@@ -1,0 +1,570 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">CNNs for Image Recognition</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, you will learn to use <strong>convolutional neural networks</strong> (<strong>CNNs</strong>) for image recognition. Convolutional neural networks are a variation of neural networks that are particularly well-suited to image recognition because they take into account the relationship between data points in space.</p>
+<p>We will cover how convolutional neural networks differ from the basic feedforward, fully connected neural network that we created in the last chapter. The main difference is that the hidden layers in a CNN are not all fully connected dense layers—CNNs include a number of special layers. One of these is the convolutional layer, which convolves a filter around the image space. The other special layer is a pooling layer, which reduces the size of the input and only persists particular values. We will go into more depth on these layers later in the chapter.</p>
+<p>As we learn about these concepts, we will see why they are so critical for image recognition. When we think about classifying images, we know that we need to detect patterns among arrays of pixels and that the neighboring pixels are important for finding certain shapes. By learning more about the convolution layer, you will know how to adjust the filter or lens to detect different patterns depending on your image data. You will also learn how to adjust the pooling layer depending on the size of your data to help make your model run more efficiently.</p>
+<p>Specifically, this chapter will cover the following topics:</p>
+<ul>
+<li>Image recognition with shallow nets</li>
+<li>Image recognition with convolutional neural networks</li>
+<li>Enhancing the model with appropriate activation layers</li>
+<li>Choosing the most appropriate activation function</li>
+<li>Selecting optimal epochs using dropout and early stopping</li>
+</ul>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p><span>You can find the code files of this chapter on the</span> GitHub link at <a href="https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R">https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R</a>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Image recognition with shallow nets</h1>
+                </header>
+            
+            <article>
+                
+<p>Image classifiers can be created without using deep-learning algorithms and methods. To demonstrate, let's use the <strong>Fashion MNIST</strong> dataset, which is an alternative to the MNIST handwriting dataset. The <span>name</span><span> </span><span>MNIST</span><span> stands for the</span> <strong>Modified National Institute of Standards and Technology</strong> <span>database, </span><span class="ILfuVd NA6bn"><span class="e24Kjd">and as the name suggests, it is a modified version of the original dataset created by the National Institute of Standards and Technology.</span></span> <span>While MNIST is a series of hand-drawn numbers, Fashion MNIST uses small images of different types of clothing. The clothing in the dataset is labeled with one of ten categories. Fashion MNIST has nothing to do with the National Institute of Standards and Technology; however, the MNIST name carried over since it is well-known as a database to use for image recognition.</span></p>
+<p>Since this dataset is not very large and each image is only 28 x 28 pixels, we can use a machine-learning algorithm, such as <kbd>RandomForest</kbd>, to train a classifier. We will train a very simple <kbd>RandomForest</kbd> model and achieve surprisingly good results; however, at the end of the chapter, we will discuss why these same results will not scale as the dataset gets larger and the individual images get larger. We will now code our image recognition model using traditional machine-learning methods:</p>
+<ol>
+<li>We will start by loading the <kbd>tidyverse</kbd> suite of packages, as shown in the following code. In this case, we only need <kbd>readr</kbd> for reading in the data; however, we will use other packages later. We will also load <kbd>randomForest</kbd> for training our model and <kbd>caret</kbd> for evaluating our model performance:</li>
+</ol>
+<pre style="padding-left: 60px">library(tidyverse)<br/>library(caret)<br/>library(randomForest)</pre>
+<p class="mce-root"/>
+<p style="padding-left: 60px">The code here will not return any values to the console; however, within the RStudio environment, we will see a checkmark next to these packages in the <span class="packt_screen">Packages</span> window indicating that they are ready to be used. Your <span class="packt_screen">Packages</span> pane should look like the following image, which shows that two of three packages have been loaded:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1034 image-border" src="assets/ef79de23-1f1c-4dec-a4b8-363f52a0cf02.png" style="width:29.83em;height:36.83em;"/></p>
+<ol start="2">
+<li>Next, we read in the train and test data for the Fashion MNIST dataset with the help of the following code:</li>
+</ol>
+<pre style="padding-left: 60px">fm &lt;- readr::read_csv('fashionmnist/fashion-mnist_train.csv')<br/>fm_test &lt;- readr::read_csv('fashionmnist/fashion-mnist_test.csv')</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">This code will place two data objects in our environment called <kbd>fm</kbd> and <kbd>fm_test</kbd>. The <span class="packt_screen">Environment</span> pane should look like the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1035 image-border" src="assets/ed554320-b06f-479e-9879-3d053ff5b72b.png" style="width:38.58em;height:10.92em;"/></p>
+<p style="padding-left: 60px">We will use <kbd>fm</kbd> to train our model. The data from <kbd>fm</kbd> will be used to compute weights for splits along this tree-based model. We will then use our model, which contains information on how the independent variable values relate to the target variables, to predict target variables for the <kbd>fm_test</kbd> data using the independent variable values.</p>
+<ol start="3">
+<li>Next, we will train our model. We set a seed for reproducibility so that we get the same quasirandom numbers every time we run the model, and as such, we always get the same results. We convert the label to a factor. The label, in this case, is an integer between <kbd>0</kbd> and <kbd>9</kbd>; however, we do not want the model to treat these values numerically. Instead, they should be treated as different categories. The remaining columns aside from the label are all pixel values. We use <kbd>~</kbd>. to denote that we will use all the remaining columns (all the pixel values) as independent variables for our model. We will grow 10 trees because this is simply an example that image classification can be done this way. Lastly, we will choose 5 variables at random during every split in our tree. We will train our <kbd>RandomForest</kbd> model in this way using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">set.seed(0)<br/><br/>rf_model &lt;- randomForest::randomForest(as.factor(label)~.,<br/>data = fm,<br/>ntree=10,<br/>mtry=5)</pre>
+<p style="padding-left: 60px">When we execute the code, the model will run, which can take several minutes. During this time, we will be unable to execute any code in the console. We can see that the model is now in our environment. The following screenshot shows some of the details contained in the model object:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1036 image-border" src="assets/da2a3770-a604-46c2-a5d3-8504de4975dc.png" style="width:33.17em;height:40.75em;"/></p>
+<p style="padding-left: 60px">We can use this model object to make predictions on new data.</p>
+<ol start="4">
+<li>We then use our model to make predictions on the test dataset and use the <kbd>ConfusionMatrix</kbd> function to evaluate performance. The following code will populate the vector of predicted values and then evaluate the accuracy of the predictions:</li>
+</ol>
+<pre style="padding-left: 60px">pred &lt;- predict(rf_model, fm_test, type="response")<br/><br/>caret::confusionMatrix(as.factor(fm_test$label), pred)<br/><br/># Accuracy : 0.8457</pre>
+<p style="padding-left: 60px">The preceding code will create one last data object, which is a vector that holds the predicted values for each case based on the model being trained on the independent variables for that dataset. We also printed some output to our console with performance metrics. The output that you receive will look like the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1037 image-border" src="assets/290bca6f-c0fa-4d7d-867c-2bc193432f05.png" style="width:28.08em;height:30.75em;"/></p>
+<p>The metrics are based on comparing the actual target variables for the test dataset with the predicted values from modeling on the test data.</p>
+<p>Surprisingly, this model produced decent results. We have achieved an accuracy of 84.6%. This shows that a simple approach can work for a dataset like this; however, as the data scales up, this type of model will have worse performance.</p>
+<p>To understand why, we should first explain how images are stored as data for modeling. When we view a grayscale image, we see lighter and darker areas. In fact, every pixel holds an integer from 0 for white to 255 for black and anywhere in between. These numbers are converted into tones so that we can visualize the image; however, for our purposes, we use these raw pixel values. When modeling with <kbd>RandomForest</kbd>, each pixel value is compared in isolation with all the other images; however, this is rarely ideal. Usually, we want to look for larger patterns of pixels within each image.</p>
+<p>Let's explore how to create a shallow neural network with just one layer. The hidden layer of the neural network will perform a calculation using all input values so that the entire image is considered. We are going to make this a simple binominal classification problem for illustration purposes and use a method to create our neural network that is <span>similar</span><span> to </span><span>the method we used in the last chapter. If you completed that chapter, then this will likely look familiar. Completing the previous chapter is not a prerequisite as we will walk through all the steps here:</span></p>
+<ol>
+<li>Before starting, we will load two more libraries for the following code: the <kbd>neuralnet</kbd> package for training our model and the <kbd>Metrics</kbd> package for evaluation functions. In particular, we will use the AUC metric later to evaluate our model. Both of these libraries can be loaded by running the following lines of code:</li>
+</ol>
+<pre style="padding-left: 60px">library(neuralnet)<br/>library(Metrics)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">This code will not cause anything to happen in the console; however, we will see checks by these packages in the <span class="packt_screen">Package</span> pane indicating that these packages are ready to use. Your <span class="packt_screen">Packages</span> pane will look like the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1038 image-border" src="assets/eb517d20-8e51-418d-beb9-ff46289e7e4b.png" style="width:37.58em;height:36.00em;"/></p>
+<ol start="2">
+<li>First, we will change the <strong>target</strong> column so that it is a simple binary response rather than include all ten categories. This is done so that we can keep this neural network very straightforward, as this is just to create a benchmark for comparing with our CNN later and to show how coding the two styles of neural networks differs. This filtering is accomplished by running the following lines of code:</li>
+</ol>
+<pre style="padding-left: 60px">fm &lt;- fm %&gt;% dplyr::filter(label &lt; 2)<br/><br/>fm_test &lt;- fm_test %&gt;% dplyr::filter(label &lt; 2)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">After running this code, we will see that the size of our data objects has changed and reduced in size as a result of our filtering. You should see that your data objects have changed from having 60,000 and 10,000 observations respectively to 12,000 and 2,000, as shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1039 image-border" src="assets/2d415b2a-5859-452d-a0da-928b777adca7.png" style="width:41.83em;height:11.08em;"/></p>
+<p style="padding-left: 60px">With the data in this format, we are now able to proceed with writing our code as a binary response task.</p>
+<ol start="3">
+<li>Now, using the following code, we will remove the target variable from the test set and isolate it in a separate vector for evaluation later:</li>
+</ol>
+<pre style="padding-left: 60px">test_label &lt;- fm_test$label<br/><br/>fm_test &lt;- fm_test %&gt;% dplyr::select(-label)</pre>
+<p style="padding-left: 60px">After running this code you will notice two changes: there is one less variable or column in the <kbd>fm_test</kbd> object and there is a new data object called <kbd>test_label</kbd>, which is a vector containing the values that were in the label column of the <kbd>fm_test</kbd> object. Your <span class="packt_screen">Environment</span> pane should look like the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1041 image-border" src="assets/b22efddd-8ddf-4e73-b21e-696ec062c3b4.png" style="width:40.50em;height:14.42em;"/></p>
+<p style="padding-left: 60px">We have made this change because we do not want the label in our test object. In this object, we need to treat the data as if we do not know the true classes so that we can try to predict the classes. We then use the labels from the vector later to evaluate how well we predicted the correct values.</p>
+<ol start="4">
+<li>Next, we will create the formula for our neural network. Using the <kbd>neuralnet</kbd> function from the <kbd>neuralnet</kbd> package, we need our formula to be formatted with the target variable on one side of a tilde (<kbd>~</kbd>) and all of our independent variables on the other side connected by plus (<kbd>+</kbd>) signs. In the following code, we collect all columns names into a vector <kbd>n</kbd> and then use <kbd>paste</kbd> to concatenate each term from this vector with a plus sign in between:</li>
+</ol>
+<pre style="padding-left: 60px">n &lt;- names(fm)<br/>formula &lt;- as.formula(paste("label ~", paste(n[!n == "label"], collapse = " + ", sep = "")))</pre>
+<p style="padding-left: 60px">After running this code, we can see the changes in our <span class="packt_screen">Environment</span> pane. We will see the vector <kbd>n</kbd> that contains all the column names and the <kbd>formula</kbd> object that has the dependent variable and independent variables placed together in the proper format. Your <span class="packt_screen">Environment</span> pane should now look like the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1045 image-border" src="assets/62fabd77-496c-4c49-8dd8-9e5123e58fd1.png" style="width:61.83em;height:21.92em;"/></p>
+<p style="padding-left: 60px">We ran the preceding code in order to create this <kbd>formula</kbd> object as it is a requirement for training a neural network using the <kbd>neuralnet</kbd> package.</p>
+<p class="mce-root"/>
+<ol start="5">
+<li>After this, we can write the code to train our model. We will set a seed for reproducibility as we always do with modeling. We will include one hidden layer with the number of units set to approximately one-third the number of predictor variables. We will set the <kbd>linear.output</kbd> argument to <kbd>false</kbd> to denote that this will be a classification model. We will also set the activation function to <kbd>logistic</kbd> because this is a classification problem. We train our model in the way we described earlier using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">set.seed(0)<br/><br/>net &lt;- neuralnet::neuralnet(formula,<br/>                            data = fm,<br/>                            hidden = 250,<br/>                            linear.output = FALSE,<br/>                            act.fct = "logistic"<br/>)</pre>
+<p style="padding-left: 60px">After running the code, we now have a new object in our <span class="packt_screen">Environment</span> pane that contains all the details gathered from training our model that can now be applied to make predictions on new data. Your <span class="packt_screen">Environment</span> pane should contain a model object similar to the one shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1046 image-border" src="assets/cb9fd321-7063-49a5-be27-e18439503605.png" style="width:32.17em;height:27.17em;"/></p>
+<p class="mce-root"/>
+<p style="padding-left: 60px">Now that we have run this code, we have a model that we can use to make predictions on our test data.</p>
+<ol start="6">
+<li>Lastly, we can make our predictions and evaluate our results with the help of the following code:</li>
+</ol>
+<pre style="padding-left: 60px">prediction_list &lt;- neuralnet::compute(net, fm_test)<br/>predictions &lt;- as.vector(prediction_list$net.result)<br/><br/>Metrics::auc(test_label, predictions)</pre>
+<p style="padding-left: 60px">Running this code will print the accuracy metric to the console. Your console should contain output just like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1047 image-border" src="assets/8f1b7f45-9822-4112-a552-62f676557d51.png" style="width:34.83em;height:19.92em;"/></p>
+<p style="padding-left: 60px">Looking at this output, we see that we have a significant improvement already. Accuracy is now up to 97.487%. When the pixels were considered in concert, it did improve results. We should remember that this model only used two target variables, and the selection of these target variables could also be part of the reason for the significant increase. In any case, with larger images, it is not efficient to push all pixel values to an activation function. This is where convolutional neural networks come in to solve this problem. They are able to look at smaller groupings of pixel values to look for patterns. They also contain a means of reducing dimensionality.</p>
+<p>Let's now explore what separates convolutional neural networks from traditional neural networks.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Image recognition with convolutional neural networks</h1>
+                </header>
+            
+            <article>
+                
+<p>Convolutional neural networks are a special form of neural network. In a traditional neural network, the input is passed to the model as vectors; however, for image data, it is more helpful to have the data arranged as matrices because we want to capture the relationship of the pixel values in two-dimensional space.</p>
+<p>Convolutional neural networks are able to capture these two-dimensional relationships through the use of a filter that convolves over the image data. The filter is a matrix with constant values and dimensions that are smaller than the image data. The constant values are multiplied by the underlying values and the sum of the resulting products is passed through to an activation function.</p>
+<p>The activation function step, which can also be considered a separate layer, evaluates whether a given pattern is present in an image. In a traditional neural network, the activation layer determines whether the calculated value from the input values exceeds a threshold and should be fed forward in the model. In a convolutional neural network, the activation layer operates in a very similar way; however, because it uses matrix multiplication, it is able to evaluate whether a two-dimensional shape is present in the data.</p>
+<p>After the activation layer, the data is further processed by a pooling layer. The function of the pooling layer is to concentrate the signal captured in the previous step while also reducing the dimensionality of the data. The pooling layer will result in a matrix that is smaller than the input data. Often a 2 x 2 pooling layer will be used that reduces the size of the input data by half. In this case, the values within every 2 x 2 section are pooled through some sort of aggregation. These values can be aggregated using any means, such as summing and averaging the values; however, in most cases, the max value is used and this value is passed to the pooling layer.</p>
+<p>After the preceding method has been implemented, the processed and reduced image data is flattened and the vectors are then fed forward to essentially a traditional neural network as the last step. Let’s start here with just this final step, since we are familiar with using a traditional neural network to model from the previous code. Here, we will see two things: firstly, that we can train a model on image data using just this final step, and secondly, that the syntax is slightly different but generally recognizable when compared with training this type of model using the <kbd>neuralnet</kbd> package.</p>
+<p class="mce-root"/>
+<p>We will now code a neural network consisting of fully connected dense hidden layers using the <kbd>keras</kbd> package:</p>
+<ol>
+<li>First, we will load the <kbd>keras</kbd> library and the Fashion MNIST dataset that comes with the package. This is accomplished by running the following code:</li>
+</ol>
+<pre style="padding-left: 60px">library(keras)<br/><br/>fashion_mnist &lt;- dataset_fashion_mnist()</pre>
+<p style="padding-left: 60px">When we run the preceding code, we will see that we get both the train and test data together in one list object. Your <span class="packt_screen">Environment</span> pane should now look like the following:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1048 image-border" src="assets/1831ae17-0d4e-4668-807c-ef73dc73030e.png" style="width:40.50em;height:16.08em;"/></p>
+<ol start="2">
+<li>Next, we can split the dataset into its component parts. It is conveniently set up so that it is easy to extract the training and test datasets and target variables. In the previous code, we used a version of the Fashion MNIST data that has already been preprocessed so that every pixel was in a separate column; however, in the following code, we will start with a large array of 28 x 28 matrices and demonstrate how to transform this data so that all pixel values for a given image are in the same row. The first step in the process is to separate out the four data objects from the list using the preceding code:</li>
+</ol>
+<pre style="padding-left: 60px">train &lt;- fashion_mnist$train$x<br/>train_target &lt;- fashion_mnist$train$y<br/><br/>test &lt;- fashion_mnist$test$x<br/>test_target &lt;- fashion_mnist$test$y</pre>
+<p style="padding-left: 60px">When you look at your <span class="packt_screen">Environment</span> pane now, you will see the image data stored in 28 x 28 matrices and the target variables in vectors within an array. Your <span class="packt_screen">Environment</span> pane will look like the following:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1049 image-border" src="assets/f3af5e2f-a0a4-46d2-9e87-5350ca95db66.png" style="width:39.58em;height:24.17em;"/></p>
+<p style="padding-left: 60px">With our data in this format, we could apply our convolutional filters, which we will do soon; however, at this point, we are going to code a dense, fully connected neural network, and in order to do so, we will need to get all the data to one row per image instead of a two-dimensional matrix per image. Since we need the data in both formats at different stages of coding a convolutional neural network, it is a straightforward conversion process that we will complete in step six.</p>
+<ol start="3">
+<li>Image data consists of a matrix or matrices of pixel values between <kbd>0</kbd> and <kbd>255</kbd>. To process this data with our neural network, we need to convert these values to floats between <kbd>0</kbd> and <kbd>1</kbd>. As shown in the following code, we will use the <kbd>normalize()</kbd> convenience function to achieve this result and the <kbd>range()</kbd> function to test whether the values are now between <kbd>0</kbd> and <kbd>1</kbd>:</li>
+</ol>
+<pre style="padding-left: 60px">train &lt;- normalize(train)<br/>test &lt;- normalize(test)<br/><br/>range(train)</pre>
+<p style="padding-left: 60px">After running this code, we may not see a noticeable change in the <span class="packt_screen">Environment</span> pane for our data objects; however, when we run the <kbd>range()</kbd> function, we can see that all values are now between <kbd>0</kbd> and <kbd>1</kbd>. The output to your console after running the <kbd>range()</kbd> function on the data object will look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1050 image-border" src="assets/571d3c33-fc60-4bf0-8940-fddec74afffa.png" style="width:16.17em;height:7.67em;"/></p>
+<ol start="4">
+<li>Now we can begin to train our model using the <kbd>keras</kbd> syntax. In the following code, we begin by declaring that we will be creating a sequential model, which means that data will pass through each subsequent layer in turn:</li>
+</ol>
+<pre style="padding-left: 60px">set.seed(0)<br/><br/>model &lt;- keras_model_sequential()</pre>
+<p style="padding-left: 60px">Running the preceding code initiates the model object; however, it doesn't contain any data yet. You can see this in your <span class="packt_screen">Environment</span> pane, which will look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1051 image-border" src="assets/4029ead7-1740-456c-ba08-99a76b13cb69.png" style="width:38.50em;height:25.00em;"/></p>
+<ol start="5">
+<li>The steps we take next are the final steps of a convolutional neural network and represent the part of the process where the data is converted in such a way that it can be processed by a traditional neural network. The first step will be to define the layer that takes the data from a large array of matrices and transforms the data so that all values for a given image are in one single row. To do this, we use the <kbd>layer_flatten()</kbd> function and pass the matrix shape in as an argument, as shown here:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_flatten(input_shape = c(28, 28))</pre>
+<p style="padding-left: 60px">The preceding code and the remainder of the steps that define the model will not cause a noticeable change in your R environment. This step adds a layer to the model object, though. This layer flattens our data so that the data for every image will be contained in a single row.</p>
+<ol start="6">
+<li>We will include one hidden layer as we have done previously. The way this is done in <kbd>keras</kbd> is to use the <kbd>layer_dense</kbd> function. We then note how many units we would like our hidden layer to have and the activation function that should be used to decide whether the signal from a unit should feed forward. In this case, we select a unit count that is approximately one-third the size of our total number of independent variable columns and <strong>rectified linear units</strong> (<strong>ReLU</strong>) as our activation function:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_dense(units = 256, activation = 'relu') </pre>
+<p style="padding-left: 60px">Again, this step produces no output or noticeable change to the environment. This adds one dense, fully connected layer to the model. The layer will contain 256 units or neurons. It will use the ReLU function to determine which signals get sent forward.</p>
+<ol start="7">
+<li>In the following code, we have 10 possible target classes, so we include 10 units in our output layer, one for each class. Since this is a multinomial classification problem, we use the <kbd>softmax</kbd> function to compute the probabilities that any given set of image data belongs to one of the 10 classes of clothing:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_dense(units = 10, activation = 'softmax')</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">This line of code will add the last layer to this current neural network. This will be our output layer, which is another dense, fully connected layer where units are equal to the number of target classes. The <kbd>softmax</kbd> function will be used at this step to determine the probability that a given set of data belongs to each of the possible target classes. This step again produces no output or change in the R environment.</p>
+<ol start="8">
+<li>Before moving on to the <kbd>compile</kbd> step, we need to convert our target vectors to a matrix, which can be done simply with the <kbd>to_categorical</kbd> functions using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">test_target &lt;- to_categorical(test_target)<br/>train_target &lt;- to_categorical(train_target)</pre>
+<p style="padding-left: 60px">After running the code, we will see a change in our <span class="packt_screen">Environment</span> pane. The <kbd>target</kbd> variable objects that were vectors are now matrices where every row contains a single value equal to <kbd>1</kbd> at the index point for the class to which it belongs. Your <span class="packt_screen">Environment</span> pane will now look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1052 image-border" src="assets/bd5e7a69-cb31-46d1-84fa-83cf040811eb.png" style="width:37.00em;height:26.92em;"/></p>
+<p style="padding-left: 60px">This step is a requirement for training a multinominal classification model with <kbd>keras</kbd>.</p>
+<ol start="9">
+<li>The following code is used to define the arguments for the <kbd>compile</kbd> step. Here, we select the <kbd>optimizer</kbd>, <kbd>loss</kbd>, and <kbd>evaluation</kbd> metrics. The <kbd>optimizer</kbd> is the algorithm that calculates the error rate between the model results and the actual values to adjust weights. We define the compile portion of the model using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;% compile(<br/>  optimizer = 'adam',   <br/>  loss = 'categorical_crossentropy', <br/>  metrics = 'categorical_accuracy'   <br/>)</pre>
+<p style="padding-left: 60px"><span>In the preceding code, we did the following:</span></p>
+<ul>
+<li style="padding-left: 30px"><span>We chose <strong>Adaptive Moment Estimation</strong> (<strong>Adam</strong>). The loss function is the formula that is used to calculate the error rate. </span></li>
+<li style="padding-left: 30px"><span>When working with a multinominal classification problem like this one, the most suitable loss function is categorical crossentropy, which is another term for multiclass log loss.</span></li>
+<li style="padding-left: 30px"><span>In order to use this loss function, the target variable must be stored as a matrix, which is why we performed that data type conversion in the previous step.</span></li>
+<li style="padding-left: 30px"><span>The metrics argument stores the measurement for evaluating model performance, and we used categorical accuracy.</span></li>
+</ul>
+<ol start="10">
+<li>The step to fit our model at this point requires just three arguments. We pass in the training dataset, the target variables of the training data, and the number of times we would like the model to run. As shown in the following code, we will choose <kbd>10</kbd> epochs at this point so that our model finishes running quickly; however, if you have time to run the model for longer, then you will likely get better results. Train a neural network on the train data with the following code:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;% fit(train, train_target, epochs = 10</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">When we run this code, we will get a printout to our console with the results from every epoch. The output to your console will look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1053 image-border" src="assets/6662fc0f-2302-4c51-a4ee-9b98345b52ba.png" style="width:38.25em;height:35.42em;"/></p>
+<p style="padding-left: 60px">In addition to the console output, the preceding code also produces a plot, which is a graphical representation of the same information. In your <span class="packt_screen"><strong>Viewer</strong></span> pane, you will see a plot like this:</p>
+<p class="mce-root"/>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1054 image-border" src="assets/521d7502-2d54-4344-ae13-f8f7efdc7556.png" style="width:36.92em;height:30.25em;"/></p>
+<p style="padding-left: 60px">The two pieces of output show that our model improves a lot at first and then improves at a much slower pace after additional iterations of the model.</p>
+<ol start="11">
+<li>After this, we can run our model on our test dataset and use the test target variables to evaluate our model, as shown in the following screenshot. We can calculate the loss and categorical accuracy metric and print out the categorical accuracy metric by running the following code:</li>
+</ol>
+<pre style="padding-left: 60px">score &lt;- model %&gt;% evaluate(test, test_target)<br/><br/>score$categorical_accuracy</pre>
+<p style="padding-left: 60px">You should see the following printed out to your console:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1055 image-border" src="assets/1b1b03f4-e508-4c57-bd38-3025041eb042.png" style="width:31.08em;height:6.00em;"/></p>
+<p style="padding-left: 60px">We have achieved a categorical accuracy of 88.66%. This is a decrease from our previous accuracy; however, keep in mind that the accuracy metric before pertained to a binary response and this describes predictions for all classes.</p>
+<ol start="12">
+<li>Making predictions using the model is achieved through the <kbd>predict()</kbd> function. In the following code, <kbd>predict_classes</kbd> can be used to choose one of the 10 classes that are most likely based on the probability scores, while <kbd>preds</kbd> will calculate the probabilities:</li>
+</ol>
+<pre style="padding-left: 60px">preds &lt;- model %&gt;% predict(test)<br/><br/>predicted_classes &lt;- model %&gt;% predict_classes(test)</pre>
+<p style="padding-left: 60px">After running the preceding code, we can see the difference in our <span class="packt_screen"><strong>Environment</strong></span> pane, which contains two new data objects. Your <span class="packt_screen"><strong>Environment</strong></span> pane will look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1056 image-border" src="assets/cea0f813-d0e8-4ede-8c1a-66453262c63e.png" style="width:40.92em;height:32.00em;"/></p>
+<p style="padding-left: 60px">We can see that <kbd>preds</kbd> is a large matrix with a probability value for each class, while <kbd>predicted_classes</kbd> is a vector where every value indicates the most probable class for each case.</p>
+<ol start="13">
+<li>Finally, we can use a confusion matrix to review our results. In order to run this code, we will need our test target labels back in vector format rather than in a matrix. To do this, we will just read in the test target file again, as shown here:</li>
+</ol>
+<pre style="padding-left: 60px">test_target_vector &lt;- fashion_mnist$test$y<br/><br/>caret::confusionMatrix(as.factor(predicted_classes),as.factor(test_target_vector))</pre>
+<p>Running the code will produce an evaluation metric output to print to our console. Your console will look like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1057 image-border" src="assets/d22457d1-da11-46f3-b2ce-10a6576b3e33.png" style="width:21.92em;height:26.67em;"/></p>
+<p>Our accuracy score has actually decreased from 97.487% to 88.66%. This is in part due to limiting our model to 10 runs and also, again, because we are now building a classifier for 10 categories, whereas the other score was achieved with a binary classifier. At this point, improving the accuracy score is not the priority in any case. The preceding code is here to show how to code a neural network using the <kbd>keras</kbd> syntax.</p>
+<p class="mce-root"/>
+<p>In the preceding code, during the compile stage, we chose an optimizer, loss function, and evaluation metric; however, we should note the other options that we could have selected and the difference between the available choices. We'll look at these in the following sections.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Optimizers</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's look at the following optimizers:</p>
+<ul>
+<li><strong>Stochastic gradient descent</strong> (<strong>SGD</strong>): This is the simplest optimizer. For every weight, the model stores an error rate. Depending on the direction of the error, whether the predicted value is greater than or less than the true value, a small learning rate is applied to the weight to change the next round of results so that the predicted values are incrementally moving in the opposite direction as the error. This process is simple, but for deep neural networks, the fine adjustments at every iteration mean that it can take a long time for the model to converge.</li>
+<li><strong>Momentum</strong><span>: Momentum itself is not an optimizer, but is something that can be incorporated with different optimizers. The idea of momentum is that it takes the decaying average of all the corrections that have occurred previously and uses these in combination with the correction calculated for the current move. For this, we can imagine momentum working just like it would if an object was rolled down a hill and then continued to roll up another hill using its own momentum. For every movement that it made, there would be a force pulling it back down the hill; however, for a period of time, the momentum to continue up the hill would be stronger than the force pulling it back down.</span></li>
+<li><strong>Adagrad/Adadelta</strong><span>: Adagrad improves on SGD through the use of a matrix of all previous errors per node rather than one error rate for all nodes; however, the use of this matrix of values means that the learning rate can be canceled out of the model runs for too long. Adadelta is the correction for the limitation of Adagrad. Adadelta uses momentum to solve the growing error rate matrix problem.</span></li>
+<li><strong>RMSprop</strong><span><span>: This is a separate correction to Adagrad. It is similar to Adadelta, however, with RMSprop, the learning rate is not only divided by a matrix of local per-node decaying average error rates, but also by a global decaying average of all squared error rates.</span></span></li>
+<li><strong>Adam</strong>: This algorithm further corrects and builds upon the algorithms before. Adam includes not only an exponentially decaying average of squared error rates, as seen <span>in RMSprop</span>, but also an exponentially decaying average of error rates (not squared), which is momentum. In this way, Adam is more or less RMSprop with momentum. The combination of the two means that there is a correction to momentum similar to friction, which decreases the effect of momentum and thereby leads to faster convergence, in many cases making Adam a popular optimizer at the time of writing.</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Loss functions</h1>
+                </header>
+            
+            <article>
+                
+<p>With the preceding optimizers, you can select whichever one you like and try different algorithms to see which produces the best results. With the loss function, there are some choices that are more appropriate than others based on the problem being solved:</p>
+<ul>
+<li><kbd>binary_crossentropy</kbd>: This loss function is used for classification problems where the requirement is to assign input data to one of two classes. This can also be used when assigning input data to more than one or two classes if it is possible for a given case to belong to more than one class. In this case, each target class is treated as a separate binary class (for each target class the given case belongs to or does not belong to). This can also be used for regression when the target values are between 0 and 1.</li>
+<li><kbd>categorical_crossentropy</kbd><span>: Categorical crossentropy is used with a multinominal classification problem where any given row of input data can only belong to one of the more than two classes. As we noted with binary crossentropy, in order to use categorical crossentropy, the target vector must be converted to a matrix so that there is a value of 1 for the index associated with the target class for every given row. If the target vector contains integers that are meant to be treated as integers and not categorical classes, then <kbd>sparse_categorical_crossentropy</kbd> can be used without performing the matrix conversion required for categorical crossentropy.</span></li>
+<li>MSE (<strong>mean squared error</strong>): Mean squared error is an appropriate choice for regression problems since the predicted values and true values can be any number. This loss function takes the square of the difference between the predicted values and the target values.</li>
+</ul>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Evaluation metrics</h1>
+                </header>
+            
+            <article>
+                
+<p>The evaluation metric is used to measure model performance. While similar to the loss functions, it is not used for making corrections while training the model. It is only used after the model has been trained to evaluate performance:</p>
+<ul>
+<li><strong>Accuracy</strong>: This metric measures how often the correct class is predicted. By default, 0.5 is used as a threshold, which means that if the predicted probability is below 0.5, then the predicted class is 0; otherwise, it is 1. The total number of cases where the predicted class matches the target class is divided by the total number of target variables.</li>
+<li><strong>Cosine similarity</strong><span>: Compares the similarity between two vectors by evaluating the similarity of terms in <em>n</em>-dimensional space. This is used often to evaluate the similarity of text data. For this, we can imagine a piece of text with the word cat four times and the word dog once, and another with the word cat four times and the word dog twice. In this case, with two dimensions, we could envision a line from the origin through the point where <em>y</em> = 4 and <em>x</em> = 1 for the first piece of text and another line through the point where <em>y</em> = 4 and <em>x</em> = 2 for the next piece of text. If we evaluate the angle between the two lines, we will arrive at the cosine value used to determine similarity. If the lines overlap, then the documents have a perfect similarity score of 1, and the larger the angle between the lines, the less similar and the lower the similarity score will be.</span></li>
+<li><strong>Mean absolute error</strong><span>: The average value for all absolute errors. The absolute error is the difference between the predicted variable and the target variable.</span></li>
+<li><strong>Mean squared error</strong><span>: The average value for all squared errors. The squared error is the square of the difference between the predicted variable and the target variable. Through squaring the errors, an increased penalty is applied to larger errors relative to mean absolute error.</span></li>
+<li><strong>Hinge</strong><span>: To use the hinge evaluation metric, all target variables should be -1 or 1. From here, the formula is to subtract the product of the predicted value and the target variable from 1 and then to use this value or 0, whichever is greater for evaluation. Results are evaluated as more correct the closer the metric value is to 0.</span></li>
+<li><strong>KL divergence</strong><span>: This metric compares the distribution of true results with the distribution of predicted results and evaluates the similarity of the distribution.</span></li>
+</ul>
+<p class="mce-root"/>
+<p>We have, so far, used a tree-based classifier and a traditional neural network to classify our image data. We have also reviewed the <kbd>keras</kbd> syntax and <span><span>looked at </span></span>our options for several functions within the modeling pipeline using this framework. Next, we will add the additional layers before the neural network that we just coded to create a convolutional neural network. For this special type of neural network, we will include a convolution layer and a pooling layer. A dropout layer is often also included; however, we will add this later as it serves a slightly different purpose than the convolution and pooling layers. When used together, these layers find more complex patterns in our data and also reduce the size of our data, which is especially important when working with large image files.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Enhancing the model with additional layers</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we add two important layers: the convolution layer, and pooling layer:</p>
+<ol>
+<li>Before beginning, we make one small change to the data structure. We will add a fourth dimension that is a constant value. We add the extra dimension using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">dim(train) &lt;- c(nrow(train), 28, 28, 1) <br/>dim(test) &lt;- c(nrow(test), 28, 28, 1) </pre>
+<p style="padding-left: 60px">When we make this change, we can see the added dimension for these data objects in the <span class="packt_screen">Environment</span> pane, which will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1058 image-border" src="assets/807acb3e-c10c-41d4-a945-8d26d60f87c1.png" style="width:36.33em;height:23.67em;"/></p>
+<p style="padding-left: 60px">We make this change to the structure because it is a requirement of modeling a CNN using <kbd>keras</kbd>.</p>
+<ol start="2">
+<li>As before, the first step in the modeling process is to establish that we will be building a sequential model by calling the <kbd>keras_model_sequential()</kbd> function with no arguments using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">set.seed(0)<br/><br/>model &lt;- keras_model_sequential()</pre>
+<p style="padding-left: 60px">Running the preceding code will place the model object into our <span class="packt_screen">Environment</span> pane, however, it contains no data at the moment and no output is printed to console.</p>
+<ol start="3">
+<li>Next, we will add our convolving layer for a two-dimensional object. In the following code, we will decide on the number of filters or subsets of the data and the size of these subsets as well as the activation function used to determine whether the subset contains a certain pattern:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_conv_2d(filters = 484, kernel_size = c(7,7), activation = 'relu',<br/>                activation = 'relu', input_shape = c(28,28,1))</pre>
+<p style="padding-left: 60px"><span>Let's looks at the preceding code in a little more detail:</span></p>
+<ul>
+<li style="padding-left: 30px"><span>We chose to include 484 filters and a kernel size that is 7 pixels high and wide.</span></li>
+<li style="padding-left: 30px"><span>We applied a filter the size of the kernel on the image and, using the constant values on the filter, the model determined whether it detects a pattern.</span></li>
+<li style="padding-left: 30px"><span>The stride value of 1 that is used in this example means that the kernel slides over the surface of the image by 1 pixel after every filter has been evaluated, though this number can be changed.</span></li>
+</ul>
+<ol start="4">
+<li>After this, we will use a max pooling layer in the following code to create a new downsampled version of our data that represents the maximum values within the pool size after the convolving round:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;% layer_max_pooling_2d(pool_size = c(2, 2))</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p style="padding-left: 60px">This line of code causes no noticeable changes to the <span class="packt_screen">Environment</span> pane and prints no output to the console. It adds a layer to our model that will reduce the size of our data to one-quarter of the original size.</p>
+<ol start="5">
+<li>After this, the steps continue in the same way as we described in the previous example from the <em>Image recognition with convolutional neural networks</em> section. Let's have a look at the following code:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;% <br/>layer_flatten() %&gt;%<br/>  layer_dense(units = 98, activation = 'relu') %&gt;%<br/>  layer_dense(units = 10, activation = 'softmax')<br/><br/>model %&gt;% compile(<br/>  loss = 'categorical_crossentropy',<br/>  optimizer = 'adam',<br/>  metrics = 'accuracy'<br/>)<br/><br/>model %&gt;% fit(<br/>  train, train_target,<br/>  batch_size = 100,<br/>  epochs = 5,<br/>  verbose = 1,<br/>  validation_data = list(test, test_target)<br/>)<br/><br/>scores &lt;- model %&gt;% evaluate(<br/>  test, test_target, verbose = 1<br/>)<br/><br/>preds &lt;- model %&gt;% predict(test)<br/><br/>predicted_classes &lt;- model %&gt;% predict_classes(test)<br/><br/>caret::confusionMatrix(as.factor(predicted_classes),as.factor(test_target_vector))</pre>
+<p class="mce-root"/>
+<p style="padding-left: 60px">After running the preceding code, we will get model diagnostic data printed to the console, which will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1061 image-border" src="assets/60457c3a-0a74-4e39-b620-7048c639f12a.png" style="width:31.92em;height:16.67em;"/></p>
+<p style="padding-left: 60px">You will also get a plot with the same data, which looks like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1062 image-border" src="assets/f4815302-74f6-4740-bdfc-b3e23911ce91.png" style="width:42.17em;height:31.75em;"/></p>
+<p style="padding-left: 60px">The preceding code also produces performance metrics and prints them to the console. Your console will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1063 image-border" src="assets/b59da266-148f-460d-bcdf-e5c2a5bb9710.png" style="width:24.92em;height:27.83em;"/></p>
+<p style="padding-left: 60px">By adding our convolution layer and our pooling layer, we have already increased our accuracy score from 88.66% to 90.51%, and we did so with five fewer rounds to prevent using a long-running model while learning.</p>
+<p>As discussed previously, deep learning occurs when there are many layers for the signal to pass through, so in the following method, we will see how we can continue to add more layers. Using this, you can continue to add as many layers as you need as you refine your model:</p>
+<ol>
+<li>We start by redefining our model. We will state again that it is a sequential model in the following code:</li>
+</ol>
+<pre style="padding-left: 60px">set.seed(0)<br/><br/>model &lt;- keras_model_sequential()</pre>
+<p style="padding-left: 60px">The preceding code will reset the model object; however, no noticeable changes will occur in the <span class="packt_screen">Environment</span> pane and nothing will print to the console.</p>
+<p class="mce-root"/>
+<ol start="2">
+<li>In the next step, we will use a convolving layer with 128 filters and then a pooling layer. In this case, we also add <kbd>padding = "same"</kbd> to prevent dimension reduction after the convolution layer. This is in order to make it possible to add additional layers. If we reduce the dimensionality of our data too quickly, then we will not be able to fit a filter of any kernel size on the data later. We define our first convolving layer and pooling layer using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_conv_2d(filters = 128, kernel_size = c(7,7), activation = 'relu',<br/>                input_shape = c(28,28,1), padding = "same") %&gt;%<br/>  layer_max_pooling_2d(pool_size = c(2, 2)) </pre>
+<p style="padding-left: 60px">The preceding code results in no noticeable changes to the <span class="packt_screen">Environment</span> pane and nothing will print to the console.</p>
+<ol start="3">
+<li>As shown in the following code, we will add in another convolving layer with 64 filters and a pooling layer. We add these two additional layers using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_conv_2d(filters = 64, kernel_size = c(7,7), activation = 'relu', padding = "same") %&gt;%<br/>  layer_max_pooling_2d(pool_size = c(2, 2))</pre>
+<p style="padding-left: 60px">The preceding code results in no noticeable changes to the <span class="packt_screen">Environment</span> pane and nothing will print to the console.</p>
+<ol start="4">
+<li>We then add in one more convolving layer. This time, we will use 32 filters and a pooling layer, as shown in the following code. We add these two additional layers using the following code:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>  layer_conv_2d(filters = 32, kernel_size = c(7,7), activation = 'relu', padding = "same") %&gt;%<br/>  layer_max_pooling_2d(pool_size = c(2, 2))</pre>
+<p style="padding-left: 60px">The preceding code results in no noticeable changes to the <span class="packt_screen">Environment</span> pane and nothing will print to the console.</p>
+<ol start="5">
+<li>Finally, in the following code, we flatten the values and proceed in the same way as we have in the previous examples:</li>
+</ol>
+<pre style="padding-left: 60px">model %&gt;%<br/>layer_flatten() %&gt;%<br/>  layer_dense(units = 128, activation = 'relu') %&gt;%<br/>  layer_dense(units = 10, activation = 'softmax')<br/><br/>model %&gt;% compile(<br/>  loss = 'categorical_crossentropy',<br/>  optimizer = 'adam',<br/>  metrics = 'accuracy'<br/>)<br/><br/>model %&gt;% fit(<br/>  train, train_target,<br/>  batch_size = 100,<br/>  epochs = 5,<br/>  verbose = 1,<br/>  validation_data = list(test, test_target)<br/>)<br/><br/>score &lt;- model %&gt;% evaluate(<br/>  test, test_target, verbose = 1<br/>)<br/><br/>preds &lt;- model %&gt;% predict(test)<br/><br/>predicted_classes &lt;- model %&gt;% predict_classes(test)<br/><br/>caret::confusionMatrix(as.factor(predicted_classes),as.factor(test_target_vector))</pre>
+<p>The preceding code produces model diagnostics in our console. Your console will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1064 image-border" src="assets/42678786-19c3-41bd-9015-a133f90ad9b1.png" style="width:30.83em;height:17.17em;"/></p>
+<p>The preceding code also produces a plot. You will see a plot in your <span class="packt_screen">Viewer</span> pane that looks like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1065 image-border" src="assets/7c853b96-fe00-4bee-9763-99c0241a4bcb.png" style="width:50.25em;height:37.83em;"/></p>
+<p>We also produce additional performance metrics and print these to our console. You will see the following output in your console:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1066 image-border" src="assets/159ab197-a120-4b36-b59d-88fffaa447d8.png" style="width:25.58em;height:28.67em;"/></p>
+<p>Our accuracy score remains almost the same at 89.97%. We could likely get the accuracy to improve with more filters per layer; however, this will significantly increase run time, so that is why we keep the filter count per layer as it is. We have seen here how to write code to create a CNN and a CNN with a deeper layer structure, and we noticed how it improved performance. We have so far used the ReLU activation function, which is a very popular and common activation function; however, we know there are other options, so next, we will write code to select a different activation function.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Choosing the most appropriate activation function</h1>
+                </header>
+            
+            <article>
+                
+<p>Using <kbd>keras</kbd>, you can use a number of different activation functions. Some of these have been discussed in previous chapters; however, there are some that have not been previously covered. We can begin by listing the ones we have already covered with a quick note on each function:</p>
+<ul>
+<li><strong>Linear</strong>: Also known as the identity function. Uses the value of <em>x</em>.</li>
+<li><strong>Sigmoid</strong>: Uses 1 divided by 1 plus the exponent of negative <em>x</em>.</li>
+<li><strong>Hyperbolic tangent</strong> (<strong>tanh</strong>): Uses the exponent of <em>x</em> minus the exponent of negative <em>x</em> divided by <em>x</em> plus the exponent of negative <em>x</em>. This has the same shape as the sigmoid function; however, the range along the <em>y</em>-axis goes from 1 to -1 instead of from 1 to 0.</li>
+<li><strong>Rectified Linear Units</strong> (<strong>ReLU</strong>): Uses the value of <em>x</em> if <em>x</em> is greater than 0; otherwise, it assigns a value of 0 if <em>x</em> is less than or equal to 0.</li>
+<li><strong>Leaky ReLU</strong>: Uses the same formula as ReLU; however, it applies a small alpha value when <em>x</em> is less than 0.</li>
+<li><strong>Softmax</strong>: Provides a probability for each possible target class.</li>
+</ul>
+<p>Let's look at all the functions that were not mentioned in previous chapters:</p>
+<ul>
+<li><strong>Exponential Linear Unit</strong> (<strong>ELU</strong>): Uses the exponent of <em>x</em> - 1 multiplied by a constant alpha value if the value for <em>x</em> is less than 0</li>
+<li><strong>Scaled Exponential Linear Unit</strong> (<strong>SELU</strong>): Uses the ELU function and then multiplies the result of the function by a constant scale value</li>
+<li><strong>Thresholded ReLU</strong>: Uses the same formula as ReLU; however, instead of using 0 as the threshold for whether <em>x</em> is <em>x</em> or 0, it uses a user-defined value of theta to determine this threshold.</li>
+<li><strong>Parametric Rectified Linear Unit</strong> (<strong>PReLU</strong>): The same as the formula for Leaky ReLu; however, it uses an array of values for alpha rather than a single value.</li>
+<li><strong>Softplus</strong>: Uses the log of the exponent of <em>x</em> plus 1</li>
+<li><strong>Softsign</strong>: Uses <em>x</em> divided by the absolute value of <em>x</em> + 1</li>
+<li><strong>Exponential</strong>: Uses the exponent of <em>x</em>.</li>
+<li><strong>Hard Sigmoid</strong>: Uses a modified and faster version of the sigmoid function. If <em>x</em> is less than -2.5, then the value is 0 and if <em>x</em> is greater than 2.5, then the value is 1; otherwise, it uses 0.2 * <em>x</em> + 0.5.</li>
+</ul>
+<p class="mce-root"><span>So far, we have used the ReLU activation</span> function <span>by assigning the</span> <kbd>relu</kbd> value to t<span>he activation argument within our layer function call. For some activation functions, such as the sigmoid function, we can simply swap out the</span> <kbd>relu</kbd><span> </span><span>value</span><span> </span><span>with the</span> <kbd>sigmoid</kbd><span> </span><span>value;</span><span> however, more advanced activation functions require a separate activation function layer. Let's switch the activation function from ReLu to Leaky ReLU in our code by removing the activation argument from the layer function call and adding a Leaky ReLU activation function:</span></p>
+<pre>model &lt;- keras_model_sequential()<br/>model %&gt;%<br/>  layer_conv_2d(filters = 8, kernel_size = c(3,3), input_shape = c(28,28,1)) %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_max_pooling_2d(pool_size = c(2, 2)) %&gt;%<br/>  layer_conv_2d(filters = 16, kernel_size = c(3,3)) %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_max_pooling_2d(pool_size = c(2, 2)) %&gt;%<br/>  layer_conv_2d(filters = 32, kernel_size = c(3,3)) %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_max_pooling_2d(pool_size = c(2, 2)) %&gt;%<br/>  layer_flatten() %&gt;%<br/>  layer_dense(units = 128) %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_dense(units = 10, activation = 'softmax')<br/><br/># compile model<br/>model %&gt;% compile(<br/>  loss = loss_categorical_crossentropy,<br/>  optimizer = 'rmsprop',<br/>  metrics = c('accuracy')<br/>)<br/># train and evaluate<br/>model %&gt;% fit(<br/>  train, train_target,<br/>  batch_size = 100,<br/>  epochs = 5,<br/>  verbose = 1,<br/>  validation_data = list(test, test_target)<br/>)<br/>scores &lt;- model %&gt;% evaluate(<br/>  test, test_target, verbose = 1<br/>)<br/>preds &lt;- model %&gt;% predict(test)<br/>predicted_classes &lt;- model %&gt;% predict_classes(test)<br/>caret::confusionMatrix(as.factor(predicted_classes),as.factor(test_target_vector))</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>The preceding code prints model diagnostic data to our console. Your console will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1068 image-border" src="assets/bf800383-b76f-44e2-a9a5-46f2af9382ae.png" style="width:24.83em;height:14.25em;"/></p>
+<p>The preceding code also produces a plot with model performance data. You will see a plot like the following image in your <span class="packt_screen">Viewer</span> pane:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1069 image-border" src="assets/a6296662-30bb-4780-86ab-43046649d7a0.png" style="width:41.50em;height:31.25em;"/></p>
+<p>The preceding code also produces performance metrics. These will print to your console and will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1070 image-border" src="assets/51e4f360-e562-45b7-ac40-12e7717e4299.png" style="width:24.58em;height:25.08em;"/></p>
+<p>After switching our activation function, our accuracy score is 90.95%, which is very similar to the score we have been getting so far. In this case, switching our activation function did not improve performance; however, there will be times when this will be helpful, so it is important to know how to make this modification.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Selecting optimal epochs using dropout and early stopping</h1>
+                </header>
+            
+            <article>
+                
+<p>To avoid overfitting, we can use two techniques. The first is adding a dropout layer. The dropout layer will remove a subset of the layer output. This makes the data a little different at every iteration so that the model generalizes <span>better</span><span> </span><span>and doesn't fit the solution too specifically to the training data. In the preceding code, we add the dropout layer after the pooling layer:</span></p>
+<pre>model &lt;- keras_model_sequential()<br/>model %&gt;%<br/>  layer_conv_2d(filters = 128, kernel_size = c(7,7), input_shape = c(28,28,1), padding = "same") %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_max_pooling_2d(pool_size = c(2, 2)) %&gt;%<br/>  layer_dropout(rate = 0.2) %&gt;%<br/>  layer_conv_2d(filters = 64, kernel_size = c(7,7), padding = "same") %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_max_pooling_2d(pool_size = c(2, 2)) %&gt;%<br/>  layer_dropout(rate = 0.2) %&gt;%<br/>  layer_conv_2d(filters = 32, kernel_size = c(7,7), padding = "same") %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_max_pooling_2d(pool_size = c(2, 2)) %&gt;%<br/>  layer_dropout(rate = 0.2) %&gt;%<br/>  layer_flatten() %&gt;%<br/>  layer_dense(units = 128) %&gt;%<br/>  layer_activation_leaky_relu() %&gt;% <br/>  layer_dropout(rate = 0.2) %&gt;%<br/>  layer_dense(units = 10, activation = 'softmax')<br/><br/># compile model<br/>model %&gt;% compile(<br/>  loss = 'categorical_crossentropy',<br/>  optimizer = 'adam',<br/>  metrics = 'accuracy'<br/>)<br/># train and evaluate<br/>model %&gt;% fit(<br/>  train, train_target,<br/>  batch_size = 100,<br/>  epochs = 5,<br/>  verbose = 1,<br/>  validation_data = list(test, test_target)<br/>)<br/>scores &lt;- model %&gt;% evaluate(<br/>  test, test_target, verbose = 1<br/>)<br/>preds &lt;- model %&gt;% predict(test)<br/>predicted_classes &lt;- model %&gt;% predict_classes(test)<br/>caret::confusionMatrix(as.factor(predicted_classes),as.factor(test_target_vector))</pre>
+<p>The preceding code prints model diagnostic data to our console. Your console will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1071 image-border" src="assets/9d0947cd-aa5b-416b-a197-f82689a0f31a.png" style="width:31.50em;height:16.67em;"/></p>
+<p>The preceding code also produces a plot with model performance data. You will see a plot like the following image in your <span class="packt_screen">Viewer</span> pane:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1073 image-border" src="assets/ec8e5b34-0189-4414-ade2-b328f32a771e.png" style="width:46.08em;height:35.00em;"/></p>
+<p>The preceding code also produces some performance metrics. The output printed to your console will look like the following image:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-1074 image-border" src="assets/7db9be8b-473b-4e95-98ab-7cc34fd33542.png" style="width:27.42em;height:29.83em;"/></p>
+<p><span>In this case, u</span>sing this tactic caused our accuracy score to decrease slightly to 90.07%. This could be due to working with a dataset of such small images that the model suffered from the removal of data at every step. With larger datasets, this will likely help make models more efficient and generalize better.</p>
+<p>The other tactic for preventing overfitting is using early stopping. Early stopping will monitor progress and stop the model from continuing to train on the data when the model no longer improves. In the following code, we have set the patience argument to <kbd>2</kbd>, which means that the evaluation metric must fail to improve for two epochs in a row.</p>
+<p>In the following code, with epochs kept at <kbd>5</kbd>, the model will complete all five rounds; however, if you have time, feel free to run all the preceding code and then, when it is time to fit the model, increase the number of epochs to see when the early stopping function stops the model. We add early stopping functionality to our model using the following code:</p>
+<pre>model %&gt;% fit(<br/>  train, train_target,<br/>  batch_size = 100,<br/>  epochs = 5,<br/>  verbose = 1,<br/>  validation_data = list(test, test_target),<br/>  callbacks = list(<br/>    callback_early_stopping(patience = 2)<br/>  )<br/>)</pre>
+<p>From the preceding code, we can deduce the following:</p>
+<ul>
+<li>Using dropout and early stopping, we demonstrated methods for discovering the optimal number of epochs or rounds for our model.</li>
+<li>When thinking of the number of epochs we should use, the goal is twofold.</li>
+<li>We want our model to run efficiently so that we are not waiting for our model to finish running, even though the additional rounds are not improving performance. We also want to avoid overfitting where a model is trained too specifically on the training data and is unable to generalize to new data.
+<ul>
+<li>Dropout helps with the second issue by arbitrarily removing some data on each round. It also introduces randomness that prevents the model from learning too much about the whole dataset.</li>
+<li>Early stopping helps with the first problem by monitoring performance and stopping the model when the model is no longer producing better results for a given length of time.</li>
+<li>Using these two techniques together will allow you to find the epoch number that allows the model to run efficiently and also generalize well.</li>
+</ul>
+</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we started by showing how image classification models can be created using standard machine-learning techniques; however, this has limitations as the images get larger and more complex. We can use convolutional neural networks to combat this issue. Using this approach, we demonstrated how we could perform dimensionality reduction and make it more computationally efficient to train a classification model on image data. We built a model with one convolution and pooling layer and then showed how we could make the model even deeper by adding further layers. Lastly, we used dropout layers and early stopping to avoid overfitting our model. Using all of these tactics in concert, we are now able to build models for classifying any type of image data.</p>
+<p>In the next chapter, we will learn how to code a multilayer perceptron. The multilayer perceptron is a feedforward neural network that includes only dense, fully connected hidden layers. With fewer options to adjust, we will take a deeper dive into what is available for us to tune. In addition, we will use the MXNet package for the first time, aside from the brief introduction in <a href="b614d2ff-1494-4a53-bd21-3c5d108be87c.xhtml">Chapter 2</a>, <em>CNNs for Image Recognition</em>.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

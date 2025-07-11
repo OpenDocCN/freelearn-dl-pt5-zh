@@ -1,0 +1,589 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer042">
+<h1 class="chapter-number" id="_idParaDest-100"><a id="_idTextAnchor097"/>6</h1>
+<h1 id="_idParaDest-101"><a id="_idTextAnchor098"/>Engineering Distributed Training</h1>
+<p>In the previous chapter, we discussed how to select optimal hardware for the <strong class="bold">Deep</strong> <strong class="bold">Learning</strong> (<strong class="bold">DL</strong>) training job and optimize your model for the target hardware platform. In this chapter, we will consider, in depth, how to design efficient distributed training on Amazon SageMaker given your particular use case and model architecture.</p>
+<p>There are two specific problems that distributed training aims to address. The first problem is how to reduce the training time of large models by distributing training tasks across multiple compute devices. Another problem arises when we need to train large models that cannot fit into the memory of a single GPU device. This problem is especially relevant for NLP tasks where it’s shown that very large models have more expressive power and, hence, better performance on a wide range of NLP tasks. For instance, the latest open source SOTA language model, called BLOOM, was trained for ~3.5 months on a compute cluster with 384 GPU accelerators (NVIDIA A100). Model weights alone are around 329 GB, and a checkpoint with model weights and optimizer states is 2.3 TB. For more details, please refer to the model card at <a href="https://huggingface.co/bigscience/bloom">https://huggingface.co/bigscience/bloom</a>.</p>
+<p>Two approaches have emerged to address these problems; the first is <strong class="bold">Data parallel</strong> distributed training to speed up training time by simultaneously distributing tasks. The second is <strong class="bold">Model parallel</strong> distributed training to distribute large models between several GPUs and, hence, allow you to use models that cannot fit into the memory of an individual GPU device.</p>
+<p>As you probably already guessed, large models that do not fit a single GPU device also require considerable time to train. So, inevitably, model parallelism will need to be combined with data parallelism to make the training time acceptable. The combination of data parallelism and model parallelism is known as <strong class="bold">hybrid parallelism</strong>. In this chapter, we will discuss these three types of parallelism.</p>
+<p>While understanding distributed training approaches is essential, you also need to understand the available implementations for your DL framework and model architecture. SageMaker provides proprietary libraries for distributed training: <strong class="bold">SageMaker Distributed Data Parallel</strong> (<strong class="bold">SDDP</strong>) and <strong class="bold">SageMaker Distributed Model Parallel</strong> (<strong class="bold">SDMP</strong>). We will review their benefits and gain practical experience in how to use them in this chapter. Additionally, we will discuss other popular open source alternatives for distributed training for both the TensorFlow and PyTorch frameworks and how to use them on the SageMaker platform.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li>Engineering data parallel training </li>
+<li>Engineering model parallel and hybrid training</li>
+<li>Optimizing distributed training jobs</li>
+</ul>
+<p>By the end of this chapter, you will have a good understanding of distributed training and will have gained practical experience of how to implement various types of distributed training on Amazon SageMaker.</p>
+<h1 id="_idParaDest-102"><a id="_idTextAnchor099"/>Technical requirements</h1>
+<p>In this chapter, we will provide code walk-through samples, so you can develop practical skills. The full code examples are available at <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/</a>.</p>
+<p>To follow along with this code, you will need to have the following:</p>
+<ul>
+<li>An AWS account and IAM user with the permissions to manage Amazon SageMaker resources.</li>
+<li>A SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker-compatible environment established.</li>
+<li>Access to GPU training instances in your AWS account. Each example in this chapter will provide a recommended instance type to use. It’s possible that you will need to increase your compute quota for <em class="italic">SageMaker Training Job</em> to have GPU instances enabled. In that case, please follow the instructions at <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml</a>.</li>
+</ul>
+<h1 id="_idParaDest-103"><a id="_idTextAnchor100"/>Engineering data parallel training </h1>
+<p>First, let’s outline some important terminology<a id="_idIndexMarker420"/> that we’ll use throughout this chapter:</p>
+<ul>
+<li><strong class="bold">Training process</strong>, <strong class="bold">trainer</strong>, or <strong class="bold">worker</strong> – These terms are used interchangeably<a id="_idIndexMarker421"/> to identify an independent<a id="_idIndexMarker422"/> training process in a compute<a id="_idIndexMarker423"/> cluster. For example, a distributed DL training process usually runs on a single GPU device.</li>
+<li><strong class="bold">Training node</strong>, <strong class="bold">server</strong>, or <strong class="bold">host</strong> – These terms define the server<a id="_idIndexMarker424"/> in the training cluster. The server<a id="_idIndexMarker425"/> can have one or several<a id="_idIndexMarker426"/> GPU devices, which means that one or several training processes can run on the same server.</li>
+<li><strong class="bold">World size</strong> – This is the number of independent<a id="_idIndexMarker427"/> training processes running in the training cluster. Typically, the world size is equal to the number of GPU devices that are available in your training cluster.</li>
+<li><strong class="bold">Rank (also global rank)</strong> – This is a unique zero-based ID<a id="_idIndexMarker428"/> of training processes running<a id="_idIndexMarker429"/> in your training cluster. For instance, if you have 4 training processes, they will have the ranks of 0, 1, 2, and 3.</li>
+<li><strong class="bold">Local rank</strong> – This is a unique zero-based ID<a id="_idIndexMarker430"/> of training processes running within a single node. For example, if you have two training nodes with two GPU devices each, then the local ranks will be 0 and 1, and the global ranks will be 0, 1, 2, and 3.</li>
+<li><strong class="bold">Communication backend</strong> or <strong class="bold">Collective communication</strong> – These terms define the mechanism<a id="_idIndexMarker431"/> and protocol for training<a id="_idIndexMarker432"/> processes to communicate<a id="_idIndexMarker433"/> and coordinate<a id="_idIndexMarker434"/> computations with each<a id="_idIndexMarker435"/> other. Some popular backends are <strong class="bold">NVIDIA NCCL</strong>, <strong class="bold">Gloo</strong>, and <strong class="bold">Message passing interface</strong> (<strong class="bold">MPI</strong>).</li>
+<li><strong class="bold">Collective operation</strong> – This is a specific operation performed<a id="_idIndexMarker436"/> between the processes of a training cluster, such as the <strong class="source-inline">allreduce</strong> operation, to aggregate and average tensors or <strong class="bold">broadcast</strong> to send the tensor from one training process to other processes in your cluster. Typically, communication backends provide the implementation of collective operations.</li>
+</ul>
+<p>Now that we understand the basic terminology of distributed training, let’s review data parallelism in depth.</p>
+<p>Data parallel distributed training<a id="_idIndexMarker437"/> is useful when you are looking to reduce the training time of your model across multiple training devices. Each individual training process has a copy of the global model but trains it on a unique slice of data in parallel with others (hence <em class="italic">data parallelism</em>). At the end of the training step, each training process exchanges with other learned gradient updates. Then, the gradient updates are averaged and distributed back to all training processes so that they can update their individual model copies. <em class="italic">Figure 6.1</em> illustrates how data batches are distributed in a data-parallel two-node two-GPU cluster:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer032">
+<img alt="Figure 6.1 – An overview of data parallelism " height="680" src="image/B17519_06_001.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.1 – An overview of data parallelism</p>
+<p>When engineering your data parallel training job, you need to be aware of several key design choices<a id="_idIndexMarker438"/> to debug and optimize your training job, such as the following: </p>
+<ul>
+<li>How the coordination happens between processes</li>
+<li>How individual compute processes communicate with each other</li>
+<li>How compute processes are distributed in the training cluster</li>
+</ul>
+<p>In the following section, we will discuss these design options.</p>
+<h2 id="_idParaDest-104"><a id="_idTextAnchor101"/>Coordination patterns – Parameter Server versus Allreduce</h2>
+<p>There are two <a id="_idIndexMarker439"/>ways to coordinate<a id="_idIndexMarker440"/> compute processes in distributed clusters: using a <strong class="bold">dedicated centralized coordinator</strong> and using <strong class="bold">peer-to-peer coordination</strong> where each node communicates<a id="_idIndexMarker441"/> with one or many peers<a id="_idIndexMarker442"/> in a cluster directly. In the context of data parallel training, a centralized<a id="_idIndexMarker443"/> coordination pattern is called <strong class="bold">Parameter Server</strong> where the parameter server process coordinates the distribution of gradient updates and maintains a global model copy. The peer-to-peer pattern is called <strong class="bold">Allreduce</strong> that goes by the name of the peer-to-peer algorithm<a id="_idIndexMarker444"/> to distribute gradient updates between the training processes. In <em class="italic">Figure 6.2</em>, you can see the difference between the two coordination patterns:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer033">
+<img alt="Figure 6.2 – The Parameter Server (A) and Allreduce (B) coordination patterns " height="470" src="image/B17519_06_002.jpg" width="1160"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.2 – The Parameter Server (A) and Allreduce (B) coordination patterns</p>
+<p>Parameter Server is responsible for coordinating<a id="_idIndexMarker445"/> training processes in the cluster, namely<a id="_idIndexMarker446"/> the following:</p>
+<ul>
+<li>Allocating a unique set of data records for each training process</li>
+<li>Receiving gradients from each individual training process</li>
+<li>Aggregating gradients and updating the model weights accordingly</li>
+<li>Sending the updated model back to the training processes</li>
+</ul>
+<p>Parameter Server stores a master copy of model weights. For larger DL models, it’s possible that you might not be able to store the full model on Parameter Server. Additionally, Parameter Server can become a network and computation bottleneck. In that case, you might introduce multiple parameter servers that will store a subset of model parameters to reduce the network and memory requirements. Multiple parameter servers allow you to scale your distributed training for large models; however, it introduces additional complexities when coordinating model updates between the training processes and parameter servers and might still lead to network congestion. Finding an optimal configuration between the training processes and parameter servers can be a daunting task with a considerable trial-and-error effort required to find the optimal configuration.</p>
+<p>The <strong class="bold">Allreduce</strong> algorithm employs<a id="_idIndexMarker447"/> peer-to-peer communication when each<a id="_idIndexMarker448"/> training process exchanges gradient updates with only two neighbors. A training process with a rank of <em class="italic">i</em> calculates gradients for the unique data micro-batch, receives gradients from process <em class="italic">i-1</em>, summarizes the received gradients with its own calculated gradients, and then sends the aggregated gradients to node <em class="italic">i+1</em>. In total, each process will communicate with its peers <img alt="" height="31" src="image/B17519_06_F01.png" width="146"/> times:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer035">
+<img alt="Figure 6.3 – The sequence of compute operations in the Allreduce algorithm " height="220" src="image/B17519_06_003.jpg" width="1101"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.3 – The sequence of compute operations in the Allreduce algorithm</p>
+<p>The Allreduce algorithm is considered bandwidth-efficient with constant communication costs and avoids having communication bottlenecks such as in the case of Parameter Server. Additionally, it has less complexity in operating compared to the Parameter Server approach (specifically, in the case of multiple parameter server instances). Therefore, many recent research papers and implementations are based on the Allreduce algorithm and its modifications. The most popular implementations of the Allreduce algorithm are Horovod, TensorFlow<a id="_idIndexMarker449"/> Mirror Strategy, and PyTorch <strong class="bold">Distributed Data Parallel</strong> (<strong class="bold">DDP</strong>). AWS utilizes the modified Allreduce algorithm in the SDDP library, too. Later<a id="_idIndexMarker450"/> in this chapter, we will develop a distributed training job on SageMaker using the previously mentioned<a id="_idIndexMarker451"/> Allreduce implementations.</p>
+<h3>Communication types – sync versus async</h3>
+<p>There are two types of communication in distributed training jobs: <strong class="bold">synchronous</strong> (<strong class="bold">sync</strong>) and <strong class="bold">asynchronous</strong> (<strong class="bold">async</strong>).</p>
+<p><strong class="bold">Sync communication</strong> implies that each training process will perform<a id="_idIndexMarker452"/> its computations synchronously with other processes in the cluster. For instance, in the case<a id="_idIndexMarker453"/> of the synchronous Allreduce algorithm, each training process will wait for other processes to complete their backward and forward passes before starting to exchange their gradients. This leads to situations where the cluster performance on each training step is defined by the performance of the slowest training process and might result in waiting for time (waste) for other training processes. However, the benefits of sync communication include more stable training convergence. Different implementations of the Allreduce algorithm also provide optimizations to reduce waiting time.</p>
+<p>In <strong class="bold">async communication</strong>, each node acts independently. It sends gradient<a id="_idIndexMarker454"/> updates to other processes or centralized parameter<a id="_idIndexMarker455"/> servers and proceeds with the next training iteration without waiting for results from peers. This approach allows you to minimize the waiting time and maximize the throughput of each training process. The disadvantage of this approach is that the training process can be slow to converge and unstable due to increased stochasticity.</p>
+<p>In practice, it’s important to balance the system throughout and training converge. For this reason, sync communication is used in most implementations of distributed training with a number of optimizations to increase training throughput.</p>
+<h3>Training process layouts in a cluster</h3>
+<p>There are several ways to organize training processes<a id="_idIndexMarker456"/> in your training cluster depending on your model size/architecture and training requirements (such as the desired duration of training):</p>
+<ul>
+<li><strong class="bold">Single node with multiple GPUs</strong> – This allows you to keep you to distributed training<a id="_idIndexMarker457"/> inside a single server and, hence, uses a fast inter-GPU NVLink network. This layout can be a great choice for smaller training jobs. However, even the most performant <strong class="source-inline">p4d.24xlarge</strong> instance only has 8 GPU devices, which limits how much you can scale your training job on a single node.</li>
+<li><strong class="bold">Multiple nodes with a single GPU</strong> – This implies that all coordination between the processes<a id="_idIndexMarker458"/> happens over network communication, which can frequently be a global training bottleneck. Hence, this layout is suboptimal for most training scenarios.</li>
+<li><strong class="bold">Multiple nodes with multiple GPUs</strong> – This allows you to scale your training job to 10s and 100s of individual training<a id="_idIndexMarker459"/> processes. When choosing this layout, you need to pay attention to the network throughput between training nodes since it can become a global bottleneck. SageMaker instances such as <em class="italic">p4d</em> and <em class="italic">p3dn</em> provide improved network capabilities to address this issue.</li>
+</ul>
+<p>Now that we have the initial intuition of data parallelism, let’s gain some practical experience and build data parallel distributed training jobs for the TensorFlow and PyTorch frameworks. We will use both native data parallelism implementations and DL frameworks, as well as the popular framework-agnostic Horovod library. Then, we will learn how to use AWS’s proprietary SageMaker Data Parallel library and review its benefits compared to open source implementations of data parallelism.</p>
+<h2 id="_idParaDest-105"><a id="_idTextAnchor102"/>Engineering TensorFlow data parallel training</h2>
+<p>When designing distributed training jobs<a id="_idIndexMarker460"/> for the TensorFlow<a id="_idIndexMarker461"/> framework, you have several implementations of data parallelism available:</p>
+<ul>
+<li>The native data parallel<a id="_idIndexMarker462"/> implementation (known as “strategies”)</li>
+<li>The Horovod implementation for TensorFlow</li>
+</ul>
+<p>Let’s review the pros and cons of these implementations.</p>
+<h3>Using native TensorFlow strategies</h3>
+<p>TensorFlow 2 significantly expanded<a id="_idIndexMarker463"/> the number of distribution strategies<a id="_idIndexMarker464"/> compared to TensorFlow 1. Note that since TensorFlow 2 has several APIs for training, some APIs have limited support for distributed strategies. Please refer to <em class="italic">Figure 6.4</em> for the support matrix:</p>
+<table class="No-Table-Style _idGenTablePara-1" id="table001-2">
+<colgroup>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+</colgroup>
+<tbody>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p><strong class="bold" lang="en-US" xml:lang="en-US">Training API</strong></p>
+</td>
+<td class="No-Table-Style">
+<p><strong class="bold" lang="en-US" xml:lang="en-US">Mirrored Strategy</strong></p>
+</td>
+<td class="No-Table-Style">
+<p><strong class="bold" lang="en-US" xml:lang="en-US">TPU Strategy</strong></p>
+</td>
+<td class="No-Table-Style">
+<p><strong class="bold" lang="en-US" xml:lang="en-US">Multi Worker Mirrored Strategy (MWMS)</strong></p>
+</td>
+<td class="No-Table-Style">
+<p><strong class="bold" lang="en-US" xml:lang="en-US">Central Storage Strategy</strong></p>
+</td>
+<td class="No-Table-Style">
+<p><strong class="bold" lang="en-US" xml:lang="en-US">Parameter Server Strategy</strong></p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Keras Model.fit</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Experimental support</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Experimental support</span></p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Custom training loop</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Experimental support</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Experimental support</span></p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Estimator API</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Limited Support</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Not supported</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Limited Support</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Limited Support</span></p>
+</td>
+<td class="No-Table-Style">
+<p><span lang="en-US" xml:lang="en-US">Limited Support</span></p>
+</td>
+</tr>
+</tbody>
+</table>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.4 – TensorFlow 2 distributed strategies</p>
+<p><strong class="bold">Parameter Server Strategy</strong> and <strong class="bold">Central Storage Strategy</strong> are marked as <strong class="bold">Experimental support</strong>, which means that they are currently in active development. It’s generally advised not to use experimental features in production workloads. So, we will not consider them in the scope of this book.</p>
+<p class="callout-heading">Note</p>
+<p class="callout">While the Amazon SageMaker documentation states that it supports TensorFlow Parameter Server, this claim is misleading. SageMaker supports TensorFlow 1 Parameter Server, which is obsolete and should not be used in new development. SageMaker does not directly support the TensorFlow 2 native strategies out of the box, though it can support them with a few code changes, as shown next.</p>
+<p><strong class="bold">TPU Strategy</strong> is designed to work with Google TPU<a id="_idIndexMarker465"/> devices and, hence, is not <a id="_idIndexMarker466"/>supported by Amazon SageMaker. Therefore, in this section, we will focus on <strong class="bold">Mirrored Strategy</strong> and MWMS.</p>
+<p>Both strategies implement the sync Allreduce algorithm for GPU devices. As their names suggest, the Multi Worker strategy supports distributing training tasks across multiple training nodes. For <em class="italic">intra-node communication</em>, you might choose either the <em class="italic">NCCL backend</em> or the <em class="italic">native RING communication</em> backend. In the case of both strategies, full model copies (known as <em class="italic">MirroredVariables</em>) are stored on each training <a id="_idIndexMarker467"/>process and updated synchronously after each training step. Let’s review <a id="_idIndexMarker468"/>an example of how to implement <strong class="bold">MWMS</strong> on the SageMaker platform.</p>
+<p>As a test task, we will choose everyone’s favorite MNIST dataset and train a small computer vision model to solve<a id="_idIndexMarker469"/> a classification task. We will use the convenient <strong class="bold">Keras API</strong> to build and train the model and evaluate the results. An example notebook with more details is available at <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_distributed_training_TF.ipynb">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_distributed_training_TF.ipynb</a>.</p>
+<p>We will start by reviewing which modifications are required to enable MWMS.</p>
+<h4>Cluster configuration and setup</h4>
+<p>MWMS is not natively<a id="_idIndexMarker470"/> supported by Amazon SageMaker, so we need<a id="_idIndexMarker471"/> to correctly configure the MWMS environment in SageMaker. TensorFlow2 uses an environment variable called <strong class="source-inline">tf_config</strong> to represent the cluster configuration. This configuration is then used to start the training processes. You can read about how to build the <strong class="source-inline">'TF_CONFIG'</strong> variable at <a href="https://www.tensorflow.org/guide/distributed_training#TF_CONFIG">https://www.tensorflow.org/guide/distributed_training#TF_CONFIG</a>. In the following <a id="_idIndexMarker472"/>code block, we use the <strong class="source-inline">'_build_tf_config()'</strong> method to set up this variable. Note that we are using the <strong class="source-inline">'SM_HOSTS'</strong> and <strong class="source-inline">'SM_CURRENT_HOST'</strong> SageMaker environment variables for it:</p>
+<pre class="source-code">
+Def _build_tf_config():
+    hosts = json.loads(os.getenv("SM_HOSTS"))
+    current_host = os.getenv("SM_CURRENT_HOST")
+    workers = hosts
+    def host_addresses(hosts, port=7777):
+        return ["{}:{}".format(host, port) for host in hosts]
+    tf_config = {"cluster": {}, "task": {}}
+    tf_config["cluster"]["worker"] = host_addresses(workers)
+    tf_config["task"] = {"index": workers.index(current_host), "type": "worker"}
+    os.environ["TF_CONFIG"] = json.dumps(tf_config)</pre>
+<p>In this example, by<a id="_idIndexMarker473"/> default, we use two <strong class="source-inline">p2.xlarge</strong> instances<a id="_idIndexMarker474"/> with a total world size of just two training processes. So, <strong class="source-inline">_build_tf_config()</strong> will produce the following <strong class="source-inline">'TF_CONFIG'</strong> variable in the rank=<strong class="source-inline">0</strong> node:</p>
+<pre class="source-code">
+{
+    "cluster": 
+    {
+        "worker": ["algo-1:7777", "algo-2:7777"]},
+        "task": {"index": 0, "type": "worker"
+    }
+}</pre>
+<p>Once the <strong class="source-inline">TF</strong> config has been correctly set, TF2 should be able to start training processes on all nodes and utilize all available GPU devices for it. This is a default setting, but you can provide a list of specific GPU devices to use, too.</p>
+<p>To complete the cluster setup, we also need to make sure that the NCCL backend has been configured (please see the <strong class="source-inline">_set_nccl_environment()</strong> method) and that all nodes in the cluster can communicate with each other (please see the <strong class="source-inline">_dns_lookup()</strong> method). Note that these methods are required because TensorFlow 2 strategies are not officially supported by SageMaker. For supported <a id="_idIndexMarker475"/>data-parallel implementations, SageMaker provides <a id="_idIndexMarker476"/>these utilities out of the box and runs them as part of the training cluster initiation.</p>
+<h4>Using MWMS</h4>
+<p>To use MWMS, we will start by initiating<a id="_idIndexMarker477"/> a strategy object as follows. Please note<a id="_idIndexMarker478"/> that, here, we explicitly set the communication backend to <strong class="source-inline">AUTO</strong>, which means that TF2 will identify which backend to use. You can also define a specific backend manually. <strong class="source-inline">NCCL</strong> and the custom <strong class="source-inline">RING</strong> backends are available for GPU devices:</p>
+<pre class="source-code">
+strategy = tf.distribute.MultiWorkerMirroredStrategy(
+    communication_options=tf.distribute.experimental.CommunicationOptions(
+        implementation=tf.distribute.experimental.CollectiveCommunication.AUTO
+    )
+)</pre>
+<p>Once the strategy has been correctly initiated, you can confirm your cluster configuration by properly checking <strong class="source-inline">strategy.num_replicas_in_sync</strong>, which will return your world size. It should match the number of GPUs per node multiplied by the number of nodes.</p>
+<p>In this example, we are using the Keras API, which fully supports MWMS and, thus, simplifies our training script. For instance, to create model copies on all workers, you just need to initiate your Keras model within <strong class="source-inline">strategy.scope</strong>, as demonstrated in the following code block:</p>
+<pre class="source-code">
+    with strategy.scope():
+        multi_worker_model = build_and_compile_cnn_model()</pre>
+<p>Additionally, MWMS automatically shards your dataset based on the world size. You only need to set up a proper global batch size, as shown in the following code block. Note that automatic sharding can be turned on if some custom sharding logic is needed:</p>
+<pre class="source-code">
+global_batch_size = args.batch_size_per_device * _get_world_size()
+multi_worker_dataset = mnist_dataset(global_batch_size)</pre>
+<p>The rest of the training script is like your single-process Keras training script. As you can see, using MWMS is quite<a id="_idIndexMarker479"/> straightforward, and TF2 does a good job<a id="_idIndexMarker480"/> at abstracting complexities from developers, but at the same time, gives you the flexibility to adjust the default settings if needed.</p>
+<h4>Running a SageMaker job</h4>
+<p>So far, we have discussed how to update<a id="_idIndexMarker481"/> the training script to run in a data parallel way. In the source directory, you will also see the <strong class="source-inline">mnist_setup.py</strong> script to download and configure the MNIST dataset. Now we are ready to run data-parallel training on SageMaker.</p>
+<p>In the following code block, we define the TF version (2.8), the Python version (3.9), the instance type, and the number of instances. Additionally, we pass several training hyperparameters. Since the MNIST dataset has been downloaded from the internet as part of our training script, no data is passed to the <strong class="source-inline">estimator_ms.fit()</strong> method:</p>
+<pre class="source-code">
+from sagemaker.tensorflow import TensorFlow
+ps_instance_type = 'ml.p2.xlarge'
+ps_instance_count = 2
+hyperparameters = {'epochs': 4, 'batch-size-per-device' : 16, 'steps-per-epoch': 100}
+estimator_ms = TensorFlow(
+                       source_dir='1_sources',
+                       entry_point='train_ms.py', 
+                       role=role,
+                       framework_version='2.8',
+                       py_version='py39',
+                       disable_profiler=True,
+                       debugger_hook_config=False,
+                       hyperparameters=hyperparameters,
+                       instance_count=ps_instance_count, 
+                       instance_type=ps_instance_type,
+                       )
+estimator_ms.fit()</pre>
+<p>The training job should complete<a id="_idIndexMarker482"/> within 10–12 minutes using the default settings. Feel free to experiment with the number of nodes in the cluster and instance types and observe any changes in <strong class="source-inline">'TF_CONFIG'</strong>, the training speed, and convergence. </p>
+<p>In the next section, we will learn about an open source alternative for data parallel – the Horovod framework.</p>
+<h3>Using the Horovod framework</h3>
+<p>The Horovod framework<a id="_idIndexMarker483"/> provides implementations<a id="_idIndexMarker484"/> of synchronous data parallelism for the most popular DL frameworks such as TensorFlow 1 and TensorFlow 2 (including Keras), PyTorch, and Apache MXNet. One of the benefits of Horovod is that it requires minimal modification of your training scripts to distribute training tasks, which is compatible with various cluster layouts. Horovod supports several communication backends: Gloo and Open MPI for CPU-based training and NCCL to run on NVIDIA GPU devices. </p>
+<p>Horovod comes with a number of features to address the conceptual limitations of the Allreduce algorithm, which we discussed earlier. To decrease waiting times during the <strong class="source-inline">allreduce</strong> computation and to increase<a id="_idIndexMarker485"/> the utilization of training devices, Horovod introduces a concept called <strong class="bold">Tensor Fusion</strong>, which allows you to interleave communication and computations. This mechanism attempts to batch all the gradients ready for reduce operations together into a single reduction operation. Another notable feature that improves<a id="_idIndexMarker486"/> performance in certain scenarios is called <strong class="bold">Hierarchical Operations</strong>. This attempts to group operations (such as hierarchical <strong class="source-inline">allreduce</strong> and <strong class="source-inline">allgather</strong>) into a hierarchy and, thus, achieve better overall <a id="_idIndexMarker487"/>performance. Additionally, Horovod provides an <strong class="bold">Autotune</strong> utility to tune the performance of training jobs by tweaking the training parameters. Note that running an Autotune job is not intended for production usage.</p>
+<p>Now, let’s review how to use Horovod for TensorFlow 2 on SageMaker. Please note that Horovod is natively supported for both the TensorFlow<a id="_idIndexMarker488"/> and PyTorch frameworks. In this chapter, we will only review the Horovod implementation for TensorFlow 2 since the PyTorch variant will be very similar. We will solve the same MNIST classification problem that we did earlier.</p>
+<h4>Configuring the Horovod cluster</h4>
+<p>Unlike with MWMS, we don’t have<a id="_idIndexMarker489"/> to configure and set up a training cluster in the training script since Horovod is supported by SageMaker. The Horovod cluster configuration is done on the level of the TensorFlow Estimator API via the <strong class="source-inline">distribution</strong> object, as shown in the following code block:</p>
+<pre class="source-code">
+distribution = {"mpi": {"enabled": True, "custom_mpi_options": "-verbose --NCCL_DEBUG=INFO", "processes_per_host": 1}}</pre>
+<p>Note the <strong class="source-inline">processes_per_host</strong> parameter, which should match the number of GPUs in the chosen instance type. Additionally, you can set <strong class="source-inline">custom_mpi_options</strong> as<a id="_idIndexMarker490"/> needed, which SageMaker will pass to the <strong class="bold">mpirun</strong> run utility. You can view the list<a id="_idIndexMarker491"/> of supported MPI options at <a href="https://www.open-mpi.org/doc/v4.0/man1/mpirun.1.php">https://www.open-mpi.org/doc/v4.0/man1/mpirun.1.php</a>.</p>
+<h4>Developing the training script</h4>
+<p>You can find the full training script at <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_sources/train_hvd.py">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/1_sources/train_hvd.py</a>. Let’s perform<a id="_idIndexMarker492"/> the following steps:</p>
+<ol>
+<li>We start by initiating Horovod in the training script via the <strong class="source-inline">_initiate_hvd()</strong> method. We also need to associate the Horovod training processes with the available GPU devices (one device per process):<p class="source-code">def _initiate_hvd():</p><p class="source-code">    hvd.init()</p><p class="source-code">    gpus = tf.config.experimental.list_physical_devices("GPU")</p><p class="source-code">    for gpu in gpus:</p><p class="source-code">        tf.config.experimental.set_memory_growth(gpu, True)</p><p class="source-code">    if gpus:</p><p class="source-code">tf.config.experimental.set_visible_devices(gpus[hvd.local_rank()], "GPU")</p></li>
+<li>Next, we need to shard<a id="_idIndexMarker493"/> our dataset based on the world size, so each process can get a slice of data based on its global rank. For this, we use the <strong class="source-inline">shard</strong> method of the TensorFlow dataset instance. Note that we are getting local and global ranks of the given training process using the Horovod properties of <strong class="source-inline">size()</strong> and <strong class="source-inline">rank()</strong>:<p class="source-code">train_dataset = train_dataset.shard(hvd.size(), hvd.rank())</p></li>
+<li>Then, we use the <strong class="source-inline">DistributedOptimizer</strong> Horovod wrapper to enable the distributed gradient update. Note that we are wrapping an instance of the native TF2 optimizer:<p class="source-code">optimizer = tf.keras.optimizers.SGD(learning_rate=0.001 * hvd.size())</p><p class="source-code">optimizer = hvd.DistributedOptimizer(optimizer)</p></li>
+<li>Lastly, we use special Horovod callbacks, which will be used by Keras in the training loop:<ul><li><strong class="source-inline">hvd.callbacks.BroadcastGlobalVariablesCallback(0)</strong> to distribute initial variables from the <strong class="source-inline">rank=0</strong> process to other training processes in the cluster</li><li><strong class="source-inline">hvd.callbacks.MetricAverageCallback()</strong> to calculate the global average of metrics across all training processes</li></ul></li>
+<li>These callbacks are then passed to the <strong class="source-inline">model.fit()</strong> method, as follows:<p class="source-code">    hvd_model.fit(</p><p class="source-code">        shareded_by_rank_dataset,</p><p class="source-code">        epochs=args.epochs,</p><p class="source-code">        steps_per_epoch=args.steps_per_epoch // hvd.size(),</p><p class="source-code">        callbacks=callbacks,</p><p class="source-code">    )</p></li>
+</ol>
+<p>These are the minimal<a id="_idIndexMarker494"/> additions to your training script that allow you to use Horovod.</p>
+<h4>Running the SageMaker job</h4>
+<p>The SageMaker training job configuration<a id="_idIndexMarker495"/> is like the MWMS example, but we will add the <strong class="source-inline">distribution</strong> parameter, which allows us to set the MPI parameters and defines how many processes will be started per host:</p>
+<pre class="source-code">
+from sagemaker.tensorflow import TensorFlow
+ps_instance_type = 'ml.p2.xlarge'
+ps_instance_count = 2
+distribution = {"mpi": {"enabled": True, "custom_mpi_options": "-verbose --NCCL_DEBUG=INFO", "processes_per_host": 1}}
+hyperparameters = {'epochs': 4, 'batch-size-per-device' : 16, 'steps-per-epoch': 100}
+estimator_hvd = TensorFlow(
+                       source_dir='1_sources',
+                       entry_point='train_hvd.py', 
+                       role=role,
+                       framework_version='2.8',
+                       py_version='py39',
+                       disable_profiler=True,
+                       debugger_hook_config=False,
+                       hyperparameters=hyperparameters,
+                       instance_count=ps_instance_count, 
+                       instance_type=ps_instance_type,
+                       distribution=distribution
+                       )
+estimator_hvd.fit()</pre>
+<p>Here, we implemented minimal viable<a id="_idIndexMarker496"/> examples of data parallel training jobs using TensorFlow 2 MWMS and TensorFlow 2 Horovod. Now, you should have some practical experience in developing baseline training jobs. There are more knobs and capabilities in both Allreduce implementations, which we encourage you to explore and try in your real-life use cases. The choice of specific implementations (MWMS or Horovod) in many instances is use case specific without a clear-cut winner. The benefits of Horovod are that it supports several DL frameworks and its maturity (specifically its troubleshooting and optimization utilities). On the other hand, TensorFlow 2 strategies provide native integration with various TensorFlow APIs and different approaches, with many of them currently in experimental mode.</p>
+<p>In the next section, we will move on to the PyTorch framework and review its native data parallel implementation.</p>
+<h2 id="_idParaDest-106"><a id="_idTextAnchor103"/>Engineering PyTorch data parallel training</h2>
+<p>PyTorch provides<a id="_idIndexMarker497"/> a native implementation<a id="_idIndexMarker498"/> of data parallelism called <strong class="bold">DDP</strong>. DDP implements a<a id="_idIndexMarker499"/> synchronous Allreduce algorithm that can be scaled for multiple devices and multiple nodes. It supports both CPU and GPU training devices. To use DDP, you need to spawn multiple processes (one process per training device) on each node. PyTorch provides a special launch utility, called <strong class="source-inline">torch.distributed.run</strong>, to simplify and coordinate the processes launch. Similarly to Horovod, PyTorch DDP supports NCCL, Gloo, and the MPI<a id="_idIndexMarker500"/> communication backends. Additionally, PyTorch DDP natively supports <strong class="bold">mixed precision</strong> and <strong class="bold">Automatic Mixed Precision</strong> (<strong class="bold">AMP</strong>), which allows you to train<a id="_idIndexMarker501"/> your model with half-precision and minimal impact on model accuracy and training convergence. The benefits of AMP include the speeding up of computations and the reduction of a memory footprint. </p>
+<p>While SageMaker doesn’t support PyTorch DDP natively, it’s possible to run DDP training jobs on SageMaker. Let’s review the implementation example.</p>
+<p>We take the pretrained CV Resnet18 model and then fine-tune it to classify ants and bees. We use data parallel to distribute tasks between two <strong class="source-inline">p2.xlarge</strong> instances with a single GPU device each. Feel free to change or modify the number and type of instances in the training cluster and observe how this changes the training speed. </p>
+<p>Note that this is small-scale training and will not be indicative of training efficiency in real-life tasks. </p>
+<p>Next, we will highlight key code constructs. A notebook and other code assets are available at <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/2_distributed_training_PyTorch.ipynb">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter6/2_distributed_training_PyTorch.ipynb</a>. </p>
+<h3>Launching training processes</h3>
+<p>Amazon SageMaker has no out-of-the-box<a id="_idIndexMarker502"/> support for PyTorch DDP training. Specifically, it doesn’t know how to start distributed DDP processes in the training cluster. Therefore, we need to develop a launching utility to perform this function. This utility is quite simple and can also be reused for any other DDP-based training jobs.</p>
+<p>In the launcher script, we will use a DDP module, <strong class="source-inline">torch.distributed.run</strong>, which simplifies the spawning of training processes<a id="_idIndexMarker503"/> in a cluster. As part of the launcher script, we need to collect information about the training world, specifically, the number of nodes and GPU devices in the cluster as well as identify the node that will act as the master coordinator. Then, <strong class="source-inline">torch.distributed.run</strong> will spawn multiple training processes. Please refer to <em class="italic">Figure 6.5</em> for a visual illustration:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer036">
+<img alt="Figure 6.5 – Launching PyTorch DDP training on N nodes with two GPUs  " height="614" src="image/B17519_06_005.jpg" width="677"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.5 – Launching PyTorch DDP training on N nodes with two GPUs </p>
+<p>Let’s highlight several<a id="_idIndexMarker504"/> key areas in our launcher script: </p>
+<ol>
+<li value="1">First, we need to collect information about the SageMaker training cluster. For this, we use the environmental variables set by SageMaker automatically:<p class="source-code">    nodes = json.loads(os.getenv("SM_HOSTS"))</p><p class="source-code">    nnodes = len(nodes)</p><p class="source-code">    node_rank = nodes.index(os.getenv("SM_CURRENT_HOST"))</p><p class="source-code">    nproc_per_node = os.getenv("SM_NUM_GPUS", 1)</p></li>
+<li>Next, we need<a id="_idIndexMarker505"/> to form the command line to start <strong class="source-inline">torch.distributed.run</strong>:<p class="source-code">    cmd = [</p><p class="source-code">        sys.executable,</p><p class="source-code">        "-m",</p><p class="source-code">        "torch.distributed.run",</p><p class="source-code">        f"--nproc_per_node={nproc_per_node}",</p><p class="source-code">        f"--nnodes={str(nnodes)}",</p><p class="source-code">        f"--node_rank={node_rank}",</p><p class="source-code">        f"--rdzv_id={os.getenv('SAGEMAKER_JOB_NAME')}",</p><p class="source-code">        "--rdzv_backend=c10d",</p><p class="source-code">        f"--rdzv_endpoint={nodes[0]}:{RDZV_PORT}",</p><p class="source-code">        distr_args.train_script,</p><p class="source-code">    ]</p><p class="source-code">    # Adding training hyperparameters which will then be passed in training script</p><p class="source-code">    cmd.extend(training_hyperparameters)</p></li>
+</ol>
+<p>Note that we are adding <strong class="source-inline">training hyperparameters</strong> “as is” at the end of the command line. These arguments are not handled by the launcher but by the training script to configure training. </p>
+<ol>
+<li value="3">Lastly, we use Python’s <strong class="source-inline">subprocess.Popen</strong> to start the <strong class="source-inline">torch.distributed.run</strong> utility as a module:<p class="source-code">    process = subprocess.Popen(cmd, env=os.environ)</p><p class="source-code">    process.wait()</p><p class="source-code">    if process.returncode != 0:</p><p class="source-code">        raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)</p></li>
+</ol>
+<p>Note that we are copying the environment variables to subprocesses to preserve all the SageMaker variables. If the spawned process returns nonzero code (an indication of error), we will then raise an exception to propagate the error code to the SageMaker control plane.</p>
+<p>In summary, our launcher utility<a id="_idIndexMarker506"/> is responsible for collecting training cluster configuration and then starting <strong class="source-inline">torch.distributed.run</strong> on each node. The utility then takes care of starting multiple training processes per node.</p>
+<h3>Adopting the training script for DDP</h3>
+<p>To use DDP, we need to make<a id="_idIndexMarker507"/> minimal changes<a id="_idIndexMarker508"/> to our training script: </p>
+<ol>
+<li value="1">First, we initialize the training process and add it to the DDP process group:<p class="source-code">dist.init_process_group(</p><p class="source-code">    backend="nccl",</p><p class="source-code">    rank=int(os.getenv("RANK", 0)),</p><p class="source-code">    world_size=int(os.getenv("WORLD_SIZE", 1)),</p><p class="source-code">)</p></li>
+</ol>
+<p>Since we have GPU-based instances, we use the <strong class="source-inline">NCCL</strong> communication backend. Also, we utilize the environment variables set by the <strong class="source-inline">torch.distributed.run</strong> module: world size and global rank. </p>
+<ol>
+<li value="2">Next, we need to identify which GPU device will store the model and run computations. We use the <strong class="source-inline">LOCAL_RANK</strong> variable set by <strong class="source-inline">torch.distributed.run</strong> during the process spawn:<p class="source-code">torch.cuda.set_device(os.getenv("LOCAL_RANK"))</p><p class="source-code">device = torch.device("cuda")</p><p class="source-code">model = model.to(device)</p></li>
+<li>Then, we wrap<a id="_idIndexMarker509"/> our regular PyTorch model with a special DDP<a id="_idIndexMarker510"/> implementation. This implementation allows us to work with the PyTorch model as if it is a regular, locally stored model. Under the hood, the DDP module implements gradient synchronization between training processes in the process group. Also, observe that we are scaling down the global batch size provided by the user based on the world size:<p class="source-code">model = DDP(model)</p><p class="source-code">args.batch_size //= dist.get_world_size()</p><p class="source-code">args.batch_size = max(args.batch_size, 1)</p></li>
+<li>The last step we need to do is to modify the training data loader so that each training process gets a unique slice of data during the training step. For this, we use <strong class="source-inline">DistributedSampler</strong>, which samples data records based on the total number of processes, and process the global rank: <p class="source-code">    train_sampler = torch.utils.data.distributed.DistributedSampler(</p><p class="source-code">        image_datasets["train"], num_replicas=args.world_size, rank=args.rank</p><p class="source-code">    )</p><p class="source-code">    train_loader = torch.utils.data.DataLoader(</p><p class="source-code">        image_datasets["train"],</p><p class="source-code">        batch_size=args.batch_size,</p><p class="source-code">        shuffle=False,</p><p class="source-code">        num_workers=0,</p><p class="source-code">        pin_memory=True,</p><p class="source-code">        sampler=train_sampler,</p><p class="source-code">    ) </p></li>
+</ol>
+<p>The rest of the training<a id="_idIndexMarker511"/> script is similar to <em class="italic">non-distributed training</em>. As you can <a id="_idIndexMarker512"/>see, the amount of modification in the training script to make it compatible with PyTorch DDP is minimal.</p>
+<h3>Running a SageMaker training job</h3>
+<p>Once the launcher and training<a id="_idIndexMarker513"/> scripts are ready, we can start the SageMaker training job. Note that we identify the launcher script as an <strong class="source-inline">entry_point</strong> parameter. A reference to the training script is provided along with the training hyperparameters in the <strong class="source-inline">hyperparameter</strong> object: </p>
+<pre class="source-code">
+from sagemaker.pytorch import PyTorch
+ps_instance_type = 'ml.p3.2xlarge'
+ps_instance_count = 2
+hyperparameters = {
+  'train-script': 'train_ddp.py',
+  'epochs': 25,
+  }
+estimator_ms = PyTorch(
+                       source_dir='2_sources',
+                       entry_point='launcher.py', 
+                       role=role,
+                       framework_version='1.9',
+                       py_version='py38',
+                       disable_profiler=True,
+                       debugger_hook_config=False,
+                       hyperparameters=hyperparameters,
+                       instance_count=ps_instance_count, 
+                       instance_type=ps_instance_type,
+                       )
+estimator_ms.fit(inputs={"train":f"{data_url}/train", "val":f"{data_url}/val"})</pre>
+<p>The training job should complete<a id="_idIndexMarker514"/> within 8–9 minutes. Feel free to review the debug messages in the training job logs. Additionally, you can experiment with other parameters such as the instance type and size, the number of epochs, the batch size, and more.</p>
+<p>In this section, we learned how to use native data parallel implementation in the PyTorch framework. In the next section, we will cover SageMaker’s proprietary data parallel implementation.</p>
+<h2 id="_idParaDest-107"><a id="_idTextAnchor104"/>Engineering SageMaker’s DDP jobs</h2>
+<p>The SDDP library<a id="_idIndexMarker515"/> provides a proprietary implementation<a id="_idIndexMarker516"/> of data parallelism with native integration with other SageMaker capabilities. SDDP is packaged in SageMaker DL containers and supports both the TensorFlow 2 and PyTorch frameworks.</p>
+<p>SDDP utilized MPI (like Horovod) to manage processes in the training cluster. Under the hood, SDDP uses the <strong class="bold">mpirun</strong> utility to start training in the training<a id="_idIndexMarker517"/> cluster. SDDP is only available for GPU-based instances: <strong class="source-inline">ml.p3.16xlarge</strong>, <strong class="source-inline">ml.p3dn.24xlarge</strong>, and <strong class="source-inline">ml.p4d.24xlarge</strong>. SDDP provides an API very similar to Horovod and PyTorch DDP, which makes it easy to switch from open source implementations to it.</p>
+<p>SDDP implements a modified Allreduce algorithm with a number of optimizations to improve the overall training performance and, specifically, waiting time during the <strong class="source-inline">allreduce</strong> operation. As discussed earlier, in the synchronous Allreduce algorithm, typically, the distributed <strong class="source-inline">allreduce</strong> operation is a bottleneck and becomes even less efficient with the scaling out of the training cluster. Please view <em class="italic">Figure 6.6</em>:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer037">
+<img alt="Figure 6.6 – Allreduce times with a cluster increase " height="237" src="image/B17519_06_006.jpg" width="1093"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.6 – Allreduce times with a cluster increase</p>
+<p>To increase training efficiencies, specifically, in a large<a id="_idIndexMarker518"/> cluster, SDDP introduces several novel optimizations:</p>
+<ul>
+<li>SDDP utilizes GPU and CPU devices during training, so GPU devices perform forward and backward passes, and CPU devices perform gradient averaging and communication with other training processes during the <strong class="source-inline">allreduce</strong> stage. This approach allows you to run compute operations and <strong class="source-inline">allreduce</strong> in parallel and, hence, maximize utilizations.</li>
+<li>SDDP supports <strong class="bold">FusionBuffers</strong> to balance data sent over the network<a id="_idIndexMarker519"/> during <strong class="source-inline">allreduce</strong> (such as Horovod’s Tensor Fusion feature).</li>
+</ul>
+<p>As a result, AWS claims that SDDP provides near linear scaling of training throughput with an increase in the training cluster size. AWS published the following benchmarks to demonstrate the optimization gains of SDDP compared to native PyTorch DDP: for 8 node clusters of <strong class="source-inline">p3dn.24xl</strong>, SSDP outperforms PyTorch DDP by 41% when training the BERT model and by 13% when training the MaskRCNN model. Please refer to this article<a id="_idIndexMarker520"/> for more details: <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/data-parallel-intro.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/data-parallel-intro.xhtml</a>.</p>
+<p>When engineering an SDDP training job, keep the following<a id="_idIndexMarker521"/> aspects in mind:</p>
+<ul>
+<li>SDDP relies on the CPU device to perform the <strong class="source-inline">allreduce</strong> operation. Most framework data loaders use CPU, too. So, make sure that you control your CPU usage to avoid overutilization. In <a href="B17519_07.xhtml#_idTextAnchor110"><em class="italic">Chapter 7</em></a>, <em class="italic">Operationalizing Deep Learning Training</em>, we will discuss tools that you can use to control your resource utilization such as SageMaker Debugger. Alternatively, you can move data loading operations to GPU. However, in this case, you will have less available GPU memory to load the model and run its forward and backward passes.</li>
+<li>SDDP might not have significant or any benefits when used in small clusters or on a single node, as it was designed to specifically address the bottlenecks of large training clusters.</li>
+</ul>
+<p>Let’s review an example of an SDDP-based training job. For this, we will reuse the previous PyTorch DDP and make minimal modifications to switch from PyTorch DDP to the SDDP library.</p>
+<p>As a training task, we use the same binary classification CV as in the PyTorch DDP sample. Since SDDP is natively supported by SageMaker, we don’t need to develop any custom launcher utilities. SDDP uses the <strong class="source-inline">mpirun</strong> utility to spawn training processes in our cluster. You can use the <strong class="source-inline">distribution</strong> parameter to enable data-parallel execution and provide any <strong class="source-inline">mpi</strong> options, as follows:</p>
+<pre class="source-code">
+distribution = { 
+    "smdistributed": { 
+        "dataparallel": {
+            "enabled": True, 
+            "custom_mpi_options": "-verbose -x NCCL_DEBUG=VERSION"
+        }
+    }
+}</pre>
+<p>Now, let’s move on to adopting the training script.</p>
+<h3>Adopting the training script </h3>
+<p>SDDP’s starting version 1.4.0 is an integrated PyTorch DDP package<a id="_idIndexMarker522"/> that we used in the previous example as a specific backend option. This significantly reduces the changes needed to use SDDP. In fact, if you already have a DDP-enabled training script, you will only need to add an import of the <strong class="source-inline">torch_sddp</strong> package and use the <strong class="source-inline">smddp</strong> communication backend when initializing the process group, as follows:</p>
+<pre class="source-code">
+import smdistributed.dataparallel.torch.torch_smddp
+import torch.distributed as dist
+dist.init_process_group(backend='smddp')</pre>
+<p>Keep in mind that SDDP v1.4 is only available with the latest PyTorch v10 DL containers. For earlier versions, the SDDP API<a id="_idIndexMarker523"/> is slightly different. For more details, please refer to the official API documentation at <a href="https://sagemaker.readthedocs.io/en/stable/api/training/distributed.xhtml#the-sagemaker-distributed-data-parallel-library">https://sagemaker.readthedocs.io/en/stable/api/training/distributed.xhtml#the-sagemaker-distributed-data-parallel-library</a>.</p>
+<h3>Running the SDDP SageMaker training job</h3>
+<p>Starting the SDDP job<a id="_idIndexMarker524"/> requires you to provide<a id="_idIndexMarker525"/> a special <strong class="source-inline">distribution</strong> object with the configuration of data parallelism. Another thing to keep in mind is that SDDP is only available for a limited set of multi-GPU instance types: <strong class="source-inline">ml.p3.16xlarge</strong>, <strong class="source-inline">ml.p3dn.24xlarge</strong>, and <strong class="source-inline">ml.p4d.24xlarge</strong>. Take a look at the following:</p>
+<pre class="source-code">
+from sagemaker.pytorch import PyTorch
+instance_type = 'ml.p3.16xlarge'
+instance_count = 2
+distribution = { 
+    "smdistributed": { 
+        "dataparallel": {
+            "enabled": True, 
+            "custom_mpi_options": "-verbose -x NCCL_DEBUG=VERSION"
+        }
+    }
+}
+sm_dp_estimator = PyTorch(
+          entry_point="train_sm_dp.py",
+          source_dir='3_sources',
+          role=role,
+          instance_type=instance_type,
+          sagemaker_session=sagemaker_session,
+          framework_version='1.10',
+          py_version='py38',
+          instance_count=2,
+          hyperparameters={
+              "batch-size":64,
+              "epochs":25,
+          },
+          disable_profiler=True,
+          debugger_hook_config=False,
+          distribution=distribution,
+          base_job_name="SM-DP",
+      )</pre>
+<p>Note that since we are using<a id="_idIndexMarker526"/> a small dataset, this training sample won’t be indicative of any performance efficiencies of SDDP compared to the open source data parallel frameworks. </p>
+<h3>Summarizing data parallelism</h3>
+<p>So far, we have<a id="_idIndexMarker527"/> discussed how to speed up the training of DL models, which can fit into the memory of an individual device. We discussed and developed training scripts using native implementations as part of the DL frameworks, open source, and proprietary cross-framework Allreduce implementations (Horovod and SageMaker SDDP, respectively). However, we didn’t attempt to benchmark the training efficiencies of the given implementation. While each use case is unique, the general recommendation would be to consider SDDP as a first choice when you are dealing with large-scale and lengthy training processes involving large clusters. If you have a medium- or small-scale training job, you still might consider using framework-native data-parallel implementations. In such cases, the SDDP performance benefits can be negligible.</p>
+<p>In the next section, we will discuss how to optimally train models that cannot fit into single GPU memory using model parallelism.</p>
+<h1 id="_idParaDest-108"><a id="_idTextAnchor105"/>Engineering model parallel training jobs</h1>
+<p>In model parallelism, a single copy<a id="_idIndexMarker528"/> of the model is distributed across two or more training devices to avoid the memory limitations of a single GPU device. A simple method of model parallelism is to explicitly assign layers of the model onto different devices. In this case, forward pass computations will be performed on the GPU device storing the first set of layers. Then, the results will be transferred to the GPU device storing the next set of layers, and so on. The handoff between<a id="_idIndexMarker529"/> layers will happen in reverse order during the backward<a id="_idIndexMarker530"/> pass. This type of model parallelism is known as <strong class="bold">naïve model parallelism</strong> or <strong class="bold">vertical model parallelism</strong> because we split the model vertically between devices. However, this type of model parallelism is inefficient, as each GPU device will wait for a significant amount of time for other devices to complete their computations. A more efficient way to organize model parallelism is called <strong class="bold">Pipeline Parallelism</strong>. This splits a single data batch<a id="_idIndexMarker531"/> into a number of micro-batches and tries to minimize the waiting time by overlapping<a id="_idIndexMarker532"/> the computing gradients for different <strong class="bold">micro-batches</strong>. See a comparison of naïve model parallelism and pipeline parallelism in <em class="italic">Figure 6.7</em>:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer038">
+<img alt="Figure 6 .7 – Naïve model parallelism and pipeline model parallelism " height="869" src="image/B17519_06_007.jpg" width="1508"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6 .7 – Naïve model parallelism and pipeline model parallelism</p>
+<p class="callout-heading">Source of the figure</p>
+<p class="callout"><a href="https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.xhtml%0D">https://ai.googleblog.com/2019/03/introducing-gpipe-open-source-library.xhtml</a></p>
+<p>Implementing<a id="_idIndexMarker533"/> pipeline parallelism<a id="_idIndexMarker534"/> has several challenges, as you will likely need to reimplement your training script to assign parts of the model to different devices and reflect the new computation flow in your training loop. Also, you will need to decide how to optimally place your model layers on devices within the same node and across nodes. Additionally, pipeline parallel doesn’t support conditional flows and requires each layer to take a tensor as input and produce a tensor output. You will also need to reimplement pipeline parallelism for each new model architecture. Later in this section, we’ll see how the SMDP library addresses these challenges.</p>
+<p>Splitting the model vertically<a id="_idIndexMarker535"/> is one way to minimize memory <a id="_idIndexMarker536"/>footprint. Another parallelization approach is called <strong class="bold">Tensor Parallelism</strong>. Each tensor (data inputs and layer outputs) is split across multiple devices and processed in parallel. Then, the individual results are aggregated. Tensor parallelism is possible as many compute operations can be represented as matrix operations, which can be split along the <em class="italic">X</em> or <em class="italic">Y</em> axes. Refer to <em class="italic">Figure 6.8</em> for a visual representation of how tensors<a id="_idIndexMarker537"/> can be split. Tensor parallelism is also known as <strong class="bold">horizontal parallelism</strong>:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer039">
+<img alt="" height="1154" src="image/B17519_06_008.jpg" width="1655"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.8 – Row-wise and column-wise tensor parallelism</p>
+<p class="callout-heading">Source of the figure</p>
+<p class="callout"><a href="https://github.com/huggingface/transformers/blob/main/docs/source/en/perf_train_gpu_many.mdx">https://github.com/huggingface/transformers/blob/main/docs/source/en/perf_train_gpu_many.mdx</a><a href="https://huggingface.co/docs/transformers/parallelism%0D"/></p>
+<p>Pipeline and tensor model parallelism<a id="_idIndexMarker538"/> can be combined. Moreover, data parallelism can be added to achieve even further parallelization and a better training speed. The combination<a id="_idIndexMarker539"/> of data parallelism and model parallelism is known as <strong class="bold">hybrid parallelism</strong>. This approach is used to train most of the current large SOTA NLP models such as T5 or GPT3. Refer to <em class="italic">Figure 6.9</em>, which illustrates a combination of pipeline parallelism and data parallelism:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer040">
+<img alt="Figure 6.9 – Combining pipeline parallelism and data parallelism " height="220" src="image/B17519_06_009.jpg" width="905"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.9 – Combining pipeline parallelism and data parallelism</p>
+<p>Now that we have refreshed our understanding of key model parallel approaches, let’s review the SDMP library – the SageMaker proprietary implementation of model parallelism.</p>
+<h2 id="_idParaDest-109"><a id="_idTextAnchor106"/>Engineering training with SDMP</h2>
+<p>SDMP is a feature-rich library that implements<a id="_idIndexMarker540"/> various types of model parallelism and hybrid parallelism and is optimized for the SageMaker infrastructure. It supports the TensorFlow and PyTorch frameworks and allows you to automatically partition models between devices with minimal code changes to your training script. Like SDDP, SDMP uses MPI to coordinate tasks in the training cluster, performing forward and backward computations on GPU devices and communication tasks on CPU devices.</p>
+<p>SDMP has a few notable features<a id="_idIndexMarker541"/> to simplify the development of model parallel training jobs and optimize hardware utilization at training time:</p>
+<ul>
+<li>SDMP supports arbitrary model architecture and requires minimal code changes to your training script. It doesn’t have any accuracy penalties.</li>
+<li><strong class="bold">Automated model splitting</strong> partitions your model between<a id="_idIndexMarker542"/> devices in the training cluster. You can choose to optimize<a id="_idIndexMarker543"/> for speed and memory utilization. Additionally, SDMP supports manual model splitting (however, in practice, this is rarely a good approach).</li>
+<li><strong class="bold">Interleaved pipeline</strong> is an improvement of simple model pipelining<a id="_idIndexMarker544"/> and allows you to minimize the amount of time processing micro-batches by prioritizing backward operations whenever possible:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer041">
+<img alt="Figure 6.10 – A comparison of simple and interleaved pipelines " height="357" src="image/B17519_06_010.jpg" width="996"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 6.10 – A comparison of simple and interleaved pipelines</p>
+<p class="callout-heading">Source of the figure</p>
+<p class="callout"><a href="https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.xhtml%0D">https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-core-features.xhtml</a></p>
+<p>While SDMP<a id="_idIndexMarker545"/> officially supports both TensorFlow 2 and PyTorch, certain optimizations are only available for PyTorch. This extended support for PyTorch includes the following:</p>
+<ul>
+<li><strong class="bold">Optimizer state sharding</strong> allows you to split not only<a id="_idIndexMarker546"/> the model but also the optimizer <a id="_idIndexMarker547"/>state between training devices in data parallel groups. This further reduces the memory footprint of individual devices during training. Note that optimizer state sharding adds an aggregation step (when the global optimizer state is reconstructed from individual shards), which will result in additional latency. </li>
+<li><strong class="bold">Tensor parallelism</strong> in addition to pipeline and data<a id="_idIndexMarker548"/> parallelism. Tensor parallelism can be specifically useful for large layers that cannot fit into a single GPU device, such as embeddings.</li>
+<li><strong class="bold">Activation checkpointing</strong> and <strong class="bold">activation offloading</strong> are two other techniques<a id="_idIndexMarker549"/> that further minimize<a id="_idIndexMarker550"/> the training memory<a id="_idIndexMarker551"/> footprint in exchange for some additional compute time to reconstruct the training state. </li>
+</ul>
+<p>As using these advanced optimization features comes with a memory-compute trade-off, it’s generally advised that you only use them for large models (that is, billions of parameters).</p>
+<p>Now, let’s develop a hybrid parallel job using the SDMP library. We will reuse the previous PyTorch example with CV models. </p>
+<p class="callout-heading">Note </p>
+<p class="callout">This example has an educational purpose only. Usually CV models (such as Resnet18) can fit into a single GPU, and in this case, model parallelism is not required. However, smaller models are easy to manage and quick to train for demo purposes.</p>
+<h3>Configuring model and hybrid parallelism</h3>
+<p>First, let’s understand<a id="_idIndexMarker552"/> how our training will be executed<a id="_idIndexMarker553"/> and how we can configure parallelism. For this, we will use the distribution object of the SageMaker training job. It has two key components: <strong class="source-inline">model parallel</strong> and <strong class="source-inline">mpi</strong>.  </p>
+<p>SageMaker relies on the <strong class="source-inline">mpi</strong> utility to run distributed computations. In the following code snippet, we set it to run <strong class="source-inline">8</strong> training processes. Here, <strong class="source-inline">processes_per_host</strong> defines how many training processes will be run per host, which includes both processes running model parallelism, data parallelism, or tensor parallelism. In most cases, the number of processes should match the number of available GPUs in the node.</p>
+<p>The <strong class="source-inline">Modelparallel</strong> object defines<a id="_idIndexMarker554"/> the configuration of the SDMP library. Then, in the<a id="_idIndexMarker555"/> code snippet, we set 2-way model parallelism (the <strong class="source-inline">partitions</strong> parameter is set to <strong class="source-inline">2</strong>). Also, we enable data parallelism by setting the <strong class="source-inline">ddp</strong> parameter to <strong class="source-inline">True</strong>. When data parallelism has been enabled, SDMP will automatically infer the data parallel size based on the number of training processes and the model parallelism size. Another important parameter is <strong class="source-inline">auto_partition</strong>, so SDMP automatically partitions the model between GPU devices.</p>
+<p>In the following code block, we configure our training job to run on 2 instances with a total of 16 GPUs in the training cluster. Our <strong class="source-inline">distribution</strong> object defines 2-way model parallelism. Since the total number of training processes is 16, SDMP will automatically infer 8-way data parallelism. In other words, we split our model between 2 GPU devices, and have a total of 8 copies of the model: </p>
+<pre class="source-code">
+smd_mp_estimator = PyTorch(
+# ... other job parameters are reducted for brevity
+instance_count=2,
+instance_type= 'ml.p3.16xlarge',          
+distribution={
+                  "modelparallel": {
+                      "enabled":True,
+                      "parameters": {
+                          "microbatches": 8, 
+                          "placement_strategy": "cluster", 
+                          "pipeline": "interleaved",
+                          "optimize": "speed", 
+                          "partitions": 2,
+                          "auto_partition": True,
+                          "ddp": True,
+                      }
+                  }
+              },
+            "mpi": {
+                    "enabled": True,
+                    "processes_per_host": 8,
+                    "custom_mpi_options": mpioptions 
+              }</pre>
+<p>Please note that you need to align<a id="_idIndexMarker556"/> the configuration of hybrid parallelism<a id="_idIndexMarker557"/> with your cluster layout (the number of nodes and GPU devices). SageMaker Python SDK provides upfront validation of the hybrid parallelism configuration; however, this doesn’t guarantee that all your GPU devices will be used during the training process. It’s a good idea to add debug messages to your training scripts to ensure that all GPU devices are properly utilized. </p>
+<h3>Adopting the training scripts</h3>
+<p>One of the benefits of SDMP is that it requires<a id="_idIndexMarker558"/> minimal changes to your training script. This is achieved by using the Python decorator to define computations that need to be run in a model parallel or hybrid fashion. Additionally, SDMP provides an API like other distributed libraries such as Horovod or PyTorch DDP. In the following code block, we only highlight the key parts. The full source is available at <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/tree/main/chapter6/4_sources">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/tree/main/chapter6/4_sources</a>:</p>
+<ol>
+<li value="1">We start by importing and initializing the SDMP library:<p class="source-code">import smdistributed.modelparallel.torch as smp</p><p class="source-code">smp.init()</p></li>
+<li>Once the library has been initialized, we can use the SDMP API to check that our hybrid parallelism has been correctly configured. For this, you can run the following <strong class="source-inline">debug</strong> statement as part of your training script:<p class="source-code">logger.debug(</p><p class="source-code">f"Hello from global rank {smp.rank()}. "</p><p class="source-code">      f"Local rank {smp.local_rank()} and local size {smp.local_size()}. "</p><p class="source-code">      f"List of ranks where current model is stored {smp.get_mp_group()}. "</p><p class="source-code">      f"List of ranks with different replicas of the same model {smp.get_dp_group()}. "</p><p class="source-code">      f"Current MP rank {smp.mp_rank()} and MP size is {smp.mp_size()}. "</p><p class="source-code">        f"Current DP rank {smp.dp_rank()} and DP size is {smp.dp_size()}."</p><p class="source-code">    )</p></li>
+<li>The output will be produced <a id="_idIndexMarker559"/>in each training process. Let’s review the output from global rank <strong class="source-inline">0</strong>. Here, the message prefix in brackets is provided by the MPP utility, marking the unique MPI process, and <strong class="source-inline">algo-1</strong> is a reference to the hostname. From the debug message, you can confirm that we have configured 2-way parallelism and 8-way data parallelism. Additionally, we can observe GPU assignments for the data parallel and model parallel groups:<p class="source-code">[1,mpirank:0,algo-1]:INFO:__main__:Hello from global rank 0. Local rank 0 and local size 8. List of ranks where current model is stored [0, 1]. List of ranks with different replicas of the same model [0, 2, 4, 6, 8, 10, 12, 14]. Current MP rank 0 and MP size is 2. Current DP rank 0 and DP size is 8.</p></li>
+<li>SDMP manages the assignment of model partitions to the GPU device, and you don’t have to explicitly move the model to a specific device (in a regular PyTorch script, you need to move the model explicitly by calling the <strong class="source-inline">model.to(device)</strong> method). In each training script, you need to choose a GPU device based on the SMDP local rank:<p class="source-code">torch.cuda.set_device(smp.local_rank())</p><p class="source-code">device = torch.device("cuda")</p></li>
+<li>Next, we need<a id="_idIndexMarker560"/> to wrap the PyTorch model and optimizers in SDMP implementations. This is needed to establish communication between the model parallel and data parallel groups. </li>
+<li>Once wrapped, you will need to use SDMP-wrapped versions of the model and optimizer in your training script. Note that you still need to move your input tensors (for instance, data records and labels) to this device using the PyTorch <strong class="source-inline">input_tensor.to(device)</strong> method:<p class="source-code">model = smp.DistributedModel(model)</p><p class="source-code">optimizer = smp.DistributedOptimizer(optimizer)</p></li>
+<li>After that, we need to configure our data loaders. SDMP doesn’t have any specific requirements for data loaders, except that you need to ensure batch size consistency. It’s recommended that you use the <strong class="source-inline">drop_last=True</strong> flag to enforce it. This is because, internally, SDMP breaks down the batch into a set of micro-batches to implement pipelining. Hence, we need to make sure that the batch size is always divisible by the micro-batch size. Note that, in the following code block, we are using the SDMP API to configure a distributed sampler for data parallelism:<p class="source-code">    dataloaders_dict = {}</p><p class="source-code">    train_sampler = torch.utils.data.distributed.DistributedSampler(</p><p class="source-code">        image_datasets["train"], num_replicas=sdmp_args.dp_size, rank=sdmp_args.dp_rank)</p><p class="source-code">    dataloaders_dict["train"] = torch.utils.data.DataLoader(</p><p class="source-code">        image_datasets["train"],</p><p class="source-code">        batch_size=args.batch_size,</p><p class="source-code">        shuffle=False,</p><p class="source-code">        num_workers=0,</p><p class="source-code">        pin_memory=True,</p><p class="source-code">        sampler=train_sampler,</p><p class="source-code">        drop_last=True,</p><p class="source-code">    )</p><p class="source-code">    dataloaders_dict["val"] = torch.utils.data.DataLoader(</p><p class="source-code">        image_datasets["val"],</p><p class="source-code">        batch_size=args.batch_size,</p><p class="source-code">        shuffle=False,</p><p class="source-code">        drop_last=True,</p><p class="source-code">    )</p></li>
+<li>Once we have our model, optimizer, and data<a id="_idIndexMarker561"/> loaders configured, we are ready to write our training and validation loops. To implement model parallelism, SDMP provides a <strong class="source-inline">@smp.step</strong> decorator. Any function decorated with <strong class="source-inline">@smp.set</strong> splits executes internal computations in a pipelined manner. In other words, it splits the batch into a set of micro-batches and coordinates the computation between partitions of models across GPU devices. Here, the training and test computations are decorated with <strong class="source-inline">@smp.step</strong>. Note that the training step contains both forward and backward passes, so SDMP can compute gradients on all partitions. We only have the forward pass in the test step:<p class="source-code">@smp.step</p><p class="source-code">def train_step(model, data, target, criterion):</p><p class="source-code">    output = model(data)</p><p class="source-code">    loss = criterion(output, target)</p><p class="source-code">    model.backward(loss)  #  instead of PyTorch loss.backward()</p><p class="source-code">    return output, loss</p><p class="source-code">@smp.step</p><p class="source-code">def test_step(model, data, target, criterion):</p><p class="source-code">    output = model(data)</p><p class="source-code">    loss = criterion(output, target)</p><p class="source-code">    return output, loss</p></li>
+</ol>
+<p>Note another difference: when calculating loss, we used the <strong class="source-inline">model.backward(loss)</strong> SDMP method. So, SDMP can correctly compute gradient values across model partitions.</p>
+<ol>
+<li value="9">We use decorated<a id="_idIndexMarker562"/> training and test steps in the outer training loop as follows. The training loop construct is like a typical PyTorch training loop with one difference. Since SDMP implements pipelining over micro-batches, the loss values will be calculated for micro-batches, too (that is, the <strong class="source-inline">loss_mb</strong> variable). Hence, to calculate the average loss across the full batch, we call the <strong class="source-inline">reduce_mean()</strong> method. Note that all variables returned by the <strong class="source-inline">@smp.step</strong> decorated function are instances of the class that provides a convenient API to act across<a id="_idIndexMarker563"/> mini-batches (such as the <strong class="source-inline">.reduce_mean()</strong> or <strong class="source-inline">.concat()</strong> methods):<p class="source-code">for epoch in range(num_epochs):</p><p class="source-code">        for phase in ["train", "val"]:</p><p class="source-code">            if phase == "train":</p><p class="source-code">                model.train()  # Set model to training mode</p><p class="source-code">            else:</p><p class="source-code">                model.eval()  # Set model to evaluate mode</p><p class="source-code">            for inputs, labels in dataloaders[phase]:</p><p class="source-code">                inputs = inputs.to(device)</p><p class="source-code">                labels = labels.to(device)</p><p class="source-code">                optimizer.zero_grad()</p><p class="source-code">                with torch.set_grad_enabled(phase == "train"):</p><p class="source-code">                    if phase == "train":</p><p class="source-code">                        outputs, loss_mb = train_step(model, inputs, labels, criterion)</p><p class="source-code">                        loss = loss_mb.reduce_mean()</p><p class="source-code">                        optimizer.step()</p><p class="source-code">                    else:</p><p class="source-code">                        outputs, loss_mb = test_step(model, inputs, labels, criterion)</p><p class="source-code">                        loss = loss_mb.reduce_mean()</p></li>
+<li>Once training is done, we need to save our distributed model. For this, SMDP provides the <strong class="source-inline">smp.save()</strong> method, which supports saving both the model and optimizer states in pickle format. You can choose whether you want to persist model partitions or not by using the <strong class="source-inline">partial</strong> flag. If partial saving is enabled, then the model partitions<a id="_idIndexMarker564"/> are saved separately along with their model parallel ranks. In the following code block, we save a single model checkpoint. Note that we are saving the model in a single process based on the rank filter to avoid any conflicts:<p class="source-code">    if smp.dp_rank() == 0:</p><p class="source-code">        model_file_path = os.path.join(</p><p class="source-code">            os.environ["SM_MODEL_DIR"], f"finetuned-{args.model_name}-checkpoint.pt"</p><p class="source-code">        )</p><p class="source-code">        model_dict = model.state_dict()  # save the full model</p><p class="source-code">        opt_dict = optimizer.state_dict()  # save the full optimizer state</p><p class="source-code">        smp.save(</p><p class="source-code">            {"model_state_dict": model_dict, "optimizer_state_dict": opt_dict},</p><p class="source-code">            model_file_path,</p><p class="source-code">            partial=False,</p><p class="source-code">        )</p></li>
+<li>Once our testing is complete, SageMaker will upload the model and optimizer checkpoints to the S3 location. You can use this model for inference as follows:<p class="source-code">model_state = torch.load('finetuned-resnet-checkpoint.pt')['model_state_dict']</p><p class="source-code">model_ft = models.resnet18(pretrained=False)</p><p class="source-code">num_ftrs = model_ft.fc.in_features</p><p class="source-code">model_ft.fc = nn.Linear(num_ftrs, num_classes)</p><p class="source-code">model_ft.load_state_dict(model_state)</p><p class="source-code">outputs = model_ft(inputs)</p></li>
+</ol>
+<p>These are the minimal changes that are required<a id="_idIndexMarker565"/> in your training script to make it compatible with the SDMP library to implement model or hybrid parallelism. We encourage you to experiment with various SDMP configuration parameters (please refer to the <strong class="source-inline">distribution</strong> object from the previous section) to develop good intuition, specifically the following:</p>
+<ul>
+<li>Change the number of model <em class="italic">partitions</em>. Our implementation has 2 partitions; you might try to set 1 or 4 partitions and see how this changes the data parallel and model parallel groups.</li>
+<li>Change the number of <em class="italic">micro-batches</em> and <em class="italic">batch size</em> to see how it impacts training speed. In production scenarios, you will likely need to explore an upper memory limit for batch size and micro-batches to improve training efficiency.</li>
+<li>See how the type of <em class="italic">pipeline implementation</em> – interleaved or simple – impacts the training speed.</li>
+</ul>
+<h3>Additional considerations</h3>
+<p>We used relatively simple and small models such as Resnet to demonstrate how to implement hybrid parallelism. However, the implementation of more complex models such as GPT-n will require additional considerations. The following sections detail them.</p>
+<h4>Tensor parallelism</h4>
+<p>Tensor parallelism<a id="_idIndexMarker566"/> is only available in the PyTorch version<a id="_idIndexMarker567"/> of the SDMP library. Tensor parallelism makes sense to use for scenarios when a parameter layer consumes a considerable amount of GPU memory (such as embedding tables). When using tensor parallelism, you need to make sure that SDMP supports the modules of your model. SDMP provides distributed implementations of common modules such as <strong class="source-inline">nn.Linear</strong>, <strong class="source-inline">nn.Embedding</strong>, and more. If a specific module is not supported, first, you will need to implement a tensor-parallelizable<a id="_idIndexMarker568"/> version of it. Please refer to the SDMP API documentation for details: <a href="https://sagemaker.readthedocs.io/en/stable/api/training/smp_versions/latest/smd_model_parallel_pytorch_tensor_parallel.xhtml">https://sagemaker.readthedocs.io/en/stable/api/training/smp_versions/latest/smd_model_parallel_pytorch_tensor_parallel.xhtml</a>.</p>
+<h4>Reference implementations</h4>
+<p>AWS provides a few example<a id="_idIndexMarker569"/> scripts to train popular large models such as GPT2, GPT-J, and BERT using the SDMP library. See the official GitHub repository at <a href="https://github.com/aws/amazon-sagemaker-examples/tree/main/training/distributed_training/pytorch/model_parallel">https://github.com/aws/amazon-sagemaker-examples/tree/main/training/distributed_training/pytorch/model_parallel</a>.</p>
+<p>You can<a id="_idIndexMarker570"/> also find the reference configuration of SDMP at <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-best-practices.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/model-parallel-best-practices.xhtml</a>.</p>
+<p>So far, we have covered different ways to distribute your training job and looked at sample implementations. In the next section, we will cover some parameters to improve the efficiency of your distributed training job.</p>
+<h1 id="_idParaDest-110"><a id="_idTextAnchor107"/>Optimizing distributed training jobs</h1>
+<p>In many cases, optimizing your large-scale<a id="_idIndexMarker571"/> distributed training jobs requires a lot of trial and error and is very specific to the runtime environment, hardware stack, model architecture, and other parameters. But there are several key knobs that might help to optimize your training speed and overall efficiency.</p>
+<h2 id="_idParaDest-111"><a id="_idTextAnchor108"/>Cluster layout and computation affinity</h2>
+<p>When running distributed<a id="_idIndexMarker572"/> training jobs, especially model parallel<a id="_idIndexMarker573"/> or hybrid parallel, it’s always a good idea to understand how different types of computation are aligned with your cluster layout.</p>
+<p>Let’s consider a situation when we need to run model parallel training in the cluster of two nodes with two GPU devices each. The total training processes count is 4 with global ranks ranging from 0 to 3 and local ranks being 0 and 1. We assume that the model copy and gradients can fit into two devices. In this case, we need to ensure that each model will be stored within each node: one model copy will be placed on ranks 0 and 1 (local ranks 0 and 1), and another on ranks 2 and 3 (local ranks 0 and 1). This will ensure that communication between layers of the model will happen over faster inter-GPU connections and won’t, typically, traverse slower intra-node networks.</p>
+<p>To address this situation, SDMP provides a special parameter called <strong class="source-inline">placement_strategy</strong>, which allows you to control the training process’s affinity to your hardware.</p>
+<h3>Communication backend</h3>
+<p>In this chapter, we covered some of the most popular<a id="_idIndexMarker574"/> communication backends, such<a id="_idIndexMarker575"/> as NCCL, Gloo, and MPI. The following list is a rule of thumb when choosing which backend to use given your specific case:</p>
+<ul>
+<li><strong class="bold">Message passing interface</strong> (<strong class="bold">MPI</strong>) is a communication standard in distributed computations<a id="_idIndexMarker576"/> that comes with a number of backend implementations, such as Open-MPI, MVAPICH2, and more. MPI backends also support inter-GPU operations on CUDA tensors. However, MPI is rarely an optimal choice for your training job if you have other options.</li>
+<li><strong class="bold">Gloo</strong> backends come with wide support<a id="_idIndexMarker577"/> for point-to-point and collective computations between CPU devices as well as collective computations between GPU devices. Gloo can be a good choice for initial debugging on CPU devices. However, you should usually<a id="_idIndexMarker578"/> prefer NCCL when using GPU devices for training.</li>
+<li><strong class="bold">NCCL</strong> backends are provided by NVIDIA<a id="_idIndexMarker579"/> and are optimal for training jobs on NVIDIA GPUs.</li>
+<li><strong class="bold">Custom</strong> backends can be provided as part<a id="_idIndexMarker580"/> of the DL framework. For instance, TensorFlow<a id="_idIndexMarker581"/> 2 provides a custom <strong class="bold">RING</strong> backend. </li>
+</ul>
+<p class="callout-heading">Note</p>
+<p class="callout">When working with a newer SOTA model, make sure that the communication backend of your choice supports the collective and point-to-point operations required by your model architecture. </p>
+<h4>Training hyperparameters</h4>
+<p>There are many training hyperparameters <a id="_idIndexMarker582"/>that can impact your training efficiencies. While we don’t intend to cover all of them, we have listed some hyperparameters that you can tweak in your optimization efforts:</p>
+<ul>
+<li>Use <strong class="bold">AMP</strong> to reduce memory requirements<a id="_idIndexMarker583"/> and speed up training with minimal impact on accuracy and training convergence. AMP is a popular technique that is used to combine single (FP32) and half-precision (FP16) tensors during the forward, backward, and update steps. Note that you will likely need to have a large batch size in order to have meaningful improvements with AMP.</li>
+<li>Use <strong class="bold">hardware-optimized data types</strong> (such as TF32, BF32, and BF16) to speed up training. These<a id="_idIndexMarker584"/> data types are optimized for specific DL computations and provide speed up compared to the common FP32 and FP16 types. Note that to use these types, you need to ensure that your framework, model architecture, and hardware support it.</li>
+<li>Optimize your <strong class="bold">global batch size</strong> to speed up training. As you <a id="_idIndexMarker585"/>scale out your training cluster, make sure that you are updating your global batch size accordingly. Typically, the upper limit of local batch size is defined by available GPU memory (you will likely see a <em class="italic">CUDA OOM</em> error if the local batch size cannot fit into memory). Keep in mind that increasing the batch size beyond a certain threshold might not increase the global training throughput either. You can find some<a id="_idIndexMarker586"/> additional materials and benchmarks in the <em class="italic">NVIDIA</em> guide at <a href="https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.xhtml#batch-size">https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.xhtml#batch-size</a>. Another thing to keep in mind is that you might need to proportionally increase the learning rate with an increase in the batch size.</li>
+<li>Use <strong class="bold">fused optimizers</strong> (such as the FusedAdam optimizer) to speed up weight updates using<a id="_idIndexMarker587"/> the operation fusion – combining multiple operations into one. Make sure that you confirm that your DL framework and hardware support fused optimizers.</li>
+</ul>
+<p>These are several common parameters that might improve the efficiency of your training jobs. Note that, in many real-life use cases, you might have model- or task-specific tuning parameters. </p>
+<h1 id="_idParaDest-112"><a id="_idTextAnchor109"/>Summary</h1>
+<p>In this chapter, we focused on how to engineer large-scale data parallel, model parallel, and hybrid distributed training jobs. We discussed which type of parallelism to choose based on your specific use case and model architecture. Then, we reviewed several popular approaches of how to organize distributed training – such as the Parameter Server and Allreduce algorithms – along with various performance considerations to tune distributed training jobs. You will now be able to select the correct type of distributed training, technical stack, and approach to debug and tune training job performance. Then, we reviewed several examples of distributed training jobs in Amazon SageMaker using the popular open source and proprietary libraries SDDP and SMDP. </p>
+<p>Running large-scale training jobs requires not only initial engineering efforts but also the well-established operational management of your training jobs. In many cases, the training job can run for days and weeks, or you will need to periodically retrain your models on new data. As each long-running DL training job requires considerable compute resources and associated time and cost resources, we want to make sure that our training is efficient. For instance, we need to control in real time whether our model is converging during training. Otherwise, we might want to stop earlier and avoid wasting compute resources and time. In the next chapter, we will focus on setting up an operational stack for your DL training jobs.</p>
+</div>
+</div></body></html>

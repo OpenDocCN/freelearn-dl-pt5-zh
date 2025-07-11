@@ -1,0 +1,513 @@
+<html><head></head><body>
+		<div>
+			<div id="_idContainer138" class="Content">
+			</div>
+		</div>
+		<div id="_idContainer139" class="Content">
+			<h1 id="_idParaDest-148">5. <a id="_idTextAnchor173"/>Deep Learning for Sequences</h1>
+		</div>
+		<div id="_idContainer179" class="Content">
+			<p class="callout-heading">Overview</p>
+			<p class="callout">In this chapter, we will implement deep learning-based approaches to sequence modeling, after understanding the considerations of dealing with sequences. We will begin with <strong class="bold">Recurrent Neural Networks</strong> (<strong class="bold">RNNs</strong>), an intuitive approach to sequence processing that has provided state-of-the-art results. We will then discuss and implement 1D convolutions as another approach and see how it compares with RNNs. We will also combine RNNs with 1D convolutions in a hybrid model. We will employ all of these models on a classic sequence processing task – stock price prediction. By the end of this chapter, you will become adept at implementing deep learning approaches for sequences, particularly plain RNNs and 1D convolutions, and you will have laid the foundations for more advanced RNN-based models.</p>
+			<h1 id="_idParaDest-149"><a id="_idTextAnchor174"/>Introduction</h1>
+			<p>Let's say you're working with text data and your objective is to build a model that checks whether a sentence is grammatically correct. Consider the following sentence: <em class="italic">"words? while sequence be this solved of can the ignoring".</em> The question didn't make sense, right? Well, how about the following? <em class="italic">"Can this be solved while ignoring the sequence of words?"</em></p>
+			<p>Suddenly, the text makes complete sense. What do we acknowledge, then, about working with text data? That sequence matters.</p>
+			<p>In the task of assessing whether a given sentence is grammatically correct, the sequence is important. Sequence-agnostic models would fail terribly at the task. The nature of the task requires you to analyze the sequence of the terms.</p>
+			<p>In the previous chapter, we worked with text data, discussing ideas around representation and creating our own word vectors. Text and natural language data have another important characteristic – they have a sequence to them. While text data is one example of sequence data, sequences are everywhere: from speech to stock prices, from music to global temperatures. In this chapter, we'll start working with sequential data in a way that considers the order of the elements. We will begin with RNNs, a deep learning approach that exploits the sequence of data to provide insightful results of tasks such as machine translation, sentiment analysis, recommender systems, and time series prediction, to name a few. We will then look at using convolutions for sequence data. Finally, we will see how these approaches can be combined in a single, powerful deep learning architecture. Along the way, we will also build an RNN-based model for stock price prediction.</p>
+			<h1 id="_idParaDest-150"><a id="_idTextAnchor175"/>Working with Sequences</h1>
+			<p>Let's look at another example to make the importance of sequence modeling clearer. The task is to predict the stock price for a company for the next 30 days. The data provided to you is the stock price for today. You can see this in the following plot, where the <em class="italic">y-axis</em> represents the stock price and the <em class="italic">x-axis</em> denotes the date. Is this data sufficient?</p>
+			<div>
+				<div id="_idContainer140" class="IMG---Figure">
+					<img src="image/B15385_05_01.jpg" alt="Figure 5.1: Stock price with just 1 day’s data&#13;&#10;"/>
+				</div>
+			</div>
+			<p> </p>
+			<p class="figure-caption">Figure 5.1: Stock price with just 1 day's data</p>
+			<p>Surely, one data point, that is, the price on a given day, is not sufficient to predict the price for the next 30 days. We need more information. Particularly, we need information about the past – how the stock price has been moving for the past few days/months/years. So, we ask for, and get, data for three years:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer141" class="IMG---Figure">
+					<img src="image/B15385_05_02.jpg" alt="Figure 5.2: Stock price prediction using historical data&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.2: Stock price prediction using historical data</p>
+			<p>This seems much more useful, right? Looking at the past trend and some patterns in the data, we can make predictions on the future stock prices. Thus, by looking at the past trend, we get a rough idea of how the stock will move over the next few days. We can't do this without a sequence. Again, sequence matters.</p>
+			<p>In real-world use cases, say, machine translation, you need to consider the sequence in the data. Sequence-agnostic models can only get you so far in some tasks; you need an approach that truly exploits the information contained in the sequence. But before talking about the workings of those architectures, we need to answer an important question: <em class="italic">what are sequences, anyway</em>?</p>
+			<p>While the definition of a "<em class="italic">sequence</em>" from the dictionary is rather self-explanatory, we need to be able to identify sequences for ourselves and decide whether we need to consider the sequence. To understand this idea, let's go back to the first example we saw: "<em class="italic">words? while sequence be this solved of can the ignoring</em>" versus "<em class="italic">can this be solved while ignoring the sequence of words?</em>"</p>
+			<p>When you jumbled the terms of the meaningful sentence text, it stopped making sense and lost all/most of the information. This can be a simple and effective test for a sequence: If you jumbled the elements, does it still make sense? If the answer is "no," then you have a sequence at hand. While sequences are everywhere, here are some examples of sequence data: language, music, movie scripts, music videos, time-series data (stock prices, commodity prices, and more), and the survival probability of a patient.</p>
+			<h2 id="_idParaDest-151"><a id="_idTextAnchor176"/>Time Series Data – Stock Price Prediction</h2>
+			<p>We will start working on our own model for predicting stock prices. The objective of the stock price prediction task is to build a model that can predict the next day's stock price based on historical prices. As we saw in the previous section, the task requires us to consider the sequence in the data. We will predict the stock price for Apple Inc.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">We will use a cleaned-up version of Apple's historical stock data that's been sourced from the Nasdaq website: <a href="https://www.nasdaq.com/market-activity/stocks/aapl/historical">https://www.nasdaq.com/market-activity/stocks/aapl/historical</a>. The dataset can be downloaded from the following link: <a href="https://packt.live/325WSKR">https://packt.live/325WSKR</a>.</p>
+			<p class="callout">Make sure to place the file (<strong class="source-inline">AAPL.csv</strong>) in your working directory and start a new Jupyter Notebook for the code. It is important that you run all the code in the exercises and the topic sections in a single Jupyter Notebook.</p>
+			<p>Let's begin by understanding the data. We will load the required libraries and then load and plot the data. You can use the following commands to load the necessary libraries and use the cell magic command (<strong class="source-inline">%matplotlib inline</strong>) to plot the images inline:</p>
+			<p class="source-code">import pandas as pd, numpy as np</p>
+			<p class="source-code">import matplotlib.pyplot as plt</p>
+			<p class="source-code">%matplotlib inline</p>
+			<p>Next, we'll load the <strong class="source-inline">.csv </strong>file, using the <strong class="source-inline">read_csv()</strong> method from Pandas, into a DataFrame (<strong class="source-inline">inp0</strong>) and have a look at a few records using the <strong class="source-inline">head</strong> method of the pandas DataFrame:</p>
+			<p class="source-code">inp0 = pd.read_csv('AAPL.csv')</p>
+			<p class="source-code">inp0.head()</p>
+			<p>You should get the following output:</p>
+			<div>
+				<div id="_idContainer142" class="IMG---Figure">
+					<img src="image/B15385_05_03.jpg" alt="Figure 5.3: The first five records of the AAPL dataset&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.3: The first five records of the AAPL dataset</p>
+			<p>We can see that the first record is for January 17, 2020 and is the most recent date in the data (the latest data at the time of writing this book). As is the convention for pandas DataFrames, the first record has an index of 0 (the index is simply the identifier for the row, and each row has an index value). <strong class="source-inline">Open</strong> refers to the value of a particular stock at the opening of the trade, <strong class="source-inline">High</strong> refers to the highest value of the stock during the day, while <strong class="source-inline">Low</strong> and <strong class="source-inline">Close</strong> represent the lowest price and closing price, respectively. We also have the volume traded on the day.</p>
+			<p>Let's also look at the last few records of the dataset using the following command:</p>
+			<p class="source-code">inp0.tail()</p>
+			<p>The records look as follows:</p>
+			<div>
+				<div id="_idContainer143" class="IMG---Figure">
+					<img src="image/B15385_05_04.jpg" alt="Figure 5.4: Bottom five records of the AAPL dataset&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.4: Bottom five records of the AAPL dataset</p>
+			<p>From the preceding tables, we can see that we have daily opening, high, low, and closing prices, and volumes, from January 25, 2010 to January 17, 2020. For our purpose, we are concerned with the closing price.</p>
+			<h2 id="_idParaDest-152"><a id="_idTextAnchor177"/>Exercise 5.01: Visualizing Our Time-Series Data</h2>
+			<p>In this exercise, we will extract the closing price from the data, perform the necessary formatting, and plot the time series to gain a better understanding of the data. Make sure that you have read through the preceding section and loaded the data, as well as imported the relevant libraries. Perform the following steps to complete this exercise:</p>
+			<ol>
+				<li>Use the following command to import the necessary libraries if you haven't already:<p class="source-code">import pandas as pd, numpy as np</p><p class="source-code">import matplotlib.pyplot as plt</p><p class="source-code">%matplotlib inline</p></li>
+				<li>Download the file titled <strong class="source-inline">AAPL.csv</strong> from GitHub (<a href="https://packt.live/325WSKR">https://packt.live/325WSKR</a>) and load it into a DataFrame:<p class="source-code">inp0 = pd.read_csv('AAPL.csv')</p></li>
+				<li>Plot the <strong class="source-inline">Close</strong> column as a line plot to see the pattern using the <strong class="source-inline">plot</strong> method of the DataFrame, specifying the <strong class="source-inline">Date</strong> column as the <em class="italic">X-axis</em>:<p class="source-code">inp0.plot("Date", "Close")</p><p class="source-code">plt.show()</p><p>The plot for this will be as follows, with the <em class="italic">X-axis</em> showing the closing price and the <em class="italic">Y-axis</em> representing the dates:</p><div id="_idContainer144" class="IMG---Figure"><img src="image/B15385_05_05.jpg" alt="Figure 5.5: Plot of the closing price&#13;&#10;"/></div><p class="figure-caption">Figure 5.5: Plot of the closing price</p><p>From the plot, we can see that the latest values are getting plotted first (on the left). We'll reverse the data for convenience of plotting and handling. We'll achieve this by sorting the DataFrame by the index (remember that the index was 0 for the latest record) in descending order.</p></li>
+				<li>Reverse the data by sorting the DataFrame on the index. Plot the closing price again and supply <strong class="source-inline">Date </strong>as the <em class="italic">X-axis</em>:<p class="source-code">inp0 = inp0.sort_index(ascending=False)</p><p class="source-code">inp0.plot("Date", "Close")</p><p class="source-code">plt.show()</p><p>The closing price will be plotted as follows:</p><div id="_idContainer145" class="IMG---Figure"><img src="image/B15385_05_06.jpg" alt="Figure 5.6: The trend after reversing the data&#13;&#10;"/></div><p class="figure-caption">Figure 5.6: The trend after reversing the data</p><p>That worked as expected. We can see that the latest values are plotted to the right.</p></li>
+				<li>Extract the values for <strong class="source-inline">Close</strong> from the DataFrame as a <strong class="source-inline">numpy</strong> array, reshaped to specify one column using <strong class="source-inline">array.reshape(-1,1)</strong>:<p class="source-code">ts_data = inp0.Close.values.reshape(-1,1)</p></li>
+				<li>Plot the values as a line plot using matplotlib. Don't worry about marking the dates; the order of the data is clear (matplotlib will use an index instead, beginning with 0 for the first point):<p class="source-code">plt.figure(figsize=[14,5])</p><p class="source-code">plt.plot(ts_data)</p><p class="source-code">plt.show()</p><p>The resulting trend is as follows, with the <em class="italic">X-axis</em> representing the index and the <em class="italic">Y-axis</em> showing the closing price:</p><div id="_idContainer146" class="IMG---Figure"><img src="image/B15385_05_07.jpg" alt="Figure 5.7: The daily stock price trend&#13;&#10;"/></div></li>
+			</ol>
+			<p class="figure-caption">Figure 5.7: The daily stock price trend</p>
+			<p>That's what our sequence data looks like. There is no continuous clear trend; the prices rose for a period, after which the stock waxed and waned. The pattern isn't straightforward. We can see that there is some seasonality at a small duration (maybe monthly). Overall, the pattern is rather complex and there are no obvious and easy-to-identify cyclicities in the data that we can exploit. This complex sequence is what we will work with – predicting the stock price for a day using historical values.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">To access the source code for this specific section, please refer to <a href="https://packt.live/2ZctArW">https://packt.live/2ZctArW</a>.</p>
+			<p class="callout">You can also run this example online at <a href="https://packt.live/38EDOEA">https://packt.live/38EDOEA</a>. You must execute the entire Notebook in order to get the desired result.</p>
+			<p>In this exercise, we loaded the stock price data. After reversing the data for ease of handling, we extracted the closing price (the <strong class="source-inline">Close</strong> column). We plotted the data to visually examine the trend and patterns in the data, acknowledging that there aren't any obvious patterns in the data for us to exploit.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Whether you treat the data as a sequence also depends on the task at hand. If the task doesn't need the information in the sequence, then maybe you don't need to treat it as such.</p>
+			<p>In this chapter, we'll be focusing on tasks that require/greatly benefit from exploiting the sequence in the data. How is that done? We'll find out in the following sections, where we'll discuss the intuition and the approach behind RNNs.</p>
+			<h1 id="_idParaDest-153"><a id="_idTextAnchor178"/>Recurrent Neural Networks</h1>
+			<p>How does our brain process a sentence? Let's try to understand how our brain processes a sentence as we read it. You see some terms in a sentence, and you need to identify the sentiment contained in the sentence (positive, negative, neutral). Let's look at the first term – "<strong class="source-inline">I</strong>":</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer147" class="IMG---Figure">
+					<img src="image/B15385_05_08.jpg" alt="Figure 5.8 Sentiment analysis for the first term&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.8 Sentiment analysis for the first term</p>
+			<p>"<strong class="source-inline">I</strong>" is neutral, so our classification (neutral) is appropriate. Let's look at another term:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer148" class="IMG---Figure">
+					<img src="image/B15385_05_09.jpg" alt="Figure 5.9: Sentiment analysis with two terms&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.9: Sentiment analysis with two terms</p>
+			<p>With the term "<strong class="source-inline">can't</strong>," we need to update our assessment of the sentiment. "<strong class="source-inline">I</strong>" and "<strong class="source-inline">can't</strong>" together typically have a negative connotation, so our current assessment is updated as "negative" and is marked with a cross. Let's look at the next couple of words:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer149" class="IMG---Figure">
+					<img src="image/B15385_05_10.jpg" alt="Figure 5.10: Sentiment analysis with four terms&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.10: Sentiment analysis with four terms</p>
+			<p>After the two additional terms, we maintain our prediction that the sentence has a negative sentiment. With all the information so far, "<strong class="source-inline">I can't find any</strong>," is a good assessment. Let's look at the final term:</p>
+			<div>
+				<div id="_idContainer150" class="IMG---Figure">
+					<img src="image/B15385_05_11.jpg" alt="Figure 5.11: Sentiment analysis with the final term added&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.11: Sentiment analysis with the final term added</p>
+			<p>With that last term coming in, our prediction is completely overturned. Suddenly, we now agree that this is a positive expression. Your assessment is updated with each new term coming in, is it not? Your brain gathers/collects all the information it has at hand and makes an assessment. On arrival of the new term, the assessment so far is updated. This process is exactly what an RNN mimics.</p>
+			<p>So, what makes a network "recurrent"? The key idea is to <em class="italic">not only process new information but also retain the information received so far</em>. This is achieved in RNNs by making the output depend not only on the new input value but also on the current "state" (information captured so far). To understand this better, let's see how a standard feedforward neural network would process a simple sentence and compare it with how an RNN would process it.</p>
+			<p>Consider the task of sentiment classification (positive or negative) for an input sentence, "<em class="italic">life is good</em>." In a standard feedforward network, the inputs corresponding to all the terms in the sentence are passed to the network together. As depicted in the following diagram, the input data is the combined representation of all the terms in the sentence that have been passed to the hidden layers of the network. All the terms are considered together to classify the sentiment in the sentence as positive:</p>
+			<div>
+				<div id="_idContainer151" class="IMG---Figure">
+					<img src="image/B15385_05_12.jpg" alt="Figure 5.12: Standard feedforward network for sentiment classification&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.12: Standard feedforward network for sentiment classification</p>
+			<p>In contrast, an RNN would process the sentence word by word. As shown in the following diagram, the first input for the term "<em class="italic">life</em>" is passed to the hidden layers at time <em class="italic">t=0</em>. The hidden layers provide some output values, but this isn't the final classification of the sentence and is rather an intermediate value of the hidden layers. No classification is done yet:</p>
+			<div>
+				<div id="_idContainer152" class="IMG---Figure">
+					<img src="image/B15385_05_13.jpg" alt="Figure 5.13: RNN processing the first term at time t=0&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.13: RNN processing the first term at time t=0</p>
+			<p>The next term "<strong class="source-inline">is</strong>"), along with its corresponding input, is processed at time <em class="italic">t=1</em> and then fed to the hidden layers. As shown in the following diagram, this time, the hidden layer also considers the intermediate output from the hidden layer at time <em class="italic">t=0</em>, which is essentially the output corresponding to the term "<strong class="source-inline">life</strong>." The output from the hidden layers will now effectively consider the new input ("<strong class="source-inline">is</strong>") and the input at the previous time step ("<strong class="source-inline">life</strong>"):</p>
+			<div>
+				<div id="_idContainer153" class="IMG---Figure">
+					<img src="image/B15385_05_14.jpg" alt="Figure 5.14: The network at t=1&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.14: The network at t=1</p>
+			<p>After time step <em class="italic">t=1</em>, the output of the hidden layers effectively contains information from the terms "<strong class="source-inline">life</strong>" and "<strong class="source-inline">is</strong>,", effectively holding information corresponding to the inputs so far. At time <em class="italic">t=2</em>, the data corresponding to the next term, that is, "<strong class="source-inline">good</strong>," is fed into the hidden layers. The following diagram shows that the hidden layers use this new input data, along with the output from hidden layers from time <em class="italic">t=1</em>, to provide an output. This output effectively considers all the inputs so far, in the order in which they appear in the input text. It is when the entire sentence is processed that the final classification of the sentence is made ("positive", in this case):</p>
+			<div>
+				<div id="_idContainer154" class="IMG---Figure">
+					<img src="image/B15385_05_15.jpg" alt="Figure 5.15: Output at t=2 when the entire sentence is processed&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.15: Output at t=2 when the entire sentence is processed</p>
+			<h2 id="_idParaDest-154"><a id="_idTextAnchor179"/>Loops – An Integral Part of RNNs</h2>
+			<p>A common part of RNNs is using "loops," as shown in the following diagram. By loops, we mean a mechanism of retaining the "state" value containing the information so far and using it along with the new input:</p>
+			<div>
+				<div id="_idContainer155" class="IMG---Figure">
+					<img src="image/B15385_05_16.jpg" alt="Figure 5.16: RNNs depicted with a loop&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.16: RNNs depicted with a loop</p>
+			<p>As shown in the following diagram, this is done by simply making a virtual copy of the hidden layer and using it at the next time step, that is, when processing the next input. If processing a sentence term by term, this would mean, for each term, saving the hidden layer output (time <em class="italic">t-1</em>), and when the new term comes in at time <em class="italic">t</em>, processing the hidden layer output (time <em class="italic">t</em>) along with its previous state (time <em class="italic">t-1</em>). That's all there really is to it:</p>
+			<div>
+				<div id="_idContainer156" class="IMG---Figure">
+					<img src="image/B15385_05_17.jpg" alt="Figure 5.17: Copying the hidden layer state&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.17: Copying the hidden layer state</p>
+			<p>To make the workings of RNNs even more clear, let's expand the view from <em class="italic">Figure 5.15</em>, where we saw how the input sentence is processed term by term. We'll understand how different an RNN is from a standard feedforward network.</p>
+			<p>The part highlighted by the dotted box should be familiar to you – it represents the standard feedforward network with hidden layers (rectangles with dotted lines). The data for an input flows from left to right across the depth of the network, using feedforward weights, W<span class="subscript">F</span>, to provide an output -- exactly as in a standard feedforward network. The recurrent part is the flow of data from bottom to top, across the time steps:</p>
+			<div>
+				<div id="_idContainer157" class="IMG---Figure">
+					<img src="image/B15385_05_18.jpg" alt="Figure. 5.18: RNN architecture&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure. 5.18: RNN architecture</p>
+			<p>For all the hidden layers, the output propagates along the time dimension too, to the next time step. Alternately, for a hidden layer at time step <em class="italic">t </em>and depth <em class="italic">l</em>, the inputs are as follows:</p>
+			<ul>
+				<li>Data from the previous hidden layer at the same time step</li>
+				<li>Data from the same hidden layer at the previous time step</li>
+			</ul>
+			<p>Have a good look at the preceding diagram to understand the workings of an RNN. The output from the hidden layer can be derived as follows:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer158" class="IMG---Figure">
+					<img src="image/B15385_05_19.jpg" alt="Figure 5.19: Calculating activations in an RNN&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.19: Calculating activations in an RNN</p>
+			<p>The first part of the formula, <em class="italic">W</em><span class="subscript">F</span><span class="superscript">(l)</span>a<span class="subscript">t</span><span class="superscript">(l-1)</span>, corresponds to the result of the feedforward calculation, that is, applying feedforward weights (<em class="italic">W</em><span class="subscript">F</span>) to the output (<em class="italic">a</em><span class="subscript">t</span><span class="superscript">(l-1)</span>) from the previous layer. The second part corresponds to the recurrent calculation, that is, applying recurrent weights (<em class="italic">W</em><span class="subscript">R</span><span class="superscript">(l)</span>) to the output from the same layer from the previous time step (<em class="italic">a</em><span class="subscript">t-1</span><span class="superscript">(l)</span>). Additionally, as with all neural network layers, there is a bias term as well. This result, on applying the activation function, becomes the output from the layer at time <em class="italic">t</em> and depth <em class="italic">l</em> (<em class="italic">a</em><span class="subscript">t</span><span class="superscript">(l)</span>).</p>
+			<p>To make the idea more concrete, let's implement the feedforward steps of a simple RNN using TensorFlow.</p>
+			<h2 id="_idParaDest-155"><a id="_idTextAnchor180"/>Exercise 5.02: Implementing the Forward Pass of a Simple RNN Using TensorFlow</h2>
+			<p>In this exercise, we will use TensorFlow to perform one pass of the operations in a simple RNN with one hidden layer and two time steps. By performing one pass, we mean calculating the activation of the hidden layer at time step <em class="italic">t=0</em>, then using this output along with the new input at <em class="italic">t=1</em> (applying the appropriate recurrent and feedforward weights) to obtain the output at time <em class="italic">t=1</em>. Initiate a new Jupyter Notebook for this exercise and perform the following steps:</p>
+			<ol>
+				<li value="1">Import TensorFlow and NumPy. Set a random seed of <strong class="source-inline">0</strong> using <strong class="source-inline">numpy</strong> to make the results reproducible:<p class="source-code">import numpy as np</p><p class="source-code">import tensorflow as tf</p><p class="source-code">np.random.seed(0)</p><p class="source-code">tf.random.set_seed(0)</p></li>
+				<li>Define the <strong class="source-inline">num_inputs</strong> and <strong class="source-inline">num_neurons</strong> constants that will be holding the number of inputs (2) and the number of neurons in the hidden layer (3), respectively:<p class="source-code">num_inputs = 2</p><p class="source-code">num_neurons = 3</p><p>We will have two inputs at each time step. Let's call them <strong class="source-inline">xt0</strong> and <strong class="source-inline">xt1</strong>.</p></li>
+				<li>Define the variables for the weight matrices. We need two of them – one for the feedforward weights and another for the recurrent weights. Initialize them randomly:<p class="source-code">Wf = tf.Variable(tf.random.normal\</p><p class="source-code">                (shape=[num_inputs, num_neurons]))</p><p class="source-code">Wr = tf.Variable(tf.random.normal\</p><p class="source-code">                (shape=[num_neurons, num_neurons]))</p><p>Notice the dimensions for the recurrent weights – it is a square matrix, with as many rows/columns as the number of neurons in the hidden layer.</p></li>
+				<li>Add the bias variable (to make the activations fit the data better), with as many zeros as the number of neurons in the hidden layer:<p class="source-code">b = tf.Variable(tf.zeros([1,num_neurons]))</p></li>
+				<li>Create the data – three examples for <strong class="source-inline">xt0 </strong>(two inputs, three examples) as <strong class="source-inline">[[0,1], [2,3], [4,5]]</strong> and <strong class="source-inline">xt1</strong> as <strong class="source-inline">[[100,101], [102,103], [104,105]]</strong> – as <strong class="source-inline">numpy</strong> arrays of the <strong class="source-inline">float32</strong> type (consistent with <strong class="source-inline">dtype</strong> for TensorFlow's default float representation):<p class="source-code">xt0_batch = np.array([[0,1],[2,3],[4,5]]).astype(np.float32)</p><p class="source-code">xt1_batch = np.array([[100, 101],[102, 103],\</p><p class="source-code">                      [104,105]]).astype(np.float32)</p></li>
+				<li>Define a function named <strong class="source-inline">forward_pass</strong> to apply a forward pass to the given data, that is, <strong class="source-inline">xt0</strong>, <strong class="source-inline">xt1</strong>. Use <strong class="source-inline">tanh</strong> as the activation function. The output at <em class="italic">t=0</em> should be derived from <strong class="source-inline">Wf</strong> and <strong class="source-inline">xt0</strong> alone. The output at <em class="italic">t=1</em> must use <strong class="source-inline">yt0</strong> with the recurrent weights, <strong class="source-inline">Wf</strong>, and use the new input, <strong class="source-inline">xt1</strong>. The function should return outputs at the two time steps:<p class="source-code">def forward_pass(xt0, xt1):</p><p class="source-code">    yt0 = tf.tanh(tf.matmul(xt0, Wf) + b)</p><p class="source-code">    yt1 = tf.tanh(tf.matmul(yt0, Wr) + tf.matmul(xt1, Wf) + b)</p><p class="source-code">    return yt0, yt1</p><p>Note that there is no recurrent weight here at time step 0; it comes into play only after the first time step.</p></li>
+				<li>Perform the forward pass by calling the <strong class="source-inline">forward_pass</strong> function with the created data (<strong class="source-inline">xt0_batch</strong>, <strong class="source-inline">xt1_batch</strong>) and put the output into variables, <strong class="source-inline">yt0_output</strong> and <strong class="source-inline">yt1_output</strong>:<p class="source-code">yt0_output, yt1_output = forward_pass(xt0_batch, xt1_batch)</p></li>
+				<li>Print the output values, <strong class="source-inline">yt0_output</strong> and <strong class="source-inline">yt1_output</strong>, using the <strong class="source-inline">print</strong> function from TensorFlow:<p class="source-code">tf.print(yt0_output)</p><p>The output at <em class="italic">t=0</em> gets printed out like so. Note that this result could be slightly different for you because of the random initialization that's done by TensorFlow:</p><p class="source-code">[[-0.776318431 -0.844548464 0.438419849]</p><p class="source-code"> [-0.0857750699 -0.993522227 0.516408086]</p><p class="source-code"> [0.698345721 -0.999749422 0.586677969]]</p></li>
+				<li>	Now, print the values of yt1_output:<p class="source-code">tf.print(yt1_output)</p><p>The output at <em class="italic">t=1</em> gets is printed as follows. Again, this could be slightly different for you because of the random initial values, but all the values should be close to 1 or -1:</p><p class="source-code"> [[1 -1 0.999998629]</p><p class="source-code"> [1 -1 0.999998331]</p><p class="source-code"> [1 -1 0.999997377]]</p><p>We can see that the final output at time <em class="italic">t=1</em> is a 3x3 matrix – representing the outputs for the three neurons in the hidden layer for the three instances of data.</p><p class="callout-heading">Note</p><p class="callout">To access the source code for this specific section, please refer to <a href="https://packt.live/2ZctArW">https://packt.live/2ZctArW</a>.</p><p class="callout">You can also run this example online at <a href="https://packt.live/38EDOEA">https://packt.live/38EDOEA</a>. You must execute the entire Notebook in order to get the desired result.</p><p class="callout-heading">Note</p><p class="callout">Despite having set the seeds for <strong class="source-inline">numpy</strong> as well as <strong class="source-inline">tensorflow</strong> to achieve reproducible results, there are a lot more causes for the variation in results. While the values you see may be different, the output you see should largely agree with ours.</p></li>
+			</ol>
+			<p>In this exercise, we manually performed the forward pass for two time steps in a simple RNN. We saw that it's merely using the hidden layer output from the previous time step as an input to the next. Now, you don't really need to perform any of this manually – Keras makes making RNNs very simple. We will use Keras for our stock price prediction model.</p>
+			<h2 id="_idParaDest-156"><a id="_idTextAnchor181"/>The Flexibility and Versatility of RNNs</h2>
+			<p>In <em class="italic">Exercise 5.2</em>, <em class="italic">Implementing the Forward Pass of a Simple RNN Using TensorFlow</em>, we used two inputs at each time step, and we had an output at each time step. But it doesn't always have to be that way. RNNs have a lot of flexibility to offer. For starters, you can have single/multiple inputs as well as outputs. Additionally, you needn't have inputs and outputs at each time step.</p>
+			<p>You could have the following:</p>
+			<ul>
+				<li>Inputs at different time steps with the output only at the final step</li>
+				<li>A single input with outputs at multiple time steps</li>
+				<li>Both inputs and outputs (equal or unequal lengths) at multiple time steps</li>
+			</ul>
+			<p>There is enormous flexibility in RNN architectures, and this flexibility makes them very versatile. Let's take a look at some possible architectures and what some potential applications can be:</p>
+			<div>
+				<div id="_idContainer159" class="IMG---Figure">
+					<img src="image/B15385_05_20.jpg" alt="Figure 5.20: Inputs at multiple steps with the output at the final step&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.20: Inputs at multiple steps with the output at the final step</p>
+			<p>You can have inputs at multiple time steps, such as in a sequence (or single or more inputs) with the output only at the final time step, when the prediction is made, as shown in the preceding diagram. At each time step, the hidden layers operate on the feedforward output from the previous layer and the recurrent output from its copy from the previous time step. But there is no prediction for the intermediate time steps. Prediction is made only after processing the entire input sequence – the same process we saw in <em class="italic">Figure. 5.15</em> (the "<em class="italic">life is good</em>" example). Text classification applications extensively use this architecture – sentiment classification into positive/negative, classifying an email into spam/ham, identifying hate speech in comments, automatically moderating product reviews on a shopping platform, and many more.</p>
+			<p>Time series prediction (for example, stock prices) also utilizes this architecture, where the past few values are processed to predict a single future value:</p>
+			<div>
+				<div id="_idContainer160" class="IMG---Figure">
+					<img src="image/B15385_05_21.jpg" alt="Figure 5.21: Input in a single step, output in multiple steps&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.21: Input in a single step, output in multiple steps</p>
+			<p>The preceding diagram illustrates another architecture in which the input is received in a single step, but the output is obtained at multiple time steps. Applications around generation – generating images for a given keyword, generating music for a given keyword (composer), or generating a paragraph of text for a given keyword – are based on this architecture.</p>
+			<p>You could also have an output at each time step corresponding to the input, as depicted in the following diagram. Essentially, this model will help you make a prediction for each incoming element of the sequence. An example of such a task would be the Parts-of-Speech tagging of terms – for each term in a sentence, we identify whether the term is a noun, verb, adjective, or another part of speech. </p>
+			<p>Another example from natural language processing would be <strong class="bold">Named Entity Recognition</strong> (<strong class="bold">NER</strong>) where, for each term in the text, the objective is to detect whether it represents a named entity and then classify it as an organization, person, place, or another category if it does:</p>
+			<div>
+				<div id="_idContainer161" class="IMG---Figure">
+					<img src="image/B15385_05_22.jpg" alt="Figure 5.22: Multiple outputs at each time step&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.22: Multiple outputs at each time step</p>
+			<p>In the previous architecture, we had an output for each incoming element. In many situations, this doesn't work, and we need an architecture that has different lengths for input and output, as shown in the following diagram. Think of translation between languages. Does a sentence in English necessarily have the same number of terms in its German translation? More often than not, the answer is no. For such cases, the architecture in the following diagram provides the notion of an "encoder" and a "decoder." The information corresponding to the input sequence is stored in the final hidden layer of the encoder network, which in itself has recurrent layers. </p>
+			<p>This representation/information is processed by the decoder network (again, this is recurrent), which outputs the translated sequence:</p>
+			<div>
+				<div id="_idContainer162" class="IMG---Figure">
+					<img src="image/B15385_05_23.jpg" alt="Figure 5.23: Architecture with different lengths for input and output&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.23: Architecture with different lengths for input and output</p>
+			<p>For all of these architectures, you could also have multiple inputs, making RNN models even more versatile. For example, when making stock price predictions, you could provide multiple inputs (previous stock prices of company, the stock exchange index, crude oil price, and whatever you think is relevant) over multiple time steps, and the RNN will be able to accommodate and utilize all of these. This is one of the reasons RNNs are very popular and have changed the way we work with sequences today. Of course, you also have all the predictive power of deep learning to add.</p>
+			<h2 id="_idParaDest-157"><a id="_idTextAnchor182"/>Preparing the Data for Stock Price Prediction</h2>
+			<p>For our stock price prediction task, we will predict the value of a given stock on any day by using the past few days' data and feeding it to an RNN. Here, we have a single input (single feature), over multiple time steps, and a single output. We will employ the RNN architecture from <em class="italic">Figure 5.20</em>.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Continue in the same Jupyter Notebook that we plotted our time-series data in throughout this chapter (unless specified otherwise).</p>
+			<p>So far, we've looked at the data and understood what we're dealing with. Next, we need to prepare the data for the model. The first step is to create a train-test split of the data. Since this is time-series data, we can't just randomly pick points to assign to our train and test sets. We need to maintain the sequence. For time-series data, we typically reserve the first portion of the data to train on and utilize the last part of the data for our test set. In our case, we will take the first 75% records as our training data and the last 25% as our test data. The following command will help us get the size of the train set needed:</p>
+			<p class="source-code">train_recs = int(len(ts_data) * 0.75)</p>
+			<p>This is the number of records we'll have in the train set. We can separate the sets as follows:</p>
+			<p class="source-code">train_data = ts_data[:train_recs]</p>
+			<p class="source-code">test_data = ts_data[train_recs:]</p>
+			<p class="source-code">len(train_data), len(test_data)</p>
+			<p>The lengths of the train and test sets will be as follows:</p>
+			<p class="source-code">(1885, 629)</p>
+			<p>Next, we need to scale the stock data. For that, we can employ the min-max scaler from <strong class="source-inline">sklearn</strong>. The <strong class="source-inline">MinMaxScaler</strong> scales the data so that it's in a range between 0 and 1 (inclusive) – the highest value in the data being mapped to 1. We'll fit and transform the scaler on the train data and only transform the test data:</p>
+			<p class="source-code">from sklearn.preprocessing import MinMaxScaler</p>
+			<p class="source-code">scaler = MinMaxScaler()</p>
+			<p class="source-code">train_scaled = scaler.fit_transform(train_data)</p>
+			<p class="source-code">test_scaled = scaler.transform(test_data)</p>
+			<p>The next important step is to format the data to get the "features" for each instance. We need to define a "lookback period" – the number of days from the history that we want to use to predict the next value. The following code will help us define a function that returns the target value of <strong class="source-inline">y</strong> (stock price for a day) and <strong class="source-inline">X</strong> (values for each day in the lookback period):</p>
+			<p class="source-code">def get_lookback(inp, look_back):</p>
+			<p class="source-code">    y = pd.DataFrame(inp)</p>
+			<p class="source-code">    dataX = [y.shift(i) for i in range(1, look_back+1)]</p>
+			<p class="source-code">    dataX = pd.concat(dataX, axis=1)</p>
+			<p class="source-code">    dataX.fillna(0, inplace = True)</p>
+			<p class="source-code">    return dataX.values, y.values</p>
+			<p>The function takes in a dataset (a series of numbers, rather) and, for the provided lookback, adds as many values from the history. It does so by shifting the series, each time concatenating it to the result. The function returns the stock price for the day as <em class="italic">y</em> and the values in lookback period (shifted values) as our features. Now, we can define a lookback period and see the result of applying the function to our data:</p>
+			<p class="source-code">look_back = 10</p>
+			<p class="source-code">trainX, trainY = get_lookback(train_scaled, look_back=look_back)</p>
+			<p class="source-code">testX, testY = get_lookback(test_scaled, look_back= look_back)</p>
+			<p>Try the following command to examine the shape of the outcome datasets:</p>
+			<p class="source-code">trainX.shape, testX.shape</p>
+			<p>The output is as follows:</p>
+			<p class="source-code">((1885, 10), (629, 10))</p>
+			<p>As expected, there are 10 features for each example, corresponding to the past 10 days. We have this history for the train data as well as the test data. With that, data preparation is complete. Before we move on to building our first RNN on this data, let's understand RNNs a little more.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">The <strong class="source-inline">trainX</strong> and <strong class="source-inline">trainY</strong> variables we created here will be used throughout the exercises that follow. So, make sure you are running this chapter's code in the same Jupyter Notebook.</p>
+			<h2 id="_idParaDest-158"><a id="_idTextAnchor183"/>Parameters in an RNN</h2>
+			<p>To calculate the number of parameters in an RNN layer, let's take a look at a generic hidden layer:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer163" class="IMG---Figure">
+					<img src="image/B15385_05_24.jpg" alt="Figure 5.24: Parameters of the recurrent layer&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.24: Parameters of the recurrent layer</p>
+			<p>The hidden layer takes inputs from the previous hidden layer at the same time step, and also from itself from a previous time step. If the input layer (the previous hidden layer) to the RNN layer is m-dimensional, we would need <em class="italic">n×m</em> weights/parameters, where <em class="italic">n</em> is the number of neurons in the RNN layer. For the output layer, the dimensionality if the weights would be <em class="italic">n×k</em>, if <em class="italic">k</em> is the dimensionality of the output. The recurrent weight is always a square matrix of dimensionality <em class="italic">n×n</em> – since the dimensionality of the input is the same as the layer itself.</p>
+			<p>The number of parameters for any RNN layer would therefore be <strong class="source-inline">n</strong><span class="superscript">2</span><strong class="source-inline"> + nk + nm</strong>, where we have the following:</p>
+			<ul>
+				<li><strong class="source-inline">n</strong>: Dimension of the hidden (current) layer</li>
+				<li><strong class="source-inline">m</strong>: Dimension of the input layer</li>
+				<li><strong class="source-inline">k</strong>: Dimension of the output layer</li>
+			</ul>
+			<h2 id="_idParaDest-159"><a id="_idTextAnchor184"/>Training RNNs</h2>
+			<p>How to forward propagate information in an RNN should be clear by now. If not, please refer to <em class="italic">Figure 5.19</em> with the equations. The new information propagates along the depth of the network as well along the time steps, using the previous hidden states at each step. The additional two key aspects of training RNNs are as follows:</p>
+			<ul>
+				<li><strong class="bold">Defining loss</strong>: We know how loss is defined for a standard neural network; that is, it has a single output. With RNNs, in the case that there is a single time step at the output (for example, text classification), the loss is calculated the same way as in standard neural networks. But we know that RNNs could have outputs over multiple time steps (for example, in Part-of-Speech tagging or machine translation). How is loss defined across multiple time steps? A very simple and popular approach is summing up the loss at all the steps. The loss for the entire sequence is calculated as the sum of the loss at all time steps.</li>
+				<li><strong class="bold">Backpropagation</strong>: Backpropagation of the errors now needs us to work across time steps, since there is a time dimension as well. We have already seen that loss is defined as the sum of loss at each time step. The usual chain rule application helps us out; we also need to sum the gradients at each time step over time. This has a very catchy name: <strong class="bold">Backpropagation Through Time</strong> (<strong class="bold">BPTT</strong>).<p class="callout-heading">Note</p><p class="callout">A detailed treatment of the training process and the involved math is beyond the scope of this book. The basic concept is all we need to understand the considerations involved.</p></li>
+			</ul>
+			<p>Now, let's continue building our first RNN model using Keras. We will introduce two new layers that are available in Keras in this chapter and understand their function and utility. The first layer we need is the <strong class="source-inline">SimpleRNN</strong> layer.</p>
+			<p>To import all the necessary utilities from Keras, you can use the following code:</p>
+			<p class="source-code">from tensorflow.keras.models import Sequential</p>
+			<p class="source-code">from tensorflow.keras.layers \</p>
+			<p class="source-code">import SimpleRNN, Activation, Dropout, Dense, Reshape</p>
+			<p>The SimpleRNN layer is the simplest plain vanilla RNN layer. It takes in a sequence, and the output of the neuron is fed back as input. Additionally, if we want to follow this RNN layer with another RNN layer, we have the option of returning sequences as output. Let's have a look at some of the options.</p>
+			<ul>
+				<li><strong class="source-inline">?SimpleRNN</strong>: The signature for the SimpleRNN layer is as follows:</li>
+			</ul>
+			<div>
+				<div id="_idContainer164" class="IMG---Figure">
+					<img src="image/B15385_05_25.jpg" alt="Figure 5.25: Signature of the SimpleRNN layer&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.25: Signature of the SimpleRNN layer</p>
+			<p>We can see that the layer also has all the usual options of regular/standard layers in Keras that let you specify the activations, initialization, dropout, and more.</p>
+			<p>The RNN layers expect the input data to be in a certain format. Since we can have input data as multiple time steps for multiple features, the input format is expected to make that specification unambiguous. The expected input shape is (look_back, number of features). It expects a matrix with the same lookback history for each feature.</p>
+			<p>In our case, we have one feature, and the lookback period is 10. So, the expected input shape is (10, 1). Note that we currently have each input as a list of 10 values, so we need to make sure it is understood as (10,1). We'll use the reshape layer for this purpose. The reshape layer needs the input shape and the target shape. Let's start building our model by instantiating and adding a reshape layer.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">Even though we have set the seeds for <strong class="source-inline">numpy</strong> as well as <strong class="source-inline">tensorflow</strong> to achieve reproducible results, there are a lot more causes for variation owing to which you may get a result that's different from ours. This applies to all the models we'll use here. While the values you see may be different, the output you see should largely agree with ours. If the model performance is very different, you may want to tweak the number of epochs – the reason for this being that the weights in neural networks are initialized randomly, so the starting point for you and us could be slightly different, and we may reach a similar position when training a different number of epochs.</p>
+			<h2 id="_idParaDest-160"><a id="_idTextAnchor185"/>Exercise 5.03: Building Our First Plain RNN Model</h2>
+			<p>In this exercise, we will build our first plain RNN model. We will have a reshape layer, followed by a <strong class="source-inline">SimpleRNN</strong> layer, followed by a dense layer for the prediction. We will use the formatted data for <strong class="source-inline">trainX</strong> and <strong class="source-inline">trainY</strong> that we created earlier, along with the initialized layers from Keras. Perform the following steps to complete this exercise:</p>
+			<ol>
+				<li value="1">Let's gather the necessary utilities from Keras. Use the following code to do so:<p class="source-code">from tensorflow.keras.models import Sequential</p><p class="source-code">from tensorflow.keras.layers \</p><p class="source-code">import SimpleRNN, Activation, Dropout, Dense, Reshape</p></li>
+				<li>Instantiate the <strong class="source-inline">Sequential</strong> model:<p class="source-code">model = Sequential()</p></li>
+				<li>Add a <strong class="source-inline">Reshape</strong> layer to get the data in the format (<strong class="source-inline">look_back</strong>, <strong class="source-inline">1</strong>):<p class="source-code">model.add(Reshape((look_back,1), input_shape = (look_back,)))</p><p>Note the arguments to the <strong class="source-inline">Reshape</strong> layer. The target shape is (<strong class="source-inline">lookback, 1</strong>), as we discussed.</p></li>
+				<li>Add a <strong class="source-inline">SimpleRNN</strong> layer with 32 neurons and specify the input shape. Note that we took an arbitrary number of neurons, so you're welcome to experiment with this number:<p class="source-code">model.add(SimpleRNN(32, input_shape=(look_back, 1)))</p></li>
+				<li>Add a <strong class="source-inline">Dense</strong> layer of size 1:<p class="source-code">model.add(Dense(1))</p></li>
+				<li>Add an <strong class="source-inline">Activation</strong> layer with a linear activation:<p class="source-code">model.add(Activation('linear'))</p></li>
+				<li>Compile the model with the <strong class="source-inline">adam</strong> optimizer and <strong class="source-inline">mean_squared_error</strong> (since we're predicting a real-values quantity):<p class="source-code">model.compile(loss='mean_squared_error', optimizer='adam')</p></li>
+				<li>Print a summary of the model:<p class="source-code">model.summary()</p><p>The summary will be printed as follows:</p></li>
+			</ol>
+			<div>
+				<div id="_idContainer165" class="IMG---Figure">
+					<img src="image/B15385_05_26.jpg" alt="Figure 5.26: Summary of the SimpleRNN model&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.26: Summary of the SimpleRNN model</p>
+			<p>Pay attention to the number of parameters in the <strong class="source-inline">SimpleRNN</strong> layer. It works out to be as we expected.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">To access the source code for this specific section, please refer to <a href="https://packt.live/2ZctArW">https://packt.live/2ZctArW</a>.</p>
+			<p class="callout">You can also run this example online at <a href="https://packt.live/38EDOEA">https://packt.live/38EDOEA</a>. You must execute the entire Notebook in order to get the desired result.</p>
+			<p>In this exercise, we defined our model architecture using a single-layer plain RNN architecture. This is indeed a very simple model, in comparison to the kinds of models we built earlier for image data. Next, let's see how this model performs on the task at hand.</p>
+			<h2 id="_idParaDest-161"><a id="_idTextAnchor186"/>Model Training and Performance Evaluation</h2>
+			<p>We have defined and compiled the model. The next step is to learn the model parameters by fitting the model on the train data. We can do this by using a batch size of 1 and a validation split of 10%, and by training for only three epochs. We tried different values of epochs and found that the model gave the best result at three epochs. The following code will help us train the model using the <strong class="source-inline">fit()</strong> method:</p>
+			<p class="source-code">model.fit(trainX, trainY, epochs=3, batch_size=1, \</p>
+			<p class="source-code">          verbose=2, validation_split=0.1)</p>
+			<p>The output is as follows:</p>
+			<div>
+				<div id="_idContainer166" class="IMG---Figure">
+					<img src="image/B15385_05_27.jpg" alt="Figure 5.27: Training output&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.27: Training output</p>
+			<p>We can see that the loss is already pretty low. We trained the model here without doing any careful hyperparameter tuning. You can see that for this dataset, three epochs was sufficient, and we're trying to keep it simple here. With the model training done, we now need to assess the performance on the train and test sets.</p>
+			<p>To make our code a little more modular, we'll define two functions – one to print the RMS error on the train and test sets and the other function to plot the predictions for the test data along with the original values in the data. Let's begin by defining our first function, using the <strong class="source-inline">sqrt</strong> function from <strong class="source-inline">math</strong> to get the root of the <strong class="source-inline">mean_squared_error</strong> provided to us by the model's <strong class="source-inline">evaluate</strong> method. The function definition is as follows:</p>
+			<p class="source-code">import math</p>
+			<p class="source-code">def get_model_perf(model_obj):</p>
+			<p class="source-code">    score_train = model_obj.evaluate(trainX, trainY, verbose=0)</p>
+			<p class="source-code">    print('Train RMSE: %.2f RMSE' % (math.sqrt(score_train)))</p>
+			<p class="source-code">    score_test = model_obj.evaluate(testX, testY, verbose=0)</p>
+			<p class="source-code">    print('Test RMSE: %.2f RMSE' % (math.sqrt(score_test)))</p>
+			<p>To see how our model did, we need to supply our <strong class="source-inline">model</strong> object to this method. This can be done as follows:</p>
+			<p class="source-code">get_model_perf(model)</p>
+			<p>The output will be as follows:</p>
+			<p class="source-code">Train RMSE: 0.02 RMSE</p>
+			<p class="source-code">Test RMSE: 0.03 RMSE</p>
+			<p>The values seem rather low (admittedly, we don't really have a benchmark here, but these values do seem to be good considering that our outcome values are ranging from 0 to 1). But this is a summary statistic, and we already know that the values in the data change considerably. A better idea would be to visually assess the performance, comparing the actual values to the predicted for the test period. The following code will help us define a function that plots the predictions for a given model object:</p>
+			<p class="source-code">def plot_pred(model_obj):</p>
+			<p class="source-code">    testPredict = \</p>
+			<p class="source-code">    scaler.inverse_transform(model_obj.predict(testX))</p>
+			<p class="source-code">    pred_test_plot = ts_data.copy()</p>
+			<p class="source-code">    pred_test_plot[:train_recs+look_back,:] = np.nan</p>
+			<p class="source-code">    pred_test_plot[train_recs+look_back:,:] = \</p>
+			<p class="source-code">    testPredict[look_back:]</p>
+			<p class="source-code">    plt.plot(ts_data)</p>
+			<p class="source-code">    plt.plot(pred_test_plot, "--")</p>
+			<p>First, the function makes predictions on the test data. Since this data is scaled, we apply the inverse transform to get the data back to its original scale before plotting it. The function plots the actual values as a solid line and the predicted values as dotted lines. Let's use this function to visually assess how our model performs. We need to simply pass the model object to the <strong class="source-inline">plot_pred</strong> function, as demonstrated in the following code:</p>
+			<p class="source-code">%matplotlib inline</p>
+			<p class="source-code">plt.figure(figsize=[10,5])</p>
+			<p class="source-code">plot_pred(model)</p>
+			<p>The plot that's displayed is as follows:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer167" class="IMG---Figure">
+					<img src="image/B15385_05_28.jpg" alt="Figure 5.28: Predictions versus actuals&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.28: Predictions versus actuals</p>
+			<p>The preceding diagram visualizes the predictions (dotted lines) from the model juxtaposed with the actual values (solid lines). That looks pretty good, doesn't it? At this scale, it looks like overlap between the predicted and the actual is very high – the prediction curve fits the actual values almost perfectly. Prima facie, it does seem that the model has done a great job.</p>
+			<p>But before congratulating ourselves, let's recall the granularity at which we worked – we're working with 10 points to predict the next day's stock price. Of course, at this scale, even if we took simple averages, the plot would look impressive. We need to zoom in, a lot, to understand this better. Let's zoom in so that the individual points are visible. We'll use the <strong class="source-inline">%matplotlib notebook</strong> cell magic command for interactivity in the chart and zoom in on the values corresponding to indices <strong class="source-inline">2400</strong> – <strong class="source-inline">2500</strong> in the plot:</p>
+			<p class="source-code">%matplotlib notebook</p>
+			<p class="source-code">plot_pred(model)</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">If the graph presented below is not displayed properly for some reason, run the cell containing  <strong class="source-inline">%matplotlib notebook</strong> for a couple of times.  Alternatively, you can also use <strong class="source-inline">%matplotlib inline</strong> instead of <strong class="source-inline">%matplotlib notebook</strong>.</p>
+			<p>The output is as follows, with the dotted lines showing the predictions and the solid line depicting the actual values:</p>
+			<div>
+				<div id="_idContainer168" class="IMG---Figure">
+					<img src="image/B15385_05_29.jpg" alt="Figure 5.29: Zoomed-in view of predictions&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.29: Zoomed-in view of predictions</p>
+			<p>Even after zooming in, the result is pretty good. All the variations have been captured well. A single RNN layer with just 32 neurons giving us this kind of result is great. Those who have worked with time series prediction using classical methods would be elated (as we were) to see the efficacy of RNNs for this task.</p>
+			<p>We saw what RNNs are and, through our stock price prediction model, also saw the predictive power of even a very simple model for a sequence prediction task. We mentioned earlier that using an RNN is one approach to sequence processing. There is another noteworthy approach to handling sequences that employs convolutions. We'll explore it in the next section.</p>
+			<h2 id="_idParaDest-162"><a id="_idTextAnchor187"/>1D Convolutions for Sequence Processing</h2>
+			<p>In the previous chapters, you saw how deep neural networks benefit from convolutions – you saw convnets and how they can be used for working with images, and how they help with the following:</p>
+			<ul>
+				<li>Reducing the number of parameters</li>
+				<li>Learning the "local features" for the image</li>
+			</ul>
+			<p>Interestingly, and this is something that is not very obvious, convnets can also be very helpful for sequence processing tasks. Instead of 2D, we could use 1D convolutions for sequence data. How does 1D convolution work? Let's take a look:</p>
+			<div>
+				<div id="_idContainer169" class="IMG---Figure">
+					<img src="image/B15385_05_30.jpg" alt="Figure 5.30: Feature generation using 1D convolutions&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.30: Feature generation using 1D convolutions</p>
+			<p>In <em class="italic">Chapter 3</em>, <em class="italic">Image Classification with Convolutional Networks</em>, we saw how a filter works for the case of images, extracting "patches" from the input image to provide us with output "features." In the case of 1D, a filter extracts subsequences from the input sequence and multiplies them by the weights to give us a value for the output features. As shown in the preceding diagram, the filter moves from the beginning to the end of the sequence (top to bottom). This way, the 1D convnet extracts local patches. As in the 2D case, the patches/features learned here can be recognized later in a different position in the sequence. Of course, as with 2D convolutions, you can choose the filter size and the stride for 1D convolutions as well. If used with a stride more than 1, the 1D convnet can also significantly reduce the number of features.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">When employed on text data as the first layer, the "local features" that 1D convolutions extract are features for groups of words. A filter size of 2 would help extract two-word combos (called bi-grams), 3 would extract three-word combos (tri-grams), and so on. Larger filter sizes would learn larger groups of terms.</p>
+			<p>You could also apply pooling to 1D – max or average pooling to further subsample the features. So, you could greatly reduce the effective length of sequence that you're dealing with. A long input sequence can be brought down to a much smaller, more manageable length. This should certainly help with speed.</p>
+			<p>We understand that we benefit in speed. But do 1D convnets perform well for sequences? 1D convnets have shown very good results in tasks around translation and text classification. They have also shown great results for audio generation and other tasks regarding predicting from sequences.</p>
+			<p>Will 1D convnets perform well for our task of stock price prediction? Ponder it – think about what kind of features we get and how we're handling the sequence. If you aren't sure, then don't worry – we're going to employ a 1D convnet-based model for our task and see for ourselves in the next exercise.</p>
+			<h2 id="_idParaDest-163"><a id="_idTextAnchor188"/>Exercise 5.04: Building a 1D Convolution-Based Model</h2>
+			<p>In this exercise, we will build our first model using 1D convnets and evaluate its performance. We'll employ a single <strong class="source-inline">Conv1D </strong>layer, followed by <strong class="source-inline">MaxPooling1D</strong>. We'll continue using the same dataset and notebook we've been using so far. Perform the following steps to complete this exercise:</p>
+			<ol>
+				<li value="1">Import the 1D convolution-related layers from Keras:<p class="source-code">from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten</p></li>
+				<li>Initialize a <strong class="source-inline">Sequential</strong> model and add a <strong class="source-inline">Reshape</strong> layer to reshape each instance as a vector (<strong class="source-inline">look_back, 1</strong>):<p class="source-code">model_conv = Sequential()</p><p class="source-code">model_conv.add(Reshape((look_back,1), \</p><p class="source-code">               input_shape = (look_back,)))</p></li>
+				<li>Add a Conv1D layer with five filters of size 5 and <strong class="source-inline">relu</strong> as the activation function:<p class="source-code">model_conv.add(Conv1D(5, 5, activation='relu'))</p><p>Note that we're using fewer filters than the sequence length. In many other applications, the sequence can be much longer than in our example. The filters are generally much lower in number than the input sequence.</p></li>
+				<li>Add a Maxpooling1D layer with a pool size of 5:<p class="source-code">model_conv.add(MaxPooling1D(5))</p></li>
+				<li>Flatten the output with a <strong class="source-inline">Flatten</strong> layer:<p class="source-code">model_conv.add(Flatten())</p></li>
+				<li>Add a <strong class="source-inline">Dense</strong> layer with a single neuron and add a linear activation layer:<p class="source-code">model_conv.add(Dense(1))</p><p class="source-code">model_conv.add(Activation('linear'))</p></li>
+				<li>Print out the summary of the model:<p class="source-code">model_conv.summary()</p><p>The model's summary is as follows:</p><div id="_idContainer170" class="IMG---Figure"><img src="image/B15385_05_31.jpg" alt="Figure 5.31: Summary of the model&#13;&#10;"/></div><p class="figure-caption">Figure 5.31: Summary of the model</p><p>Notice the dimensions of the output from the Conv1D layer – 6 x 5. This is expected – for a filter size of 5, we get 6 features. Also, take a look at the overall number of parameters. It's just 36, which is indeed a very small number.</p></li>
+				<li>Compile the model with the loss as <strong class="source-inline">mean_squared_error</strong> and <strong class="source-inline">adam</strong> as the <strong class="source-inline">optimizer</strong>, and then fit it on the train data for 5 epochs:<p class="source-code">model_conv.compile(loss='mean_squared_error', optimizer='adam')</p><p class="source-code">model_conv.fit(trainX, trainY, epochs=5, \</p><p class="source-code">               batch_size=1, verbose=2, validation_split=0.1)</p><p>You should see the following output:</p><div id="_idContainer171" class="IMG---Figure"><img src="image/B15385_05_32.jpg" alt="Figure 5.32: Training and validation loss&#13;&#10;"/></div><p class="figure-caption">Figure 5.32: Training and validation loss</p><p>From the preceding screenshot, we can see that the validation loss is pretty low for the 1D convolution model too. We need to see whether this performance is comparable to that of the plain RNN. Let's evaluate the performance of the model and see whether it aligns with our expectations.</p></li>
+				<li>Use the <strong class="source-inline">get_model_perf</strong> function to get the RMSE for the train and test sets:<p class="source-code">get_model_perf(model_conv)</p><p>The output is as follows:</p><p class="source-code">Train RMSE: 0.04 RMSE</p><p class="source-code">Test RMSE: 0.05 RMSE</p><p>This is marginally higher than that of the plain RNN model. Let's visualize the predictions next.</p></li>
+				<li>Using the <strong class="source-inline">plot_pred</strong> function, plot the predictions and the actual values:<p class="source-code">%matplotlib inline</p><p class="source-code">plt.figure(figsize=[10,5])</p><p class="source-code">plot_pred(model_conv)</p><p>The model output would be as follows, with the dotted lines showing the predictions and solid lines depicting the actual values:</p><div id="_idContainer172" class="IMG---Figure"><img src="image/B15385_05_33.jpg" alt="Figure 5.33: Plotting the predictions and actual values&#13;&#10;"/></div><p class="figure-caption">Figure 5.33: Plotting the predictions and actual values</p><p>This is very similar to the plot from the predictions from the RNN model (<em class="italic">Figure 5.29</em>). But we now acknowledge that a better assessment would need interactive visualization and zooming in to a scale where the individual points are visible. Let's zoom in using the interactive plotting features of matplotlib using the notebook backend by using the <strong class="source-inline">%matplotlib</strong> cell magic command.</p></li>
+				<li>Plot again with interactivity and zoom into the last 100 data points:<p class="source-code">%matplotlib notebook</p><p class="source-code">plot_pred(model_conv)</p><p>The output will be as follows:</p><div id="_idContainer173" class="IMG---Figure"><img src="image/B15385_05_34.jpg" alt="Figure 5.34: Zoomed-in view of predictions&#13;&#10;"/></div></li>
+			</ol>
+			<p class="figure-caption">Figure 5.34: Zoomed-in view of predictions</p>
+			<p class="callout-heading"> Note</p>
+			<p class="callout">If the preceding graph is not displayed properly for some reason, run the cell containing  <strong class="source-inline">%matplotlib notebook</strong> for a couple of times.  Alternatively, you can also use <strong class="source-inline">%matplotlib inline</strong> instead of <strong class="source-inline">%matplotlib notebook</strong>.</p>
+			<p>The preceding diagram shows a closer view of the predictions (dotted lines) and the actual values (solid lines). Things aren't looking too good at this scale. The output is very smooth, and almost looks like some kind of averaging is going on. What happened? Is this in line with your expectations? Can you explain this output?</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">To access the source code for this specific section, please refer to <a href="https://packt.live/2ZctArW">https://packt.live/2ZctArW</a>.</p>
+			<p class="callout">You can also run this example online at <a href="https://packt.live/38EDOEA">https://packt.live/38EDOEA</a>. You must execute the entire Notebook in order to get the desired result.</p>
+			<p>In this exercise, we built and trained our 1D convolution-based model for stock price prediction. We saw that the number of parameters is very low, and that the training time was much lower.</p>
+			<h2 id="_idParaDest-164"><a id="_idTextAnchor189"/>Performance of 1D Convnets</h2>
+			<p>To explain the result in the previous exercise, we need to understand what is happening after we extract the subsequences using the Conv1D layer. The sequence in the data is being captured, that is, in the individual filters. But is the sequence being retained after that, and are we really exploiting the sequence in the data? No, we are not. Once the patches have been extracted, they are being treated independently. It is for this reason that the performance is not great.</p>
+			<p>So, why did we state that 1D convnets do great on sequence tasks previously? How do you make them perform well for our task? 1D convnets do very well on tasks regarding text, especially classification, where the short, local sequence has very high importance and following the order in the entire sequence (say, 200 terms) doesn't provide a huge benefit. For time series tasks, we need order in the entire sequence. There are ways to induce order consideration for tasks such as time series tasks, but they aren't great.</p>
+			<h2 id="_idParaDest-165"><a id="_idTextAnchor190"/>Using 1D Convnets with RNNs</h2>
+			<p>We saw the benefits of 1D convnets – speed, feature reduction, lower number of parameters, learning local features, and much more. We also saw that RNNs provide very powerful and flexible architectures for handling sequences but have a lot of parameters and are expensive to train. One possible approach can be to combine both – the benefit of the representation and feature reduction from 1D convnets in the initial layers, and the benefit of the sequence processing power of RNNs in the following layers. Let's try it out for our task.</p>
+			<h2 id="_idParaDest-166"><a id="_idTextAnchor191"/>Exercise 5.05: Building a Hybrid (1D Convolution and RNN) Model</h2>
+			<p>In this exercise, we will build a model that will employ both 1D convolutions and RNNs and assess the change in performance. Making a hybrid model is straightforward – we'll begin with the convolution layer, the output of which is features in a sequence. The sequence can be fed straight into the RNN layer. Therefore, combining the 1D convolutions with RNNs is as simple as following the Conv1D layer with an RNN layer. We'll continue this exercise in the same Jupyter Notebook. Perform the following steps to complete this exercise:</p>
+			<ol>
+				<li value="1">Initialize a sequential model, add a <strong class="source-inline">Reshape</strong> layer (as in the preceding exercise), and add a <strong class="source-inline">Conv1D</strong> layer with five filters and a filter size 3:<p class="source-code">model_comb = Sequential()</p><p class="source-code">model_comb.add(Reshape((look_back,1), \</p><p class="source-code">                        input_shape = (look_back,)))</p><p class="source-code">model_comb.add(Conv1D(5, 3, activation='relu'))</p></li>
+				<li>Next, add a <strong class="source-inline">SimpleRNN</strong> layer with 32 neurons, followed by a <strong class="source-inline">Dense</strong> layer and an <strong class="source-inline">Activation</strong> layer:<p class="source-code">model_comb.add(SimpleRNN(32))</p><p class="source-code">model_comb.add(Dense(1))</p><p class="source-code">model_comb.add(Activation('linear'))</p></li>
+				<li>Print out the model summary:<p class="source-code">model_comb.summary()</p><p>The output will be as follows:</p><div id="_idContainer174" class="IMG---Figure"><img src="image/B15385_05_35.jpg" alt="Figure 5.35: Summary of the hybrid (1D convolution and RNN) model&#13;&#10;"/></div><p class="figure-caption">Figure 5.35: Summary of the hybrid (1D convolution and RNN) model</p><p>The output from the Conv1D layer is 8 × 5 – 8 features from 5 filters. The overall number of parameters is slightly higher than the plain RNN model. This is because the sequence size we're dealing with is very low. If we were dealing with larger sequences, we would have seen a reduction in the parameters. Let's compile and fit the model.</p></li>
+				<li>Compile and fit the model on the training data for three epochs:<p class="source-code">model_comb.compile(loss='mean_squared_error', optimizer='adam')</p><p class="source-code">model_comb.fit(trainX, trainY, epochs=3, \</p><p class="source-code">               batch_size=1, verbose=2, validation_split=0.1)</p><p>The model training output is as follows:</p><div id="_idContainer175" class="IMG---Figure"><img src="image/B15385_05_36.jpg" alt="Figure 5.36: Training and validation loss&#13;&#10;"/></div><p class="figure-caption">Figure 5.36: Training and validation loss</p><p>Let's assess the performance first by looking at RMSE. We don't expect this to be very useful for our example, but let's print it out as good practice.</p></li>
+				<li>Print the RMSE for the train and test set using the <strong class="source-inline">get_model_perf</strong> function:<p class="source-code">get_model_perf(model_comb)</p><p>You'll get the following output:</p><p class="source-code">Train RMSE: 0.02 RMSE</p><p class="source-code">Test RMSE: 0.03 RMSE</p><p>The values seem lower, but only a very close look will help us assess the performance of the model.</p></li>
+				<li>Plot the prediction versus actual in interactive mode and zoom in on the last 100 points:<p class="source-code">%matplotlib notebook</p><p class="source-code">plot_pred(model_comb)</p><p>The output of the preceding command will be as follows:</p><div id="_idContainer176" class="IMG---Figure"><img src="image/B15385_05_37.jpg" alt="Figure 5.37: Plot of the combined model&#13;&#10;"/></div></li>
+			</ol>
+			<p class="figure-caption">Figure 5.37: Plot of the combined model</p>
+			<p>Following is a zoomed-in view of the predictions:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer177" class="IMG---Figure">
+					<img src="image/B15385_05_38.jpg" alt="Figure 5.38: Zoomed-in view of predictions&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.38: Zoomed-in view of predictions</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">If the graphs presented below are not displayed properly for some reason, run the cell containing  <strong class="source-inline">%matplotlib notebook</strong> for a couple of times.  Alternatively, you can also use <strong class="source-inline">%matplotlib inline</strong> instead of <strong class="source-inline">%matplotlib notebook</strong>.</p>
+			<p>This result is extremely good. The prediction (dotted lines) is extremely close to the actual (solid lines) for the test data – capturing not only the level but also the minute variations very well. There is also some effective regularization going on when the 1D convnet is extracting patches from the sequence. These features are being fed in sequence to the RNN, which is using its raw power to provide the output we see. There is indeed merit in combining 1D convnets with RNNs.</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">To access the source code for this specific section, please refer to <a href="https://packt.live/2ZctArW">https://packt.live/2ZctArW</a>.</p>
+			<p class="callout">You can also run this example online at <a href="https://packt.live/38EDOEA">https://packt.live/38EDOEA</a>. You must execute the entire Notebook in order to get the desired result.</p>
+			<p>In this exercise, we saw how we can combine 1D convnets and RNNs to form a hybrid model that can provide high performance. We acknowledge that there is merit in trying this combination for sequence processing tasks.</p>
+			<h2 id="_idParaDest-167"><a id="_idTextAnchor192"/>Activity 5.01: Using a Plain RNN Model to Predict IBM Stock Prices</h2>
+			<p>We have seen RNNs in action and can now appreciate the kind of power they bring in sequence prediction tasks. We also saw that RNNs in conjunction with 1D convnets provide great results. Now, let's employ these ideas in another stock price prediction task, this time predicting the stock price for IBM. The dataset can be downloaded from <a href="https://packt.live/3fgmqIL">https://packt.live/3fgmqIL</a>. You will visualize the data and understand the patterns. From your understanding of the data, choose a lookback period and build an RNN-based model for prediction. The model will have a 1D convnet as well as a plain RNN layer. You will also employ dropout to prevent overfitting. </p>
+			<p>Perform the following steps to complete this exercise:</p>
+			<ol>
+				<li value="1">Load the <strong class="source-inline">.csv </strong>file, reverse the index, and plot the time series (the <strong class="source-inline">Close</strong> column) for visual inspection.</li>
+				<li>Extract the values for <strong class="source-inline">Close</strong> from the DataFrame as a <strong class="source-inline">numpy</strong> array and plot them using <strong class="source-inline">matplotlib</strong>.</li>
+				<li>Assign the final 25% data as test data and the first 75% as train data.</li>
+				<li>Using <strong class="source-inline">MinMaxScaler</strong> from <strong class="source-inline">sklearn</strong>, scale the train and test data.</li>
+				<li>Using the <strong class="source-inline">get_lookback</strong> function we defined in this chapter, get lookback data for the train and test data using a lookback period of 15.</li>
+				<li>From Keras, import all the necessary layers for employing plain RNNs (<strong class="source-inline">SimpleRNN</strong>, <strong class="source-inline">Activation</strong>, <strong class="source-inline">Dropout</strong>, <strong class="source-inline">Dense</strong>, and <strong class="source-inline">Reshape</strong>) and 1D convolutions (Conv1D). Also, import <strong class="source-inline">mean_squared_error</strong>.</li>
+				<li>Build a model with a 1D convolution layer (5 filters of size 3) and an RNN layer with 32 neurons. Add 25% dropout after the RNN layer. Print the model's summary.</li>
+				<li>Compile the model with the <strong class="source-inline">mean_squared_error</strong> loss and the <strong class="source-inline">adam</strong> optimizer. Fit this on the train data in five epochs with a validation split of 10% and a batch size of 1.</li>
+				<li>Using the <strong class="source-inline">get_model_perf</strong> method, print the RMSE of the model.</li>
+				<li>Plot the predictions – the entire view, as well as a zoomed-in one for a close assessment of the performance.</li>
+			</ol>
+			<p>The zoomed-in view of the predictions (dotted lines) versus the actuals (solid lines) should be as follows:</p>
+			<div>
+				<div id="_idContainer178" class="IMG---Figure">
+					<img src="image/B15385_05_39.jpg" alt="Figure 5.39: Zoomed-in view of predictions&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.39: Zoomed-in view of predictions</p>
+			<p class="callout-heading">Note</p>
+			<p class="callout">The detailed steps for this activity, along with the solutions and additional commentary, are presented on page 410.</p>
+			<h1 id="_idParaDest-168"><a id="_idTextAnchor193"/>Summary</h1>
+			<p>In this chapter, we looked at the considerations of working with sequences. There are several tasks that require us to exploit information contained in a sequence, where sequence-agnostic models would fare poorly. We saw that using RNNs is a very powerful approach to sequence modeling – the architecture explicitly processes the sequence and considers the information accumulated so far, along with the new input, to generate the output. Even very simple RNN architectures performed very well on our stock price prediction task. We got the kind of results that would take a lot of effort to get using classical approaches.</p>
+			<p>We also saw that 1D convolutions can be employed in sequence prediction tasks. 1D convolutions, like their 2D counterparts for images, learn local features in a sequence. We built a 1D convolution model that didn't fare too well on our task. The final model that we built combined 1D convolutions and RNNs and provided excellent results regarding the stock price prediction task.</p>
+			<p>In the next chapter, we will discuss models that are variations of RNNs that are even more powerful. We will also discuss architectures that extract the latent power of the idea of the RNN. We will apply these "RNNs on steroids" to an important task in natural language processing – sentiment classification.</p>
+		</div>
+		<div>
+			<div id="_idContainer180" class="Content">
+			</div>
+		</div>
+		<div>
+			<div id="_idContainer181" class="Content">
+			</div>
+		</div>
+	</body></html>

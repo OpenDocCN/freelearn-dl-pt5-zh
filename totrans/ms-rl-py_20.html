@@ -1,0 +1,201 @@
+<html><head></head><body>
+		<div id="_idContainer1717">
+			<h1 id="_idParaDest-316"><em class="italic"><a id="_idTextAnchor348"/>Chapter 16</em>: Marketing, Personalization and Finance</h1>
+			<p>In this chapter, we discuss three areas in which RL (RL) is gaining significant traction. First, we describe how it can be used in personalization and recommendation systems. With that, we go beyond the single-step bandit approaches we covered in the earlier chapters. A related field that can also significantly benefit from RL is marketing. In addition to personalized marketing applications, RL can help in areas such as managing campaign budgets and reducing customer churn. Finally, we discuss the promise of RL in finance and related challenges. In doing so, we introduce TensorTrade, a Python framework for developing and testing RL-based trading algorithms. </p>
+			<p>So, in this chapter, we cover the following:</p>
+			<ul>
+				<li>Going beyond bandits for personalization</li>
+				<li>Developing effective marketing strategies using RL</li>
+				<li>Applying RL in finance</li>
+			</ul>
+			<h1 id="_idParaDest-317"><a id="_idTextAnchor349"/>Going beyond bandits for personalization</h1>
+			<p>When we covered <a id="_idIndexMarker1338"/>multi-armed and contextual bandit problems in the early chapters of the book, we presented a case study aimed at maximizing the <strong class="bold">click-through rate (CTR)</strong> of online ads. This is just one example of how bandit models can be used to provide users with personalized content and experience, a common challenge of almost all online (and offline) content providers, from e-retailers to social media platforms. In this section, we go beyond the bandit models and describe a multi-step RL approach to personalization. Let's first start by discussing where the bandit models fall short, and then how multi-step RL can address those issues.</p>
+			<h2 id="_idParaDest-318"><a id="_idTextAnchor350"/>Shortcomings of bandit models</h2>
+			<p>The goal in bandit <a id="_idIndexMarker1339"/>problems is to maximize the immediate (single-step) return. In an online ad CTR maximization problem, this is usually a good way of thinking about the goal: an online ad is displayed, the user clicks, and voila! If not, it's a miss.</p>
+			<p>The relationship between the user and, let's say, YouTube or Amazon, is much more sophisticated than this. The user experience on such platforms is a journey, rather than an event. The platform recommends some content, and it is not a total miss if the user does not click on it. It could be the case that the user finds the presented content interesting and enticing and just continues browsing. Even if that user session does not result in a click or conversion, the user may come back soon knowing that the platform is serving some content relevant to the user's interests. Conversely, too many clicks in a session could very well mean that the user is not able to find what they are looking for, leading to a bad experience. This "journey-like" nature of the problem, the fact that the platform (agent) decisions have a downstream impact on the customer satisfaction and business value (reward), is what makes multi-step RL an appealing approach here.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Although it is tempting to depart from a bandit model towards multi-step RL, think twice before doing so. Bandit algorithms are much easier to use and have well-understood theoretical properties, whereas it could be quite challenging to successfully train an agent in a multi-step RL setting. Note that many multi-step problems can be cast as a single-step problem by including a memory for the agent in the context and the expected future value of the action in the immediate reward, which then allows us to stay in the bandit framework.</p>
+			<p>One of the successful implementations of multi-step deep RL for personalization is related to news recommendation, proposed by (Zheng et al. 2018). In the next section, we describe a similar approach to the problem inspired by this work, although our discussion will be at a higher level and broader than what the paper suggests.</p>
+			<h2 id="_idParaDest-319"><a id="_idTextAnchor351"/>Deep RL for news recommendation</h2>
+			<p>When we go on our<a id="_idIndexMarker1340"/> favorite news app, we expect to read some interesting and perhaps important content. Of course, what makes news interesting or important is different for everyone, so we have a personalization problem. As Zheng et al. (2018) mention, there are some additional challenges in news recommendation:</p>
+			<ul>
+				<li>The action space is not fixed. In fact, it is quite the opposite: There is so much news flowing in during a day, each with some unique characteristics, making it hard to think about the problem like a traditional Gym environment.</li>
+				<li>User preferences are quite dynamic too: They change and evolve over time. A user who is more into politics this week can get bored and read about art next week, which is what Zheng et al. (2018) demonstrate with data.</li>
+				<li>As we mentioned, this is a truly multi-step problem. If there are two pieces of news that can be displayed, one about a disaster and the other about a sports game, showing the former could have a higher chance of getting clicked due to its sensational nature. It could also lead to the user leaving the platform early as their morale decreases, preventing more engagement on the platform.</li>
+				<li>What the agent observes about the user is so limited compared to all possible factors playing a role in the user's behavior. Therefore, the environment is partially observable.</li>
+			</ul>
+			<p>So, the problem is to choose which news piece(s) from a dynamic inventory to display to a user whose interests, one, change over time, and two, are impacted by many factors that the agent does not fully observe. </p>
+			<p>Let's next describe the components of the RL problem here.</p>
+			<h3>The observation and action space</h3>
+			<p>Borrowing <a id="_idIndexMarker1341"/>from Zheng et al. (2018), there are the<a id="_idIndexMarker1342"/> following<a id="_idIndexMarker1343"/> pieces of information that make up the observation and action space about a particular user and a news piece:</p>
+			<ul>
+				<li><strong class="bold">User features</strong> related to the features of all the news pieces the user clicked in that session, that day, in the past week, how many times the user has come to the platform over various time horizons, and so on.</li>
+				<li><strong class="bold">Context features</strong> are related to the information about the time of the day, the day of the week, whether it is a holiday, election day, and so on.</li>
+				<li><strong class="bold">User-news features</strong> about how many times this particular news piece appeared in the feed of the particular user over the past hour, and similar statistics related to the entities, topics, and categories in the news.</li>
+				<li><strong class="bold">News features</strong> of this particular piece such as topic, category, provider, entity names, click counts over the past hour, the past 6 hours, past day, and so on.</li>
+			</ul>
+			<p>Now, this makes up a <a id="_idIndexMarker1344"/>different observation-action<a id="_idIndexMarker1345"/> space than what we are used to:</p>
+			<ul>
+				<li>The first two sets of features are more like an observation: The user shows up, requests news content, and the agent observes the user and context-related features. </li>
+				<li>Then the agent needs to pick a news piece to display (or a set of news pieces, as in the paper). Therefore, the features related to the news and user-news correspond to an action.</li>
+				<li>What is interesting is that the available action set is dynamic, and it carries elements related to the user/observation (in user-news features).</li>
+			</ul>
+			<p>Although this is not a traditional setup, don't let that scare you. We can still estimate, for example, the Q-value of a given observation-action pair: We simply need to feed all these features to a neural network that estimates the Q-value. To be specific, the paper uses two neural networks, one estimating the state-value and the other the advantage, to calculate the Q-value, although a single network can also be used. This is depicted in Figure 1<a id="_idTextAnchor352"/>6.1:</p>
+			<div>
+				<div id="_idContainer1699" class="IMG---Figure">
+					<img src="image/B14160_16_01.jpg" alt="Figure 16.1 – Q-network of a news recommendation agent&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 16.1 – Q-network of a news recommendation agent</p>
+			<p>Now, compare this to a traditional Q-network:</p>
+			<ul>
+				<li>A regular Q-network would have multiple heads, one for each action (and plus one for the <a id="_idIndexMarker1346"/>value estimation if the action heads are<a id="_idIndexMarker1347"/> estimating advantages rather than Q values). Such a network outputs Q-value estimates for all of the actions in a fixed set for a given observation in a single forward pass.</li>
+				<li>In this setup, we need to make a separate forward pass over the network for each available news piece given the user, and then pick the one(s) with highest Q values.</li>
+			</ul>
+			<p>This approach is actually similar to what we used in <a href="B14160_03_Final_SK_ePub.xhtml#_idTextAnchor059"><em class="italic">Chapter 3</em></a>, <em class="italic">Contextual Bandits</em>.</p>
+			<p>Next, let's discuss an alternative modeling approach that we could use in this setup.</p>
+			<h3>Using action embeddings</h3>
+			<p>When the action<a id="_idIndexMarker1348"/> space is very large and/or it varies <a id="_idIndexMarker1349"/>each time step, like in this problem, <strong class="bold">action embeddings</strong> can be used to select an action given an observation. An action embedding is a representation of the action as a fixed-sized array, usually obtained as an outcome of a neural network.</p>
+			<p>Here is how it works: </p>
+			<ul>
+				<li>We use a policy network <a id="_idIndexMarker1350"/>that outputs, rather than action values, an <strong class="bold">intention vector</strong>, a fixed-size array of numbers. </li>
+				<li>The intention vector carries information about what the ideal action would look like given the observation.</li>
+				<li>In the context of the news recommendation problem, such an intention vector would mean something like: "Given these user and context features, this user wants to read about team sports from international leagues that are in finals."</li>
+				<li>This intention vector is then compared to the available actions. The action that is "closest" to <a id="_idIndexMarker1351"/>the "intention" is chosen. For example, a news piece about team sports in a foreign league, but not playing the finals.</li>
+				<li>A measure of the closeness is cosine similarity, which is the dot product of an intention and action embedding.</li>
+			</ul>
+			<p>This setup is illustrated in Fig<a id="_idTextAnchor353"/>ure 16.2:</p>
+			<div>
+				<div id="_idContainer1700" class="IMG---Figure">
+					<img src="image/B14160_16_02.jpg" alt="Figure 16.2 – Using action embeddings for news recommendation&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 16.2 – Using action embeddings for news recommendation</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The use of embeddings in this way is something OpenAI introduced to deal with the huge action space in Dota 2. A nice blog explaining their approach is at <a href="https://neuro.cs.ut.ee/the-use-of-embeddings-in-openai-five/">https://neuro.cs.ut.ee/the-use-of-embeddings-in-openai-five/</a>. This can also be implemented fairly easily in RLlib, which is explained at <a href="https://bit.ly/2HQRkfx">https://bit.ly/2HQRkfx</a>. </p>
+			<p>Next, let's discuss <a id="_idIndexMarker1352"/>what the reward function looks like in the news recommendation problem.</p>
+			<h3>The reward function</h3>
+			<p>In the online ad<a id="_idIndexMarker1353"/> problem that we solved at the beginning of the book, maximizing the CTR was the only objective. In the news recommendation problem, we would like to maximize the long-term engagement with the user, while also increasing the likelihood of immediate clicks. This requires a measure for user activeness, for which the paper uses a survival model.</p>
+			<h3>Exploration using dueling bandit gradient descent</h3>
+			<p>Exploration is an<a id="_idIndexMarker1354"/> essential component of RL. When we train RL agents in simulation, we don't care about taking bad actions for the sake of learning, except it wastes some of the computation budget. If the RL agent is trained in a real environment, as it usually is in a setting such as news recommendation, then exploration will have consequences beyond computational inefficiency and could harm user satisfaction.</p>
+			<p>If you think about the common <img src="image/Formula_05_272.png" alt=""/>-greedy approach, during exploration, it takes an action uniformly at random over the entire action space, even though we know that some of the actions are really bad. For example, even though the agent knows that a reader is mainly interested in politics, it will randomly display news pieces about beauty, sports, celebrities, and so on, which the reader might find totally irrelevant. </p>
+			<p>One way of overcoming this issue is to incrementally deviate from the greedy action to explore and update the policy if the agent receives a good reward after an exploratory action. Here is how we could do it:</p>
+			<ul>
+				<li>In addition to the regular <img src="image/Formula_16_002.png" alt=""/> network, we<a id="_idIndexMarker1355"/> use an <strong class="bold">explore network</strong> <img src="image/Formula_16_003.png" alt=""/> to generate exploratory actions. </li>
+				<li>The weights of <img src="image/Formula_16_004.png" alt=""/>, denoted by <img src="image/Formula_16_005.png" alt=""/>, is obtained by perturbing the weights of <img src="image/Formula_16_006.png" alt=""/>, denoted by <img src="image/Formula_16_007.png" alt=""/>.</li>
+				<li>More formally, <img src="image/Formula_16_008.png" alt=""/>, where <img src="image/Formula_16_009.png" alt=""/> is some coefficient to control the trade-off between exploration and exploitation, and <img src="image/Formula_16_010.png" alt=""/> generates a random number between the inputs.</li>
+				<li>To obtain a set of news pieces to display to a user, we first generate two sets of recommendations <a id="_idIndexMarker1356"/>from <img src="image/Formula_16_011.png" alt=""/> and <img src="image/Formula_16_012.png" alt=""/>, one from each, and then randomly select pieces from both to add to the display set.</li>
+				<li>Once the display set is shown to the user, the agent collects the user feedback (reward). If the feedback for the items generated by <img src="image/Formula_16_013.png" alt=""/> is better, <img src="image/Formula_16_014.png" alt=""/> does not change. Otherwise, the weights are updated <img src="image/Formula_16_015.png" alt=""/>, where <img src="image/Formula_16_016.png" alt=""/> is some step size. </li>
+			</ul>
+			<p>Finally, let's discuss<a id="_idIndexMarker1357"/> how this model can be trained and deployed to get effective outcomes.</p>
+			<h3>Model training and deployment </h3>
+			<p>We already mentioned<a id="_idIndexMarker1358"/> the dynamic characteristics of user behavior and preferences. Zheng et al. (2018) overcome this by training and updating the model frequently throughout the day, so that the model captures the latest dynamics in the environment.</p>
+			<p>This concludes our discussion on personalization applications of RL, particularly in a news recommendation setting. Next, we shift gears towards a related area, marketing, which can also benefit from personalization, and do more using RL.</p>
+			<h1 id="_idParaDest-320"><a id="_idTextAnchor354"/>Developing effective marketing strategies using RL</h1>
+			<p>RL can significantly improve marketing strategies in multiple areas. Let's now talk about some of them.</p>
+			<h2 id="_idParaDest-321"><a id="_idTextAnchor355"/>Personalized marketing content</h2>
+			<p>In relation to the<a id="_idIndexMarker1359"/> previous section, there is always room for more personalization in marketing. Rather than sending the same email or flier to all customers, or having rough customer segmentation, RL can help to determine the best sequence of personalized marketing content to communicate to customers.</p>
+			<h2 id="_idParaDest-322"><a id="_idTextAnchor356"/>Marketing resource allocation for customer acquisition</h2>
+			<p>Marketing <a id="_idIndexMarker1360"/>departments often make decisions about where to spend the budget based on subjective judgment and/or simple models. RL can actually come up with pretty dynamic policies to allocate marketing resources while leveraging the information about the product, responses from different marketing channels, and context information such as the time of year and so on.</p>
+			<h2 id="_idParaDest-323"><a id="_idTextAnchor357"/>Reducing the customer churn rate</h2>
+			<p>Retailers have <a id="_idIndexMarker1361"/>long studied predictive models to identify customers that are about to be lost. After they are identified, usually, discount coupons, promotion items, and so on are sent to the customer. But the sequence of taking such actions, given the type of the customer and the responses from the earlier actions, is underexplored. RL can effectively evaluate the value of each of these actions and reduce customer churn.</p>
+			<h2 id="_idParaDest-324"><a id="_idTextAnchor358"/>Winning back lost customers</h2>
+			<p>If you ever <a id="_idIndexMarker1362"/>subscribed to The Economist magazine, and then made the mistake of quitting your subscription, you probably received many phone calls, mail, emails, notifications, and so on. One cannot help but wonder whether such spamming is the best approach. It is probably not. An RL-based approach, on the other hand, can help determine which channels to use and when, along with the accompanying perks of maximizing the chances of winning the customers back while minimizing the cost of these efforts.</p>
+			<p>This list could go on. I suggest you take a moment or two to think about what marketing behavior of the companies you are a customer of you find disturbing, ineffective, irrelevant, and how RL could help with that.</p>
+			<p>Next, our final area for this chapter: finance.</p>
+			<h1 id="_idParaDest-325"><a id="_idTextAnchor359"/>Applying RL in finance</h1>
+			<p>If we need to<a id="_idIndexMarker1363"/> reiterate RL's promise, it is to obtain policies for sequential decision making to maximize rewards under uncertainty. What is a better match than finance for such a tool! In finance, the following are true:</p>
+			<ul>
+				<li>The goal is very much to maximize some monetary reward. </li>
+				<li>Decisions made now will definitely have consequences down the road.</li>
+				<li>Uncertainty is a defining factor.</li>
+			</ul>
+			<p>As a result, RL is getting increasingly popular in the finance community. </p>
+			<p>To be clear, this section will not include any examples of a winning trading strategy, well, for obvious reasons: First, the author does not know any; second, even if he did, he would not include them in a book (and no one would). In addition, there are challenges when it comes to using RL in finance. So, we start this section with a discussion on these challenges. Once we ground ourselves in reality, we will proceed to define some application areas and introduce some tools you can use in this area. </p>
+			<h2 id="_idParaDest-326"><a id="_idTextAnchor360"/>Challenges with using RL in finance</h2>
+			<p>How much time<a id="_idIndexMarker1364"/> did it take for you to get a decent score in a video game when you first played it? An hour? Two? In any case, it is a tiny fraction of the experience that an RL agent would need, millions of game frames, if not billions, to reach that level. This is because the gradients an RL agent obtains in such environments are too noisy to quickly learn from for the algorithms we are using. And video games are not that difficult after all.</p>
+			<p>Have you ever wondered what it takes to become a successful trader on the stock market? Years of financial experience, perhaps a Ph.D. in physics or math? Even then, it is difficult for a trader to beat market performance.</p>
+			<p>This was perhaps too long of a statement to convince you that it is difficult to make money by trading equities for the following reasons:</p>
+			<ul>
+				<li>Financial markets are highly efficient (although not perfectly), and it is very difficult, if not practically impossible, to predict the market. In other words, the <strong class="bold">signal</strong> is very weak in the financial data, and it is almost completely <strong class="bold">noise</strong>.</li>
+				<li>Financial markets are dynamic. A trading strategy that is profitable today may not last long as others may discover the same strategy and trade on it. For example, if people knew that Bitcoin would trade at $100K at the first solar eclipse, the price would jump to that level now as people would not wait until that day to buy it.</li>
+				<li>Unlike video games, financial markets are real-word processes. So, we need to create a simulation of them to be able to collect the huge amounts of data needed to train an RL agent for an environment much noisier than a video game. Remember that all simulations are imperfect, and what the agent learns is likely to be the quirks of the simulation model rather than a real signal, which won't be useful outside of the simulation.</li>
+				<li>The real-world<a id="_idIndexMarker1365"/> data is big enough to easily detect a low signal in it.</li>
+			</ul>
+			<p>So, this was a long, discouraging, yet necessary disclaimer we needed to put out there to let you know that it is far from low-hanging-fruit to train a trader agent. Having said that, RL is a tool, a powerful one, and its effective use is up to the capabilities of its user. </p>
+			<p>Now, it is time to induce some optimism. There are some cool open source libraries out there for you to work towards creating your trader agent, and TensorTrade is one candidate. It could be helpful for educational purposes and to strategize some trading ideas before going into some more custom tooling.</p>
+			<h2 id="_idParaDest-327"><a id="_idTextAnchor361"/>Introducing TensorTrade</h2>
+			<p>TensorTrade is<a id="_idIndexMarker1366"/> designed to easily compose Gym-like environments for trading equities. It allows the user to define and glue together various kinds of data streams, feature extractions for observations, action spaces, reward structures, and other convenient utilities you might need to train a trader agent. Since the environment follows the Gym API, it can be easily hooked up with RL libraries, such as RLlib. </p>
+			<p>In this section, we give a quick introduction to TensorTrade and defer the details of what you can do with it to the documentation.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">You can find the TensorTrade documentation at <a href="https://www.tensortrade.org/">https://www.tensortrade.org/</a>.</p>
+			<p>Let's start with<a id="_idIndexMarker1367"/> installation and then put together some TensorTrade components to create an environment.</p>
+			<h3>Installing TensorTrade</h3>
+			<p>TensorTrade can <a id="_idIndexMarker1368"/>be installed with a simple <strong class="source-inline">pip</strong> command as follows:</p>
+			<p class="source-code">pip install tensortrade</p>
+			<p>If you would like to create a virtual environment to install TensorTrade in, don't forget to also install Ray RLlib.</p>
+			<h3>TensorTrade concepts and components</h3>
+			<p>As we <a id="_idIndexMarker1369"/>mentioned, TensorTrade environments can be composed of highly<a id="_idIndexMarker1370"/> modular components. Let's put together a basic environment here.</p>
+			<h4>Instrument</h4>
+			<p>Instruments in <a id="_idIndexMarker1371"/>finance are assets that can be traded. We can define the<strong class="source-inline"> U.S. Dollar </strong>and <strong class="source-inline">TensorTrade Coin</strong> instruments as follows:</p>
+			<p class="source-code">USD = Instrument("USD", 2, "U.S. Dollar")</p>
+			<p class="source-code">TTC = Instrument("TTC", 8, "TensorTrade Coin")</p>
+			<p>The preceding integer arguments represent the precision of the quantities for those instruments.</p>
+			<h4>Stream</h4>
+			<p>A stream simply <a id="_idIndexMarker1372"/>refers to an object that streams data, such as price data from a market simulation. For example, we can create a simple sinusoidal USD-TTC price stream as follows:</p>
+			<p class="source-code">x = np.arange(0, 2*np.pi, 2*np.pi / 1000)</p>
+			<p class="source-code">p = Stream.source(50*np.sin(3*x) + 100,</p>
+			<p class="source-code">                  dtype="float").rename("USD-TTC")</p>
+			<h4>Exchange and data feed</h4>
+			<p>Next, we need<a id="_idIndexMarker1373"/> to create an exchange to<a id="_idIndexMarker1374"/> trade these instruments in. We put the price stream we just created in the exchange:</p>
+			<p class="source-code">coinbase = Exchange("coinbase", service=execute_order)(p)</p>
+			<p>Now that we have a price stream defined, we can also define transformations for it and extract some features and indicators. All such features will also be streams and they will be all packed in a data feed:</p>
+			<p class="source-code">feed = DataFeed([</p>
+			<p class="source-code">    p,</p>
+			<p class="source-code">    p.rolling(window=10).mean().rename("fast"),</p>
+			<p class="source-code">    p.rolling(window=50).mean().rename("medium"),</p>
+			<p class="source-code">    p.rolling(window=100).mean().rename("slow"),</p>
+			<p class="source-code">    p.log().diff().fillna(0).rename("lr")])</p>
+			<p>If you are wondering what the last line is doing, it is the log ratio of prices in two consecutive time steps to assess the relative change. </p>
+			<h4>Wallet and portfolio</h4>
+			<p>Now, it's time to<a id="_idIndexMarker1375"/> create some wealth for <a id="_idIndexMarker1376"/>ourselves and put it in our wallets. Feel free to be generous to yourself: </p>
+			<p class="source-code">cash = Wallet(coinbase, 100000 * USD)</p>
+			<p class="source-code">asset = Wallet(coinbase, 0 * TTC)</p>
+			<p class="source-code">portfolio = Portfolio(USD, [cash, asset])</p>
+			<p>Our wallets together make up our portfolio.</p>
+			<h4>Reward scheme</h4>
+			<p>The reward scheme<a id="_idIndexMarker1377"/> is simply the kind of reward function we want to incentivize our agent with. If you are thinking "there is only one goal, make profit!", well, there is more to it. You can use things like risk-adjusted returns or define your own goal. For now, let's keep things simple and use the profit as the reward:</p>
+			<p class="source-code">reward_scheme = default.rewards.SimpleProfit()</p>
+			<h4>Action scheme</h4>
+			<p>The action scheme <a id="_idIndexMarker1378"/>defines the type of actions you want your agent to be able to take, such as a simple <strong class="bold">buy</strong>/<strong class="bold">sell</strong>/<strong class="bold">hold</strong> all assets (<strong class="bold">BSH</strong>), or fractiona<a id="_idIndexMarker1379"/>l buys/sells and so on. We also put the cash and assets in it:</p>
+			<p class="source-code">action_scheme = default.actions.BSH(cash=cash, asset=asset)</p>
+			<h4>Putting them all together in an environment</h4>
+			<p>Finally, these can be all put together to form an environment with some additional parameters:</p>
+			<p class="source-code">env = default.create(</p>
+			<p class="source-code">    feed=feed,</p>
+			<p class="source-code">    portfolio=portfolio,</p>
+			<p class="source-code">    action_scheme=action_scheme,</p>
+			<p class="source-code">    reward_scheme=reward_scheme,</p>
+			<p class="source-code">    window_size=25,</p>
+			<p class="source-code">    max_allowed_loss=0.6)</p>
+			<p>So, that's the basics of creating an environment in TensorTrade. You can of course go much beyond this, but you get the idea. After this step, it can be easily plugged into RLlib, or virtually any library compatible with the Gym API.</p>
+			<h3>Training RLlib agents in TensorTrade</h3>
+			<p>As you may <a id="_idIndexMarker1380"/>remember from the earlier chapters, one <a id="_idIndexMarker1381"/>way of using custom environments in Gym is to put them in a function that returns the environment and register them. So, it looks something like this:</p>
+			<p class="source-code">def create_env(config):</p>
+			<p class="source-code">    ...</p>
+			<p class="source-code">    return env</p>
+			<p class="source-code">register_env("TradingEnv", create_env)</p>
+			<p>The environment name can then be referred to inside the trainer config in RLlib. You can find the full code in <strong class="source-inline">Chapter16/tt_example.py</strong> on the GitHub repo.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">This example mostly follows what is in the TensorTrade documentation. For a more detailed Ray/RLlib tutorial, you can visit <a href="https://www.tensortrade.org/en/latest/tutorials/ray.html">https://www.tensortrade.org/en/latest/tutorials/ray.html</a>.</p>
+			<p>This concludes our discussion on TensorTrade. You can now go ahead and try a few trading ideas. When you are back, let's briefly talk about developing machine learning-based trading strategies and wrap up the chapter.</p>
+			<h2 id="_idParaDest-328"><a id="_idTextAnchor362"/>Developing equity trading strategies</h2>
+			<p>What is almost as <a id="_idIndexMarker1382"/>noisy as the market itself is the information about how to trade them. How to develop effective trading strategies is well beyond the scope of our book. However, here is a blog post that can give you get a realistic idea about what to pay attention to when developing ML models for trading. As always, use your judgment and due diligence to decide on what to believe: <a href="https://www.tradientblog.com/2019/11/lessons-learned-building-an-ml-trading-system-that-turned-5k-into-200k/">https://www.tradientblog.com/2019/11/lessons-learned-building-an-ml-trading-system-that-turned-5k-into-200k/</a>.</p>
+			<p>With that, let's wrap up this chapter.</p>
+			<h1 id="_idParaDest-329"><a id="_idTextAnchor363"/>Summary</h1>
+			<p>In this chapter, we covered three important RL application areas: personalization, marketing, and finance. For personalization and marketing, this chapter went beyond the bandit applications that are commonly used in these areas and discussed the merits of multi-step RL. We also covered methods such as dueling bandit gradient descent, which helped us achieve more conservative exploration to avoid excessive reward losses, and action embeddings, which is helpful to deal with large action spaces. We concluded the chapter with a discussion on financial applications of RL, their challenges, and introduced the TensorTrade library.</p>
+			<p>The next chapter is the last application chapter of the book, in which we will focus on smart cities and cybersecurity.</p>
+			<h1 id="_idParaDest-330"><a id="_idTextAnchor364"/>References</h1>
+			<p>Zheng, G. et al. (2018). <em class="italic">DRN: A Deep RL Framework for News Recommendation</em>. WWW '18: Proceedings of the 2018 World Wide Web Conference April 2018, Pages 167–176, <a href="https://doi.org/10.1145/3178876.3185994">https://doi.org/10.1145/3178876.3185994</a>.</p>
+		</div>
+	</body></html>

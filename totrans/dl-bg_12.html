@@ -1,0 +1,162 @@
+<html><head></head><body>
+        <section>
+
+                            <header class="header-title chapter-title">
+                    Restricted Boltzmann Machines
+                </header>
+            
+            <article>
+                
+<p>Together, we have seen the power of unsupervised learning and hopefully convinced ourselves that it can be applied to different problems. We will finish the topic of unsupervised learning with an exciting approach known as <strong>Restricted Boltzmann Machines</strong> (<strong>RBMs</strong>). When we do not care about having a large number of layers, we can use RBMs to learn from the data and find ways to satisfy an energy function that will produce a model that is robust at representing input data.</p>
+<p class="mce-root">This chapter complements <a href="6677b8b1-806c-4c39-8c1e-371e83501acf.xhtml">Chapter 8</a>, <em>Deep Autoencoders</em>, by introducing the backward-forward nature of RBMs, while contrasting it with the forward-only nature of <strong>Autoencoders</strong> (<strong>AEs</strong>). This chapter compares RBMs and <span>AEs</span> in the problem of dimensionality reduction, using MNIST as the case study. Once you are finished with this chapter, you should be able to use an RBM using scikit-learn and implement a solution using a Bernoulli RBM. You will be able to perform a visual comparison of the latent spaces of an RBM and an AE, and also visualize the learned weights for an inspection of the inner workings of an RBM and an AE.</p>
+<p class="mce-root">This chapter is organized as follows:</p>
+<ul>
+<li class="mce-root">Introduction to RBMs</li>
+<li class="mce-root">Learning data representations with RBMs</li>
+<li class="mce-root">Comparing RBMs and AEs</li>
+</ul>
+<h1 id="uuid-6c4a9c19-6691-4c46-943e-bc9913750e2a">Introduction to RBMs</h1>
+<p>RBMs are unsupervised models that can be used in different applications that require rich latent representations. They are usually used in a pipeline with a classification model with the purpose of extracting features from the data. They are based on <strong>Boltzmann Machines</strong> (<strong>BMs</strong>), which we discuss next (Hinton, G. E., and Sejnowski, T. J. (1983)).</p>
+<h2 id="uuid-f109c63c-5d67-40da-b8a2-3eeaf6875aa6">BMs</h2>
+<p>A BM can be thought of as an undirected dense graph, as depicted in <em>Figure 10.1</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/1dd88078-d42e-4544-8491-77f715f7696f.png" style="width:23.17em;height:19.50em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.1 – A BM model</div>
+<p>This undirected graph has some neural units that are modeled to be <strong>visible</strong>, <img class="fm-editor-equation" src="assets/bc0fc9ef-6923-4dad-905f-d7c40116b3d7.png" style="width:3.92em;height:1.33em;"/>, and a set of neural units that are <strong>hidden</strong>, <img class="fm-editor-equation" src="assets/ec3962a8-a124-46ce-b17f-ea74d72f1067.png" style="width:5.92em;height:1.33em;"/>. Of course, there could be many more than these. But the point of this model is that all neurons are connected to each other: they all <em>talk</em> among themselves. The training of this model will not be covered here, but essentially it is an iterative process where the input is presented in the visible layers, and every neuron (one at a time) adjusts its connections with other neurons to satisfy a loss function (usually based on an energy function), and the process repeats until the learning process is considered to be satisfactory.</p>
+<p>While the RB model was quite interesting and powerful, it took a very long time to train! Take into consideration that this was around in the early 1980s and performing computations on larger graphs than this and with larger datasets could have a significant impact on the training time. However, in 1983, G. E. Hinton and his collaborators proposed a simplification of the BM model by restricting the communication between neurons, as we will discuss next.</p>
+<p class="mce-root"/>
+<h2 id="uuid-31d75d54-be06-4b58-bf99-ae57556479cd">RBMs</h2>
+<p>The <em>restriction</em> of traditional BMs lies in the communication between neurons; that is, visible neurons can only talk to hidden neurons and hidden neurons can only talk to visible neurons, as depicted in <em>Figure 10.2</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/40d2dc56-c956-418d-a481-ea4ff53f5d42.png" style="width:22.67em;height:13.67em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.2 – An RBM model. Compare to the BM model in Figure 10.1</div>
+<p>The graph shown in <em>Figure 10.2</em> is known as a <strong>dense bipartite graph</strong>. Perhaps you are thinking that it looks a lot like the typical dense neural networks that we have been using so far; however, it is not quite the same. The main difference is that all the neural networks that we have used only communicate information going forward from input (visible) to hidden layers, while an RBM can go both ways! The rest of the elements are familiar: we have weights and biases that need to be learned.</p>
+<p>If we stick to the simple model shown in <em>Figure 10.2</em>, we could explain the learning theory behind an RBM in simpler terms.</p>
+<p>Let's interpret every single neural unit as a random variable whose current state depends on the state of other neural units.</p>
+<div class="packt_infobox">This interpretation allows us to use sampling techniques related to <strong>Markov Chain Monte Carlo</strong> (<strong>MCMC</strong>) (Brooks, S., et al. (2011)); however, we will not go into the details of these in this book.</div>
+<p class="mce-root"/>
+<p>Using this interpretation, we can define an energy function for the model as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="fm-editor-equation" src="assets/7eafb87d-5b01-4b10-ab01-98aad9a12ae3.png" style="width:28.50em;height:4.17em;"/></p>
+<p>where <img class="fm-editor-equation" src="assets/da9561fe-3f4a-4973-9c06-1c311d126aae.png" style="width:3.25em;height:1.25em;"/> denote the biases on a visible neural unit and a hidden neural unit, respectively. It turns out that we can also express the joint probability density function of neural an hidden units as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="fm-editor-equation" src="assets/f43952f8-d909-4104-8a8e-c173c9c19d4b.png" style="width:9.00em;height:2.75em;"/></p>
+<p>which has a simple marginal distribution:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="fm-editor-equation" src="assets/46d00194-e21e-4dd7-849b-273079cd4c45.png" style="width:18.58em;height:3.83em;"/></p>
+<p>The denominator in the conditional and marginal is known as a normalizing factor that has only the effect of ensuring that probability values add up to one, and can be defined as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="fm-editor-equation" src="assets/c442f2fe-1dfa-4915-8db1-90a8e5b4da7e.png" style="width:8.92em;height:3.17em;"/></p>
+<p>These formulations allow us to quickly find MCMC techniques for training; most notably, you will find in the literature that Contrastive Divergence involving Gibbs sampling is the most common approach (Tieleman, T. (2008)).</p>
+<p>There are only a handful of RBMs implemented that are readily available for a learner to get started; one of them is a Bernoulli RBM that is available in scikit-learn, which we discuss next.</p>
+<p class="mce-root"/>
+<h2 id="uuid-27a9cb20-3de6-4e00-8017-3d2d9308a30b">Bernoulli RBMs</h2>
+<p class="mce-root">While the generalized RBM model does not make any assumptions about the data that it uses, a Bernoulli RBM does make the assumption that the input data represents values in the range [0,1] that can be interpreted as probability values. In the ideal case, values are in the set {0,1}, which is closely related to Bernoulli trials. If you are interested, there are other approaches that assume that the inputs follow a Gaussian distribution. You can find out more by reading Yamashita, T. et al. (2014).</p>
+<p class="mce-root">There are only a few datasets that we can use for this type of RBM; MNIST is an example that can be interpreted as binary inputs where the data is 0 when there are no digit traces and 1 where there is digit information. In scikit-learn, the <kbd>BernoulliRBM</kbd> model can be found in the neural network collection: <kbd>sklearn.neural_network</kbd>.<br/>
+<br/>
+Under the assumption of Bernoulli-like input distribution, this RBM model <em>approximately</em> optimizes the log likelihood using a method called <strong>Persistent Contrastive Divergence</strong> (<strong>PCD</strong>) (Tieleman, T., and Hinton, G. (2009)). It turned out that PCD was much faster than any other algorithm at the time and fostered discussions and much excitement that was soon overshadowed by the popularization of <strong>backpropagation</strong> compared to dense networks.</p>
+<p>In the next section, we will implement a Bernoulli RBM on MNIST with the purpose of learning the representations of the dataset.</p>
+<p class="mce-root"/>
+<h1 id="uuid-9d392fdb-adbd-4cfa-849f-170706a8de42">Learning data representations with RBMs</h1>
+<p>Now that you know the basic idea behind RBMs, we will use the <kbd><span>BernoulliRBM</span></kbd> model to learn data representations in an unsupervised manner. As before, we will do this with the MNIST dataset to facilitate comparisons.</p>
+<div class="packt_tip">For some people, the task of <strong>learning representations</strong> can be thought of as <strong>feature engineering</strong>. The latter has an explicability component to the term, while the former does not necessarily require us to prescribe meaning to the learned representations.</div>
+<p>In scikit-learn, we can create an instance of the RBM by invoking the following instructions:</p>
+<pre>from sklearn.neural_network import BernoulliRBM<br/>rbm = BernoulliRBM()</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>The default parameters in the constructor of the RBM are the following:</p>
+<ul>
+<li><kbd>n_components=256</kbd>, which is the number of hidden units, <img class="fm-editor-equation" src="assets/73826389-c0a2-4f77-972f-ed916b23f0a9.png" style="width:0.92em;height:1.00em;"/>, while the number of visible units, <img class="fm-editor-equation" src="assets/89773bbc-964d-486b-b725-57c2ef2aa47e.png" style="width:1.08em;height:1.00em;"/>, is inferred from the dimensionality of the input.</li>
+<li><kbd>learning_rate=0.1</kbd> controls the strength of the learning algorithm with respect to updates, and it is recommended to explore it with values in the set {<em>1, 0.1, 0.01, 0.001</em>}.</li>
+<li><kbd>batch_size=10</kbd> controls how many samples are used in the batch-learning algorithm.</li>
+<li><kbd>n_iter=10</kbd> controls the number of iterations that are run before we stop the learning algorithm. The nature of the algorithm allows it to keep going as much as we want; however, the algorithm usually finds good solutions in a few iterations.</li>
+</ul>
+<p>We will only change the default number of components to make it 100. Since the original number of dimensions in the MNIST dataset is 784 (because it consists of 28 x 28 images), having 100 dimensions does not seem like a bad idea.</p>
+<p>To train the RBM with 100 components over MNIST training data loaded into <kbd>x_train</kbd>, we can do the following:</p>
+<pre>from sklearn.neural_network import BernoulliRBM<br/>from tensorflow.keras.datasets import mnist<br/>import numpy as np<br/><br/>(x_train, y_train), (x_test, y_test) = mnist.load_data()<br/><br/>image_size = x_train.shape[1]<br/>original_dim = image_size * image_size<br/>x_train = np.reshape(x_train, [-1, original_dim])<br/>x_test = np.reshape(x_test, [-1, original_dim])<br/>x_train = x_train.astype('float32') / 255<br/>x_test = x_test.astype('float32') / 255<br/><br/>rbm = BernoulliRBM(verbose=True)<br/><br/>rbm.n_components = 100<br/>rbm.fit(x_train)</pre>
+<p>The output during training might look like this:</p>
+<pre>[BernoulliRBM] Iteration 1, pseudo-likelihood = -104.67, time = 12.84s<br/>[BernoulliRBM] Iteration 2, pseudo-likelihood = -102.20, time = 13.70s<br/>[BernoulliRBM] Iteration 3, pseudo-likelihood = -97.95, time = 13.99s<br/>[BernoulliRBM] Iteration 4, pseudo-likelihood = -99.79, time = 13.86s<br/>[BernoulliRBM] Iteration 5, pseudo-likelihood = -96.06, time = 14.03s<br/>[BernoulliRBM] Iteration 6, pseudo-likelihood = -97.08, time = 14.06s<br/>[BernoulliRBM] Iteration 7, pseudo-likelihood = -95.78, time = 14.02s<br/>[BernoulliRBM] Iteration 8, pseudo-likelihood = -99.94, time = 13.92s<br/>[BernoulliRBM] Iteration 9, pseudo-likelihood = -93.65, time = 14.10s<br/>[BernoulliRBM] Iteration 10, pseudo-likelihood = -96.97, time = 14.02s</pre>
+<p>We can look into the representations <span>learned</span> <span>by invoking the</span> <kbd>transform()</kbd> <span>method on the MNIST test data,</span> <kbd>x_test</kbd><span>, as follows:</span></p>
+<pre>r = rbm.transform(x_test)</pre>
+<p>In this case, there are 784 input dimensions, but the <kbd>r</kbd> <span>variable</span> will have 100 dimensions. To visualize the test set in the latent space induced by the RBM, we can use UMAPs as we did before, which will produce the two-dimensional plot shown in <em>Figure 10.3</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/17976fd6-6978-4fe1-aa16-31bfe3ae1cce.png" style="width:28.17em;height:24.92em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.3 – UMAP representation of the learned representations by the RBM on MNIST test data</div>
+<p class="mce-root"/>
+<p>The full code to produce this plot from the RBM feature space using UMAP is as follows:</p>
+<pre>import matplotlib.pyplot as plt<br/>import umap<br/><br/>y_ = list(map(int, y_test))<br/><strong>X_ = rbm.transform(x_test)</strong><br/><br/>X_ = umap.UMAP().fit_transform(X_)<br/><br/>plt.figure(figsize=(10,8))<br/>plt.title('UMAP of 100 RBM Learned Components on MNIST')<br/>plt.scatter(X_[:,0], X_[:,1], s=5.0, c=y_, alpha=0.75, cmap='tab10')<br/>plt.xlabel('$z_1$')<br/>plt.ylabel('$z_2$')<br/>plt.colorbar()</pre>
+<p>Compare <em>Figure 10.3</em> with the representations shown in previous chapters. From the figure, we can appreciate that there are clear class separations and clustering, while at the same time there are slight overlaps between classes. For example, there is some overlap between the numerals 3 and 8, which is to be expected since these numbers look alike. This plot also shows that the RBM generalizes very well since the data in <em>Figure 10.3</em> is coming from <span>data that is</span> unseen by the model.</p>
+<p>We can further inspect the weights (or <em>components</em>) learned by the RBM; that is, we can retrieve the weights associated with the visible layers as follows:</p>
+<pre>v = rbm.components_</pre>
+<p>In this case, the <kbd>v</kbd> <span>variable</span> will be a 784 x 100 <span>matrix describing the learned weights. We can visualize every single one of the neurons and reconstruct the weights associated with those neurons, which will look like the components in <em>Figure 10.4</em>:</span></p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/9ac6b554-5cef-4031-b2af-73bc85f5a4b9.png" style="width:29.75em;height:28.33em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.4 – Learned weights of the RBM</div>
+<p>A close examination of <em>Figure 10.4</em> informs us that there are weights that pay attention to diagonal features, or circular features, or features that are very specific to specific digits and edges in general. The bottom row, for example, has features that appear to be associated with the numbers 2 and 6.</p>
+<p>The weights shown in <em>Figure 10.4</em> can be used to transform the input space into richer representations that can later be used for classification in a pipeline that allows for this task.</p>
+<p>To satisfy our learning curiosity, we could also look into the RBM and its states by sampling the network using the <kbd>gibbs()</kbd> method. This means that we could visualize what happens when we present the input to the visible layer and then what the response is from the hidden layer, and then use that as input again and repeat to see how the stimulus of the model changes. For example, run the following code:</p>
+<pre>import matplotlib.pyplot as plt<br/>plt.figure()<br/>cnt = 1<br/>for i in range(10):    #we look into the first ten digits of test set<br/>  <strong>x</strong> = x_test[i]<br/>  for j in range(10):  #we project and reuse as input ten times<br/>    plt.subplot(10, 10, cnt)<br/>    plt.imshow(x.reshape((28, 28)), cmap='gray')<br/>    <strong>x = rbm.gibbs(x)   </strong>#here use current as input and use as input again<br/>    cnt += 1<br/>plt.show()</pre>
+<p>This will effectively produce a plot like the one shown in <em>Figure 5</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/8144dac0-0e70-4382-9d00-a6452b5336c7.png" style="width:33.42em;height:31.92em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.5 – Gibbs sampling on an MNIST-based RBM</div>
+<p><em>Figure 10.5</em> shows <span>the input</span> in the first column, and the remaining 10 columns are successive sampling calls. Clearly, as the input is propagated back and forth within the RBM, it suffers from some slight deformations. Take row number five, corresponding to the digit 4; we can see how the input is being deformed until it looks like a number 2. This information has no immediate effect on the learned features unless a strong deformation is observed at the first sampling call.</p>
+<p>In the next section, we will use an AE to make a comparison with an RBM.</p>
+<p class="mce-root"/>
+<h1 id="uuid-86de33b9-e633-4279-ad44-15bcb170ac2c">Comparing RBMs and AEs</h1>
+<p>Now that we have seen how RBMs perform, a comparison with AEs is in order. To make this comparison fair, we can propose the closest configuration to an RBM that an AE can have; that is, we will have the same number of hidden units (neurons in the encoder layer) and the same number of neurons in the visible layer (the decoder layer), as shown in <em>Figure 10.6</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"/>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/d8fefc75-8a3e-40ae-8e91-2ab36d6fea70.png" style="width:27.25em;height:23.83em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.6 – AE configuration that's comparable to RBM</div>
+<p>We can model and train our AE using the tools we covered in <a href="480521d9-845c-4c0a-b82b-be5f15da0171.xhtml">Chapter 7</a>, <em>Autoencoders</em>, as follows:</p>
+<pre>from tensorflow.keras.layers import Input, Dense<br/>from tensorflow.keras.models import Model<br/><br/>inpt_dim = 28*28    # 784 dimensions<br/>ltnt_dim = 100      # 100 components<br/><br/>inpt_vec = Input(shape=(<strong>inpt_dim</strong>,))<br/><strong>encoder</strong> = Dense(<strong>ltnt_dim</strong>, activation='sigmoid') (inpt_vec)<br/>latent_ncdr = Model(inpt_vec, encoder)<br/>decoder = Dense(<strong>inpt_dim</strong>, activation='sigmoid') (encoder)<br/><strong>autoencoder</strong> = Model(inpt_vec, decoder)<br/><br/>autoencoder.compile(loss='binary_crossentropy', optimizer='adam')<br/>autoencoder.fit(x_train, x_train, epochs=200, batch_size=1000)</pre>
+<p>There is nothing new here, except that we are training with only two dense layers that are large enough to provide nice representations. <em>Figure 10.7</em> depicts the UMAP visualization of the learned representations on the test set:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/01853091-de4e-420d-a897-43d3f4b7e6b3.png" style="width:38.92em;height:34.42em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.7 – AE-induced representations using a UMAP visualization</div>
+<p>The preceding figure is produced with the following code:</p>
+<pre>import matplotlib.pyplot as plt<br/>import umap<br/><br/>y_ = list(map(int, y_test))<br/>X_ = latent_ncdr.predict(x_test)<br/><br/>X_ = umap.UMAP().fit_transform(X_)<br/><br/>plt.figure(figsize=(10,8))<br/>plt.title('UMAP of 100 AE Learned Components on MNIST')<br/>plt.scatter(X_[:,0], X_[:,1], s=5.0, c=y_, alpha=0.75, cmap='tab10')<br/>plt.xlabel('$z_1$')<br/>plt.ylabel('$z_2$')<br/>plt.colorbar()</pre>
+<p>From <em>Figure 10.7</em>, you can see that the data is nicely clustered; although the clusters are closer together than in <em>Figure 10.3</em>, the within-cluster separations seems to be better. Similarly to the RBM, we can visualize the weights that were learned.</p>
+<p>Every <kbd>Model</kbd> object in <kbd>tensorflow.keras</kbd> has a method called <kbd>get_weights()</kbd> that can retrieve a list with all the weights at every layer. Let's run this:</p>
+<pre>latent_ncdr.<strong>get_weights</strong>()<strong>[0]</strong></pre>
+<p class="mce-root"/>
+<p>It gives us access to the weights of the first layer and allows us to visualize them in the same way we did for the RBM weights. <em>Figure 10.8</em> shows the learned weights:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/af57fcd9-06c3-4286-959e-699e42a5904a.png" style="width:37.42em;height:35.67em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.8 – AE weights</div>
+<p>The weights shown in <em>Figure 10.8</em>, in comparison with those of the RBM in <em>Figure 10.4</em>, have no <span>noticeable</span> digit-specific features. These features seem to be oriented to textures and edges in very unique regions. This is very interesting to see because it suggests that fundamentally different models will produce fundamentally different latent spaces.</p>
+<div class="packt_tip">If both RBMs and AEs produce interesting latent spaces, imagine what we could achieve if we use both of them in our deep learning projects! Try it!</div>
+<p class="mce-root"/>
+<p>Finally, to prove that the AE achieves high-quality reconstructions as modeled, we can look at <em>Figure 10.9</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/37f7f0ac-e0ba-498e-80ac-6064f79c94a2.png" style="width:46.67em;height:10.08em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 10.9 – AE inputs (top row) and reconstructions (bottom row)</div>
+<p> </p>
+<p>The reconstructions using 100 components seem to have high quality, as shown in <em>Figure 10.9</em>. This is, however, not possible for RBMs since their purpose is not to reconstruct data, necessarily, as we have explained in this chapter.</p>
+<h1 id="uuid-31f39b65-1079-4e6c-92d3-7c5ff853dc55">Summary</h1>
+<p>This intermediate-level chapter has shown you the basic theory behind how RBMs work and their applications. We paid special attention to a Bernoulli RBM that operates on input data that may follow a Bernoulli-like distribution in order to achieve fast learning and efficient computations. We used the MNIST dataset to showcase how interesting the learned representations are for an RBM, and we visualized the learned weights as well. We concluded by comparing the RBM with a very simple AE and showed that both learned high-quality latent spaces while being fundamentally different models.</p>
+<p>At this point, you should be able to implement your own RBM model, visualize its learned components, and see the learned latent space by projecting (transforming) the input data and looking at the hidden layer projections. You should feel confident in using an RBM on large datasets, such as MNIST, and even perform a comparison with an AE.</p>
+<p>The next chapter is the beginning of a new group of chapters about supervised deep learning. <a href="03e9a734-fb56-485d-ae90-66fb98ecd4d1.xhtml">Chapter 11</a>, <em>Deep and Wide Neural Networks</em>, will get us started in a series of exciting and new topics surrounding supervised deep learning. The chapter will explain the differences in performance and the complexities of deep versus wide neural networks in supervised settings. It will introduce the concept of dense networks and sparse networks in terms of the connections between neurons. <span>You can't miss it!</span></p>
+<p class="mce-root"/>
+<h1 id="uuid-71cf4b97-b1d1-4ea5-8343-00449dd4feb9">Questions and answers</h1>
+<ol>
+<li class="mce-root"><strong>Why can't we perform data reconstructions with an RBM?</strong></li>
+</ol>
+<p style="padding-left: 60px">RBMs are fundamentally different to AEs. An RBM aims to optimize an energy function, while an AE aims to optimize a data reconstruction function. Thus, we can't do reconstructions with RBMs. However, this fundamental difference allows for new latent spaces that are interesting and robust.</p>
+<ol start="2">
+<li><strong>Can we add more layers to an RBM?</strong></li>
+</ol>
+<p style="padding-left: 60px">No. Not in the current model presented here. The concept of stacked layers of neurons fits the concept of deep AEs better.</p>
+<ol start="3">
+<li><strong>What is so cool about RBMs then?</strong></li>
+</ol>
+<p style="padding-left: 60px">They are simple. They are fast. They provide rich latent spaces. They have no equal at this point. The closest competitors are AEs.</p>
+<h1 id="uuid-ce91dc15-81fa-4dcc-abc1-6282379a6da2">References</h1>
+<ul>
+<li>Hinton, G. E., and Sejnowski, T. J. (1983, June). Optimal perceptual inference. In Proceedings of the <em>IEEE conference on Computer Vision and Pattern Recognition</em> (Vol. 448). IEEE New York.</li>
+<li>Brooks, S., Gelman, A., Jones, G., and Meng, X. L. (Eds.). (2011). <em>Handbook of Markov Chain Monte Carlo</em>. CRC press.</li>
+<li>Tieleman, T. (2008, July). Training restricted Boltzmann machines using approximations to the likelihood gradient. In Proceedings of the 25th <em>International Conference on Machine Learning</em> (pp. 1064-1071).</li>
+<li>Yamashita, T., Tanaka, M., Yoshida, E., Yamauchi, Y., and Fujiyoshii, H. (2014, August). To be Bernoulli or to be Gaussian, for a restricted Boltzmann machine. In 2014 22nd <em>International Conference on Pattern Recognition</em> (pp. 1520-1525). IEEE.</li>
+<li>Tieleman, T., and Hinton, G. (2009, June). Using fast weights to improve persistent contrastive divergence. In Proceedings of the 26th Annual <em>International Conference on Machine Learning</em> (pp. 1033-1040).</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

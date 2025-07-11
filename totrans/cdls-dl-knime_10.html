@@ -1,0 +1,224 @@
+<html><head></head><body>
+		<div id="_idContainer741">
+			<h1 id="_idParaDest-144"><em class="italic"><a id="_idTextAnchor290"/>Chapter 8: </em>Neural Machine Translation</h1>
+			<p>In the previous chapter, <a href="B16391_07_Final_NM_ePUB.xhtml#_idTextAnchor230"><em class="italic">Chapter 7</em></a>, <em class="italic">Implementing NLP Applications</em>, we introduced several text encoding techniques and used them in three <strong class="bold">Natural Language Processing</strong> (<strong class="bold">NLP</strong>) applications. One of the applications was for free text generation. The result showed that it is possible for a network to learn the structure of a language, so as to generate text in a certain style.</p>
+			<p>In this chapter, we will build on top of this case study for free text generation and train a neural network to automatically translate sentences from a source language into a target language. To do that, we will use concepts learned from the free text generation network, as well as from the autoencoder introduced in <a href="B16391_05_Final_NM_ePUB.xhtml#_idTextAnchor152"><em class="italic">Chapter 5</em></a>, <em class="italic">Autoencoder for Fraud Detection</em>.</p>
+			<p>We will start by describing the general concept of machine translation, followed by an introduction to the encoder-decoder neural architectures that will be used for neural machine translation. Next, we will discuss all the steps involved in the implementation of the application, from preprocessing to defining the network structure to training and applying the network.</p>
+			<p>The chapter is organized into the following sections:</p>
+			<ul>
+				<li>Idea of Neural Machine Translation</li>
+				<li>Encoder-Decoder Architecture</li>
+				<li>Preparing the Data for the Two Languages</li>
+				<li>Building and Training an Encoder-Decoder Architecture</li>
+			</ul>
+			<h1 id="_idParaDest-145"><a id="_idTextAnchor291"/>Idea of Neural Machine Translation</h1>
+			<p><strong class="bold">Automatic translation</strong> has been a <a id="_idIndexMarker737"/>popular and challenging task for a long time now. The flexibility and ambiguity of <a id="_idIndexMarker738"/>the human language make it still one of the most difficult tasks to implement. The same word or phrase can have different meanings depending on the context and, often, there might not be just one correct translation, but many possible ways to translate the same sentence. So, how can a computer learn to translate text from one language into another? Different approaches have been introduced over the years, all with the same goal: to automatically translate sentences or text from a source language into a target language.</p>
+			<p>The development of automatic translation <a id="_idIndexMarker739"/>systems started in the early 1970s with <strong class="bold">Rule-Based Machine Translation</strong> (<strong class="bold">RBMT</strong>). Here, automatic translation was implemented through hand-developed rules and dictionaries by specialized linguists at the lexical, syntactic, and semantic levels of sentences.</p>
+			<p>In the 1990s, <strong class="bold">statistical machine translation</strong> models became state of the art, even though the first <a id="_idIndexMarker740"/>concepts for statistical machine translation were introduced in 1949 by Warren Weaver. Instead of using dictionaries and handwritten rules, the idea became to use a vast corpus of examples to train statistical models. This task can be described as modeling the probability distribution, <img src="image/Formula_B16391_08_001.png" alt=""/>, that a string, <img src="image/Formula_B16391_07_001.png" alt=""/>, in the target language (for example, German) is the translation of a string, <img src="image/Formula_B16391_08_003.png" alt=""/>, in the source language (for example, English). Different approaches have been introduced to model this <img src="image/Formula_B16391_08_004.png" alt=""/> probability distribution, the most popular of which came from the Bayes theorem and modeled <img src="image/Formula_B16391_08_005.png" alt=""/> as <img src="image/Formula_B16391_08_006.png" alt=""/>. Thus, in this approach, the task is split into two subtasks: training a language model, <img src="image/Formula_B16391_08_007.png" alt=""/>, and modeling the probability, <img src="image/Formula_B16391_08_008.png" alt=""/> More generally, several subtasks can be defined, and several models are trained and tuned for each subtask.</p>
+			<p>More recently, neural machine translation gained quite some popularity in the task of automatic translation. Also, here, a vast corpus of example sentences in a source and target language is required to train the translation model. The difference between classical statistical-based models and neural machine translation is in the <a id="_idIndexMarker741"/>definition of the task: instead of training many small sub-components and tuning them separately, one single network is trained in an end-to-end fashion.</p>
+			<p>One network architecture that can be used for neural machine translations is an encoder-decoder network. Let's find out what this is.</p>
+			<h1 id="_idParaDest-146"><a id="_idTextAnchor292"/>Encoder-Decoder Architecture</h1>
+			<p>In this section, we will first introduce the general concept of an encoder-decoder architecture. Afterward, we <a id="_idIndexMarker742"/>will focus on how the encoder is used in neural machine translation. In the last two subsections, we will concentrate on how the decoder is applied during training and deployment.</p>
+			<p>One of the possible structures <a id="_idIndexMarker743"/>for neural machine translation is the <strong class="bold">encoder-decoder </strong>network. In <a href="B16391_05_Final_NM_ePUB.xhtml#_idTextAnchor152"><em class="italic">Chapter 5</em></a>, <em class="italic">Autoencoder for Fraud Detection</em>, we introduced the concept of a neural network consisting of an encoder and a decoder component. Remember, in the case of an autoencoder, the task of the encoder component is to extract a dense representation of the input, while the task of the decoder component is to recreate the input based on the dense representation given by the encoder.</p>
+			<p>In the case of encoder-decoder networks for neural machine translation, the task of the encoder is to extract the context of the sentence in the source language (the input sentence) into a dense representation, while the task of the decoder is to create the corresponding translation in the target language from the dense representation of the encoder.</p>
+			<p><em class="italic">Figure 8.1</em> visualizes this process:</p>
+			<div>
+				<div id="_idContainer722" class="IMG---Figure">
+					<img src="image/B16391_08_001.jpg" alt="Figure 8.1 – The general structure of an encoder-decoder network for neural machine translation"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.1<a id="_idTextAnchor293"/> – The general structure of an encoder-decoder network for neural machine translation</p>
+			<p>Here, the source language is English, and the target language is German. The goal is to translate the sentence <strong class="source-inline">I am a student</strong> from English into German, where one correct translation could be <strong class="source-inline">Ich bin ein Student</strong>. The encoder consumes the <strong class="source-inline">I am a student</strong> sentence and produces as output a dense vector representation of the <a id="_idIndexMarker744"/>content of the sentence. This dense vector representation is fed into the decoder, which then outputs the translation.</p>
+			<p>In this case study, the input and the output of the network are sequences. Therefore, <strong class="bold">Recurrent Neural Network</strong> (<strong class="bold">RNN</strong>) layers <a id="_idIndexMarker745"/>are commonly used in the encoder and decoder parts, to capture the context information and to handle input and output sequences of variable length.</p>
+			<p>In general, encoder-decoder RNN-based architectures are used for all kinds of sequence-to-sequence analysis tasks – for example, question-and-answer systems. Here, the question is first processed by the encoder, which creates a dense numerical representation of it, then the decoder generates the answer.</p>
+			<p>Let's focus now on the encoder part of the neural translation network, before we move on to the decoder, to understand what kind of data preparation is needed.</p>
+			<h2 id="_idParaDest-147"><a id="_idTextAnchor294"/>Applying the Encoder</h2>
+			<p>The goal of the <a id="_idIndexMarker746"/>encoder is to extract a dense vector representation of the context from the input sentence. This can be achieved by using a <strong class="bold">Long Short-Term Memory</strong> (<strong class="bold">LSTM</strong>) layer <a id="_idIndexMarker747"/>where the encoder reads the input sentence (in English) either word by word or character by character.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">In <a href="B16391_06_Final_VK_ePUB.xhtml#_idTextAnchor181"><em class="italic">Chapter 6</em></a>, <em class="italic">Recurrent Neural Networks for Demand Prediction</em>, we introduced LSTM layers. Remember that an LSTM layer has two hidden states, one being the cell state and the other being a filtered version of it. The cell state contains a summary of all previous inputs.</p>
+			<p>In a classic encoder-decoder network architecture, the vectors of the hidden states of the LSTM layer are used to store the dense representation. <em class="italic">Figure 8.2</em> shows how the LSTM-based encoder processes the input sentence:</p>
+			<div>
+				<div id="_idContainer723" class="IMG---Figure">
+					<img src="image/B16391_08_002.jpg" alt="Figure 8.2 – Example of how the encoder processes the input sentence"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure <a id="_idTextAnchor295"/>8.2 – Example of how the encoder processes the input sentence</p>
+			<p>The encoder starts with some initialized hidden state vectors. At each step, the next word in the sequence is fed into the LSTM unit and the hidden state vectors are updated. The final hidden state vectors, after processing the whole input sequence in the source language, contain the context representation and become the input for the hidden state vectors in the decoder.</p>
+			<p>The intermediate output hidden states of the encoder are not used.</p>
+			<p>Now that we have a dense representation of the context, we can use it to feed the decoder. While <a id="_idIndexMarker748"/>the way the encoder works during training and deployment stays the same, the way the decoder works is a bit different during training and deployment.</p>
+			<p>Let's first concentrate on the training phase.</p>
+			<h2 id="_idParaDest-148"><a id="_idTextAnchor296"/>Applying the Decoder during Training</h2>
+			<p>The task of the <a id="_idIndexMarker749"/>decoder is to generate the translation in the target sequence from the dense context representation, either word by word or character by character, using again an RNN with an LSTM layer. This means that, in theory, each predicted word/character should be fed back into the network as the next input. However, during training, we can skip the theory and apply the <a id="_idIndexMarker750"/>concept of <strong class="bold">teacher forcing</strong>. Here, the actual word/character is fed back into the LSTM unit instead of the predicted word/character, which greatly benefits the training procedure.</p>
+			<p><em class="italic">Figure 8.3</em> shows an example of teacher forcing during the training phase of the decoder:</p>
+			<div>
+				<div id="_idContainer724" class="IMG---Figure">
+					<img src="image/B16391_08_003.jpg" alt="Figure 8.3 – Example of teacher forcing while training of the decoder"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figur<a id="_idTextAnchor297"/><a id="_idTextAnchor298"/>e 8.3 – Example of teacher forcing while training of the decoder</p>
+			<p>The dense context representation of the encoder is used to initialize the hidden states of the decoder's LSTM layer. Next, two sequences are used by the LSTM layer to train the decoder: the input sequence with the true word/character values, starting with a <strong class="bold">start token</strong>, and the target sequence, also with the true word/character values.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">The target sequence, in this case, is the input sequence shifted by one character and with an end token at the end.</p>
+			<p>To summarize, three sequences of words/characters are needed during training:</p>
+			<ul>
+				<li>The input sequence for the encoder</li>
+				<li>The input sequence for the decoder</li>
+				<li>The output sequence for the decoder</li>
+			</ul>
+			<p>During deployment, we <a id="_idIndexMarker751"/>don't have the input and output sequence for the decoder. So, let's find out how the trained decoder can be used during deployment.</p>
+			<h2 id="_idParaDest-149"><a id="_idTextAnchor299"/>Applying the Decoder during Deployment</h2>
+			<p>When we apply the <a id="_idIndexMarker752"/>trained network, we don't know the true values of the translation sequence. So, we feed only the dense context representation from the encoder and a start token into the decoder. Then, the decoder applies the LSTM unit multiple times, always feeding the last predicted word/character back into the LSTM unit as input for the next step. <em class="italic">Figure 8.4</em> visualizes the usage of the decoder during deployment:</p>
+			<div>
+				<div id="_idContainer725" class="IMG---Figure">
+					<img src="image/B16391_08_004.jpg" alt="Figure 8.4 – Usage of the decoder during deployment"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figu<a id="_idTextAnchor300"/>re 8.4 – Usage of the decoder during deployment</p>
+			<p>In the first step, the dense context representation from the encoder forms the input hidden state vectors and the <strong class="bold">start token</strong> forms the input value for the decoder. Based on this, the first word is predicted, and the hidden state vectors are updated. In the next steps, the updated hidden state vectors and the last predicted word are fed back into the LSTM unit, to predict the next word. This means that if a wrong word has been predicted once; the error accumulates in this kind of sequential prediction.</p>
+			<p>In this section, you learned what encoder-decoder neural networks are and how they can be used for neural machine translation.</p>
+			<p>In the next sections, we will go through the steps required to train a neural machine translation <a id="_idIndexMarker753"/>network to translate sentences from English into German. As usual, the first step is data preparation.</p>
+			<p>So, let's start by creating the three sequences required to train a neural machine translation network using an encoder-decoder structure.</p>
+			<h1 id="_idParaDest-150"><a id="_idTextAnchor301"/>Preparing the Data for the Two Languages</h1>
+			<p>In <a href="B16391_07_Final_NM_ePUB.xhtml#_idTextAnchor230"><em class="italic">Chapter 7</em></a>, <em class="italic">Implementing NLP Applications</em>, we talked <a id="_idIndexMarker754"/>about the advantages and disadvantages of training neural networks at the character and word levels. As we already have some experience with the character level, we decided to also train this network for automatic translation at the character level.</p>
+			<p>To train a neural machine translation network, we need a dataset with bilingual sentence pairs for the two languages. Datasets for different language combinations can be <a id="_idIndexMarker755"/>downloaded for free at <a href="http://www.manythings.org/anki/">www.manythings.org/anki/</a>. From there, we can download a dataset containing a number of sentences in English and German that are <a id="_idIndexMarker756"/>commonly used in everyday life. The dataset consists of two columns only: the original short text in English and the corresponding translation in German. </p>
+			<p><em class="italic">Figure 8.5</em> shows you a subset of this dataset to be used as the training set:</p>
+			<div>
+				<div id="_idContainer726" class="IMG---Figure">
+					<img src="image/B16391_08_005.jpg" alt="Figure 8.5 – Subset of the training set with English and German sentences"/>
+				</div>
+			</div>
+			<p class="figure-caption">F<a id="_idTextAnchor302"/>igure 8.5 – Subset of the training set with English and German sentences</p>
+			<p>As you can see, for some English sentences, there is more than one possible translation. For example, the sentence <strong class="source-inline">Hug Tom</strong> can be translated to <strong class="source-inline">Umarmt Tom</strong>, <strong class="source-inline">Umarmen Sie Tom</strong>, or <strong class="source-inline">Drücken Sie Tom</strong>.</p>
+			<p>Remember that a network doesn't understand characters, only numerical values. Thus, character input sequences need to be transformed into numerical input sequences. In the first part of the previous chapter, we introduced several encoding techniques.</p>
+			<p>As for the free text generation<a id="_idIndexMarker757"/> case study, we adopted <strong class="bold">one-hot encoding</strong> as the encoding scheme, which will be implemented in two steps. First, an <strong class="bold">index-based encoding</strong> is <a id="_idIndexMarker758"/>produced; then, this index-based encoding is converted into a one-hot encoding inside the <strong class="bold">Keras Network Learner</strong> node<a id="_idIndexMarker759"/> during training and the <strong class="bold">Keras Network Executor</strong> node when <a id="_idIndexMarker760"/>applying the trained network.</p>
+			<p>In addition, a dictionary mapping for the English and German characters with their index is also needed. In the previous chapter, for product name generation, we resorted to the <strong class="bold">KNIME Text Processing Extension</strong> to generate the index-based<a id="_idIndexMarker761"/> encoding for the character sequences. We will do the same here.</p>
+			<p>For the training of the neural machine translation, three index-encoded character sequences must be created:</p>
+			<ul>
+				<li>The input <a id="_idIndexMarker762"/>sequence to feed the encoder. This is the index-encoded input character sequence from the source language – in our case, English.</li>
+				<li>The input sequence to feed the decoder. This is the index-encoded character sequence for the target language, starting with a start token.</li>
+				<li>The target sequence to train the decoder, which is the input sequence to the decoder shifted by one step in the past and ending with an end token.</li>
+			</ul>
+			<p>The workflow in <em class="italic">Figure 8.6</em> reads the bilingual sentence pairs, extracts the first 10,000 sentences, performs the index-encoding for the sentences in English and German separately, and <a id="_idIndexMarker763"/>finally, partitions the dataset into a training and a test set<a id="_idTextAnchor303"/><a id="_idTextAnchor304"/>:</p>
+			<div>
+				<div id="_idContainer727" class="IMG---Figure">
+					<img src="image/B16391_08_006.jpg" alt="Figure 8.6 – Preprocessing workflow snippet to prepare the data to train the network for neural machine translation"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.6 – Preprocessing workflow snippet to prepare the data to train the network for neural machine translation</p>
+			<p>Most of the work of the preprocessing happens inside the component named <strong class="bold">Index encoding and sequence creation</strong>. <em class="italic">Figure 8.7</em> shows its content:<a id="_idTextAnchor305"/></p>
+			<div>
+				<div id="_idContainer728" class="IMG---Figure">
+					<img src="image/B16391_08_007.jpg" alt="Figure 8.7 – Workflow snippet inside the component named Index encoding and sequence creation"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.7 – Workflow snippet inside the component named Index encoding and sequence creation</p>
+			<p>The workflow snippet inside the component first separates the English text from the German text, then <a id="_idIndexMarker764"/>produces the index-encoding for the sentences – in the upper part for the German sentences and the lower part for the English sentences. Then, finally, for each language, a dictionary is created, applied, and saved.</p>
+			<p>After the index-encoding of the German sentences, the two sequences for the decoder are created: in the upper branch by adding a start token at the beginning and in the lower branch by adding an end token at the end of the sequence.</p>
+			<p>All sequences from the German and English languages are then transformed into collection cells so that they can be converted to one-hot encoding before training.</p>
+			<h1 id="_idParaDest-151"><a id="_idTextAnchor306"/>Building and Training the Encoder-Decoder Architecture</h1>
+			<p>Now that the three sequences are available, we can start defining the network structure <a id="_idIndexMarker765"/>within a workflow. In this section, you will learn how <a id="_idIndexMarker766"/>to define and train an encoder-decoder structure in KNIME Analytics Platform. Once the network is trained, you will learn how the encoder and decoder can be extracted into two networks. In the last section, we will discuss how the extracted networks can be used in a deployment workflow to translate English sentences into German.</p>
+			<h2 id="_idParaDest-152"><a id="_idTextAnchor307"/>Defining the Network Structure</h2>
+			<p>In the encoder-decoder <a id="_idIndexMarker767"/>architecture, we want to have both the encoder and the decoder as LSTM networks. The encoder and the decoder have different input sequences. The English one-hot-encoded sentences are the input for the encoder and the German one-hot-encoded sentences are the input for the decoder. This means two input layers are needed: one for the encoder and one for the decoder.</p>
+			<p>The <strong class="bold">encoder</strong> network is made up of two layers:</p>
+			<ul>
+				<li>An <a id="_idIndexMarker768"/>input layer implemented via the <strong class="bold">Keras Input Layer</strong> node: The shape of the<a id="_idIndexMarker769"/> input tensor is <img src="image/Formula_B16391_08_009.png" alt=""/>, where <img src="image/Formula_B16391_08_010.png" alt=""/> is the dictionary size for the source language. <em class="italic">?</em> in the input tensor shape represents variable length sequences, while <em class="italic">n</em> indicates one-hot vectors with <img src="image/Formula_B16391_08_011.png" alt=""/> components. In our example, <img src="image/Formula_B16391_08_012.png" alt=""/> for the English language, and the shape of the input tensor is [?,71].</li>
+				<li>An LSTM<a id="_idIndexMarker770"/> Layer via a <strong class="bold">Keras LSTM Layer</strong> node: In this node, we<a id="_idIndexMarker771"/> use 256 units and enable the <em class="italic">return state</em> checkbox to pass the hidden states to the upcoming decoder network.</li>
+			</ul>
+			<p>The <strong class="bold">decoder network</strong> is made of three layers:</p>
+			<ul>
+				<li>First, a <strong class="bold">Keras Input Layer</strong> node<a id="_idIndexMarker772"/> to define the input shape. Again, the input shape <img src="image/Formula_B16391_08_013.png" alt=""/> is a tuple, where <img src="image/Formula_B16391_08_014.png" alt=""/> represents<a id="_idIndexMarker773"/> a variable length and <img src="image/Formula_B16391_08_015.png" alt=""/> the size of each vector in the input sequence – that is, the dictionary size of the target language (German). In our example, the input tensor for German has a shape of <img src="image/Formula_B16391_08_016.png" alt=""/>.</li>
+				<li>An LSTM<a id="_idIndexMarker774"/> layer via a Keras <strong class="bold">LSTM Layer</strong> node. This time, the <a id="_idIndexMarker775"/>optional input ports are used to feed the hidden states from the encoder into the decoder. This means the output port of the first LSTM layer in the encoder network is connected to both optional input ports in the decoder network. In addition, the output port of the Keras Input Layer node for the German input sequences is connected to the top input port. In its configuration window, it is important to select the correct input tensors as well as the hidden tensors. The <em class="italic">return sequence</em> and <em class="italic">return state</em> checkboxes must be activated to return the intermediate output hidden states, which are used in the next<a id="_idIndexMarker776"/> layer to extract the probability distribution for the next predicted character. As in the encoder LSTM, 256 units are used.</li>
+				<li>Last, a<a id="_idIndexMarker777"/> softmax layer is added via a <strong class="bold">Keras Dense Layer</strong> node<a id="_idIndexMarker778"/> to produce the probability vector of the characters in the dictionary in the target language (German). In the configuration window, the softmax activation function is selected to have 85 units, which is the size of the dictionary of the target language.</li>
+			</ul>
+			<p>The workflow in <em class="italic">Figure 8.8</em> defines this encoder-decoder <a id="_idIndexMarker779"/>network structure:</p>
+			<p class="figure-caption"><a id="_idTextAnchor308"/></p>
+			<div>
+				<div id="_idContainer737" class="IMG---Figure">
+					<img src="image/B16391_08_008.jpg" alt="Figure 8.8 – The workflow snippet that defines the encoder-decoder network"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.8 – The workflow snippet that defines the encoder-decoder network</p>
+			<p>The upper part of the workflow defines the encoder with a <strong class="bold">Keras Input Layer</strong> and <strong class="bold">Keras LSTM Layer</strong> node. In the <a id="_idIndexMarker780"/>lower part, the decoder is defined as described previously.</p>
+			<p>Now that we have defined the encoder-decoder architecture, we can train the network.</p>
+			<h2 id="_idParaDest-153"><a id="_idTextAnchor309"/>Training the Network</h2>
+			<p>As in all other <a id="_idIndexMarker781"/>examples in this book, the <strong class="bold">Keras Network Learner</strong> node<a id="_idIndexMarker782"/> is used to train the network.</p>
+			<p>In the first tab of the configuration window, named <strong class="bold">Input Data</strong>, the input columns for both input layers are selected: in the upper part for the source language, which means the input for the encoder, and in the lower part for the target language, which means the input for the decoder. To convert the index-encoded sequences into one-hot-encoded sequences, the <strong class="bold">From Collection of Number (integer) to One-Hot Tensor</strong> conversion type is used for both columns.</p>
+			<p>In the next tab of the configuration window, named <strong class="bold">Target Data</strong>, the column with the target sequence for the decoder is selected and the <strong class="bold">From Collection of Number (integer) to One-Hot Tensor</strong> conversion type is enabled again. Characters are again considered like classes in a multi-class classification problem; therefore, the Categorical Cross Entropy loss function is adopted for the training process.</p>
+			<p>In the third tab, <strong class="bold">Options</strong>, the<a id="_idIndexMarker783"/> training phase is set to run for a maximum of 120 epochs, with a batch size of 128 data rows, shuffling the data before each epoch and using Adam as the optimizer algorithm with the default settings.</p>
+			<p>During training, we monitor the performance using the <strong class="bold">Learner Monitor</strong> view of the Keras Network Learner node and decide to stop the learning process when an accuracy of 94% has been reached.</p>
+			<h2 id="_idParaDest-154"><a id="_idTextAnchor310"/>Extracting the Trained Encoder and Decoder</h2>
+			<p>To apply the <a id="_idIndexMarker784"/>trained model to translate new sentences, we need to split the encoder and decoder apart. To do so, each part is extracted from the complete <a id="_idIndexMarker785"/>network using a few lines of Python code in<a id="_idIndexMarker786"/> a <strong class="bold">DL Python Network Editor</strong> node. This node allows us to edit and modify the network structure using the <strong class="bold">Python libraries</strong> directly.</p>
+			<p>Remember that the output of the decoder is the probability distribution across all characters in the target language. In <a href="B16391_07_Final_NM_ePUB.xhtml#_idTextAnchor230"><em class="italic">Chapter 7</em></a>, <em class="italic">Implementing NLP Applications</em>, we introduced two approaches for the prediction of the next character based on this output probability distribution. Option one picks the character with the highest probability as the next character. Option two picks the next character randomly according to the given probability distribution.</p>
+			<p>In this case study, we use <a id="_idIndexMarker787"/>option one and implement it directly in the decoder via an additional <strong class="bold">lambda layer</strong>. To summarize, when postprocessing, we need to perform the following steps:</p>
+			<ul>
+				<li>Separate <a id="_idIndexMarker788"/>the encoder and decoder parts of the network.</li>
+				<li>Introduce a lambda layer with an argmax function that selects the character with the highest probability in the softmax layer.<p class="callout-heading">Important note</p><p class="callout">Lamba layers allow you to use arbitrary TensorFlow functions when constructing sequential and functional API models using TensorFlow as the backend. Lambda layers are best suited for simple operations or quick experimentation.</p></li>
+			</ul>
+			<p>Let's start with extracting the encoder.</p>
+			<h3>Extracting the Encoder</h3>
+			<p>In the following code, you can <a id="_idIndexMarker789"/>see the Python code used to extract the encoder:</p>
+			<ol>
+				<li value="1">Load packages:<p class="source-code">from keras.models import Model</p><p class="source-code">from keras.layers import Input</p></li>
+				<li>Define input:<p class="source-code">new_input = Input((None,70))</p></li>
+				<li>Extract trained encoder LSTM and define model:<p class="source-code">encoder = input_network.layers[-3]</p><p class="source-code">output = encoder(new_input)</p><p class="source-code">output_network = Model(inputs=new_input, outputs=output)</p></li>
+			</ol>
+			<p>It starts with defining the input, feeding it into the encoder's LSTM layer, and then defining the output.</p>
+			<p>In more detail, in the first two lines, the required packages are loaded. Next, an input layer is defined; then, the <strong class="source-inline">-3</strong> layer – the trained LSTM layer of the encoder – is extracted. Finally, the network output is defined as the output of the trained encoder LSTM layer</p>
+			<p>Now that we have <a id="_idIndexMarker790"/>extracted the encoder, let's see how we can extract the decoder.</p>
+			<h3>Extracting the Decoder and Adding a Lambda Layer</h3>
+			<p>In the following code <a id="_idIndexMarker791"/>snippet, you can see the code used in<a id="_idIndexMarker792"/> the <strong class="bold">DL Python Network Editor</strong> node to <a id="_idIndexMarker793"/>extract the decoder part and add the lambda layer to it:</p>
+			<ol>
+				<li value="1">Load the packages:<p class="source-code">from keras.models import Model</p><p class="source-code">from keras.layers import Input, Lambda</p><p class="source-code">from keras import backend as K</p></li>
+				<li>Define the inputs:<p class="source-code">state1 = Input((256,))</p><p class="source-code">state2 = Input((256,))</p><p class="source-code">new_input = Input((1,85))</p></li>
+				<li>Extract the trained decoder LSTM layer and softmax layer:<p class="source-code">decoder_lstm = input_network.layers[-2]</p><p class="source-code">decoder_dense = input_network.layers[-1]</p></li>
+				<li>Apply <a id="_idIndexMarker794"/>the LSTM and dense <a id="_idIndexMarker795"/>layer:<p class="source-code">x, out_h, out_c = decoder_lstm(new_input, initial_state=[state1, state2])</p><p class="source-code">probability_output = decoder_dense(x)</p></li>
+				<li>Add the lambda layer and define the output:<p class="source-code">argmax_output = Lambda(lambda x: K.argmax(x, axis=-1))(probability_output)</p><p class="source-code">output_network = Model(inputs=[new_input, state1, state2], outputs=[probability_output, argmax_output, out_h, out_c])</p></li>
+			</ol>
+			<p>The code again first loads the necessary packages, then defines three inputs – two for the input hidden states and one for the one-hot-encoded character vector. Next, it extracts the trained LSTM layer and the softmax layer in the decoder. Finally, it introduces the lambda layer with the <strong class="source-inline">argmax</strong> function and defines the output.</p>
+			<p>For faster execution during deployment, the encoder and the decoder are converted into TensorFlow<a id="_idIndexMarker796"/> networks using the <strong class="bold">Keras to TensorFlow Network Converter</strong> node.</p>
+			<p>Now that we have trained the neural machine translation network and we have separated the <a id="_idIndexMarker797"/>encoder and the decoder, we want to apply them to the sentences in the <a id="_idIndexMarker798"/>test set.</p>
+			<p>The full training workflow is available on the KNIME Hub: <a href="https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/.">https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/.</a></p>
+			<h2 id="_idParaDest-155"><a id="_idTextAnchor311"/>Applying the Trained Network for Neural Machine Translation</h2>
+			<p>To apply the encoder and <a id="_idIndexMarker799"/>decoder <a id="_idIndexMarker800"/>networks to the test data, we need a workflow that first applies the encoder to <a id="_idIndexMarker801"/>the index-encoded English sentences to extract the context information, and then applies the decoder to produce the translation.</p>
+			<p>The decoder should be initialized with the first hidden states from the encoder and with the start token from the input sequence, to trigger the translation character by character in the recursive loop. <em class="italic">Figure 8.9</em> vis<a id="_idTextAnchor312"/>ualizes the process:</p>
+			<div>
+				<div id="_idContainer738" class="IMG---Figure">
+					<img src="image/B16391_08_009.jpg" alt="Figure 8.9 – The idea of applying the encoder and decoder model during deployment"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.9 – The idea of applying the encoder and decoder model during deployment</p>
+			<p>The<a id="_idIndexMarker802"/> workflow snippet in <em class="italic">Figure 8.10</em> performs <a id="_idTextAnchor313"/>exactly these steps:</p>
+			<div>
+				<div id="_idContainer739" class="IMG---Figure">
+					<img src="image/B16391_08_010.jpg" alt="Figure 8.10 – This workflow snippet applies the trained encoder-decoder neural architecture to translate English sentences into German sentences"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.10 – This workflow snippet applies the trained encoder-decoder neural architecture to translate English sentences into German sentences</p>
+			<p>It starts with a <strong class="bold">TensorFlow Network Executor</strong> node (the first one on the left in <em class="italic">Figure 8.10</em>). This node<a id="_idIndexMarker803"/> takes the encoder and the index-encoded English sentences as input. In its configuration window, two outputs are defined from the LSTM hidden states.</p>
+			<p>Next, we create a start token and transform it into a collection cell. To this start token, we apply the decoder network using another <strong class="bold">TensorFlow Network Executor</strong> node (the second one from the left). In the configuration window, we make sure that the hidden states <a id="_idIndexMarker804"/>from the encoder produced in the previous <strong class="bold">TensorFlow Network Executor</strong> node are used as input. As output, we again set the hidden states, as well as the next <a id="_idIndexMarker805"/>predicted character – that is, the first character of the translated sentence.</p>
+			<p>Now, we enter the recursive loop, where this process is repeated multiple times using the updated hidden states from the last iteration and the last predicted character as input.</p>
+			<p>Finally, the German dictionary is applied to the index-encoded predicted characters and the final translation is obtained. The following is an excerpt of the translation results:</p>
+			<div>
+				<div id="_idContainer740" class="IMG---Figure">
+					<img src="image/B16391_08_011.jpg" alt="Figure 8.11 – Final results of the deployed translation network on new English sentences"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.11 – Final results of the deployed translation network on new English sentences</p>
+			<p>In the first column, we have the new English sentences, in the second column, the correct translations, and in <a id="_idIndexMarker806"/>the last column, the translation generated by the network. Most of these translations <a id="_idIndexMarker807"/>are actually correct, even though they don't match the sentences in column two, as the same sentence can have different translations. On the other hand, the translation of the <strong class="source-inline">Talk to Tom</strong> sentence is not correct as <strong class="source-inline">rune</strong> is not a German word.</p>
+			<p>The described deployment workflow is available on the KNIME Hub: <a href="https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/">https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/</a>.</p>
+			<p>In this section, you have learned how you can define, train, and apply encoder-decoder architectures based on the example of neural machine translation at the character level.</p>
+			<h1 id="_idParaDest-156"><a id="_idTextAnchor314"/>Summary</h1>
+			<p>In this chapter, we explored the topic of neural machine translation and trained a network to produce English-to-German translations.</p>
+			<p>We started with an introduction to automatic machine translation, covering its history from rule-based machine translation to neural machine translation. Next, we introduced the concept of encoder-decoder RNN-based architectures, which can be used for neural machine translation. In general, encoder-decoder architectures can be used for sequence-to-sequence prediction tasks or question-answer systems.</p>
+			<p>After that, we covered all the steps needed to train and apply a neural machine translation model at the character level, using a simple network structure with only one LSTM unit for both the encoder and decoder. The joint network, derived from the combination of the encoder and decoder, was trained using a <strong class="bold">teacher forcing</strong> paradigm.</p>
+			<p>At the end of the training phase and before deployment, a <strong class="bold">lambda layer</strong> was inserted in the decoder part to predict the character with the highest probability. In order to do that, the structure of the trained network was modified after the training process with a few lines of Python code in a DL Python Network Editor node. The Python code split the decoder and the encoder networks and added the lambda layer. This was the only part involving a short, simple snippet of Python code.</p>
+			<p>Of course, this network could be further improved in many ways – for example, by stacking multiple LSTM layers or by training the model at the word level using additional embeddings.</p>
+			<p>This is the last chapter on RNNs. In the next chapter, we want to move on to another class of neural networks, <strong class="bold">Convolutional Neural Networks</strong> (<strong class="bold">CNNs</strong>), which have proven to be very successful for image processing.</p>
+			<h1 id="_idParaDest-157"><a id="_idTextAnchor315"/>Questions and Exercises</h1>
+			<ol>
+				<li value="1">An encoder-decoder model is a:<p>a.) Many-to-one architecture</p><p>b.) Many-to-many architecture</p><p>c.) One-to-many architecture</p><p>d.) CNN architecture</p></li>
+				<li>What is the task of the encoder in neural machine translation?<p>a.) To encode the characters</p><p>b.) To generate the translation</p><p>c.) To extract a dense representation of the content in the target language</p><p>d.) To extract a dense representation of the content in the source language</p></li>
+				<li>What is another application for encoder-decoder LSTM networks?<p>a.) Text classification</p><p>b.) Question-answer systems</p><p>c.) Language detection</p><p>d.) Anomaly detection</p></li>
+			</ol>
+		</div>
+	</body></html>

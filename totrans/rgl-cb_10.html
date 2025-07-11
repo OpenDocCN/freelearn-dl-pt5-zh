@@ -1,0 +1,1359 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer313">
+<h1 class="chapter-number" id="_idParaDest-255"><a id="_idTextAnchor255"/>10</h1>
+<h1 id="_idParaDest-256"><a id="_idTextAnchor256"/>Regularization in Computer Vision</h1>
+<p>In this chapter, we will explore another popular field of deep learning – computer vision. <strong class="bold">Computer vision</strong> is a<a id="_idIndexMarker600"/> large field with many tasks, from classification through generative models to object detection. Even though we can’t cover all of them, we will supply methods that can apply to <span class="No-Break">all tasks.</span></p>
+<p>In this chapter, we’ll cover the <span class="No-Break">following recipes:</span></p>
+<ul>
+<li>Training a <strong class="bold">convolutional neural </strong><span class="No-Break"><strong class="bold">network</strong></span><span class="No-Break"> (</span><span class="No-Break"><strong class="bold">CNN</strong></span><span class="No-Break">)</span></li>
+<li>Regularizing a CNN with vanilla <strong class="bold">neural network</strong> (<span class="No-Break"><strong class="bold">NN</strong></span><span class="No-Break">) methods</span></li>
+<li>Regularizing a CNN with transfer learning for <span class="No-Break">object detection</span></li>
+<li>Semantic segmentation using <span class="No-Break">transfer learning</span></li>
+</ul>
+<p>At the end of this chapter, you will be able to handle several computer vision tasks such as image classification, object detection, instance segmentation, and semantic segmentation. You will be able to apply several tools to regularize the trained models, such as architecture, transfer learning, and freezing weights <span class="No-Break">for fine-tuning.</span></p>
+<h1 id="_idParaDest-257"><a id="_idTextAnchor257"/>Technical requirements</h1>
+<p>In this section, we will train CNNs, object detection, and semantic segmentation models, requiring the <span class="No-Break">following libraries:</span></p>
+<ul>
+<li><span class="No-Break">NumPy</span></li>
+<li><span class="No-Break">scikit-learn</span></li>
+<li><span class="No-Break">Matplotlib</span></li>
+<li><span class="No-Break">PyTorch</span></li>
+<li><span class="No-Break">torchvision</span></li>
+<li><span class="No-Break">Ultralytics</span></li>
+<li><span class="No-Break"><strong class="source-inline">segmentation-models-pytorch</strong></span></li>
+</ul>
+<h1 id="_idParaDest-258"><a id="_idTextAnchor258"/>Training a CNN</h1>
+<p>In this recipe, after<a id="_idIndexMarker601"/> reviewing the fundamental components of CNN, we will train one on a classification task – the <span class="No-Break">CIFAR10 dataset.</span></p>
+<h2 id="_idParaDest-259"><a id="_idTextAnchor259"/>Getting started</h2>
+<p>Computer vision <a id="_idIndexMarker602"/>is a special field for many reasons. The data handled in computer vision projects is usually rather large, multidimensional, and unstructured. However, its <a id="_idIndexMarker603"/>most specific aspect<a id="_idIndexMarker604"/> is arguably its <span class="No-Break">spatial structure.</span></p>
+<p>With its spatial structure comes a lot of potential difficulties, such as <span class="No-Break">the following:</span></p>
+<ul>
+<li><strong class="bold">Aspect ratio</strong>: Some <a id="_idIndexMarker605"/>images come with different aspect ratios depending on their source, such as 16/9, 4/3, 1/1, <span class="No-Break">and 9/16</span></li>
+<li><strong class="bold">Occlusion</strong>: An <a id="_idIndexMarker606"/>object can be occluded by <span class="No-Break">another one</span></li>
+<li><strong class="bold">Deformation</strong>: An<a id="_idIndexMarker607"/> object can be deformed, either because of perspective or <span class="No-Break">physical deformation</span></li>
+<li><strong class="bold">Point of view</strong>: Depending <a id="_idIndexMarker608"/>on the point of view, an object can look <span class="No-Break">totally different</span></li>
+<li><strong class="bold">Illumination</strong>: A <a id="_idIndexMarker609"/>picture can be taken in many light environments that may alter <span class="No-Break">the image</span></li>
+</ul>
+<p>Many of these difficulties are summarized in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.1</em></span><span class="No-Break">.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer267">
+<img alt="Figure 10.1 – Examples of difficulties specific to computer vision" height="617" src="image/B19629_10_01.jpg" width="1081"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.1 – Examples of difficulties specific to computer vision</p>
+<p>Due to <a id="_idIndexMarker610"/>the spatial structure of data, models are needed to process it. While recurrent neural networks are well suited to sequential data, CNNs are well suited to spatially <span class="No-Break">structured data.</span></p>
+<p>In order to properly build a CNN, we need to introduce two new types <span class="No-Break">of layers:</span></p>
+<ul>
+<li><span class="No-Break">Convolutional layers</span></li>
+<li><span class="No-Break">Pooling layers</span></li>
+</ul>
+<p>Let’s quickly explain <span class="No-Break">them both.</span></p>
+<h3>Convolutional layer</h3>
+<p>A <strong class="bold">convolutional layer</strong> is a<a id="_idIndexMarker611"/> layer made <span class="No-Break">of convolutions.</span></p>
+<p>In a fully<a id="_idIndexMarker612"/> connected layer, a weighted sum of the input features (or the input activation of the previous layer) is computed, with the weights being learned <span class="No-Break">while training.</span></p>
+<p>In a convolutional layer, a convolution is applied to the input features (or the input activation of the previous layer), with the values of the convolution kernel being learned while training. It means the NN will learn the kernel through training to extract the most relevant features from the <span class="No-Break">input images.</span></p>
+<p>A CNN can be fine-tuned <a id="_idIndexMarker613"/>with <span class="No-Break">several hyperparameters:</span></p>
+<ul>
+<li>The <span class="No-Break">kernel size</span></li>
+<li>The <span class="No-Break">padding size</span></li>
+<li>The <span class="No-Break">stride size</span></li>
+<li>The number of output channels (i.e., the number of kernels <span class="No-Break">to learn)</span></li>
+</ul>
+<p class="callout-heading">Tip</p>
+<p class="callout">See the <em class="italic">There’s more…</em> subsection for more information about kernels and other hyperparameters of <span class="No-Break">the CNNs.</span></p>
+<h3>Pooling layer</h3>
+<p>A <strong class="bold">pooling layer</strong> allows <a id="_idIndexMarker614"/>you to reduce the<a id="_idIndexMarker615"/> dimensionality of images and is commonly used in CNNs. For example, a max pooling layer with a 2x2 kernel will reduce the dimension of an image by 4 (a factor of 2 both in width and height), as shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.2</em></span><span class="No-Break">.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer268">
+<img alt="Figure 10.2 – On the left is an input image of 4x4, at the top right is the result of 2x2 max pooling, and at the bottom right is the result of a 2x2 average pooling" height="386" src="image/B19629_10_02.jpg" width="567"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.2 – On the left is an input image of 4x4, at the top right is the result of 2x2 max pooling, and at the bottom right is the result of a 2x2 average pooling</p>
+<p>There are<a id="_idIndexMarker616"/> several types of pooling, such as <span class="No-Break">the following:</span></p>
+<ul>
+<li><strong class="bold">Max pooling</strong>: Computing<a id="_idIndexMarker617"/> the <span class="No-Break">maximum value</span></li>
+<li><strong class="bold">Average pooling</strong>: Computing <a id="_idIndexMarker618"/>the <span class="No-Break">average value</span></li>
+<li><strong class="bold">Global average pooling</strong>: Computing<a id="_idIndexMarker619"/> a global average value for all channels (commonly used before fully <span class="No-Break">connected layers)</span></li>
+</ul>
+<h3>LeNet-5</h3>
+<p><strong class="bold">LeNet-5</strong> was <a id="_idIndexMarker620"/>one of the first proposed <a id="_idIndexMarker621"/>CNN architectures, by Yann Le Cun, for handwritten digit recognition. Its architecture is shown in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.3</em>, taken from Yann’s paper <em class="italic">Gradient-Based Learning Applied to </em><span class="No-Break"><em class="italic">Document Recognition</em></span><span class="No-Break">.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer269">
+<img alt="Figure 10.3 – LeNet-5’s original architecture" height="437" src="image/B19629_10_03.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.3 – LeNet-5’s original architecture</p>
+<p>Let’s describe it<a id="_idIndexMarker622"/> <span class="No-Break">in detail:</span></p>
+<ul>
+<li>An input image of <span class="No-Break">dimension 32x32</span></li>
+<li><strong class="bold">C1</strong>: A convolution layer with a 5x5 kernel and 6 <span class="No-Break">output channels</span></li>
+<li><strong class="bold">S2</strong>: A pooling layer with a <span class="No-Break">2x2 kernel</span></li>
+<li><strong class="bold">C3</strong>: A convolution layer with a 5x5 kernel and 16 <span class="No-Break">output channels</span></li>
+<li><strong class="bold">S4</strong>: A pooling layer with a <span class="No-Break">2x2 kernel</span></li>
+<li><strong class="bold">C5</strong>: A fully connected layer with <span class="No-Break">120 units</span></li>
+<li><strong class="bold">F6</strong>: A fully connected layer with <span class="No-Break">84 units</span></li>
+<li><strong class="bold">Output</strong>: An output layer with 10 units for 10 classes (0 to <span class="No-Break">9 digits)</span></li>
+</ul>
+<p>We will <a id="_idIndexMarker623"/>implement this network in this recipe on<a id="_idIndexMarker624"/> the <span class="No-Break">CIFAR-10 dataset.</span></p>
+<p>To run this recipe, the needed libraries can be installed with the <span class="No-Break">following command:</span></p>
+<pre class="source-code">
+pip install numpy matplotlib torch torchvision</pre>
+<h2 id="_idParaDest-260"><a id="_idTextAnchor260"/>How to do it…</h2>
+<p>In this recipe, we will train a CNN for image classification on the<a id="_idIndexMarker625"/> CIFAR-10 dataset. The CIFAR-10 dataset is a dataset of 32x32 RGB images, made of 10 classes – <strong class="source-inline">plane</strong>, <strong class="source-inline">car</strong>, <strong class="source-inline">bird</strong>, <strong class="source-inline">cat</strong>, <strong class="source-inline">deer</strong>, <strong class="source-inline">dog</strong>, <strong class="source-inline">frog</strong>, <strong class="source-inline">horse</strong>, <strong class="source-inline">ship</strong>, <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">truck</strong></span><span class="No-Break">.</span></p>
+<ol>
+<li>Import the <span class="No-Break">needed modules:</span><ul><li>matplotlib <span class="No-Break">for visualization</span></li><li>NumPy for <span class="No-Break">data manipulation</span></li><li>Several torch modules <span class="No-Break">and classes</span></li><li>The dataset and transformation module <span class="No-Break">from torchvision</span></li></ul></li>
+</ol>
+<p>Here are the <span class="No-Break"><strong class="source-inline">import</strong></span><span class="No-Break"> statements:</span></p>
+<pre class="source-code">
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+from torchvision.utils import make_grid
+from torchvision.datasets import CIFAR10
+import torchvision.transforms as transforms</pre>
+<ol>
+<li value="2">Instantiate <a id="_idIndexMarker626"/>the transformation to apply to images. Here, it’s a simple <span class="No-Break">two-step transformation:</span><ul><li>Convert data to a <span class="No-Break">torch tensor</span></li><li>Normalize with <strong class="source-inline">0.5</strong> mean and standard <span class="No-Break">deviation values:</span><pre class="source-code">
+transform = transforms.Compose([</pre><pre class="source-code">
+    transforms.ToTensor(),</pre><pre class="source-code">
+    transforms.Normalize((0.5, 0.5, 0.5),</pre><pre class="source-code">
+        (0.5, 0.5, 0.5)),</pre><pre class="source-code">
+])</pre></li></ul></li>
+<li>Load the<a id="_idIndexMarker627"/> data and instantiate the data loaders. The previously defined transformation is applied directly at loading as an argument of the <strong class="source-inline">CIFAR10</strong> constructor. The data loaders are here instantiated with a batch size <span class="No-Break">of </span><span class="No-Break"><strong class="source-inline">64</strong></span><span class="No-Break">:</span><pre class="source-code">
+# Will download the dataset at first</pre><pre class="source-code">
+trainset = CIFAR10('./data', train=True,</pre><pre class="source-code">
+    download=True, transform=transform)</pre><pre class="source-code">
+train_dataloader = DataLoader(trainset, batch_size=64,</pre><pre class="source-code">
+    shuffle=True)</pre><pre class="source-code">
+testset = CIFAR10('./data', train=False,</pre><pre class="source-code">
+    download=True, transform=transform)</pre><pre class="source-code">
+test_dataloader = DataLoader(testset, batch_size=64,</pre><pre class="source-code">
+    shuffle=True)</pre></li>
+<li>Optionally, we <a id="_idIndexMarker628"/>can visualize a few images to check what the <span class="No-Break">inputs are:</span><pre class="source-code">
+# Get a batch of images and labels</pre><pre class="source-code">
+images, labels = next(iter(train_dataloader))</pre><pre class="source-code">
+# Denormalize the images</pre><pre class="source-code">
+images = images / 2 + 0.5</pre><pre class="source-code">
+# Compute a grid image for visualization</pre><pre class="source-code">
+images = make_grid(images)</pre><pre class="source-code">
+# Switch from channel first to channel last</pre><pre class="source-code">
+images = np.transpose(images.numpy(), (1, 2, 0))</pre><pre class="source-code">
+# Display the result</pre><pre class="source-code">
+plt.figure(figsize=(14, 8))</pre><pre class="source-code">
+plt.imshow(images)</pre><pre class="source-code">
+plt.axis('off')</pre></li>
+</ol>
+<p>This <a id="_idIndexMarker629"/>is <span class="No-Break">the output:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer270">
+<img alt="Figure 10.4 – 64 random images from the CIFAR-10 dataset. The images are blurry, but most are clear enough for humans to classify correctly" height="554" src="image/B19629_10_04.jpg" width="554"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.4 – 64 random images from the CIFAR-10 dataset. The images are blurry, but most are clear enough for humans to classify correctly</p>
+<ol>
+<li value="5">Implement<a id="_idIndexMarker630"/> the <span class="No-Break"><strong class="source-inline">LeNet5</strong></span><span class="No-Break"> model:</span><pre class="source-code">
+class LeNet5(nn.Module):</pre><pre class="source-code">
+    def __init__(self, n_classes: int):</pre><pre class="source-code">
+        super(LeNet5, self).__init__()</pre><pre class="source-code">
+        self.n_classes = n_classes</pre><pre class="source-code">
+        self.c1 = nn.Conv2d(3, 6, kernel_size=5,</pre><pre class="source-code">
+            stride=1, padding=0)</pre><pre class="source-code">
+        self.s2 = nn.MaxPool2d(kernel_size=2)</pre><pre class="source-code">
+        self.c3 = nn.Conv2d(6, 16, kernel_size=5,</pre><pre class="source-code">
+            stride=1, padding=0)</pre><pre class="source-code">
+        self.s4 = nn.MaxPool2d(kernel_size=2)</pre><pre class="source-code">
+        self.c5 = nn.Linear(400, 120)</pre><pre class="source-code">
+        self.f6 = nn.Linear(120, 84)</pre><pre class="source-code">
+        self.output = nn.Linear(84, self.n_classes)</pre><pre class="source-code">
+    def forward(self, x):</pre><pre class="source-code">
+        x = F.relu(self.c1(x))</pre><pre class="source-code">
+        x = self.s2(x)</pre><pre class="source-code">
+        x = F.relu(self.c3(x))</pre><pre class="source-code">
+        x = self.s4(x)</pre><pre class="source-code">
+        # Flatten the 2D-array</pre><pre class="source-code">
+        x = torch.flatten(x, 1)</pre><pre class="source-code">
+        x = F.relu(self.c5(x))</pre><pre class="source-code">
+        x = F.relu(self.f6(x))</pre><pre class="source-code">
+        output = F.softmax(self.output(x), dim=1)</pre><pre class="source-code">
+        return output</pre></li>
+</ol>
+<p>This <a id="_idIndexMarker631"/>implementation has almost the same<a id="_idIndexMarker632"/> layers as the original paper. Here are a few <span class="No-Break">interesting points:</span></p>
+<ul>
+<li><strong class="source-inline">nn.Conv2d</strong> is the 2D convolution layer in <strong class="source-inline">torch</strong>, having as hyperparameters the output dimension, kernel size, stride, <span class="No-Break">and padding</span></li>
+<li><strong class="source-inline">nn.MaxPool2d</strong> is the max pooling layer in torch, having as a hyperparameter the kernel size (and, optionally, the stride, defaulting to the <span class="No-Break">kernel size)</span></li>
+<li>We use the ReLU activation function, even if it was not the function used in the <span class="No-Break">original paper</span></li>
+<li><strong class="source-inline">torch.flatten</strong> allows us to flatten a 2D tensor to a 1D tensor so that we can apply fully <span class="No-Break">connected layers</span></li>
+<li>Instantiate <a id="_idIndexMarker633"/>the model, and make sure that it works well with a random <span class="No-Break">input tensor:</span><pre class="source-code">
+# Instantiate the model</pre><pre class="source-code">
+lenet5 = LeNet5(10)</pre><pre class="source-code">
+# check device</pre><pre class="source-code">
+device = 'cuda' if torch.cuda.is_available() else 'cpu'</pre><pre class="source-code">
+lenet5 = lenet5.to(device)</pre><pre class="source-code">
+# Generate randomly one random 32x32 RGB image</pre><pre class="source-code">
+random_data = torch.rand((1, 3, 32, 32), device=device)</pre><pre class="source-code">
+result = lenet5(random_data)</pre><pre class="source-code">
+print('Resulting output tensor:', result)</pre><pre class="source-code">
+print('Sum of the output tensor:', result.sum())</pre></li>
+</ul>
+<p>The<a id="_idIndexMarker634"/> resulting output will look <span class="No-Break">like this:</span></p>
+<pre class="source-code">
+<strong class="bold">Resulting output tensor: tensor([[0.0890, 0.1047, 0.1039, 0.1003, 0.0957, 0.0918, 0.0948, 0.1078, 0.0999,</strong>
+<strong class="bold">         0.1121]], grad_fn=&lt;SoftmaxBackward0&gt;)</strong>
+<strong class="bold">Sum of the output tensor: tensor(1.0000, grad_fn=&lt;SumBackward0&gt;)</strong></pre>
+<ol>
+<li value="6">Instantiate<a id="_idIndexMarker635"/> the loss and optimizer – a cross-entropy loss for multiclass classification, with an <span class="No-Break">Adam optimizer:</span><pre class="source-code">
+criterion = nn.CrossEntropyLoss()</pre><pre class="source-code">
+optimizer = torch.optim.Adam(lenet5.parameters(), lr=0.001)</pre></li>
+<li>Implement a helper function, <strong class="source-inline">epoch_step_cifar</strong>, that computes forward propagation, backpropagation (in the case of the training set), loss, and accuracy for <span class="No-Break">an epoch:</span><pre class="source-code">
+def epoch_step_cifar(model, dataloader, device,</pre><pre class="source-code">
+training_set : bool) :</pre><pre class="source-code">
+    running_loss = 0.</pre><pre class="source-code">
+    correct = 0.</pre><pre class="source-code">
+    for i, data in enumerate(dataloader, 0):</pre><pre class="source-code">
+        inputs, labels = data</pre><pre class="source-code">
+        inputs = inputs.to(device)</pre><pre class="source-code">
+        labels = labels.to(device)</pre><pre class="source-code">
+        if training_set:</pre><pre class="source-code">
+            optimizer.zero_grad()</pre><pre class="source-code">
+        outputs = model(inputs)</pre><pre class="source-code">
+        loss = criterion(outputs, labels)</pre><pre class="source-code">
+        if training_set:</pre><pre class="source-code">
+            loss.backward()</pre><pre class="source-code">
+            optimizer.step()</pre><pre class="source-code">
+        correct += (outputs.argmax(</pre><pre class="source-code">
+            dim=1) == labels).float().sum().cpu()</pre><pre class="source-code">
+        running_loss += loss.item()</pre><pre class="source-code">
+    return running_loss, correct</pre></li>
+<li>Implement<a id="_idIndexMarker636"/> a helper function, <strong class="source-inline">train_cifar_classifier</strong>, that trains the model on a given number <a id="_idIndexMarker637"/>of epochs and returns the loss <span class="No-Break">and accuracy:</span><pre class="source-code">
+def train_cifar_classifier(model, train_dataloader,</pre><pre class="source-code">
+    test_dataloader, criterion, device, epochs):</pre><pre class="source-code">
+        # Create empty lists to store the losses and accuracies</pre><pre class="source-code">
+        train_losses = []</pre><pre class="source-code">
+        test_losses = []</pre><pre class="source-code">
+        train_accuracy = []</pre><pre class="source-code">
+        test_accuracy = []</pre><pre class="source-code">
+        # Loop over epochs</pre><pre class="source-code">
+        for epoch in range(epochs):</pre><pre class="source-code">
+            ## Train the model on the training set</pre><pre class="source-code">
+            running_train_loss = 0.</pre><pre class="source-code">
+            correct = 0.</pre><pre class="source-code">
+            lenet5.train()</pre><pre class="source-code">
+            running_train_loss,</pre><pre class="source-code">
+            correct = epoch_step_cifar(</pre><pre class="source-code">
+                model, train_dataloader, device,</pre><pre class="source-code">
+                training_set=True</pre><pre class="source-code">
+            )</pre><pre class="source-code">
+            # Compute and store loss and accuracy for this epoch</pre><pre class="source-code">
+        train_epoch_loss = running_train_loss / len(</pre><pre class="source-code">
+            train_dataloader)</pre><pre class="source-code">
+        train_losses.append(train_epoch_loss)</pre><pre class="source-code">
+        train_epoch_accuracy = correct / len(trainset)</pre><pre class="source-code">
+        train_accuracy.append(train_epoch_accuracy)</pre><pre class="source-code">
+        ## Evaluate the model on the test set</pre><pre class="source-code">
+        running_test_loss = 0.</pre><pre class="source-code">
+        correct = 0.</pre><pre class="source-code">
+        lenet5.eval()</pre><pre class="source-code">
+        with torch.no_grad():</pre><pre class="source-code">
+            running_test_loss,</pre><pre class="source-code">
+            correct = epoch_step_cifar(</pre><pre class="source-code">
+                model, test_dataloader, device,</pre><pre class="source-code">
+                training_set=False</pre><pre class="source-code">
+            )</pre><pre class="source-code">
+            test_epoch_loss = running_test_loss / len(</pre><pre class="source-code">
+                test_dataloader)</pre><pre class="source-code">
+            test_losses.append(test_epoch_loss)</pre><pre class="source-code">
+            test_epoch_accuracy = correct / len(testset)</pre><pre class="source-code">
+            test_accuracy.append(test_epoch_accuracy)</pre><pre class="source-code">
+        # Print stats</pre><pre class="source-code">
+        print(f'[epoch {epoch + 1}] Training: loss={train_epoch_loss:.3f} accuracy={train_epoch_accuracy:.3f} |\</pre><pre class="source-code">
+    \t Test: loss={test_epoch_loss:.3f} accuracy={test_epoch_accuracy:.3f}')</pre><pre class="source-code">
+    return train_losses, test_losses, train_accuracy,</pre><pre class="source-code">
+        test_accuracy</pre></li>
+<li>Using <a id="_idIndexMarker638"/>the helper function, train the <a id="_idIndexMarker639"/>model on 50 epochs and store the loss and accuracy for both the training and <span class="No-Break">test sets:</span><pre class="source-code">
+train_losses, test_losses, train_accuracy, </pre><pre class="source-code">
+test_accuracy = train_cifar_classifier(lenet5,</pre><pre class="source-code">
+    train_dataloader, test_dataloader, criterion,</pre><pre class="source-code">
+    device, epochs=50)</pre></li>
+</ol>
+<p>The last line of the output will look <span class="No-Break">like this:</span></p>
+<pre class="source-code">
+<strong class="bold">[epoch 50] Training: loss=1.740 accuracy=0.720 |   Test: loss=1.858 accuracy=0.600</strong></pre>
+<ol>
+<li value="10">Plot the loss for the train and <span class="No-Break">test sets:</span><pre class="source-code">
+plt.plot(train_losses, label='train')</pre><pre class="source-code">
+plt.plot(test_losses, label='test')</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('loss (CE)')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>This is<a id="_idIndexMarker640"/> the <span class="No-Break">resulting graph:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer271">
+<img alt="Figure 10.5 – Cross-entropy loss for the train and test sets" height="413" src="image/B19629_10_05.jpg" width="551"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.5 – Cross-entropy loss for the train and test sets</p>
+<p>After less than 10 epochs, the curves <span class="No-Break">start diverging.</span></p>
+<ol>
+<li value="11">Plot <a id="_idIndexMarker641"/>the accuracy as a function of <span class="No-Break">the epoch:</span><pre class="source-code">
+plt.plot(train_accuracy, label='train')</pre><pre class="source-code">
+plt.plot(test_accuracy, label='test')</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('Accuracy')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>This is the graph that <span class="No-Break">we get:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer272">
+<img alt="Figure 10.6 – Accuracy as a function of the epoch for both train and test sets" height="413" src="image/B19629_10_06.jpg" width="551"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.6 – Accuracy as a function of the epoch for both train and test sets</p>
+<p>After <a id="_idIndexMarker642"/>about 20 epochs, the accuracy reaches a plateau <a id="_idIndexMarker643"/>of around 60% accuracy, while the train accuracy keeps growing, <span class="No-Break">suggesting overfitting.</span></p>
+<h2 id="_idParaDest-261"><a id="_idTextAnchor261"/>There’s more…</h2>
+<p>In this subsection, let’s have a quick recap of some necessary tools and concepts to properly <span class="No-Break">understand CNNs:</span></p>
+<ul>
+<li>How to store <span class="No-Break">an image</span></li>
+<li><span class="No-Break">Padding</span></li>
+<li>Kernel <span class="No-Break">and convolution</span></li>
+<li><span class="No-Break">Stride</span></li>
+</ul>
+<h3>How to store an image</h3>
+<p>An image is <a id="_idIndexMarker644"/>nothing but a spatially arranged array of pixels. For example, a 1-million-pixel grayscale square image is an array of <span class="No-Break">1,000x1,000 pixels.</span></p>
+<p>Each pixel is usually stored as an 8-bit value and can be represented as an unsigned integer in the range of [0, 255]. So, ultimately, such an image can be represented in Python as a NumPy array of <strong class="source-inline">uint8</strong> with a shape of (<span class="No-Break">1000, 1000).</span></p>
+<p>We can go one step further with color images. A color <a id="_idIndexMarker645"/>image is commonly stored with three channels – <strong class="bold">Red, Green, and Blue</strong> (<strong class="bold">RGB</strong>). Each of these channels is stored as an 8-bit integer, so a squared 1M pixels color image can be stored as a NumPy array of a shape of (3, 1000, 1000), assuming the channel is <span class="No-Break">stored first.</span></p>
+<p class="callout-heading">Tip</p>
+<p class="callout">There are many other ways to<a id="_idIndexMarker646"/> describe a colored image – <strong class="bold">hue, saturation, value</strong> (<strong class="bold">HSV</strong>), CIELAB, transparency, and so on. However, in this book, and many computer vision cases, RGB color space <span class="No-Break">is enough.</span></p>
+<h3>Padding</h3>
+<p>We<a id="_idIndexMarker647"/> already used padding in earlier chapters for NLP processing. It <a id="_idIndexMarker648"/>consists of adding “space” around an image, basically by adding layers of values around an image. An example of padding on a 4x4 matrix is given in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.7</em></span><span class="No-Break">.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer273">
+<img alt="Figure 10.7 – An example of a 4x4 matrix padded with one layer of zeros" height="252" src="image/B19629_10_07.jpg" width="562"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.7 – An example of a 4x4 matrix padded with one layer of zeros</p>
+<p>Padding can take several arguments, such as <span class="No-Break">the following:</span></p>
+<ul>
+<li>The number of layers <span class="No-Break">of padding</span></li>
+<li>The padding method – a given value, repetition, mirror, and <span class="No-Break">so on</span></li>
+</ul>
+<p>Most of the time, zero <a id="_idIndexMarker649"/>padding is used, but sometimes, more sophisticated padding can <span class="No-Break">be useful.</span></p>
+<h3>Kernel and convolution</h3>
+<p>A <a id="_idIndexMarker650"/>convolution is a mathematical operation, between an image and a kernel, that outputs another image. It can be simply schematized <span class="No-Break">as follows:</span></p>
+<p>Convolution (input image, kernel) → <span class="No-Break">Output image</span></p>
+<p>A<a id="_idIndexMarker651"/> kernel is <a id="_idIndexMarker652"/>just a smaller matrix of predefined values, allowing us to get a property from an image through convolution. For example, with the right kernel, a convolution on an image allows us to blur an image, sharpen an image, detect edges, and <span class="No-Break">so on.</span></p>
+<p>The computation <a id="_idIndexMarker653"/>of a convolution is quite simple and can be described <span class="No-Break">as follows:</span></p>
+<ol>
+<li>Spatially match the kernel and the image from the <span class="No-Break">top-left corner.</span></li>
+<li>Compute the weights sum of all the image pixels, with the corresponding kernel value as the weight, and store this value as the top-left output <span class="No-Break">image pixel.</span></li>
+<li>Go one pixel to the right and repeat; if you reach the rightmost edge of the image, go back to the leftmost pixel and one <span class="No-Break">pixel down.</span></li>
+</ol>
+<p>This may look complicated, but it gets much easier with a diagram, as shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.8</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer274">
+<img alt="Figure 10.8 – An example of an image convolution by a kernel.Note that the resulting image is smaller in dimension" height="579" src="image/B19629_10_08.jpg" width="1164"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.8 – An example of an image convolution by a kernel.Note that the resulting image is smaller in dimension</p>
+<p>As we <a id="_idIndexMarker654"/>can see in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.8</em>, the output <a id="_idIndexMarker655"/>image is slightly smaller than the input image. Indeed, the larger the kernel, the smaller the <span class="No-Break">output image.</span></p>
+<h3>Stride</h3>
+<p>One more <a id="_idIndexMarker656"/>useful concept about convolutions is <a id="_idIndexMarker657"/>the concept of <strong class="bold">stride</strong>. The stride is the number of step pixels to take between two convolutional operations. In the example in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.8</em>, we implicitly considered a stride of 1 – the kernel is moved by one pixel <span class="No-Break">each time.</span></p>
+<p>However, it’s possible to consider a larger stride – we can have a step of any number, as shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.9</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer275">
+<img alt="Figure 10.9 – The stride effect on convolution – the larger the stride, the smaller the output image" height="195" src="image/B19629_10_09.jpg" width="554"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.9 – The stride effect on convolution – the larger the stride, the smaller the output image</p>
+<p>Having a larger stride will mainly have several, <span class="No-Break">related, consequences:</span></p>
+<ul>
+<li>Since the convolution skips more pixels, less information remains in the <span class="No-Break">output image</span></li>
+<li>The output image is smaller, allowing a reduction <span class="No-Break">in dimensionality</span></li>
+<li>The computation time <span class="No-Break">is lower</span></li>
+</ul>
+<p>Depending<a id="_idIndexMarker658"/> on the needs, having a stride larger <a id="_idIndexMarker659"/>than one can be an efficient way to have lower <span class="No-Break">computation time.</span></p>
+<p>To summarize, we can control several aspects of a convolution with <span class="No-Break">three parameters:</span></p>
+<ul>
+<li><span class="No-Break">The padding</span></li>
+<li>The <span class="No-Break">kernel size</span></li>
+<li><span class="No-Break">The stride</span></li>
+</ul>
+<p>They all affect the size of the output image, following <span class="No-Break">this formula:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer276">
+<img alt="" height="96" src="image/Formula_10_001.jpg" width="437"/>
+</div>
+</div>
+<p>This formula can be broken down <span class="No-Break">as follows:</span></p>
+<ul>
+<li><em class="italic">I</em> is the input <span class="No-Break">image size</span></li>
+<li><em class="italic">k</em> is the <span class="No-Break">kernel size</span></li>
+<li><em class="italic">p</em> is the <span class="No-Break">padding size</span></li>
+<li><em class="italic">s</em> is the <span class="No-Break">stride size</span></li>
+<li><em class="italic">O</em> is the output <span class="No-Break">image size</span></li>
+</ul>
+<p>Thanks to this formula, we can efficiently choose the required parameters in <span class="No-Break">any case.</span></p>
+<h2 id="_idParaDest-262"><a id="_idTextAnchor262"/>See also</h2>
+<ul>
+<li>Documentation about CNN <span class="No-Break">layers: </span><a href="https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.xhtml#torch.nn.Conv2d"><span class="No-Break">https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.xhtml#torch.nn.Conv2d</span></a></li>
+<li>Documentation about pooling <span class="No-Break">layers: </span><a href="https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.xhtml#torch.nn.MaxPool2d"><span class="No-Break">https://pytorch.org/docs/stable/generated/torch.nn.MaxPool2d.xhtml#torch.nn.MaxPool2d</span></a></li>
+<li>A paper about LeNet-5:  <a href="http://vision.stanford.edu/cs598_spring07/papers/Lecun98.pdf"><span class="No-Break">http://vision.stanford.edu/cs598_spring07/papers/Lecun98.pdf</span></a></li>
+<li>The amazing Stanford course about deep learning for computer <span class="No-Break">vision: </span><a href="http://cs231n.stanford.edu/"><span class="No-Break">http://cs231n.stanford.edu/</span></a></li>
+</ul>
+<h1 id="_idParaDest-263"><a id="_idTextAnchor263"/>Regularizing a CNN with vanilla NN methods</h1>
+<p>Since <a id="_idIndexMarker660"/>CNNs are a special kind of NNs, most vanilla NN optimization methods can be applied to them. A<a id="_idIndexMarker661"/> non-exhaustive list of regularization techniques we can use with CNNs is <span class="No-Break">the following:</span></p>
+<ul>
+<li><span class="No-Break">Kernel size</span></li>
+<li><span class="No-Break">Pooling size</span></li>
+<li><span class="No-Break">L2 regularization</span></li>
+<li>A fully connected number of units (<span class="No-Break">if any)</span></li>
+<li><span class="No-Break">Dropout</span></li>
+<li><span class="No-Break">Batch normalization</span></li>
+</ul>
+<p>In this recipe, we will apply batch normalization to add regularization, reusing the LeNet-5 model on the CIFAR-10 dataset, but any other method may work <span class="No-Break">as well.</span></p>
+<p>Batch normalization is a simple yet very effective method that can help NNs regularize and converge faster. The idea of batch normalization is to normalize the activation values of a hidden layer for a given batch. The method is very similar to a standard scaler for data preparation of quantitative data, but there are some differences. Let’s have a look at how <span class="No-Break">it works.</span></p>
+<p>The first <a id="_idIndexMarker662"/>step <a id="_idIndexMarker663"/>is to compute the mean value µ and the standard deviation <img alt="" height="13" src="image/Formula_10_002.png" width="15"/> of the activation values <img alt="" height="22" src="image/Formula_10_003.png" width="19"/> of a given layer. Assuming <img alt="" height="22" src="image/Formula_10_004.png" width="19"/> is the activation value of the I-th unit of the layer and the layer has <em class="italic">n</em> units, here are <span class="No-Break">the formulas:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer280">
+<img alt="" height="120" src="image/Formula_10_005.jpg" width="237"/>
+</div>
+</div>
+<div>
+<div class="IMG---Figure" id="_idContainer281">
+<img alt="" height="123" src="image/Formula_10_006.jpg" width="407"/>
+</div>
+</div>
+<p>Just like with a standard scaler, it is now possible to compute the rescaled the activation values <img alt="" height="27" src="image/Formula_10_007.png" width="76"/> with the <span class="No-Break">following formula:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer283">
+<img alt="" height="110" src="image/Formula_10_008.jpg" width="379"/>
+</div>
+</div>
+<p>Here, <img alt="" height="14" src="image/Formula_10_009.png" width="12"/> is just a small value to avoid division <span class="No-Break">by zero.</span></p>
+<p>Finally, unlike a standard scaler, there is one more step that allows the model to learn what is the best distribution with a scale and shift approach, thanks to two new learnable parameters, β and <img alt="" height="18" src="image/Formula_10_010.png" width="15"/>. They are used to compute the final batch normalization <span class="No-Break">output <img alt="" height="26" src="image/Formula_10_011.png" width="36"/>:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer287">
+<img alt="" height="54" src="image/Formula_10_012.jpg" width="415"/>
+</div>
+</div>
+<p>Here, <img alt="" height="18" src="image/Formula_10_013.png" width="14"/> allows <a id="_idIndexMarker664"/>us<a id="_idIndexMarker665"/> to adjust the scale, while β allows us to adjust the shift. These two parameters are learned during training, like any other parameter of the NN. This allows the model to adjust the distribution if required to improve <span class="No-Break">its performance.</span></p>
+<p>For a more visual example, we can see in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.10</em> a possible distribution of activation values on the left for a three-unit layer – the values are skewed and with a large standard deviation. After batch normalization, on the right part of <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.10</em>, the distributions are now close to <span class="No-Break">normal distributions.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer289">
+<img alt="Figure 10.10 – Possible activation distributions of three units of a layer before (left) and after (right) batch normalization" height="311" src="image/B19629_10_10.jpg" width="900"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.10 – Possible activation distributions of three units of a layer before (left) and after (right) batch normalization</p>
+<p>Thanks to<a id="_idIndexMarker666"/> this method, NNs tend to converge faster and generalize better, as we will see in <span class="No-Break">this recipe.</span></p>
+<h2 id="_idParaDest-264"><a id="_idTextAnchor264"/>Getting started</h2>
+<p>For this recipe, we<a id="_idIndexMarker667"/> will reuse torch and its integrated CIFAR-10 dataset so that all the needed libraries can be installed with the following command line (if not already installed in the <span class="No-Break">previous recipe):</span></p>
+<pre class="source-code">
+pip install numpy matplotlib torch torchvision</pre>
+<h2 id="_idParaDest-265"><a id="_idTextAnchor265"/>How to do it…</h2>
+<p>Since we will reuse the same data and almost the same network as in the previous recipe, we will assume the imports and instantiated classes can <span class="No-Break">be reused:</span></p>
+<ol>
+<li>Implement the regularized model. Here, we will mostly reuse the LeNet-5 architecture, with added batch normalization at <span class="No-Break">each step:</span><pre class="source-code">
+class LeNet5(nn.Module):</pre><pre class="source-code">
+    def __init__(self, n_classes: int):</pre><pre class="source-code">
+        super(LeNet5, self).__init__()</pre><pre class="source-code">
+        self.n_classes = n_classes</pre><pre class="source-code">
+        self.c1 = nn.Conv2d(3, 6, kernel_size=5,</pre><pre class="source-code">
+            stride=1, padding=0, )</pre><pre class="source-code">
+        self.s2 = nn.MaxPool2d(kernel_size=2)</pre><pre class="source-code">
+        self.bnorm2 = nn.BatchNorm2d(6)</pre><pre class="source-code">
+        self.c3 = nn.Conv2d(6, 16, kernel_size=5,</pre><pre class="source-code">
+            stride=1, padding=0)</pre><pre class="source-code">
+        self.s4 = nn.MaxPool2d(kernel_size=2)</pre><pre class="source-code">
+        self.bnorm4 = nn.BatchNorm1d(400)</pre><pre class="source-code">
+        self.c5 = nn.Linear(400, 120)</pre><pre class="source-code">
+        self.bnorm5 = nn.BatchNorm1d(120)</pre><pre class="source-code">
+        self.f6 = nn.Linear(120, 84)</pre><pre class="source-code">
+        self.bnorm6 = nn.BatchNorm1d(84)</pre><pre class="source-code">
+        self.output = nn.Linear(84, self.n_classes)</pre><pre class="source-code">
+    def forward(self, x):</pre><pre class="source-code">
+        x = F.relu(self.c1(x))</pre><pre class="source-code">
+        x = self.bnorm2(self.s2(x))</pre><pre class="source-code">
+        x = F.relu(self.c3(x))</pre><pre class="source-code">
+        x = self.s4(x)</pre><pre class="source-code">
+        # Flatten the 2D-array</pre><pre class="source-code">
+        x = self.bnorm4(torch.flatten(x, 1))</pre><pre class="source-code">
+        x = self.bnorm5(F.relu(self.c5(x)))</pre><pre class="source-code">
+        x = self.bnorm6(F.relu(self.f6(x)))</pre><pre class="source-code">
+        output = F.softmax(self.output(x), dim=1)</pre><pre class="source-code">
+        return output</pre></li>
+</ol>
+<p>As shown in the code, batch normalization can be simply added as a layer with <strong class="source-inline">nn.BatchNorm1d</strong> (or <strong class="source-inline">nn.BatchNorm2d</strong> for the convolutional part), which takes as an argument the following <span class="No-Break">input dimensions:</span></p>
+<ul>
+<li>The number of units for fully connected layers <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">BatchNorm1d</strong></span></li>
+<li>The number of kernels for convolution layers <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">BatchNorm2d</strong></span></li>
+</ul>
+<p class="callout-heading">Important note</p>
+<p class="callout">Placing batch normalization after the activation function is arguable, and some people would rather place it before the <span class="No-Break">activation function.</span></p>
+<ol>
+<li value="2">Instantiate <a id="_idIndexMarker668"/>the <a id="_idIndexMarker669"/>model, with the loss as cross-entropy and the optimizer <span class="No-Break">as Adam:</span><pre class="source-code">
+# Instantiate the model</pre><pre class="source-code">
+lenet5 = LeNet5(10)</pre><pre class="source-code">
+# check device</pre><pre class="source-code">
+device = 'cuda' if torch.cuda.is_available() else 'cpu'</pre><pre class="source-code">
+lenet5 = lenet5.to(device)</pre><pre class="source-code">
+# Instantiate loss and optimizer</pre><pre class="source-code">
+criterion = nn.CrossEntropyLoss()</pre><pre class="source-code">
+optimizer = torch.optim.Adam(lenet5.parameters(), lr=0.001)</pre></li>
+<li>Train the model over 20 epochs by reusing the <strong class="source-inline">train_cifar_classifier</strong> helper function of the previous recipe. Note that the model converges faster than without batch normalization in the <span class="No-Break">previous recipe:</span><pre class="source-code">
+train_losses, test_losses, train_accuracy, </pre><pre class="source-code">
+test_accuracy = train_cifar_classifier(lenet5,</pre><pre class="source-code">
+    train_dataloader, test_dataloader, criterion,</pre><pre class="source-code">
+    device, epochs=20)</pre></li>
+<li>Plot the<a id="_idIndexMarker670"/> loss as <a id="_idIndexMarker671"/>a function of <span class="No-Break">the epoch:</span><pre class="source-code">
+plt.plot(train_losses, label='train')</pre><pre class="source-code">
+plt.plot(test_losses, label='test')</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('loss (CE)')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the graph:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer290">
+<img alt="Figure 10.11 – Cross-entropy loss as a function of the epoch" height="413" src="image/B19629_10_11.jpg" width="551"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.11 – Cross-entropy loss as a function of the epoch</p>
+<p>Overfitting starts appearing after only a <span class="No-Break">few epochs.</span></p>
+<ol>
+<li value="5">Plot the accuracy for the train and <span class="No-Break">test sets:</span><pre class="source-code">
+plt.plot(train_accuracy, label='train')</pre><pre class="source-code">
+plt.plot(test_accuracy, label='test')</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('Accuracy')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>This is what <span class="No-Break">we get:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer291">
+<img alt="Figure 10.12 – Accuracy as a function of the epoch. The test accuracy climbs to 66%, compared to 61% without batch normalization" height="413" src="image/B19629_10_12.jpg" width="551"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.12 – Accuracy as a function of the epoch. The test accuracy climbs to 66%, compared to 61% without batch normalization</p>
+<p>As a result, we <a id="_idIndexMarker672"/>can <a id="_idIndexMarker673"/>see that while there is still some overfitting, the test accuracy improved significantly from 61% to 66%, thanks to <span class="No-Break">batch normalization.</span></p>
+<h2 id="_idParaDest-266"><a id="_idTextAnchor266"/>There’s more…</h2>
+<p>What’s interesting about CNNs is that we can have a look at what they learn from data. One way to do so is to look at the <a id="_idIndexMarker674"/>learned kernels. This can be done using the <strong class="source-inline">visualize_kernels</strong> function, as<a id="_idIndexMarker675"/> <span class="No-Break">defined here:</span></p>
+<pre class="source-code">
+from torchvision import utils
+def visualize_kernels(tensor, ch=0, all_kernels=False, nrow=8, padding=1, title=None):
+    n,c,w,h = tensor.shape
+    if all_kernels:
+        tensor = tensor.view(n*c, -1, w, h)
+    elif c != 3:
+        tensor = tensor[:,ch,:,:].unsqueeze(dim=1)
+    rows = np.min((tensor.shape[0] // nrow + 1, 64))
+    grid = utils.make_grid(tensor, nrow=nrow,
+        normalize=True, padding=padding)
+    # Display
+    plt.figure(figsize=(nrow, rows))
+    if title is not None:
+        plt.title(title)
+    plt.imshow(grid.cpu().numpy().transpose((1, 2, 0)))
+    plt.axis('off')
+    plt.show()</pre>
+<p>We can now<a id="_idIndexMarker676"/> apply this <a id="_idIndexMarker677"/>function to visualize the learned kernels of the <strong class="source-inline">C1</strong> and <span class="No-Break"><strong class="source-inline">C3</strong></span><span class="No-Break"> layers:</span></p>
+<pre class="source-code">
+visualize_kernels(lenet5.c1.weight.data, all_kernels=False,
+    title='C1 layer')
+visualize_kernels(lenet5.c3.weight.data, title='C3 layer')</pre>
+<p>Here is the <span class="No-Break">C1 layer:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer292">
+<img alt="" height="269" src="image/B19629_10_13-A.jpg" width="1063"/>
+</div>
+</div>
+<p>Here is the <span class="No-Break">C3 layer:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer293">
+<img alt="Figure 10.13 – Top – the learned kernels of the C1 layer, and bottom – the learned kernels of the C3 layer" height="345" src="image/B19629_10_13-B.jpg" width="1063"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.13 – Top – the learned kernels of the C1 layer, and bottom – the learned kernels of the C3 layer</p>
+<p>Displaying <a id="_idIndexMarker678"/>kernels is not always helpful, but, depending on the task, they can give hints on what shapes a <span class="No-Break">model recognizes.</span></p>
+<h2 id="_idParaDest-267"><a id="_idTextAnchor267"/>See also</h2>
+<ul>
+<li>The torch documentation about batch <span class="No-Break">normalization: </span><a href="https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm1d.xhtml"><span class="No-Break">https://pytorch.org/docs/stable/generated/torch.nn.BatchNorm1d.xhtml</span></a></li>
+<li>The batch normalization <span class="No-Break">paper: </span><a href="https://arxiv.org/pdf/1502.03167.pdf%0D"><span class="No-Break">https://arxiv.org/pdf/1502.03167.pdf</span></a></li>
+<li>A very well-written blog post about batch <span class="No-Break">normalization: </span><a href="https://towardsdatascience.com/batch-normalization-in-3-levels-of-understanding-14c2da90a338"><span class="No-Break">https://towardsdatascience.com/batch-normalization-in-3-levels-of-understanding-14c2da90a338</span></a></li>
+</ul>
+<h1 id="_idParaDest-268"><a id="_idTextAnchor268"/>Regularizing a CNN with transfer learning for object detection</h1>
+<p>In this recipe, we <a id="_idIndexMarker679"/>will perform another typical task in computer vision – object detection. Before taking advantage of the power of transfer learning to help get better performances<a id="_idIndexMarker680"/> using a <strong class="bold">You Only Look Once</strong> (<strong class="bold">YOLO</strong>) model (a widely used class of models for object detection), we will give insights about what <a id="_idIndexMarker681"/>object detection is, the main methods and metrics, as well as the <span class="No-Break">COCO dataset.</span></p>
+<h2 id="_idParaDest-269"><a id="_idTextAnchor269"/>Object detection</h2>
+<p><strong class="bold">Object detection</strong> is a <a id="_idIndexMarker682"/>computer vision task, involving both the identification and localization of objects of a given class (for example, a car, phone, person, or dog). As shown in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.14</em>, the objects are usually localized, thanks to predicted bounding boxes, as well as <span class="No-Break">predicted classes.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer294">
+<img alt="Figure 10.14 – An example of an image with object detection. Objects are detected with a bounding box and a class" height="803" src="image/B19629_10_14.jpg" width="1204"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.14 – An example of an image with object detection. Objects are detected with a bounding box and a class</p>
+<p>Researchers have proposed many methods to help solve object detection problems, some of which are heavily used in many industries. There are several groups of methods for object <a id="_idIndexMarker683"/>detection, but perhaps the two most widely used groups of methods are currently <span class="No-Break">the following:</span></p>
+<ul>
+<li>One-stage methods, such as YOLO <span class="No-Break">and SSD</span></li>
+<li>Two-stage methods, based<a id="_idIndexMarker684"/> on <strong class="bold">Region-Based </strong><span class="No-Break"><strong class="bold">CNN</strong></span><span class="No-Break"> (</span><span class="No-Break"><strong class="bold">R-CNN</strong></span><span class="No-Break">)</span></li>
+</ul>
+<p>Methods <a id="_idIndexMarker685"/>based on R-CNN are powerful and usually more accurate than one-stage methods. On the other hand, one-stage methods are usually less computationally expensive and can run in real time, but they may fail at detecting small objects <span class="No-Break">more often.</span></p>
+<h2 id="_idParaDest-270"><a id="_idTextAnchor270"/>Mean average precision</h2>
+<p>Since this is a <a id="_idIndexMarker686"/>specific task, a specific metric is needed to assess the performances of such models – the <strong class="bold">mean Average Precision</strong> (<strong class="bold">mAP</strong>). Let’s get an overview of what mAP is. For that, we need to introduce several concepts, such as<a id="_idIndexMarker687"/> the <strong class="bold">Intersection over Union</strong> (<strong class="bold">IoU</strong>) and precision and recall in the context of <span class="No-Break">object detection.</span></p>
+<p>When an object is detected, it comes with three pieces <span class="No-Break">of information:</span></p>
+<ul>
+<li>A <span class="No-Break">predicted class</span></li>
+<li>A bounding box (usually four points, either center plus width and height, or top-left and <span class="No-Break">bottom-right locations)</span></li>
+<li>A confidence level or probability that the box contains <span class="No-Break">an object</span></li>
+</ul>
+<p>To consider an object successfully detected, the classes must match, and the bounding box must be well localized. While knowing whether the classes match is trivial, the bounding box localization is computed using a metric <span class="No-Break">called IoU.</span></p>
+<p>Having an explicit name, the IoU can be computed as the intersection of the ground truth and the predicted boxes, over the union of those two same boxes, as shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.15</em></span><span class="No-Break">.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer295">
+<img alt="Figure 10.15 – A representation of the IoU metric" height="464" src="image/B19629_10_15.jpg" width="710"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.15 – A representation of the IoU metric</p>
+<p>Given two <a id="_idIndexMarker688"/>bounding boxes – for example, <em class="italic">A </em>and <em class="italic">B</em> – IoU can be mathematically described with the <span class="No-Break">following equation:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer296">
+<img alt="" height="96" src="image/Formula_10_014.jpg" width="275"/>
+</div>
+</div>
+<p>IoU has several <a id="_idIndexMarker689"/>advantages for <span class="No-Break">a metric:</span></p>
+<ul>
+<li>The values are between 0 <span class="No-Break">and 1</span></li>
+<li>A value of 0 means the two boxes <span class="No-Break">don’t overlap</span></li>
+<li>A value of 1 means the two boxes <span class="No-Break">perfectly match</span></li>
+</ul>
+<p>A threshold is then applied to the IoU. If the IoU is above the threshold, it is considered a <strong class="bold">True Positive</strong> (<strong class="bold">TP</strong>); otherwise, it is considered a <strong class="bold">False Positive</strong> (<strong class="bold">FP</strong>), allowing us to effectively compute the precision. Finally, a <strong class="bold">False Negative</strong> (<strong class="bold">FN</strong>) is an object that was not detected, given the <span class="No-Break">IoU threshold.</span></p>
+<p>Using these definitions of TP, FP, and FN, it is then possible to compute the precision <span class="No-Break">and recall.</span></p>
+<p>As a reminder, the precision <em class="italic">P</em> and recall <em class="italic">R</em> formulas are <span class="No-Break">the following:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer297">
+<img alt="" height="97" src="image/Formula_10_015.jpg" width="282"/>
+</div>
+</div>
+<div>
+<div class="IMG---Figure" id="_idContainer298">
+<img alt="" height="96" src="image/Formula_10_016.jpg" width="291"/>
+</div>
+</div>
+<p>Using P and R, it is possible to <a id="_idIndexMarker690"/>plot the <strong class="bold">Precision-Recall curve</strong> (<strong class="bold">PR curve</strong>), with P as a function of R for various confidence-level thresholds, from 0 to 1. Using this PR curve, it is possible to compute the <strong class="bold">Average Precision</strong> (<strong class="bold">AP</strong>) for <a id="_idIndexMarker691"/>a given class by averaging P for different values of R (for example, averaging the interpolated P for R values in [0, 0.1, <span class="No-Break">0.2... 1]).</span></p>
+<p class="callout-heading">Important note</p>
+<p class="callout">The average recall metric can be computed reciprocally using the same method, by reversing R <span class="No-Break">and P.</span></p>
+<p>Finally, the mAP is simply <a id="_idIndexMarker692"/>computed by averaging the AP over all <span class="No-Break">the classes.</span></p>
+<p class="callout-heading">Tip</p>
+<p class="callout">See the <em class="italic">See also</em> subsection for a link to a great blog post that explains in detail the <span class="No-Break">mAP computation.</span></p>
+<p>One drawback of this AP computation is that we considered only one IoU threshold, considering the same way almost perfect boxes with an IoU of 0.95 and not-so-good boxes with an IoU of 0.5. This is why some evaluation metrics average the AP for several IoU thresholds – for example, from 0.5 to 0.95 with a step of 0.05, usually noted as <strong class="source-inline">AP@[IoU=0.5:0.95</strong>] <span class="No-Break">or </span><span class="No-Break"><strong class="source-inline">AP50-95</strong></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-271"><a id="_idTextAnchor271"/>COCO dataset</h2>
+<p>The <strong class="bold">Common Objects in Context</strong> (<strong class="bold">COCO</strong>) dataset is a widely used dataset in object detection, having<a id="_idIndexMarker693"/> the following <span class="No-Break">nice features:</span></p>
+<ul>
+<li>Hundreds of thousands of images <span class="No-Break">with labels</span></li>
+<li>80 classes <span class="No-Break">of objects</span></li>
+<li>Flexible terms <span class="No-Break">of use</span></li>
+<li>A <span class="No-Break">wide community</span></li>
+</ul>
+<p>This is a standard dataset when working with object detection. Thanks to that, most standard object detection models come with a set of pre-trained weights on the COCO dataset, allowing us to take advantage of <span class="No-Break">transfer learning.</span></p>
+<h2 id="_idParaDest-272"><a id="_idTextAnchor272"/>Getting started</h2>
+<p>In this recipe, we will use<a id="_idIndexMarker694"/> the YOLO algorithm, proposed by Ultralytics. <strong class="bold">YOLO</strong> stands for <strong class="bold">You Only Look Once</strong>, referring <a id="_idIndexMarker695"/>to the fact the method operates in a single stage, enabling real-time execution on devices with powerful <span class="No-Break">enough power.</span></p>
+<p>YOLO is a popular object detection algorithm that was first proposed in 2015. It has had a lot of new versions with improvements since then; version 8 is currently <span class="No-Break">being developed.</span></p>
+<p>It can be <a id="_idIndexMarker696"/>installed simply with the following <span class="No-Break">command line:</span></p>
+<pre class="source-code">
+pip install ultralytics</pre>
+<p>We will train an object detection algorithm on a vehicles dataset available on Kaggle. It can be downloaded and prepared with the <span class="No-Break">following commands:</span></p>
+<ol>
+<li>Download the dataset using the <span class="No-Break">Kaggle API:</span><pre class="source-code">
+<strong class="bold">kaggle datasets download -d saumyapatel/traffic-vehicles-object-detection</strong><strong class="bold">  --unzip</strong></pre></li>
+<li>Rename the folder <span class="No-Break">for simplicity:</span><pre class="source-code">
+<strong class="bold">mv 'Traffic Dataset' traffic</strong></pre></li>
+<li>Create a <span class="No-Break"><strong class="source-inline">datasets</strong></span><span class="No-Break"> folder:</span><pre class="source-code">
+<strong class="bold">mkdir datasets</strong></pre></li>
+<li>Move the dataset to <span class="No-Break">this folder:</span><pre class="source-code">
+<strong class="bold">mv traffic datasets/</strong></pre></li>
+</ol>
+<p>As a result, you<a id="_idIndexMarker697"/> should now have a folder dataset with the <span class="No-Break">following structure:</span></p>
+<pre class="source-code">
+traffic
+├── images
+│   ├── train: 738 images
+│   ├── val: 185 images
+│   ├── test: 278 images
+├── labels
+    ├── train
+    ├── val</pre>
+<p>The <a id="_idIndexMarker698"/>dataset is split into <strong class="source-inline">train</strong>, <strong class="source-inline">val</strong>, and <strong class="source-inline">test</strong> sets, with respectively 738, 185, and 278 images. As we will see in the next subsection, these are typical road traffic images. The labels have seven classes – <strong class="source-inline">Car</strong>,<strong class="source-inline"> Number Plate</strong>, <strong class="source-inline">Blur Number Plate</strong>, <strong class="source-inline">Two-Wheeler</strong>, <strong class="source-inline">Auto</strong>, <strong class="source-inline">Bus</strong>, and <strong class="source-inline">Truck</strong>. We can now proceed to train the object <span class="No-Break">detection model.</span></p>
+<h2 id="_idParaDest-273"><a id="_idTextAnchor273"/>How to do it…</h2>
+<p>We will first have to quickly explore the dataset and then train and evaluate a YOLO model on <span class="No-Break">this data:</span></p>
+<ol>
+<li>Import the required modules <span class="No-Break">and functions:</span><ul><li><strong class="source-inline">matplotlib</strong> and <strong class="source-inline">cv2</strong> for image loading <span class="No-Break">and visualization</span></li><li><strong class="source-inline">YOLO</strong> for the <span class="No-Break">model training</span></li><li><strong class="source-inline">glob</strong> as <strong class="source-inline">util</strong> to list <span class="No-Break">the files:</span><pre class="source-code">
+import cv2</pre><pre class="source-code">
+from glob import glob</pre><pre class="source-code">
+import matplotlib.pyplot as plt</pre><pre class="source-code">
+from ultralytics import YOLO</pre></li></ul></li>
+<li>Let’s now <a id="_idIndexMarker699"/>explore the dataset. First, we will list the images in the <strong class="source-inline">train</strong> folder <a id="_idIndexMarker700"/>using <strong class="source-inline">glob</strong>, and then we will display eight <span class="No-Break">of them:</span><pre class="source-code">
+plt.figure(figsize=(14, 10))</pre><pre class="source-code">
+# Get all images paths</pre><pre class="source-code">
+images = glob('datasets/traffic/images/train/*.jpg')</pre><pre class="source-code">
+# Plot 8 of them</pre><pre class="source-code">
+for i, path in enumerate(images[:8]):</pre><pre class="source-code">
+    img = plt.imread(path)</pre><pre class="source-code">
+    plt.subplot(2, 4, i+1)</pre><pre class="source-code">
+    plt.imshow(img)</pre><pre class="source-code">
+    plt.axis('off')</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer299">
+<img alt="Figure 10.16 – A patchwork of eight images from the train set of the traffic dataset" height="1146" src="image/B19629_10_16.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.16 – A patchwork of eight images from the train set of the traffic dataset</p>
+<p>As we can see, these are mostly traffic-related images of different shapes <span class="No-Break">and aspects.</span></p>
+<ol>
+<li value="3">If we<a id="_idIndexMarker701"/> have a look at the labels by reading a file, we get <span class="No-Break">the </span><span class="No-Break"><a id="_idIndexMarker702"/></span><span class="No-Break">following:</span><pre class="source-code">
+with open('datasets/traffic/labels/train/00 (10).txt') as file:</pre><pre class="source-code">
+    print(file.read())</pre><pre class="source-code">
+    file.close()</pre></li>
+</ol>
+<p>The output is <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+<strong class="bold">2 0.543893 0.609375 0.041985 0.041667</strong>
+<strong class="bold">5 0.332061 0.346354 0.129771 0.182292</strong>
+<strong class="bold">5 0.568702 0.479167 0.351145 0.427083</strong></pre>
+<p>The labels are an object per line, so here, we have three labeled objects in the image. Each line contains <span class="No-Break">five numbers:</span></p>
+<ul>
+<li>The <span class="No-Break">class number</span></li>
+<li>The box center <span class="No-Break"><em class="italic">x</em></span><span class="No-Break"> coordinate</span></li>
+<li>The box center <span class="No-Break"><em class="italic">y</em></span><span class="No-Break"> coordinate</span></li>
+<li>The <span class="No-Break">box width</span></li>
+<li>The <span class="No-Break">box height</span></li>
+</ul>
+<p>Note<a id="_idIndexMarker703"/> that all the box information is relative to the size of the image, so<a id="_idIndexMarker704"/> they are represented as floats in [<span class="No-Break">0, 1].</span></p>
+<p class="callout-heading">Tip</p>
+<p class="callout">There are other data formats for boxes in images such as the COCO and the Pascal VOC formats. More information about can be found in the <em class="italic">See </em><span class="No-Break"><em class="italic">also</em></span><span class="No-Break"> subsection.</span></p>
+<p>We can even plot this image with the boxes of the labels, using the <strong class="source-inline">plot_labels</strong> function <span class="No-Break">implemented here:</span></p>
+<pre class="source-code">
+def plot_labels(image_path, labels_path, classes):
+    image = plt.imread(image_path)
+    with open(labels_path, 'r') as file:
+        lines = file.readlines()
+        for line in lines:
+            cls, xc, yc, w, h= line.strip().split(' ')
+            xc = int(float(xc)*image.shape[1])
+            yc = int(float(yc)*image.shape[0])
+            w = int(float(w)*image.shape[1])
+            h = int(float(h)*image.shape[0])
+            cv2.rectangle(image, (xc - w//2,
+                yc - h//2), (xc + w//2 ,yc + h//2),
+                (255,0,0), 2)
+            cv2.putText(image, f'{classes[int(cls)]}',
+                (xc-w//2, yc - h//2 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                (255,0,0), 1)
+    file.close()
+    plt.imshow(image)
+classes = ['Car', 'Number Plate', 'Blur Number Plate',
+    'Two Wheeler', 'Auto', 'Bus', 'Truck']
+plot_labels(
+    'datasets/traffic/images/train/00 (10).jpg',
+    'datasets/traffic/labels/train/00 (10).txt',
+    classes
+)</pre>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer300">
+<img alt="Figure 10.17 – An example of an image and its labeled bounding boxes" height="743" src="image/B19629_10_17.jpg" width="1109"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.17 – An example of an image and its labeled bounding boxes</p>
+<p>In this photo, we have labels for two cars and one plate. Let’s go on to the next step to train <a id="_idIndexMarker705"/>a model on <span class="No-Break">this data.</span></p>
+<ol>
+<li value="4">We <a id="_idIndexMarker706"/>need to create a <strong class="source-inline">.yaml</strong> file, expected by the YOLO model, containing the dataset location and classes. Create and edit a file named <strong class="source-inline">dataset.yaml</strong> in the current directory with your favorite editor, and then fill it with the <span class="No-Break">following content:</span><pre class="source-code">
+train: traffic/images/train</pre><pre class="source-code">
+val: traffic/images/val</pre><pre class="source-code">
+nc: 7</pre><pre class="source-code">
+names: ['Car', 'Number Plate', 'Blur Number Plate',</pre><pre class="source-code">
+    'Two Wheeler', 'Auto', 'Bus', 'Truck']</pre></li>
+<li>We can now instantiate a new model. This will instantiate a YOLOv8 nano model. The YOLO model comes in <span class="No-Break">five sizes:</span><ul><li><strong class="source-inline">'yolov8n.yaml'</strong> for the smallest model with 3.2 <span class="No-Break">million parameters</span></li><li><strong class="source-inline">'yolov8s.yaml'</strong> with 11.2 <span class="No-Break">million parameters</span></li><li><strong class="source-inline">'yolov8m.yaml'</strong> with 25.9 <span class="No-Break">million parameters</span></li><li><strong class="source-inline">'yolov8l.yaml'</strong> with 43.7 <span class="No-Break">million parameters</span></li><li><strong class="source-inline">'yolov8x.yaml'</strong> for the largest model with 68.2 <span class="No-Break">million parameters:</span><pre class="source-code">
+# Create a new YOLO model with random weights</pre><pre class="source-code">
+model = YOLO('yolov8n.yaml')</pre></li></ul></li>
+<li>Train the model, providing <a id="_idIndexMarker707"/>the dataset with the previously <a id="_idIndexMarker708"/>created <strong class="source-inline">dataset.yaml</strong> file, the number of epochs, and the <span class="No-Break">name (optional):</span><pre class="source-code">
+# Train the model for 100 epochs</pre><pre class="source-code">
+model.train(data='dataset.yaml', epochs=100,</pre><pre class="source-code">
+    name='untrained_traffic')</pre></li>
+</ol>
+<p class="callout-heading">Tip</p>
+<p class="callout">A lot of information is displayed when a model trains in memory, losses, and metrics. There’s nothing too complicated if you want to look at it <span class="No-Break">in detail.</span></p>
+<p>The name is optional but allows us to easily find where the results and output are stored – in the <strong class="source-inline">runs/detect/&lt;name&gt;</strong> folder. If the folder already exists, it is simply incremented and <span class="No-Break">not overwritten.</span></p>
+<p>In this folder, several useful files can be found, including <span class="No-Break">the following:</span></p>
+<ul>
+<li><strong class="source-inline">weights/best.pt</strong>: The weights of the epoch that has the best <span class="No-Break">validation loss</span></li>
+<li><strong class="source-inline">results.csv</strong> with the logged results for <span class="No-Break">each epoch</span></li>
+<li>Several curves and information about <span class="No-Break">the data</span></li>
+</ul>
+<ol>
+<li value="7">Display the results. Here, we will display the automatically saved results <span class="No-Break">image, </span><span class="No-Break"><strong class="source-inline">results.png</strong></span><span class="No-Break">:</span><pre class="source-code">
+plt.figure(figsize=(14, 10))</pre><pre class="source-code">
+plt.imshow(plt.imread(</pre><pre class="source-code">
+    'runs/detect/untrained_traffic/results.png'))</pre><pre class="source-code">
+plt.axis('off')</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer301">
+<img alt="Figure 10.18 – A results summary of the YOLO model trained from scratch after 100 epochs" height="756" src="image/B19629_10_18.jpg" width="1554"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.18 – A results summary of the YOLO model trained from scratch after 100 epochs</p>
+<p>Several<a id="_idIndexMarker709"/> train and validation losses are displayed, as well as several losses – precision (P), recall (R), mAP50, <span class="No-Break">and mAP50-95.</span></p>
+<p>The results are<a id="_idIndexMarker710"/> encouraging considering the small dataset – we see a decreasing loss and a mAP50 increasing to 0.7, meaning the model is <span class="No-Break">learning well.</span></p>
+<ol>
+<li value="8">Let’s display the results as an example of the test set. For that, we first need to implement a function that allows us to display the image and the predicted boxes and <span class="No-Break">classes, </span><span class="No-Break"><strong class="source-inline">plot_results_one_image</strong></span><span class="No-Break">:</span><pre class="source-code">
+def plot_results_one_image(result):</pre><pre class="source-code">
+    image = result[0].orig_img.copy()</pre><pre class="source-code">
+    raw_res = result[0].boxes.data</pre><pre class="source-code">
+    for detection in raw_res:</pre><pre class="source-code">
+        x1, y1, x2, y2, p,</pre><pre class="source-code">
+        cls = detection.cpu().tolist()</pre><pre class="source-code">
+        cv2.rectangle(image, (int(x1), int(y1)),</pre><pre class="source-code">
+            (int(x2), int(y2)), (255,0,0), 2)</pre><pre class="source-code">
+        cv2.putText(image, f'{classes[int(cls)]}',</pre><pre class="source-code">
+            (int(x1), int(y1) - 10),</pre><pre class="source-code">
+            cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)</pre><pre class="source-code">
+    plt.imshow(image)</pre></li>
+<li>We can<a id="_idIndexMarker711"/> then compute the inference and display the results on an<a id="_idIndexMarker712"/> image from the <span class="No-Break">test set:</span><pre class="source-code">
+# Compute the model inference on a test image</pre><pre class="source-code">
+result = model.predict(</pre><pre class="source-code">
+    'datasets/traffic/images/test/00 (100).png')</pre><pre class="source-code">
+# Plot the results</pre><pre class="source-code">
+plot_results_one_image(result)</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer302">
+<img alt="Figure 10.19 – An image from the test set and the predicted detections from the trained model" height="317" src="image/B19629_10_19.jpg" width="543"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.19 – An image from the test set and the predicted detections from the trained model</p>
+<p>As we<a id="_idIndexMarker713"/> can see, our YOLO model has already learned to detect and correctly classify several classes. However, there<a id="_idIndexMarker714"/> is still room <span class="No-Break">for improvement:</span></p>
+<ul>
+<li>The boxes do not perfectly match the objects; they are either too large or <span class="No-Break">too small</span></li>
+<li>An object may have two classes (even if the difference between the <strong class="source-inline">Blur Number Plate</strong> and <strong class="source-inline">Number Plate</strong> classes <span class="No-Break">is arguable)</span></li>
+</ul>
+<p class="callout-heading">Important note</p>
+<p class="callout">It is worth mentioning that the direct output of the YOLO model usually contains many more bounding boxes. A <a id="_idIndexMarker715"/>postprocessing step, called the <strong class="bold">non-max suppression</strong> algorithm, has been applied here. This algorithm only keeps bounding boxes with a high enough confidence level, and small enough overlapping (computed with IoU) with other boxes of the <span class="No-Break">same class.</span></p>
+<p>Let’s try to fix this using <span class="No-Break">transfer learning.</span></p>
+<h3>Training with transfer learning</h3>
+<p>We will <a id="_idIndexMarker716"/>now train another model on this exact same dataset, with the same number of epochs. However, instead of using a model with random weights, we will load a model that was trained on the COCO dataset, allowing us to take<a id="_idIndexMarker717"/> advantage of <span class="No-Break">transfer learning:</span></p>
+<ol>
+<li>Instantiate and train a pre-trained model. Instead of instantiating the model with <strong class="source-inline">yolov8n.yaml</strong>, we only need to instantiate it with <strong class="source-inline">yolov8n.pt</strong>; this will automatically download the pretrained weights and <span class="No-Break">load them:</span><pre class="source-code">
+# Load a pretrained YOLO model</pre><pre class="source-code">
+pretrained_model = YOLO('yolov8n.pt')</pre><pre class="source-code">
+# Train the model for 100 epochs</pre><pre class="source-code">
+pretrained_model.train(data='dataset.yaml',</pre><pre class="source-code">
+    epochs=100, name='pretrained_traffic')</pre></li>
+<li>Let’s now display the results of <span class="No-Break">this model:</span><pre class="source-code">
+plt.figure(figsize=(14, 10))</pre><pre class="source-code">
+plt.imshow(plt.imread(</pre><pre class="source-code">
+    'runs/detect/pretrained_traffic/results.png'))</pre><pre class="source-code">
+plt.axis('off')</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer303">
+<img alt="Figure 10.20 – A results summary of the YOLO model, with pretrained weights on the COCO dataset after 100 epochs" height="840" src="image/B19629_10_20.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.20 – A results summary of the YOLO model, with pretrained weights on the COCO dataset after 100 epochs</p>
+<p>Using <a id="_idIndexMarker718"/>transfer learning, all metrics have better performances – the mAP50 now climbs up to 0.8 against 0.7 previously, which is a <span class="No-Break">significant improvement.</span></p>
+<ol>
+<li value="3">We can now display the results in the same image as we did previously so that we can <span class="No-Break">compare them:</span><pre class="source-code">
+result = pretrained_model.predict(</pre><pre class="source-code">
+    'datasets/traffic/images/test/00 (100).png')</pre><pre class="source-code">
+plot_results_one_image(result)</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer304">
+<img alt="Figure 10.21 – An image from the test set and the predicted detections from the model with the pretrained weights" height="317" src="image/B19629_10_21.jpg" width="543"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.21 – An image from the test set and the predicted detections from the model with the pretrained weights</p>
+<p>This single image<a id="_idIndexMarker719"/> already shows several improvements – not only do the bounding boxes now perfectly fit the objects, but also no two objects are detected for a single number plate anymore. Thanks to transfer learning, we were able to efficiently help the <span class="No-Break">model generalize.</span></p>
+<h2 id="_idParaDest-274"><a id="_idTextAnchor274"/>There’s more…</h2>
+<p>In this recipe, we focused on the object detection task, but YOLO models can do much more <span class="No-Break">than that.</span></p>
+<p>Using the same library, it is also possible to train models for <span class="No-Break">the following:</span></p>
+<ul>
+<li><span class="No-Break">Classification</span></li>
+<li><span class="No-Break">Segmentation</span></li>
+<li><span class="No-Break">Pose</span></li>
+</ul>
+<p>All these models also come with pretrained weights so that transfer learning can be leveraged to get good performances, even with <span class="No-Break">small datasets.</span></p>
+<h2 id="_idParaDest-275"><a id="_idTextAnchor275"/>See also</h2>
+<ul>
+<li>A blog post explaining the mAP metric <span class="No-Break">computation: </span><a href="https://pyimagesearch.com/2022/05/02/mean-average-precision-map-using-the-coco-evaluator/"><span class="No-Break">https://pyimagesearch.com/2022/05/02/mean-average-precision-map-using-the-coco-evaluator/</span></a></li>
+<li>The COCO dataset website, which allows you to easily browse and display the <span class="No-Break">dataset: </span><a href="https://cocodataset.org/#home"><span class="No-Break">https://cocodataset.org/#home</span></a></li>
+<li>A link to the original YOLO <span class="No-Break">paper: </span><a href="https://arxiv.org/abs/1506.02640"><span class="No-Break">https://arxiv.org/abs/1506.02640</span></a></li>
+<li>A link to the ultralytics <span class="No-Break">documentation: </span><a href="https://docs.ultralytics.com/usage/python/"><span class="No-Break">https://docs.ultralytics.com/usage/python/</span></a></li>
+<li>The YOLOv8 GitHub <span class="No-Break">repo: </span><a href="https://github.com/ultralytics/ultralytics"><span class="No-Break">https://github.com/ultralytics/ultralytics</span></a></li>
+<li>A clear and concise post from Albumentations about the main bounding boxes <span class="No-Break">formats: </span><a href="https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/"><span class="No-Break">https://albumentations.ai/docs/getting_started/bounding_boxes_augmentation/</span></a></li>
+</ul>
+<h1 id="_idParaDest-276"><a id="_idTextAnchor276"/>Semantic segmentation using transfer learning</h1>
+<p>In this recipe, we<a id="_idIndexMarker720"/> will take advantage of<a id="_idIndexMarker721"/> transfer learning and the fine-tuning of pretrained models to undertake a specific task of computer vision – the semantic segmentation of <span class="No-Break">drone images.</span></p>
+<p>Object detection and instance segmentation are about detecting objects in an image – an object is delimited by a bounding box, as well as a polygon in the case of instance segmentation. Alternatively, <strong class="bold">semantic segmentation</strong> is about classifying all the pixels of an image in <span class="No-Break">a class.</span></p>
+<p>As we can see in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.22</em>, all pixels have a given color so that each one is attributed <span class="No-Break">a class.</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer305">
+<img alt="Figure 10.22 – An example of annotation of semantic segmentation. On the left is the original image, and on the right is the labeled image – there is one class of object per color, and each pixel is assigned to a given class" height="600" src="image/B19629_10_22.jpg" width="797"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.22 – An example of annotation of semantic segmentation. On the left is the original image, and on the right is the labeled image – there is one class of object per color, and each pixel is assigned to a given class</p>
+<p>Even if it may<a id="_idIndexMarker722"/> look similar to instance<a id="_idIndexMarker723"/> segmentation, we will see in this recipe that the concepts and methods used are quite different. We will review the possible metrics, losses, architectures, and encoders to solve a semantic <span class="No-Break">segmentation problem.</span></p>
+<h3>Metrics</h3>
+<p>Since <a id="_idIndexMarker724"/>semantic segmentation can be seen as a multiclass classification of each pixel, the most intuitive metric is the averaged accuracy score – the pixel accuracy averaged over the <span class="No-Break">whole image.</span></p>
+<p>Indeed, it can be used to sometimes yield solid results. However, most of the time in semantic segmentation, some classes are far less present than others – for example, in urban pictures, it is likely that there will be a lot of pixels of roads and buildings, and much less of persons or bikes. It is then likely to have good accuracy but not offer a model that accurately segments <span class="No-Break">underrepresented classes.</span></p>
+<p>Because of the<a id="_idIndexMarker725"/> limitation of the accuracy metric, many other metrics were proposed. One of the most used metrics in semantic segmentation is the IoU, already explained in the previous recipe. The IoU can be computed for each class independently and then averaged to compute a single metric (other averaging methods exist and are explored in more detail in <em class="italic">There’s more…</em> subsection). The IoU is sometimes referred <a id="_idIndexMarker726"/>to as the <span class="No-Break"><strong class="bold">Jaccard index</strong></span><span class="No-Break">.</span></p>
+<p>One more frequently used metric is <a id="_idIndexMarker727"/>the <strong class="bold">Dice coefficient</strong>. Given two sets of pixels, A (for example, the predictions for a class) and B (for example, the ground truth for a class), the Dice coefficient can be computed with the <span class="No-Break">following formula:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer306">
+<img alt="" height="106" src="image/Formula_10_017.jpg" width="323"/>
+</div>
+</div>
+<p>Here, |A| is simply the number of pixels in A, sometimes called the cardinality of A. The Dice coefficient is usually compared to the F1 score and is mathematically equivalent. Just like the IoU, the Dice coefficient can be averaged over all <span class="No-Break">the classes.</span></p>
+<p>Of course, other metrics exist and can be used, but they are outside the scope of <span class="No-Break">this recipe.</span></p>
+<h3>Losses</h3>
+<p>Several losses <a id="_idIndexMarker728"/>were developed over the years to improve the performance of semantic segmentation models. Again, if we just think of semantic segmentation as a classification task over many pixels, cross-entropy loss is an intuitive choice. However, just like the accuracy score, cross-entropy loss is not a good choice in the case of <span class="No-Break">imbalanced classes.</span></p>
+<p>In practice, it is common to simply use the Dice loss, which directly reuses the Dice coefficient. Dice loss is usually better in case of class imbalance, but it sometimes has bumpy <span class="No-Break">training losses.</span></p>
+<p>Many other losses were proposed, such as the focal loss and the Tversky loss, and all have strengths and improvements. A paper summarizing the most widely used losses is cited in the <em class="italic">See </em><span class="No-Break"><em class="italic">also</em></span><span class="No-Break"> subsection.</span></p>
+<h3>Architectures</h3>
+<p>Semantic segmentation<a id="_idIndexMarker729"/> is a very specific task, in the sense that unlike object detection, the input and output are both images. Indeed, for a given input image of size 480x640 (purposefully omitting the RGB channels), the output image is expected to have the exact same dimension of 480x640, since each pixel must have a <span class="No-Break">predicted class.</span></p>
+<p>More precisely, for an <em class="italic">N</em>-class semantic segmentation task, the output dimension would be 480x640x<em class="italic">N</em>, having for each pixel a set of <em class="italic">N</em> probabilities as the output of a <span class="No-Break">softmax function.</span></p>
+<p>The architectures to deal with such problems are usually based on the <span class="No-Break">encoder-decoder principle:</span></p>
+<ul>
+<li>An encoder computes describing features on the <span class="No-Break">input image</span></li>
+<li>A decoder decodes those encoded features in order to have the <span class="No-Break">expected outputs</span></li>
+</ul>
+<p>One of the most famous architectures for semantic segmentation is the U-Net architecture, shown in <span class="No-Break"><em class="italic">Figure 10</em></span><span class="No-Break"><em class="italic">.23</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer307">
+<img alt="Figure 10.23 – The U-Net architecture as presented in the original paper U-Net: Convolutional Networks for Biomedical Image Segmentation" height="1040" src="image/B19629_10_23.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.23 – The U-Net architecture as presented in the original paper U-Net: Convolutional Networks for Biomedical Image Segmentation</p>
+<p>As we can <a id="_idIndexMarker730"/>see in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.23</em>, the U-Net architecture can be broken down <span class="No-Break">as follows:</span></p>
+<ol>
+<li>The input image is at the top left of <span class="No-Break">the diagram.</span></li>
+<li>The input image is sequentially encoded, as we can move down to the bottom of the diagram with convolutional and <span class="No-Break">pooling layers.</span></li>
+<li>As we go back up to the top right of the diagram, the output of the encoder is decoded and concatenated with the previous output of the encoder with convolutional and <span class="No-Break">upscaling layers.</span></li>
+<li>Finally, an output of the same width and height as the input image <span class="No-Break">is predicted.</span></li>
+</ol>
+<p>One strength of U-Net is that it encodes and then decodes, and it also concatenates the intermediate encodings to have efficient predictions. It is now a standard architecture when it comes to <span class="No-Break">semantic segmentation.</span></p>
+<p>Other architectures exist, some of which<a id="_idIndexMarker731"/> are widely used too, such as <span class="No-Break">the following:</span></p>
+<ul>
+<li><strong class="bold">Feature Pyramid </strong><span class="No-Break"><strong class="bold">Networks</strong></span><span class="No-Break"> (</span><span class="No-Break"><strong class="bold">FPN</strong></span><span class="No-Break">)</span></li>
+<li>U-Net++, a proposed improvement <span class="No-Break">of U-Net</span></li>
+</ul>
+<h3>Encoders</h3>
+<p>In the <a id="_idIndexMarker732"/>original U-Net paper, as we can see in <span class="No-Break"><em class="italic">Figure 10</em></span><em class="italic">.23</em>, the encoder <a id="_idIndexMarker733"/>part is a specific one, made of convolution and pooling layers. In practice, however, it is common to use famous networks as encoders, pretrained on ImageNet or the COCO dataset, so that we can take advantage of <span class="No-Break">transfer learning.</span></p>
+<p>Depending on the needs and constraints, several<a id="_idIndexMarker734"/> encoders may be used, such as <span class="No-Break">the following:</span></p>
+<ul>
+<li>MobileNet – a light encoder, developed for fast inference on <span class="No-Break">the edge</span></li>
+<li><strong class="bold">Visual Geometry Group</strong> (<span class="No-Break"><strong class="bold">VGG</strong></span><span class="No-Break">) architectures</span></li>
+<li>ResNet and <span class="No-Break">ResNet-based architectures</span></li>
+<li><span class="No-Break">EfficientNet architectures</span></li>
+</ul>
+<h3>The SMP library</h3>
+<p>The <strong class="bold">Segmentation Models PyTorch</strong> (<strong class="bold">SMP</strong>) library is <a id="_idIndexMarker735"/>an open source library allowing us to<a id="_idIndexMarker736"/> do all we need, including <span class="No-Break">the following:</span></p>
+<ul>
+<li>Choosing architectures such as U-Net, FPN, <span class="No-Break">or U-Net++</span></li>
+<li>Choosing encoders such as VGG <span class="No-Break">or MobileNet</span></li>
+<li>Already implemented losses such as the Dice loss and the <span class="No-Break">focal loss</span></li>
+<li>Helper functions to compute metrics such as Dice and <span class="No-Break">the IoU</span></li>
+</ul>
+<p>We will use this library in this recipe to train semantic segmentation models on a <span class="No-Break">drone dataset.</span></p>
+<h2 id="_idParaDest-277"><a id="_idTextAnchor277"/>Getting started</h2>
+<p>For this recipe, we <a id="_idIndexMarker737"/>will need to download a <a id="_idIndexMarker738"/>dataset containing 400 images and associated labels. It can be downloaded with the Kaggle API using the <span class="No-Break">following commands:</span></p>
+<pre class="source-code">
+kaggle datasets download -d santurini/semantic-segmentation-dronedataset --unzip</pre>
+<p>We end up with three folders, containing several datasets. We will use the one in <strong class="source-inline">classes_dataset</strong>, a <span class="No-Break">five-classes dataset.</span></p>
+<p>We also need to install the required libraries with the <span class="No-Break">following command:</span></p>
+<pre class="source-code">
+pip install matplotlib pillow torch torchvision segmentation-models-pytorch</pre>
+<h2 id="_idParaDest-278"><a id="_idTextAnchor278"/>How to do it…</h2>
+<p>We will first train a U-Net model with a MobileNet encoder with transfer learning on our task, and then we will do the same with fine-tuning techniques by freezing layers and gradually decreasing the learning rate, in order to improve the performance of <span class="No-Break">the model.</span></p>
+<h3>Training with ImageNet weights and unfreezing all weights</h3>
+<p>We will first train<a id="_idIndexMarker739"/> a pretrained model on<a id="_idIndexMarker740"/> ImageNet in a regular fashion, with all the <span class="No-Break">weights trainable:</span></p>
+<ol>
+<li>We will first make the required imports for <span class="No-Break">this recipe:</span><pre class="source-code">
+from torch.utils.data import DataLoader, Dataset</pre><pre class="source-code">
+import torch</pre><pre class="source-code">
+import matplotlib.pyplot as plt</pre><pre class="source-code">
+import torchvision.transforms as transforms</pre><pre class="source-code">
+import numpy as np</pre><pre class="source-code">
+import tqdm</pre><pre class="source-code">
+from glob import glob</pre><pre class="source-code">
+from PIL import Image</pre><pre class="source-code">
+import segmentation_models_pytorch as smp</pre><pre class="source-code">
+import torch.nn as nn</pre><pre class="source-code">
+import torch.optim as optim</pre></li>
+<li>Implement <a id="_idIndexMarker741"/>the <span class="No-Break"><strong class="source-inline">DroneDataset</strong></span><span class="No-Break"> class:</span><pre class="source-code">
+class DroneDataset(Dataset):</pre><pre class="source-code">
+    def __init__(self, images_path: str,</pre><pre class="source-code">
+        masks_path: str, transform, train: bool,</pre><pre class="source-code">
+        num_classes: int = 5):</pre><pre class="source-code">
+            self.images_path = sorted(glob(</pre><pre class="source-code">
+                f'{images_path}/*.png'))</pre><pre class="source-code">
+            self.masks_path = sorted(glob(</pre><pre class="source-code">
+                f'{masks_path}/*.png'))</pre><pre class="source-code">
+            self.num_classes = num_classes</pre><pre class="source-code">
+            if train:</pre><pre class="source-code">
+                self.images_path = self.images_path[</pre><pre class="source-code">
+                   :int(.8*len(self.images_path))]</pre><pre class="source-code">
+                Self.masks_path = self.masks_path[</pre><pre class="source-code">
+                    :int(.8*len(self.masks_path))]</pre><pre class="source-code">
+            else:</pre><pre class="source-code">
+                self.images_path = self.images_path[</pre><pre class="source-code">
+                    int(.8*len(self.images_path)):]</pre><pre class="source-code">
+                self.masks_path = self.masks_path[</pre><pre class="source-code">
+                    int(.8*len(self.masks_path)):]</pre><pre class="source-code">
+            self.transform = transform</pre><pre class="source-code">
+    def __len__(self):</pre><pre class="source-code">
+        return len(self.images_path)</pre><pre class="source-code">
+    def __getitem__(self, idx):</pre><pre class="source-code">
+        image = np.array(Image.open(</pre><pre class="source-code">
+            self.images_path[idx]))</pre><pre class="source-code">
+        mask = np.array(Image.open(</pre><pre class="source-code">
+            self.masks_path[idx]))</pre><pre class="source-code">
+        return self.transform(image), torch.tensor(</pre><pre class="source-code">
+            mask, dtype=torch.long)</pre></li>
+</ol>
+<p>The <strong class="source-inline">__init__</strong> method just reads all the available image and mask files. It also takes a Boolean <a id="_idIndexMarker742"/>variable for the<a id="_idIndexMarker743"/> train versus test dataset, allowing you to select only the first 80% or the last 20% of <span class="No-Break">the files.</span></p>
+<p>The <strong class="source-inline">__getitem__</strong> method simply loads an image from a path and returns the transformed image as well as the mask <span class="No-Break">as tensors.</span></p>
+<ol>
+<li value="3">Instantiate the transformation to apply it to images – here, it’s simply a tensor conversion and <span class="No-Break">a normalization:</span><pre class="source-code">
+transform = transforms.Compose([</pre><pre class="source-code">
+    transforms.ToTensor(),</pre><pre class="source-code">
+    transforms.Normalize((0.5, 0.5, 0.5),</pre><pre class="source-code">
+        (0.5, 0.5, 0.5))</pre><pre class="source-code">
+])</pre></li>
+<li>Define a<a id="_idIndexMarker744"/> few constants – the batch size, learning rate, classes, <span class="No-Break">and device:</span><pre class="source-code">
+batch_size = 4</pre><pre class="source-code">
+learning_rate = 0.005</pre><pre class="source-code">
+classes = ['obstacles', 'water', 'soft-surfaces',</pre><pre class="source-code">
+    'moving-objects', 'landing-zones']</pre><pre class="source-code">
+device = torch.device(</pre><pre class="source-code">
+    'cuda' if torch.cuda.is_available() else 'cpu')</pre></li>
+<li>Instantiate<a id="_idIndexMarker745"/> the datasets and <span class="No-Break">data loaders:</span><pre class="source-code">
+train_dataset = DroneDataset(</pre><pre class="source-code">
+    'classes_dataset/classes_dataset/original_images/',</pre><pre class="source-code">
+    'classes_dataset/classes_dataset/label_images_semantic/',</pre><pre class="source-code">
+    transform,</pre><pre class="source-code">
+    train=True</pre><pre class="source-code">
+)</pre><pre class="source-code">
+train_dataloader = DataLoader(train_dataset,</pre><pre class="source-code">
+    batch_size=batch_size, shuffle=True)</pre><pre class="source-code">
+test_dataset = DroneDataset(</pre><pre class="source-code">
+    'classes_dataset/classes_dataset/original_images/',</pre><pre class="source-code">
+    'classes_dataset/classes_dataset/label_images_semantic/',</pre><pre class="source-code">
+    transform,</pre><pre class="source-code">
+    train=False</pre><pre class="source-code">
+)</pre><pre class="source-code">
+test_dataloader = DataLoader(test_dataset,</pre><pre class="source-code">
+    batch_size=batch_size, shuffle=True)</pre></li>
+<li>Display an<a id="_idIndexMarker746"/> image with an overlay<a id="_idIndexMarker747"/> of the <span class="No-Break">associated labels:</span><pre class="source-code">
+# Get a batch of images and labels</pre><pre class="source-code">
+images, labels = next(iter(train_dataloader))</pre><pre class="source-code">
+# Plot the image and overlay the labels</pre><pre class="source-code">
+plt.figure(figsize=(12, 10))</pre><pre class="source-code">
+plt.imshow(images[0].permute(</pre><pre class="source-code">
+    1, 2, 0).cpu().numpy() * 0.5 + 0.5)</pre><pre class="source-code">
+plt.imshow(labels[0], alpha = 0.8)</pre><pre class="source-code">
+plt.axis('off')</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer308">
+<img alt="Figure 10.24 – An image of the Drone dataset with its mask overlay, made of five colors for five classes" height="433" src="image/B19629_10_24.jpg" width="560"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.24 – An image of the Drone dataset with its mask overlay, made of five colors for five classes</p>
+<p>As we can see, there<a id="_idIndexMarker748"/> are <a id="_idIndexMarker749"/>several colors overlayed on <span class="No-Break">the image:</span></p>
+<ul>
+<li>Yellow <span class="No-Break">for </span><span class="No-Break"><strong class="source-inline">'landing-zones'</strong></span></li>
+<li>Dark green <span class="No-Break">for </span><span class="No-Break"><strong class="source-inline">'soft-surfaces'</strong></span></li>
+<li>Blue <span class="No-Break">for </span><span class="No-Break"><strong class="source-inline">'water'</strong></span></li>
+<li>Purple <span class="No-Break">for </span><span class="No-Break"><strong class="source-inline">'obstacles'</strong></span></li>
+<li>Light green <span class="No-Break">for </span><span class="No-Break"><strong class="source-inline">'moving-objects'</strong></span></li>
+</ul>
+<ol>
+<li value="7">Instantiate the model – a U-Net architecture, with EfficientNet as an encoder (more specifically, the <strong class="source-inline">'efficientnet-b5'</strong> encoder), pretrained <span class="No-Break">on </span><span class="No-Break"><strong class="source-inline">imagenet</strong></span><span class="No-Break">:</span><pre class="source-code">
+model = smp.Unet(</pre><pre class="source-code">
+    encoder_name='efficientnet-b5',</pre><pre class="source-code">
+    encoder_weights='imagenet',</pre><pre class="source-code">
+    in_channels=3,</pre><pre class="source-code">
+    classes=len(classes),</pre><pre class="source-code">
+    )</pre></li>
+<li>Instantiate the Adam optimizer and the loss as the <span class="No-Break">Dice loss:</span><pre class="source-code">
+optimizer = optim.Adam(model.parameters(),</pre><pre class="source-code">
+    lr=learning_rate)</pre><pre class="source-code">
+criterion = smp.losses.DiceLoss(</pre><pre class="source-code">
+    smp.losses.MULTICLASS_MODE, from_logits=True)</pre></li>
+<li>Implement <a id="_idIndexMarker750"/>a helper function, <strong class="source-inline">compute_metrics</strong>, that <a id="_idIndexMarker751"/>will help compute the IoU and F1-score (equivalent to the <span class="No-Break">Dice coefficient):</span><pre class="source-code">
+<strong class="source-inline">def compute_metrics(stats):</strong></pre><pre class="source-code">
+<strong class="source-inline">    tp = torch.cat([x["tp"] for x in stats])</strong></pre><pre class="source-code">
+<strong class="source-inline">    fp = torch.cat([x["fp"] for x in stats])</strong></pre><pre class="source-code">
+<strong class="source-inline">    fn = torch.cat([x["fn"] for x in stats])</strong></pre><pre class="source-code">
+<strong class="source-inline">    tn = torch.cat([x["tn"] for x in stats])</strong></pre><pre class="source-code">
+<strong class="source-inline">    iou = smp.metrics.iou_score(tp, fp, fn, tn,</strong></pre><pre class="source-code">
+<strong class="source-inline">        reduction='micro')</strong></pre><pre class="source-code">
+<strong class="source-inline">    f1_score = smp.metrics.f1_score(tp, fp, fn, tn,</strong></pre><pre class="source-code">
+<strong class="source-inline">        reduction='micro')</strong></pre><pre class="source-code">
+<strong class="source-inline">    return iou, f1_score</strong></pre></li>
+<li>Implement a helper function, <strong class="source-inline">epoch_step_unet</strong>, that will compute forward propagation, backpropagation if needed, the loss function, <span class="No-Break">and metrics:</span><pre class="source-code">
+def epoch_step_unet(model, dataloader, device,</pre><pre class="source-code">
+    num_classes, training_set: bool):</pre><pre class="source-code">
+        stats = []</pre><pre class="source-code">
+        for i, data in tqdm.tqdm(enumerate(</pre><pre class="source-code">
+            dataloader, 0)):</pre><pre class="source-code">
+            inputs, labels = data</pre><pre class="source-code">
+            inputs = inputs.to(device)</pre><pre class="source-code">
+            labels = labels.to(device)</pre><pre class="source-code">
+            if training_set:</pre><pre class="source-code">
+                optimizer.zero_grad()</pre><pre class="source-code">
+                outputs = model(inputs)</pre><pre class="source-code">
+                loss = criterion(outputs, labels)</pre><pre class="source-code">
+            if training_set:</pre><pre class="source-code">
+                loss.backward()</pre><pre class="source-code">
+                optimizer.step()</pre><pre class="source-code">
+        tp, fp, fn, tn = smp.metrics.get_stats(</pre><pre class="source-code">
+            torch.argmax(outputs, dim=1), labels,</pre><pre class="source-code">
+            mode='multiclass',</pre><pre class="source-code">
+            num_classes=num_classes)</pre><pre class="source-code">
+        stats.append({'tp': tp, 'fp': fp, 'fn':fn,</pre><pre class="source-code">
+            'tn': tn, 'loss': loss.item()})</pre><pre class="source-code">
+    return stats</pre></li>
+<li>Implement <a id="_idIndexMarker752"/>a <strong class="source-inline">train_unet</strong> function, allowing <a id="_idIndexMarker753"/>us to train <span class="No-Break">the model:</span><pre class="source-code">
+def train_unet(model, train_dataloader,</pre><pre class="source-code">
+    test_dataloader, criterion, device,</pre><pre class="source-code">
+    epochs: int = 10, num_classes: int = 5,</pre><pre class="source-code">
+    scheduler=None):</pre><pre class="source-code">
+    train_metrics = {'loss': [], 'iou': [], 'f1': [],</pre><pre class="source-code">
+        'lr': []}</pre><pre class="source-code">
+    test_metrics = {'loss': [], 'iou': [], 'f1': []}</pre><pre class="source-code">
+    model = model.to(device)</pre><pre class="source-code">
+    for epoch in range(epochs):</pre><pre class="source-code">
+  # loop over the dataset multiple times</pre><pre class="source-code">
+        # Train</pre><pre class="source-code">
+        model.train()</pre><pre class="source-code">
+        #running_loss = 0.0</pre><pre class="source-code">
+        train_stats = epoch_step_unet(model,</pre><pre class="source-code">
+            train_dataloader, device, num_classes,</pre><pre class="source-code">
+            training_set=True)</pre><pre class="source-code">
+        # Eval</pre><pre class="source-code">
+        model.eval()</pre><pre class="source-code">
+        with torch.no_grad():</pre><pre class="source-code">
+            test_stats = epoch_step_unet(model,</pre><pre class="source-code">
+                test_dataloader, device, num_classes,</pre><pre class="source-code">
+                training_set=False)</pre><pre class="source-code">
+        if scheduler is not None:</pre><pre class="source-code">
+            train_metrics['lr'].append(</pre><pre class="source-code">
+                scheduler.get_last_lr())</pre><pre class="source-code">
+            scheduler.step()</pre><pre class="source-code">
+        train_metrics['loss'].append(sum(</pre><pre class="source-code">
+            [x['loss'] for x in train_stats]) / len(</pre><pre class="source-code">
+                train_dataloader))</pre><pre class="source-code">
+        test_metrics['loss'].append(sum(</pre><pre class="source-code">
+            [x['loss'] for x in test_stats]) / len(</pre><pre class="source-code">
+                test_dataloader))</pre><pre class="source-code">
+        iou, f1 = compute_metrics(train_stats)</pre><pre class="source-code">
+        train_metrics['iou'].append(iou)</pre><pre class="source-code">
+        train_metrics['f1'].append(f1)</pre><pre class="source-code">
+        iou, f1 = compute_metrics(test_stats)</pre><pre class="source-code">
+        test_metrics['iou'].append(iou)</pre><pre class="source-code">
+        test_metrics['f1'].append(f1)</pre><pre class="source-code">
+        print(f"[{epoch + 1}] train loss: {train_metrics['loss'][-1]:.3f} IoU: {train_metrics['iou'][-1]:.3f} | \</pre><pre class="source-code">
+                test loss: {</pre><pre class="source-code">
+                    test_metrics['loss'][-1]:.3f} IoU:</pre><pre class="source-code">
+                    {test_metrics['iou'][-1]:.3f}")</pre><pre class="source-code">
+    return train_metrics, test_metrics</pre></li>
+</ol>
+<p>The <strong class="source-inline">train_unet</strong> function does <span class="No-Break">the following:</span></p>
+<ul>
+<li>Trains the model on the train set, and compute the evaluation metrics (the IoU <span class="No-Break">and F1-score)</span></li>
+<li>Evaluates the model on the test set with the <span class="No-Break">evaluation metrics</span></li>
+<li>If a learning rate scheduler is provided, applies a step (see the <em class="italic">There’s more</em> subsection for more <span class="No-Break">about this)</span></li>
+<li>Displays in the standard output the train and test losses <span class="No-Break">and IoU</span></li>
+<li>Returns the train and <span class="No-Break">test metrics</span></li>
+</ul>
+<ol>
+<li value="12">Train<a id="_idIndexMarker754"/> the<a id="_idIndexMarker755"/> model for 50 epochs and store the output train and <span class="No-Break">test metrics:</span><pre class="source-code">
+train_metrics, test_metrics = train_unet(model,</pre><pre class="source-code">
+    train_dataloader, test_dataloader, criterion,</pre><pre class="source-code">
+    device, epochs=50, num_classes=len(classes))</pre></li>
+<li>Display the metrics for the train and <span class="No-Break">test sets:</span><pre class="source-code">
+plt.figure(figsize=(10, 10))</pre><pre class="source-code">
+plt.subplot(3, 1, 1)</pre><pre class="source-code">
+plt.plot(train_metrics['loss'], label='train')</pre><pre class="source-code">
+plt.plot(test_metrics['loss'], label='test')</pre><pre class="source-code">
+plt.ylabel('Dice loss')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.subplot(3, 1, 2)</pre><pre class="source-code">
+plt.plot(train_metrics['iou'], label='train')</pre><pre class="source-code">
+plt.plot(test_metrics['iou'], label='test')</pre><pre class="source-code">
+plt.ylabel('IoU')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.subplot(3, 1, 3)</pre><pre class="source-code">
+plt.plot(train_metrics['f1'], label='train')</pre><pre class="source-code">
+plt.plot(test_metrics['f1'], label='test')</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('F1-score')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>Here is <a id="_idIndexMarker756"/><span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer309">
+<img alt="Figure 10.25 – The Dice loss (top), IoU (middle), and F1-score (bottom) as a function of the epoch for the train and test sets" height="824" src="image/B19629_10_25.jpg" width="839"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.25 – The Dice loss (top), IoU (middle), and F1-score (bottom) as a function of the epoch for the train and test sets</p>
+<p>As we<a id="_idIndexMarker757"/> can see, the IoU goes up to 87% on the test set and seems to reach a plateau after about 30 epochs. Also, the test set metrics are bumpy and unstable, which can be because of a learning rate that is too high, as well as a model <span class="No-Break">too large.</span></p>
+<p>Let’s now try to do the same with the freezing layer and gradually the decrease the <span class="No-Break">learning rate.</span></p>
+<h3>Fine-tuning a pretrained model by freezing layers</h3>
+<p>We <a id="_idIndexMarker758"/>will now train a pretrained model in two stages – first, we will freeze most of the layers of the model for 20 epochs, then only unfreeze all the layers, and train 30 more epochs to fine-tune <span class="No-Break">the model:</span></p>
+<ol>
+<li>First, let’s define two helper functions to freeze and unfreeze layers. The <strong class="source-inline">freeze_encoder</strong> function will freeze all the layers of the encoder up to a given block level, provided by the <strong class="source-inline">max_level</strong> argument. If no <strong class="source-inline">max_level</strong> is given, all weights of the encoder will <span class="No-Break">be frozen:</span><pre class="source-code">
+def freeze_encoder(model, max_level: int = None):</pre><pre class="source-code">
+    for I, child in enumerate(model.encoder.children()):</pre><pre class="source-code">
+        if max_level is not None and i &gt;= max_level:</pre><pre class="source-code">
+                return</pre><pre class="source-code">
+        for param in child.parameters():</pre><pre class="source-code">
+            param.requires_grad = False</pre><pre class="source-code">
+    return</pre><pre class="source-code">
+def unfreeze(model):</pre><pre class="source-code">
+    for child in model.children():</pre><pre class="source-code">
+        for param in child.parameters():</pre><pre class="source-code">
+            param.requires_grad = True</pre><pre class="source-code">
+    return</pre></li>
+<li>Instantiate a new model, which is the same as before, and print the number of <span class="No-Break">trainable parameters:</span><pre class="source-code">
+model = smp.Unet(</pre><pre class="source-code">
+    encoder_name='efficientnet-b5',</pre><pre class="source-code">
+    encoder_weights='imagenet',</pre><pre class="source-code">
+    in_channels=3,</pre><pre class="source-code">
+    classes=len(classes),</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+print''Total number of trainable parameters'', sum(p.numel() for p in model.parameters() if p.requires_grad))</pre></li>
+</ol>
+<p>The code output is <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+<strong class="bold">Total number of trainable parameters: 31216581</strong></pre>
+<p>As we can see, this model is made of ~31.2 <span class="No-Break">million parameters.</span></p>
+<ol>
+<li value="3">Le’’s now <a id="_idIndexMarker759"/>freeze part of the encoder – the first three blocks, which are basically most of the weights of the encoder, as we will see – and print the number of trainable parameters <span class="No-Break">left over:</span><pre class="source-code">
+# Freeze the of the encoder</pre><pre class="source-code">
+freeze_encoder(model, 3)</pre><pre class="source-code">
+print('Total number of trainable parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad))</pre></li>
+</ol>
+<p>The output is <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+<strong class="bold">Total number of trainable parameters: 3928469</strong></pre>
+<p>We now have only ~3.9 million trainable parameters left. Almost 27.3 million parameters from the encoder are now frozen, out of ~28 million parameters in the encoder – the remaining parameters are from the decoder. This means we will mostly train the decoder first and use the pretrained encoder as a <span class="No-Break">feature extractor.</span></p>
+<ol>
+<li value="4">Instantiate a <a id="_idIndexMarker760"/>new optimizer for training, as well as a scheduler. We will use an <strong class="source-inline">ExponentialLR</strong> scheduler here, with a gamma value of <strong class="source-inline">0.95</strong> – this means that at each epoch, the learning rate will be multiplied <span class="No-Break">by 0.95:</span><pre class="source-code">
+optimizer = optim.Adam(model.parameters(),</pre><pre class="source-code">
+    lr=learning_rate)</pre><pre class="source-code">
+scheduler = optim.lr_scheduler.ExponentialLR(</pre><pre class="source-code">
+    optimizer, gamma=0.95)</pre></li>
+<li>Train the model with frozen layers on <span class="No-Break">20 epochs:</span><pre class="source-code">
+train_metrics, test_metrics = train_unet(model,</pre><pre class="source-code">
+    train_dataloader, test_dataloader, criterion,</pre><pre class="source-code">
+    device, epochs=20, num_classes=len(classes),</pre><pre class="source-code">
+    scheduler=scheduler)</pre></li>
+</ol>
+<p>As we can see, after 20 epochs only, the IoU on the test set already reaches 88%, slightly higher than without freezing and without any learning <span class="No-Break">rate decay.</span></p>
+<ol>
+<li value="6">Now that the decoder and last layers of the encoder are warmed up against this dataset, let’s unfreeze all the parameters before training for <span class="No-Break">more epochs:</span><pre class="source-code">
+unfreeze(model)</pre><pre class="source-code">
+print('Total number of trainable parameters:', sum(p.numel() for p in model.parameters() if p.requires_grad))</pre></li>
+</ol>
+<p>The code output is <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+<strong class="bold">Total number of trainable parameters: 31216581</strong></pre>
+<p>As we can see, the trainable parameters are now back at 31.2 million, meaning that all the parameters <span class="No-Break">are trainable.</span></p>
+<ol>
+<li value="7">Train the model on 30 <span class="No-Break">more epochs:</span><pre class="source-code">
+train_metrics_unfreeze, test_metrics_unfreeze = train_unet(</pre><pre class="source-code">
+model, train_dataloader, test_dataloader,</pre><pre class="source-code">
+    criterion, device, epochs=30,</pre><pre class="source-code">
+    num_classes=len(classes), scheduler=scheduler)</pre></li>
+<li>Plot the<a id="_idIndexMarker761"/> results by concatenating the results with and <span class="No-Break">without freezing:</span><pre class="source-code">
+plt.figure(figsize=(10, 10))</pre><pre class="source-code">
+plt.subplot(3, 1, 1)</pre><pre class="source-code">
+plt.plot(train_metrics['loss'] + train_metrics_unfreeze['loss'], label='train')</pre><pre class="source-code">
+plt.plot(test_metrics['loss'] + test_metrics_unfreeze['loss'], label='test')</pre><pre class="source-code">
+plt.ylabel('Dice loss')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.subplot(3, 1, 2)</pre><pre class="source-code">
+plt.plot(train_metrics['iou'] + train_metrics_unfreeze['iou'], label='train')</pre><pre class="source-code">
+plt.plot(test_metrics['iou'] + test_metrics_unfreeze['iou'], label='test')</pre><pre class="source-code">
+plt.ylabel('IoU')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.subplot(3, 1, 3)</pre><pre class="source-code">
+plt.plot(train_metrics['f1'] + train_metrics_unfreeze['f1'], label='train')</pre><pre class="source-code">
+plt.plot(test_metrics['f1'] + test_metrics_unfreeze['f1'], label='test')</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('F1-score')</pre><pre class="source-code">
+plt.legend()</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>Here<a id="_idIndexMarker762"/> is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer310">
+<img alt="Figure 10.26 – The Dice loss (top), IoU (middle), and F1-score (bottom) as a function of the epoch for train and test sets with fine-tuning – after a drop when unfreezing the weights, the metrics improve and are stable again" height="824" src="image/B19629_10_26.jpg" width="848"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.26 – The Dice loss (top), IoU (middle), and F1-score (bottom) as a function of the epoch for train and test sets with fine-tuning – after a drop when unfreezing the weights, the metrics improve and are stable again</p>
+<p>We can see that as soon as we unfreeze all the parameters at epoch 20, the curves get a bit bumpy. However, after 10 more epochs at around epoch 30, the metrics become <span class="No-Break">stable again.</span></p>
+<p>After 50 epochs in total, the IoU reaches almost 90%, against only 87% earlier without the fine-tuning techniques (freezing and the learning <span class="No-Break">rate decay).</span></p>
+<ol>
+<li value="9">Out of curiosity, we can also plot the learning rate as a function of the epoch, to look at <a id="_idIndexMarker763"/><span class="No-Break">the decrease:</span><pre class="source-code">
+plt.plot(train_metrics['lr'] + train_metrics_unfreeze['lr'])</pre><pre class="source-code">
+plt.xlabel('epoch')</pre><pre class="source-code">
+plt.ylabel('Learning rate')</pre><pre class="source-code">
+plt.show()</pre></li>
+</ol>
+<p>Here is <span class="No-Break">the result:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer311">
+<img alt="Figure 10.27 – The learning rate value as a function of the epoch for a torch ExponentialLR class, with a gamma value of 0.95" height="410" src="image/B19629_10_27.jpg" width="554"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 10.27 – The learning rate value as a function of the epoch for a torch ExponentialLR class, with a gamma value of 0.95</p>
+<p>As expected, after 50 epochs, the initial learning rate of 0.05 is divided by almost 13, down to roughly 0.0003, <span class="No-Break">since <img alt="" height="26" src="image/Formula_10_018.png" width="129"/>.</span></p>
+<h2 id="_idParaDest-279"><a id="_idTextAnchor279"/>There’s more…</h2>
+<p>There are several ways to compute the metrics such as the IoU or Dice coefficient in semantic segmentation. In this recipe, as implemented in the <strong class="source-inline">compute_metrics</strong> function, the <strong class="source-inline">'micro'</strong> option was chosen with the <span class="No-Break">following code:</span></p>
+<pre class="source-code">
+smp.metrics.iou_score(tp, fp, fn, tn, reduction='micro')</pre>
+<p>First, we can define the TP, FP, FN, and TN for each pixel just like in any other classification task. The metrics are then computed based on <span class="No-Break">those values.</span></p>
+<p>Based on that, the most common computation methods are available and well summarized in the <span class="No-Break">SMP </span><span class="No-Break"><a id="_idIndexMarker764"/></span><span class="No-Break">documentation:</span></p>
+<ul>
+<li><strong class="source-inline">'micro'</strong>: Sum the TP, FP, FN, and TN pixels over all images and classes and then only compute <span class="No-Break">the score.</span></li>
+<li><strong class="source-inline">'macro'</strong>: Sum the TP, FP, FN, and TN pixels over all images for each label, compute the score for each label, and then average over the labels. If there is an imbalanced class (which is usually the case in semantic segmentation), this method will not take it into account and should <span class="No-Break">be avoided.</span></li>
+<li><strong class="source-inline">'weighted'</strong>: The same as <strong class="source-inline">'macro'</strong> but with a weighted average over <span class="No-Break">the labels.</span></li>
+<li><strong class="source-inline">'micro-imagewise'</strong>, <strong class="source-inline">'macro-imagewise'</strong>, and <strong class="source-inline">'weighted-imagewise'</strong>: The same as <strong class="source-inline">'micro'</strong>, <strong class="source-inline">'macro'</strong>, and <strong class="source-inline">'weighted'</strong>, respectively, but they compute the score for each image independently before averaging over the images. This can be useful when images in a dataset do not have the same dimensions, <span class="No-Break">for example.</span></li>
+</ul>
+<p>Most of the time, a <strong class="source-inline">'micro'</strong> or <strong class="source-inline">'weighted'</strong> approach works fine, but it’s always useful to understand the differences and to be able to play <span class="No-Break">with them.</span></p>
+<h2 id="_idParaDest-280"><a id="_idTextAnchor280"/>See also</h2>
+<ul>
+<li>A paper proposing a review of several losses used in semantic <span class="No-Break">segmentation: </span><a href="https://arxiv.org/pdf/2006.14822.pdf"><span class="No-Break">https://arxiv.org/pdf/2006.14822.pdf</span></a></li>
+<li>The paper proposing the U-Net <span class="No-Break">architecture: </span><a href="https://arxiv.org/pdf/1505.04597.pdf"><span class="No-Break">https://arxiv.org/pdf/1505.04597.pdf</span></a></li>
+<li>The GitHub repo of the SMP <span class="No-Break">library: </span><a href="https://github.com/qubvel/segmentation_models.pytorch"><span class="No-Break">https://github.com/qubvel/segmentation_models.pytorch</span></a></li>
+<li>A link to the Kaggle <span class="No-Break">dataset: </span><a href="https://www.kaggle.com/datasets/santurini/semantic-segmentation-drone-dataset"><span class="No-Break">https://www.kaggle.com/datasets/santurini/semantic-segmentation-drone-dataset</span></a></li>
+</ul>
+</div>
+</div></body></html>

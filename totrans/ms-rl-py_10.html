@@ -1,0 +1,370 @@
+<html><head></head><body>
+		<div id="_idContainer1363">
+			<h1 id="_idParaDest-176"><em class="italic"><a id="_idTextAnchor177"/>Chapter 8</em>: Model-Based Methods</h1>
+			<p>All of the deep <strong class="bold">reinforcement learning</strong> (<strong class="bold">RL</strong>) algorithms we have covered so far were <strong class="bold">model-free</strong>, which means they did not assume any knowledge about the transition dynamics of the environment but learned from sampled experiences. In fact, this was a quite deliberate departure from the dynamic programming methods to save us from requiring a model of the environment. In this chapter, we swing the pendulum back a little bit and discuss a class of methods that rely on a model, called <strong class="bold">model-based methods</strong>. These methods can lead to improved sample efficiency by several orders of magnitude in some problems, making it a very appealing approach, especially when collecting experience is as costly as in robotics. Having said this, we still will not assume that we have such a model readily available, but we will discuss how to learn one. Once we have a model, it can be used for decision-time planning and improving the performance of model-free methods.</p>
+			<p>This important chapter includes the following topics:</p>
+			<ul>
+				<li>Introducing model-based methods</li>
+				<li>Planning through a model</li>
+				<li>Learning a world model</li>
+				<li>Unifying model-based and model-free approaches</li>
+			</ul>
+			<p>Let's get started.</p>
+			<h1 id="_idParaDest-177"><a id="_idTextAnchor178"/>Technical requirements</h1>
+			<p>The code for this chapter can be found at the book's GitHub repository, at <a href="https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python">https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python</a>.</p>
+			<h1 id="_idParaDest-178"><a id="_idTextAnchor179"/>Introducing model-based methods</h1>
+			<p>Imagine a scene in which <a id="_idIndexMarker817"/>you are traveling in a car on an undivided road and you face the following situation. Suddenly, another car in the opposing direction approaches you fast in your lane as it is passing a truck. Chances are your mind automatically simulates different scenarios about how the next scenes might unfold: </p>
+			<ul>
+				<li>The other car might go back to its lane right away or drive even faster to pass the truck as soon as possible. </li>
+				<li>Another scenario could be the car steering toward your right, but this is an unlikely scenario (in a right-hand traffic flow). </li>
+			</ul>
+			<p>The driver (possibly you) then evaluates the likelihood and risk of each scenario, together with their possible actions too, and makes the decision to safely continue the journey. </p>
+			<p>In a less sensational example, consider a game of chess. Before making a move, a player "simulates" many scenarios in their head and assesses the possible outcomes of several moves down the road. In fact, being able to accurately evaluate more possible scenarios after a move would increase the chances of winning. </p>
+			<p>In both of these examples, the decision-making process involves picturing multiple "imaginary" rollouts of the environment, evaluating the alternatives, and taking an appropriate action accordingly. But how do we do that? We are able to do so because we have a mental model of the world that we live in. In the car driving example, drivers have an idea about possible traffic behaviors, how other drivers might move, and how physics works. In the chess example, players know the rules of the game, which moves are good, and possibly what strategies a particular player might use. This "model-based" thinking is almost the natural way to plan our actions, and different than a model-free approach that would not leverage such priors on how the world works. </p>
+			<p>Model-based methods, since they leverage more information and structure about the environment, could be more sample-efficient than model-free methods. This comes especially handy in applications where sample collection is expensive, such as robotics. So, this is such an important topic that we cover in this chapter. We will focus on two main aspects of model-based approaches: </p>
+			<ul>
+				<li>How a model of the environment (or <em class="italic">world model</em>, as we will refer to it) can be used in the optimal planning of actions</li>
+				<li>How such a model can be learned when one is not available</li>
+			</ul>
+			<p>In the next section, we start with<a id="_idIndexMarker818"/> the former and introduce some of the methods to use for planning when a model is available. Once we are convinced that learning a model of the environment is worth it and we can indeed obtain good actions with the optimal planning methods, we will discuss how such models can be learned.</p>
+			<h1 id="_idParaDest-179"><a id="_idTextAnchor180"/>Planning through a model</h1>
+			<p>In this section, we first <a id="_idIndexMarker819"/>define what it means to plan through a model in the sense of optimal control. Then, we will cover several planning methods, including the cross-entropy method and covariance matrix adaptation evolution strategy. You will also see how these methods can be parallelized using the Ray library. Now, let's get started with the problem definition.</p>
+			<h2 id="_idParaDest-180"><a id="_idTextAnchor181"/>Defining the optimal control problem</h2>
+			<p>In RL, or in control<a id="_idIndexMarker820"/> problems in general, we care about the actions an agent takes because there is a task that we want to be achieved. We express this task as a mathematical objective so that we can use mathematical tools to figure out the actions toward the task – and in RL, this is the expected sum of cumulative discounted rewards. You of course know all this, as this is what we have been doing all along, but this is a good time to reiterate it: We are essentially solving an optimization problem here. </p>
+			<p>Now, let's assume that we are trying to figure out the best actions for a problem with a horizon of <img src="image/Formula_08_001.png" alt=""/> time steps. As examples, you can think of the Atari games, Cartpole, a self-driving car, a robot in a grid world, and more. We can define the optimization problem as follows (using the notation in <em class="italic">Levine, 2019</em>):</p>
+			<div>
+				<div id="_idContainer1239" class="IMG---Figure">
+					<img src="image/Formula_08_002.jpg" alt=""/>
+				</div>
+			</div>
+			<p>All this says is how to find a sequence of actions, where <img src="image/Formula_08_003.png" alt=""/> corresponds to the action at time step <img src="image/Formula_08_004.png" alt=""/>, that maximizes the score over a <img src="image/Formula_08_005.png" alt=""/> steps. Note here that <img src="image/Formula_08_006.png" alt=""/> could be multi-dimensional (say <img src="image/Formula_08_007.png" alt=""/>) if there are multiple actions taken in each step (steering and acceleration/brake decisions in a car). Let's also denote a sequence of <img src="image/Formula_08_008.png" alt=""/> actions using <img src="image/Formula_08_009.png" alt=""/>. So, our concern is to find such an <img src="image/Formula_08_010.png" alt=""/> that maximizes <img src="image/Formula_08_011.png" alt=""/>.</p>
+			<p>At this point, there are <a id="_idIndexMarker821"/>different optimization and control styles we may pick. Let's look into those next.</p>
+			<h3>Derivative-based and derivative-free optimization</h3>
+			<p>When we see an<a id="_idIndexMarker822"/> optimization problem, a natural reaction for<a id="_idIndexMarker823"/> solving it could be "let's take the first derivative, set it equal to zero," and so on. But don't forget that, most of the time, we don't have <img src="image/Formula_08_012.png" alt=""/> as a closed-form mathematical expression that we can take the derivative of. Take playing an Atari game, for example. We can evaluate what <img src="image/Formula_08_013.png" alt=""/> is for a given <img src="image/Formula_08_014.png" alt=""/> by just playing it, but we would not be able to calculate any derivatives. This matters when it comes to the type of optimization approach we can use. In particular, note the following types:</p>
+			<ul>
+				<li><strong class="bold">Derivative-based methods</strong> require taking the <a id="_idIndexMarker824"/>derivative of the objective function to optimize it.</li>
+				<li><strong class="bold">Derivative-free methods</strong> rely on<a id="_idIndexMarker825"/> systematically and repeatedly evaluating the objective function in search of the best inputs.</li>
+			</ul>
+			<p>Therefore, we will rely on<a id="_idIndexMarker826"/> the latter here.</p>
+			<p>This was about what kind of optimization procedure we will use, which, at the end, gives us some <img src="image/Formula_08_015.png" alt=""/>. Another important design choice is about how to execute it, which we turn to next.</p>
+			<h3>Open-loop, closed-loop, and model predictive control </h3>
+			<p>Let's start explaining<a id="_idIndexMarker827"/> different types of control systems with an example: Imagine that we have an agent that is a soccer player in a forward position. For the <a id="_idIndexMarker828"/>sake of simplicity, let's assume that the only goal of the agent is to score a goal when it receives the ball. At the first moment of possessing the ball, the agent can do either of the following:</p>
+			<ul>
+				<li>Come up with a plan to score, close their eyes and ears (that is, any means of perception), and then execute the plan until the end (either scoring or losing the ball).</li>
+				<li>Or, the agent can keep their means of perception active and modify the plan with the latest information available from the environment as it happens.</li>
+			</ul>
+			<p>The former would be an example of <strong class="bold">open-loop control</strong><strong class="bold"><a id="_idIndexMarker829"/></strong>, where no feedback from the environment is used while taking the next action, whereas the latter would be an example of <strong class="bold">closed-loop control</strong>, which uses environmental feedback. In general, in RL, we<a id="_idIndexMarker830"/> have closed-loop control.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Using closed-loop control has the advantage of taking the latest information into account when planning. This is <a id="_idIndexMarker831"/>especially advantageous if the environment and/or controller dynamics are not deterministic, so a perfect prediction is not possible. </p>
+			<p>Now, the agent can use feedback, the most recent observation from the environment at time <img src="image/Formula_08_016.png" alt=""/>, in different ways. Specifically, the agent can do the following:</p>
+			<ul>
+				<li>Choose the action from a policy <img src="image/Formula_05_061.png" alt=""/> given <img src="image/Formula_08_018.png" alt=""/>, that is, <img src="image/Formula_08_019.png" alt=""/>.</li>
+				<li>Resolve the optimization problem to find <img src="image/Formula_08_020.png" alt=""/> for the subsequent <img src="image/Formula_08_021.png" alt=""/> time steps.</li>
+			</ul>
+			<p>The<a id="_idIndexMarker832"/> latter is called <strong class="bold">model predictive control </strong>(<strong class="bold">MPC</strong>). To reiterate, in MPC, the agent repeats the<a id="_idIndexMarker833"/> following loop:</p>
+			<ol>
+				<li>Come up with an optimal control plan for the next <img src="image/Formula_08_022.png" alt=""/> steps.</li>
+				<li>Execute the plan for the first step.</li>
+				<li>Proceed to the next step.</li>
+			</ol>
+			<p>Note that the way we posed the optimization problem so far does not give us a policy <img src="image/Formula_05_061.png" alt=""/> yet. Instead, we will search for a good <img src="image/Formula_08_024.png" alt=""/> using derivative-free optimization methods. </p>
+			<p>Next, let's discuss a very simple derivative-free method: random shooting.</p>
+			<h2 id="_idParaDest-181"><a id="_idTextAnchor182"/>Random shooting</h2>
+			<p>The random<a id="_idIndexMarker834"/> shooting procedure simply involves the following steps:</p>
+			<ol>
+				<li value="1">Generating a bunch of candidate action sequences uniformly at random, say <img src="image/Formula_08_025.png" alt=""/> of them.</li>
+				<li>Evaluate each of <img src="image/Formula_08_026.png" alt=""/>.</li>
+				<li>Take the action <img src="image/Formula_08_027.png" alt=""/> that gives the best <img src="image/Formula_08_028.png" alt=""/>, that is, <img src="image/Formula_08_029.png" alt=""/>.</li>
+			</ol>
+			<p>As you can tell, this is not a particularly sophisticated optimization procedure. Yet, it can be used as a baseline to compare more sophisticated methods against.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Random search-based methods could be more effective than you might think. <em class="italic">Mania et al.</em> outline such a method to optimize policy parameters in their paper "<em class="italic">Simple random search provides a competitive approach to RL</em>," which, as is apparent from its name, yields some surprisingly good results (<em class="italic">Mania et al., 2018</em>).</p>
+			<p>To make our discussion more concrete, let's introduce a simple example. But before doing so, we need to set up the Python virtual environment that we will use in this chapter.</p>
+			<h3>Setting up the Python virtual environment</h3>
+			<p>You can install the packages we will<a id="_idIndexMarker835"/> need inside a virtual environment as follows:</p>
+			<p class="source-code">$ virtualenv mbenv</p>
+			<p class="source-code">$ source mbenv/bin/activate</p>
+			<p class="source-code">$ pip install ray[rllib]==1.0.1</p>
+			<p class="source-code">$ pip install tensorflow==2.3.1</p>
+			<p class="source-code">$ pip install cma==3.0.3</p>
+			<p class="source-code">$ pip install gym[box2d]</p>
+			<p>Now, we can proceed to our example.</p>
+			<h3>Simple cannon shooting game</h3>
+			<p>Some of us are old enough to<a id="_idIndexMarker836"/> have enjoyed the old <em class="italic">Bang! Bang!</em> game on Windows 3.1 or 95. The game simply involves adjusting the shooting angle and velocity of a cannonball to hit the opponent. Here, we will play something even simpler: We have a cannon for which we can adjust the shooting angle (<img src="image/Formula_08_030.png" alt=""/>). Our goal is to maximize the distance, <img src="image/Formula_08_031.png" alt=""/>, that the ball covers on a flat surface with a fixed initial velocity <img src="image/Formula_08_032.png" alt=""/>. This is illustrated in <em class="italic">Figure 8.1</em>:</p>
+			<div>
+				<div id="_idContainer1270" class="IMG---Figure">
+					<img src="image/B14160_08_001.jpg" alt="Figure 8.1 – Simple cannon shooting game to maximize  by adjusting &#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.1 – Simple cannon shooting game to <a id="_idTextAnchor183"/>maximize <img src="image/Formula_08_033.png" alt=""/> by adjusting <img src="image/Formula_08_034.png" alt=""/></p>
+			<p>Now, if you remember some high-school math, you will realize that there is really no game here: The maximum<a id="_idIndexMarker837"/> distance can be reached by setting <img src="image/Formula_08_035.png" alt=""/>. Well, let's pretend that we don't know it and use this example to illustrate the concepts that we have introduced so far:</p>
+			<ul>
+				<li>The action is <img src="image/Formula_06_036.png" alt=""/>, the angle of the cannon, which is a scalar.</li>
+				<li>This is a single-step problem, that is, we just take one action and the game ends. Therefore <img src="image/Formula_08_037.png" alt=""/>, and <img src="image/Formula_08_038.png" alt=""/>.</li>
+			</ul>
+			<p>Let's now code this up: </p>
+			<ol>
+				<li value="1">We have access to the environment that will <em class="italic">evaluate the actions we consider before we actually take them</em>. We don't assume to know what the math equations and all the dynamics defined inside the environment are. In other words, we can call the <strong class="source-inline">black_box_projectile</strong> function to get <img src="image/Formula_08_039.png" alt=""/> for a <img src="image/Formula_08_040.png" alt=""/> we pick and for a fixed initial velocity and gravity:<p class="source-code">from math import sin, pi</p><p class="source-code">def black_box_projectile(theta, v0=10, g=9.81):</p><p class="source-code">    assert theta &gt;= 0</p><p class="source-code">    assert theta &lt;= 90</p><p class="source-code">    return (v0 ** 2) * sin(2 * pi * theta / 180) / g</p></li>
+				<li>For the random <a id="_idIndexMarker838"/>shooting procedure, we just need to generate <img src="image/Formula_08_041.png" alt=""/> actions uniformly randomly between <img src="image/Formula_08_042.png" alt=""/> and <img src="image/Formula_08_043.png" alt=""/>, for which we can use something like the following:<p class="source-code">import random</p><p class="source-code">def random_shooting(n, min_a=0, max_a=90):</p><p class="source-code">    return [random.uniform(min_a, max_a) for i in range(n)]</p></li>
+				<li>We also need a function to evaluate all the candidate actions and pick the best one. For this, we will define a more general function that we will need later. It will pick the best <img src="image/Formula_08_044.png" alt=""/> <strong class="bold">elites</strong>, that is, the <img src="image/Formula_08_045.png" alt=""/> best actions:<p class="source-code">import numpy as np</p><p class="source-code">def pick_elites(actions, M_elites):</p><p class="source-code">    actions = np.array(actions)</p><p class="source-code">    assert M_elites &lt;= len(actions)</p><p class="source-code">    assert M_elites &gt; 0</p><p class="source-code">    results = np.array([black_box_projectile(a)</p><p class="source-code">                        for a in actions])</p><p class="source-code">    sorted_ix = np.argsort(results)[-M_elites:][::-1]</p><p class="source-code">    return actions[sorted_ix], results[sorted_ix]</p></li>
+				<li>The loop to find the best action is then simple:<p class="source-code">n = 20</p><p class="source-code">actions_to_try = random_shooting(n)</p><p class="source-code">best_action, best_result = pick_elites(actions_to_try, 1)</p></li>
+			</ol>
+			<p>That's it.<a id="_idTextAnchor184"/> The action to take is then at <strong class="source-inline">best_action[0]</strong>. To reiterate, we have not done anything super interesting so far. This was just to<a id="_idIndexMarker839"/> illustrate the concepts, and to prepare you for a more interesting method that is coming up next. </p>
+			<h2 id="_idParaDest-182"><a id="_idTextAnchor185"/>Cross-entropy method</h2>
+			<p>In the cannon shooting example, we <a id="_idIndexMarker840"/>evaluated some number of actions we generated in our search for the optimal action, which happens to be <img src="image/Formula_08_046.png" alt=""/>. As you can imagine, we can be smarter in our search. For example, if we have a budget to generate and evaluate <img src="image/Formula_08_047.png" alt=""/> actions, why blindly use them up with uniformly generated actions? Instead, we can do the following:</p>
+			<ol>
+				<li value="1">Generate some number of actions to begin with (this could be done uniformly at random).</li>
+				<li>See which region in the action space seems to be giving better results (in the cannon shooting example, the region is around <img src="image/Formula_08_048.png" alt=""/>).</li>
+				<li>Generate more actions in that part of the action space.</li>
+			</ol>
+			<p>We can repeat this procedure to guide our search, which will lead to a more efficient use of our search budget. In fact, this is what the <strong class="bold">cross-entropy method</strong> (<strong class="bold">CEM</strong>) suggests! </p>
+			<p>Our previous<a id="_idIndexMarker841"/> description of the CEM was a bit vague. A more formal description is as follows:</p>
+			<ol>
+				<li value="1">Initialize a probability distribution <img src="image/Formula_08_049.png" alt=""/> with parameter <img src="image/Formula_08_050.png" alt=""/>.</li>
+				<li>Generate <img src="image/Formula_08_051.png" alt=""/> samples (solutions, actions) from <img src="image/Formula_08_052.png" alt=""/>, <img src="image/Formula_08_053.png" alt=""/>.</li>
+				<li>Sort the solutions from the highest reward to the lowest, indexed as <img src="image/Formula_08_054.png" alt=""/>, <img src="image/Formula_08_055.png" alt=""/>.</li>
+				<li>Pick the best <img src="image/Formula_08_056.png" alt=""/> solutions, elites, <img src="image/Formula_08_057.png" alt=""/> and fit the distribution <img src="image/Formula_08_058.png" alt=""/> to the elites.</li>
+				<li>Go back to <em class="italic">step 2</em> and repeat until a stopping criterion is satisfied.</li>
+			</ol>
+			<p>The algorithm, in particular, identifies the best region of actions by fitting a probability distribution to the best actions in the current<a id="_idIndexMarker842"/> iteration, from which the next generation of actions is sampled. Due to this evolutionary nature, it is considered an <strong class="bold">evolution strategy</strong> (<strong class="bold">ES</strong>).</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The CEM could prove promising when the dimension of the search, that is the action dimension times <img src="image/Formula_08_059.png" alt=""/>, is relatively small, say less than 50. Also note that CEM does not use the actual rewards in any part of the procedure, saving us from worrying about the scale of the rewards.</p>
+			<p>Next, let's implement<a id="_idIndexMarker843"/> the CEM for the cannon shooting example.</p>
+			<h3>Simple implementation of the cross-entropy method</h3>
+			<p>We can implement the <a id="_idIndexMarker844"/>CEM with some slight modifications to the random shooting method. In our simple implementation here, we do the following: </p>
+			<ul>
+				<li>Start with a uniformly generated set of actions.</li>
+				<li>Fit a normal distribution to the elites to generate the next set of samples.</li>
+				<li>Use a fixed number of iterations to stop the procedure.</li>
+			</ul>
+			<p>This can be implemented as follows:</p>
+			<p class="source-code">from scipy.stats import norm</p>
+			<p class="source-code">N, M_elites, iterations = 5, 2, 3</p>
+			<p class="source-code">actions_to_try = random_shooting(N)</p>
+			<p class="source-code">elite_acts, _ = pick_elites(actions_to_try, M_elites)</p>
+			<p class="source-code">for r in range(iterations - 1):</p>
+			<p class="source-code">    mu, std = norm.fit(elite_acts)</p>
+			<p class="source-code">    actions_to_try = np.clip(norm.rvs(mu, std, N), 0, 90)</p>
+			<p class="source-code">    elite_acts, elite_results = pick_elites(actions_to_try, </p>
+			<p class="source-code">                                                    M_elites)            </p>
+			<p class="source-code">best_action, _ = norm.fit(elite_acts)</p>
+			<p>If you add some <strong class="source-inline">print</strong> statements to<a id="_idIndexMarker845"/> see the outcome from the execution of this code, it will look like the following:</p>
+			<p class="source-code"><strong class="bold">--iteration: 1</strong></p>
+			<p class="source-code"><strong class="bold">actions_to_try: [29.97 3.56 57.8 5.83 74.15]</strong></p>
+			<p class="source-code"><strong class="bold">elites: [57.8  29.97]</strong></p>
+			<p class="source-code"><strong class="bold">--iteration: 2</strong></p>
+			<p class="source-code"><strong class="bold">fitted normal mu: 43.89, std: 13.92</strong></p>
+			<p class="source-code"><strong class="bold">actions_to_try: [26.03 52.85 36.69 54.67 25.06]</strong></p>
+			<p class="source-code"><strong class="bold">elites: [52.85 36.69]</strong></p>
+			<p class="source-code"><strong class="bold">--iteration: 3</strong></p>
+			<p class="source-code"><strong class="bold">fitted normal mu: 44.77, std: 8.08</strong></p>
+			<p class="source-code"><strong class="bold">actions_to_try: [46.48 34.31 56.56 45.33 48.31]</strong></p>
+			<p class="source-code"><strong class="bold">elites: [45.33 46.48]</strong></p>
+			<p class="source-code"><strong class="bold">The best action: 45.91</strong></p>
+			<p>You might be wondering why we need to fit the distribution instead of picking the best action we have identified. Well, it does not make much sense for the cannon shooting example where the environment is deterministic. However, when there is noise/stochasticity in the environment, picking the best action that we encountered would mean overfitting to the noise. Instead, we fit the distribution to a set of elite actions to overcome that. You can refer to <strong class="source-inline">Chapter08/rs_cem_comparison.py</strong> in the GitHub repo for the full code.</p>
+			<p>The evaluation (and action generation) steps of the CEM can be parallelized, which would reduce the wall-clock time to make a decision. Let's implement it next and use the CEM in a more sophisticated example.</p>
+			<h3>Parallelized implementation of the cross-entropy method</h3>
+			<p>In this section, we use the <a id="_idIndexMarker846"/>CEM to solve OpenAI Gym's Cartpole-v0 environment. This example will differ from the cannon shooting in the following ways:</p>
+			<ul>
+				<li>The action space is binary, corresponding to left and right. So, we will use a multivariate Bernoulli distribution as the probability distribution.</li>
+				<li>The maximum problem horizon is 200 steps. However, we will use MPC to plan for a 10-step lookahead in each step and execute the first action in the plan.</li>
+				<li>We use the Ray library for parallelization.</li>
+			</ul>
+			<p>Now, let's look into some of the key components of the implementation. The full code is available in the GitHub repo.</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter08/cem.py</p>
+			<p>Let's start describing the code with the section that samples a sequence of actions from a multivariate Bernoulli (for which we use NumPy's <strong class="source-inline">binomial</strong> function), <img src="image/Formula_08_060.png" alt=""/>, and executes it over the planning horizon to estimate the reward:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">def rollout(env, dist, args):</p>
+			<p class="source-code">    if dist == "Bernoulli":</p>
+			<p class="source-code">        actions = np.random.binomial(**args)</p>
+			<p class="source-code">    else:</p>
+			<p class="source-code">        raise ValueError("Unknown distribution")</p>
+			<p class="source-code">    sampled_reward = 0</p>
+			<p class="source-code">    for a in actions:</p>
+			<p class="source-code">        obs, reward, done, info = env.step(a)</p>
+			<p class="source-code">        sampled_reward += reward</p>
+			<p class="source-code">        if done:</p>
+			<p class="source-code">            break</p>
+			<p class="source-code">    return actions, sampled_reward</p>
+			<p>The <strong class="source-inline">ray.remote</strong> decorator will allow us to easily kick off a bunch of these workers in parallel.</p>
+			<p>The CEM runs in the<a id="_idIndexMarker847"/> following method of the <strong class="source-inline">CEM</strong> class we create:</p>
+			<ol>
+				<li value="1">We initialize the parameters of the Bernoulli distribution for a horizon of <strong class="source-inline">look_ahead</strong> steps as <strong class="source-inline">0.5</strong>. We also determine the number of elites based on a specified fraction of the total samples:<p class="source-code">    def cross_ent_optimizer(self):</p><p class="source-code">        n_elites = int(np.ceil(self.num_parallel * \</p><p class="source-code">                                   self.elite_frac))</p><p class="source-code">        if self.dist == "Bernoulli":</p><p class="source-code">            p = [0.5] * self.look_ahead</p></li>
+				<li>For a fixed number of iterations, we generate and evaluate actions on parallel rollout workers. Note how we copy the existing environment to the rollout workers to sample from that point on. We refit the distribution to the elite set:<p class="source-code">            for i in range(self.opt_iters):</p><p class="source-code">                futures = []</p><p class="source-code">                for j in range(self.num_parallel):</p><p class="source-code">                    args = {"n": 1, "p": p, </p><p class="source-code">                            "size": self.look_ahead}</p><p class="source-code">                    fid = \</p><p class="source-code">                       rollout.remote(copy.deepcopy(self.env), </p><p class="source-code">                                              self.dist, args)</p><p class="source-code">                    futures.append(fid)</p><p class="source-code">                results = [tuple(ray.get(id)) </p><p class="source-code">                                       for id in futures]</p><p class="source-code">                sampled_rewards = [r for _, r in results]</p><p class="source-code">                elite_ix = \</p><p class="source-code">                     np.argsort(sampled_rewards)[-n_elites:]</p><p class="source-code">                elite_actions = np.array([a for a, </p><p class="source-code">                                    _ in results])[elite_ix]</p><p class="source-code">                p = np.mean(elite_actions, axis=0)</p></li>
+				<li>We finalize the plan <a id="_idIndexMarker848"/>based on the latest distribution parameters:<p class="source-code">            actions = np.random.binomial(n=1, p=p,</p><p class="source-code">                                         size=self.look_ahead)</p></li>
+			</ol>
+			<p>Executing this code will solve the environment and you will see the cartpole staying alive for the maximum horizon! </p>
+			<p>That is how a parallelized CEM can be implemented using Ray. So far, so good! Next, we will go a step further and use an advanced version of the CEM.</p>
+			<h2 id="_idParaDest-183"><a id="_idTextAnchor186"/>Covariance matrix adaptation evolution strategy</h2>
+			<p>The <strong class="bold">covariance matrix adaptation evolution strategy </strong>(<strong class="bold">CMA-ES</strong>) is one of the state-of-the-art <a id="_idIndexMarker849"/>black-box optimization methods. Its working principles are similar to that of the CEM. On the other hand, the CEM uses a constant variance throughout the search. The CMA-ES dynamically adapts the covariance matrix.</p>
+			<p>We again use Ray to parallelize the search with the CMA-ES. But this time, we defer the inner dynamics of the search to a Python library called <strong class="source-inline">pycma</strong>, which is developed and maintained by Nikolaus Hansen, creator of the algorithm. You already installed this package when you created the virtual environment for this chapter.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The documentation and the details of the <strong class="source-inline">pycma</strong> library are available at <a href="https://github.com/CMA-ES/pycma">https://github.com/CMA-ES/pycma</a>.</p>
+			<p>The main difference <a id="_idIndexMarker850"/>of the CMA-ES from the CEM implementation is its use of the CMA library to optimize the <a id="_idIndexMarker851"/>actions:</p>
+			<p class="source-code">    def cma_es_optimizer(self):</p>
+			<p class="source-code">        es = cma.CMAEvolutionStrategy([0] \</p>
+			<p class="source-code">                                      * self.n_tot_actions, 1)</p>
+			<p class="source-code">        while (not es.stop()) and \</p>
+			<p class="source-code">                es.result.iterations &lt;= self.opt_iter:</p>
+			<p class="source-code">            X = es.ask()  # get list of new solutions</p>
+			<p class="source-code">            futures = [</p>
+			<p class="source-code">                rollout.remote(self.env, x,</p>
+			<p class="source-code">                               self.n_actions, </p>
+			<p class="source-code">                               self.look_ahead)</p>
+			<p class="source-code">                for x in X</p>
+			<p class="source-code">            ]</p>
+			<p class="source-code">            costs = [-ray.get(id) for id in futures]</p>
+			<p class="source-code">            es.tell(X, costs)  # feed values</p>
+			<p class="source-code">            es.disp()</p>
+			<p class="source-code">        actions = [</p>
+			<p class="source-code">            es.result.xbest[i * self.n_actions : \</p>
+			<p class="source-code">                            (i + 1) * self.n_actions]</p>
+			<p class="source-code">            for i in range(self.look_ahead)</p>
+			<p class="source-code">        ]</p>
+			<p class="source-code">        return actions</p>
+			<p>You can find the<a id="_idIndexMarker852"/> full code in <strong class="source-inline">Chapter08/cma_es.py</strong> in our GitHub repo. It solves the Bipedal Walker environment, and the output will look like the following from<a id="_idIndexMarker853"/> the CMA library:</p>
+			<p class="source-code"><strong class="bold">(7_w,15)-aCMA-ES (mu_w=4.5,w_1=34%) in dimension 40 (seed=836442, Mon Nov 30 05:46:55 2020)</strong></p>
+			<p class="source-code"><strong class="bold">Iterat #Fevals   function value  axis ratio  sigma  min&amp;max std  t[m:s]</strong></p>
+			<p class="source-code"><strong class="bold">    1     15 7.467667956594279e-01 1.0e+00 9.44e-01  9e-01  9e-01 0:00.0</strong></p>
+			<p class="source-code"><strong class="bold">    2     30 8.050216186274498e-01 1.1e+00 9.22e-01  9e-01  9e-01 0:00.1</strong></p>
+			<p class="source-code"><strong class="bold">    3     45 7.222612141709712e-01 1.1e+00 9.02e-01  9e-01  9e-01 0:00.1</strong></p>
+			<p class="source-code"><strong class="bold">   71   1065 9.341667377266198e-01 1.8e+00 9.23e-01  9e-01  1e+00 0:03.1</strong></p>
+			<p class="source-code"><strong class="bold">  100   1500 8.486571756945928e-01 1.8e+00 7.04e-01  7e-01  8e-01 0:04.3</strong></p>
+			<p class="source-code"><strong class="bold">Episode 0, reward: -121.5869865603307</strong></p>
+			<p>You should see your bipedal walker taking 50 to 100 steps out of the box! Not bad!</p>
+			<p>Next, let's touch on another important <a id="_idIndexMarker854"/>class of search methods, known as <strong class="bold">Monte Carlo tree search</strong> (<strong class="bold">MCTS</strong>).</p>
+			<h2 id="_idParaDest-184"><a id="_idTextAnchor187"/>Monte Carlo tree search</h2>
+			<p>A natural way of planning future actions is for<a id="_idIndexMarker855"/> us to first think about the first step, then condition the second decision on the first one, and so on. This is essentially a search on a decision tree, which is what MCTS does. It is a strikingly powerful method that has seen broad adaptation in the AI community.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">MCTS is a powerful method that played a key role in DeepMind's victory against Lee Sedol, a world champion and legend in the game of Go. Therefore, MCTS deserves a broad discussion; and rather than cramming some content into this chapter, we defer its explanation and implementation to the blog post at <a href="https://int8.io/monte-carlo-tree-search-beginners-guide/">https://int8.io/monte-carlo-tree-search-beginners-guide/</a>.</p>
+			<p>In this section so far, we have discussed the different methods with which an agent can plan through a model of an environment where we assumed such a model exists. In the next section, we look into how the model of the world (that is, the environment) that the agent is in can be learned.</p>
+			<h1 id="_idParaDest-185"><a id="_idTextAnchor188"/>Learning a world model</h1>
+			<p>In the introduction to this chapter, we<a id="_idIndexMarker856"/> reminded you how we departed from dynamic programming methods to avoid assuming that the model of the environment an agent is in is available and accessible. Now, coming back to talking about models, we need to also discuss how a world model can be learned when not available. In particular, in this section, we discuss what we aim to learn as a model, when we may want to learn it, a general procedure for learning a model, how to improve it by incorporating the model uncertainty into the learning procedure, and what to do when we have complex observations. Let's dive in!</p>
+			<h2 id="_idParaDest-186"><a id="_idTextAnchor189"/>Understanding what model means</h2>
+			<p>From what we have done so far, a model of the<a id="_idIndexMarker857"/> environment could be equivalent to the simulation of the environment in your mind. On the other hand, model-based methods don't require the full fidelity of a simulation. Instead, what we expect to get from a model is the next state given the current state and action. Namely, when the environment is deterministic, a model is a function <img src="image/Formula_08_061.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer1300" class="IMG---Figure">
+					<img src="image/Formula_08_062.jpg" alt=""/>
+				</div>
+			</div>
+			<p>If the environment is stochastic, we then need a probability distribution over the next state, <img src="image/Formula_08_063.png" alt=""/>, to sample from:</p>
+			<div>
+				<div id="_idContainer1302" class="IMG---Figure">
+					<img src="image/Formula_08_064.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Contrast this to a simulation model that often has explicit representations of all the underlying dynamics, such as motion physics, customer behavior, and market dynamics, depending on the type of environment. The model we learn will be a black box and is often represented as a neural network.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">A world model that we learn is not a replacement for a full simulation model. A simulation model often has a much greater capability of generalization; and it is also of a greater fidelity as it is based on explicit representations of environment dynamics. On the other hand, a simulation can act as a world model, as in the previous section. </p>
+			<p>Note that, for the rest of the section, we will use <img src="image/Formula_08_065.png" alt=""/> to represent the model. Now, let's discuss when we may want to learn a world model.</p>
+			<h2 id="_idParaDest-187"><a id="_idTextAnchor190"/>Identifying when to learn a model</h2>
+			<p>There could be various<a id="_idIndexMarker858"/> reasons for learning a world model:</p>
+			<ul>
+				<li>A model may not exist, even as a simulation. This means the agent is being trained in the actual environment, which would not allow us to do imaginary rollouts for planning.</li>
+				<li>A simulation model may exist, but it could be too slow or computationally demanding to be used in planning. Training a neural network as a world model can allow exploring a much wider range of scenarios during the planning phase.</li>
+				<li>A simulation model may exist, but it may not allow rollouts from a particular state onward. This could be because the simulation may not reveal the underlying state and/or it may not allow the user to reset it to a desired state.</li>
+				<li>We may want to explicitly have a representation of the state/observation that has a predictive power for the future states, which then removes the need for having complex policy representations or even rollout-based planning for the agent. This approach has biological inspirations and has proved to be effective, as described by <em class="italic">Ha et al., 2018</em>. You can access an interactive version of the paper at <a href="https://worldmodels.github.io/">https://worldmodels.github.io/</a>, which is a very good read on this topic.</li>
+			</ul>
+			<p>Now that we have identified several cases where learning a model might be necessary, next, let's discuss how to actually do it. </p>
+			<h2 id="_idParaDest-188"><a id="_idTextAnchor191"/>Introducing a general procedure to learn a model</h2>
+			<p>Learning a model of <img src="image/Formula_08_066.png" alt=""/> (or <img src="image/Formula_08_067.png" alt=""/> for stochastic environments) is<a id="_idIndexMarker859"/> essentially a supervised learning problem: we want to predict the next state from the current state and action. However, note the following key points:</p>
+			<ul>
+				<li>We don't start the process with data on hand like in a traditional supervised learning problem. Instead, we need to generate the data by interacting with the environment.</li>
+				<li>We don't have a (good) policy to start interacting with the environment either. After all, it is our goal to obtain one.</li>
+			</ul>
+			<p>So, what we need to do first is to initialize some policy. A natural choice is to use a random policy so that<a id="_idIndexMarker860"/> we can explore the state-action space. On the other hand, a pure random policy may not get us far in some hard exploration problems. Consider training a humanoid robot for walking, for example. Random actions are unlikely to make the robot walk, and we would not be able to obtain data to train a world model for those states. This requires us to do planning and learning simultaneously, so that the agent both explores and exploits. To that end, we can use the following procedure (<em class="italic">Levine, 2019</em>):</p>
+			<ol>
+				<li value="1">Initialize a soft policy <img src="image/Formula_08_068.png" alt=""/> to collect data tuples <img src="image/Formula_08_069.png" alt=""/> into a dataset <img src="image/Formula_08_070.png" alt=""/>.</li>
+				<li>Train <img src="image/Formula_08_071.png" alt=""/> to minimize <img src="image/Formula_08_072.png" alt=""/>.</li>
+				<li>Plan through <img src="image/Formula_08_073.png" alt=""/> to choose actions.</li>
+				<li>Follow an MPC: execute the first planned action and observe the resulting <img src="image/Formula_08_074.png" alt=""/>.</li>
+				<li>Append the obtained <img src="image/Formula_08_075.png" alt=""/> to <img src="image/Formula_08_076.png" alt=""/>.</li>
+				<li>Every <img src="image/Formula_08_077.png" alt=""/> steps, go to <em class="italic">step 3</em>; every <img src="image/Formula_07_242.png" alt=""/> steps, go to <em class="italic">step 2</em>.</li>
+			</ol>
+			<p>This approach will <a id="_idIndexMarker861"/>eventually get you a trained <img src="image/Formula_08_079.png" alt=""/>, which you can use with an MPC procedure at inference time. On the other hand, as it turns out, the performance of an agent using this procedure is often worse than what a model-free approach would do. In the next section, we look into why this happens and how the problem can be mitigated.</p>
+			<h2 id="_idParaDest-189"><a id="_idTextAnchor192"/>Understanding and mitigating the impact of model uncertainty </h2>
+			<p>When we train a world model as in<a id="_idIndexMarker862"/> the procedure we just described, we should not expect to obtain a perfect one. This should not be surprising, but it turns out that when we plan through such imperfect models using rather good <a id="_idIndexMarker863"/>optimizers such as the CMA-ES, those imperfections hurt the agent performance badly. Especially when we use high-capacity models such as neural networks, in the presence of limited data, there will be lots of errors in the model, incorrectly predicting high-reward states. To mitigate the impact of model errors, we need to take the uncertainty in the model predictions into account.</p>
+			<p>Speaking of uncertainty in model predictions, there are two types, and we need to differentiate between them. Let's do that next.</p>
+			<h3>Statistical (aleatoric) uncertainty</h3>
+			<p>Consider a predictive model that predicts the<a id="_idIndexMarker864"/> outcome of the<a id="_idIndexMarker865"/> roll of a six-sided fair die. A perfect model will be highly uncertain about the outcome: any side can come up with equal likelihood. This might be disappointing, but it is not the model's "fault." The uncertainty is due to the process itself and not because the model is not correctly explaining the data it observes. This type of uncertainty is called <strong class="bold">statistical </strong>or<strong class="bold"> aleatoric uncertainty</strong>.</p>
+			<h3>Epistemic (model) uncertainty</h3>
+			<p>In another example, imagine training a <a id="_idIndexMarker866"/>predictive model to predict the outcome of the roll of a six-sided die. We don't know whether the die is fair or <a id="_idIndexMarker867"/>not, and in fact, this is what we are trying to learn from the data. Now, imagine that we train the model just based on a single observation, which happens to be a 6. When we use the model to predict the next outcome, the model may predict a 6, because it is all the model has seen. However, this would be based on very limited data, so we would be highly uncertain about the model's prediction. This type of uncertainty is called <strong class="bold">epistemic </strong>or<strong class="bold"> model uncertainty</strong>. And it is this type of uncertainty that is getting us into trouble in model-based RL.</p>
+			<p>Let's see some ways of dealing with model uncertainty in the next section.</p>
+			<h3>Mitigating the impact of model uncertainty </h3>
+			<p>Two common ways of incorporating <a id="_idIndexMarker868"/>model uncertainty into model-based RL procedures are to use Bayesian neural networks and ensemble models. </p>
+			<h4>Using Bayesian neural networks</h4>
+			<p>A Bayesian neural network assigns a<a id="_idIndexMarker869"/> distribution over each of the parameters in <img src="image/Formula_06_013.png" alt=""/> (the parameters of the network) rather than a single number. This gives us a probability distribution, <img src="image/Formula_08_081.png" alt=""/>, to sample a neural network from. With that, we can quantify the uncertainty over the neural network parameters. </p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">Note that we used Bayesian neural networks in <a href="B14160_03_Final_SK_ePub.xhtml#_idTextAnchor059"><em class="italic">Chapter 3</em></a>,<em class="italic"> Contextual Bandits</em>. Revisiting that chapter might refresh your mind on the topic. A full tutorial is available from <em class="italic">Jospin et al., 2020</em>, if you want to dive deeper.</p>
+			<p>With this approach, whenever we are at the planning step, we sample from <img src="image/Formula_08_082.png" alt=""/> multiple times to estimate the reward for <a id="_idIndexMarker870"/>an action sequence <img src="image/Formula_08_015.png" alt=""/>.</p>
+			<h4>Using ensemble models with bootstrapping</h4>
+			<p>Another method to estimate <a id="_idIndexMarker871"/>uncertainty is to use bootstrapping, which is easier to implement than a Bayesian neural network but also a less principled approach. Bootstrapping simply involves training multiple (say 10) neural networks for <img src="image/Formula_08_084.png" alt=""/>, each using data resampled from the original dataset with replacement.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">If you need a quick refresher on bootstrapping in statistics, check out this blog post by Trist'n Joseph: <a href="https://bit.ly/3fQ37r1">https://bit.ly/3fQ37r1</a>.</p>
+			<p>Similar to the use of Bayesian networks, this time, we average the reward given by these multiple neural networks to evaluate an action sequence <img src="image/Formula_08_085.png" alt=""/> during planning.</p>
+			<p>With that, we conclude our discussion on incorporating model uncertainty into model-based RL. Before we wrap up this section, let's touch on how to consume complex observations to learn a world model.</p>
+			<h2 id="_idParaDest-190"><a id="_idTextAnchor193"/>Learning a model from complex observations </h2>
+			<p>Everything we <a id="_idIndexMarker872"/>have described so far can get a bit complicated to implement when we have one or both of the following:</p>
+			<ul>
+				<li>Partially observable environments, so the agent sees <img src="image/Formula_08_086.png" alt=""/> rather than <img src="image/Formula_08_087.png" alt=""/>.</li>
+				<li>High-dimensional observations, such as images.</li>
+			</ul>
+			<p>We have an entire chapter coming up on partial observability in <a href="B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239"><em class="italic">Chapter 11</em></a>,<em class="italic"> Generalization and Partial Observability</em>. In that chapter, we will discuss how keeping a memory of past observations helps us uncover the hidden state<a id="_idIndexMarker873"/> in the environment. A common architecture to use is the <strong class="bold">long short-term memory</strong> (<strong class="bold">LSTM</strong>) model, which is a <a id="_idIndexMarker874"/>particular class of <strong class="bold">recurrent neural network</strong> (<strong class="bold">RNN</strong>) architectures. Therefore, representing <img src="image/Formula_08_088.png" alt=""/> using an LSTM would be a common choice in the face of partial observability.</p>
+			<p>When it comes to dealing<a id="_idIndexMarker875"/> with high-dimensional observations, such as images, a common approach is to encode them in compact vectors. <strong class="bold">Variational autoencoders </strong>(<strong class="bold">VAEs</strong>) are the<a id="_idIndexMarker876"/> choice when it comes to obtaining such representations.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">A nice tutorial on VAEs by Jeremy Jordan is available at <a href="https://www.jeremyjordan.me/variational-autoencoders/">https://www.jeremyjordan.me/variational-autoencoders/</a>.</p>
+			<p>When the environment is both partially observable and emitting image observations, we would then have to first convert images to encodings, use an RNN for <img src="image/Formula_08_089.png" alt=""/> that predicts the encoding that corresponds to the next observation, and plan through this <img src="image/Formula_08_071.png" alt=""/>. <em class="italic">Ha et al., 2018,</em> used a similar approach to deal with images and partial observability in their "<em class="italic">World Models</em>" paper.</p>
+			<p>This concludes our discussion on learning a world model. In the next and final section of this chapter, let's discuss how <a id="_idIndexMarker877"/>we can use the approaches we have described so far to obtain a policy for an RL agent.</p>
+			<h1 id="_idParaDest-191"><a id="_idTextAnchor194"/>Unifying model-based and model-free approaches </h1>
+			<p>When we went<a id="_idIndexMarker878"/> from dynamic programming-based<a id="_idIndexMarker879"/> approaches to Monte Carlo and temporal-difference methods in <a href="B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106"><em class="italic">Chapter 5</em></a>,<em class="italic"> Solving the Reinforcement Learning Problem</em>, our motivation was that it is limiting to assume that the environment transition probabilities are known. Now that we know how to learn the environment dynamics, we will leverage that to find a middle ground. It turns out that with a learned model of the environment, the learning with model-free methods can<a id="_idIndexMarker880"/> be accelerated. To that end, in this section, we first refresh our minds on Q-learning, then introduce a class of methods called <strong class="bold">Dyna</strong>.</p>
+			<h2 id="_idParaDest-192"><a id="_idTextAnchor195"/>Refresher on Q-learning</h2>
+			<p>Let's start with remembering the definition of the <a id="_idIndexMarker881"/>action-value function:</p>
+			<div>
+				<div id="_idContainer1329" class="IMG---Figure">
+					<img src="image/Formula_08_091.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The expectation operator here is because the transition into the next state is probabilistic, so <img src="image/Formula_08_092.png" alt=""/> is a random variable along with <img src="image/Formula_08_093.png" alt=""/>. On the other hand, if we know the probability distribution of <img src="image/Formula_08_094.png" alt=""/> and <img src="image/Formula_08_095.png" alt=""/>, we can calculate this expectation analytically, which is what methods such as value iteration do.</p>
+			<p>In the absence of information on the transition dynamics, methods such as Q-learning estimate the expectation from a single sample of <img src="image/Formula_08_096.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer1335" class="IMG---Figure">
+					<img src="image/Formula_08_097.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Dyna algorithms are based on the idea that, rather than using a simple <img src="image/Formula_08_098.png" alt=""/> sampled from the environment, we can <a id="_idIndexMarker882"/>come up with a better estimation of the expectation using a learned model of the environment by sampling many <img src="image/Formula_08_099.png" alt=""/> from it given <img src="image/Formula_08_100.png" alt=""/>.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">So far in our discussions, we have implicitly assumed that reward <img src="image/Formula_06_142.png" alt=""/> can be calculated once <img src="image/Formula_08_102.png" alt=""/> is known. If that is not the case, especially in the presence of partial observability, we may have to learn a separate model for <img src="image/Formula_08_103.png" alt=""/>.</p>
+			<p>Next, let's more formally outline this idea.</p>
+			<h2 id="_idParaDest-193"><a id="_idTextAnchor196"/>Dyna-style acceleration of model-free methods using world models</h2>
+			<p>The Dyna approach<a id="_idIndexMarker883"/> is a rather old one (<em class="italic">Sutton, 1990</em>) that aims to "integrate learning, planning, and reacting." This approach has the<a id="_idIndexMarker884"/> following general flow (<em class="italic">Levine, 2019</em>):</p>
+			<ol>
+				<li value="1">While in state <img src="image/Formula_05_060.png" alt=""/>, sample <img src="image/Formula_05_044.png" alt=""/> using <img src="image/Formula_08_106.png" alt=""/>.</li>
+				<li>Observe <img src="image/Formula_08_107.png" alt=""/> and <img src="image/Formula_08_108.png" alt=""/>, and add the tuple <img src="image/Formula_08_109.png" alt=""/> to a replay buffer <img src="image/Formula_08_110.png" alt=""/>.</li>
+				<li>Update the world model <img src="image/Formula_08_111.png" alt=""/> and optionally <img src="image/Formula_08_112.png" alt=""/>.<p>For <img src="image/Formula_08_113.png" alt=""/> to <img src="image/Formula_08_114.png" alt=""/>:</p></li>
+				<li>Sample <img src="image/Formula_05_010.png" alt=""/> from <img src="image/Formula_08_116.png" alt=""/>.</li>
+				<li>Choose<a id="_idIndexMarker885"/> some <img src="image/Formula_05_059.png" alt=""/>, either from <img src="image/Formula_05_035.png" alt=""/>, from <img src="image/Formula_08_119.png" alt=""/>, or at random.</li>
+				<li>Sample <img src="image/Formula_08_120.png" alt=""/> and <img src="image/Formula_08_121.png" alt=""/>.</li>
+				<li>Train on <img src="image/Formula_08_122.png" alt=""/> with a model-free RL method (deep Q-learning).</li>
+				<li>Optionally, take<a id="_idIndexMarker886"/> further steps after <img src="image/Formula_08_123.png" alt=""/>.<p>End For</p></li>
+				<li>Go back to <em class="italic">step 1</em> (and <img src="image/Formula_08_124.png" alt=""/>).</li>
+			</ol>
+			<p>That's it! Dyna is an<a id="_idIndexMarker887"/> important class of <a id="_idIndexMarker888"/>methods in RL, and now you know how it works!</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">RLlib has an advanced Dyna-style method implementation called <strong class="bold">Model-Based RL via Meta-Policy Optimization</strong> or <strong class="bold">MBMPO</strong>. You can check it out at <a href="https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo">https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo</a>. As of Ray 1.0.1, it is implemented in PyTorch, so go<a id="_idIndexMarker889"/> ahead and install PyTorch in your virtual environment if you would like to experiment with it.</p>
+			<p>This concludes our chapter on model-based RL; and congratulations for reaching this far! We only scratched the surface in this broad topic, but now you are equipped with the knowledge to start using model-based methods for your problems! Let's summarize what we have covered next.</p>
+			<h1 id="_idParaDest-194"><a id="_idTextAnchor197"/>Summary</h1>
+			<p>In this chapter, we covered model-based methods. We started the chapter by describing how we humans use the world models we have in our brains to plan our actions. Then, we introduced several methods that can be used to plan an agent's actions in an environment when a model is available. These were derivative-free search methods, and for the CEM and CMA-ES methods, we implemented parallelized versions. As a natural follow-up to this section, we then went into how a world model can be learned to be used for planning or developing policies. This section contained some important discussions about model uncertainty and how learned models can suffer from it. At the end of the chapter, we unified the model-free and model-based approaches in the Dyna framework.</p>
+			<p>As we conclude our discussion on model-based RL, we proceed to the next chapter for yet another exciting topic: multi-agent RL. Take a break, and we will see you soon!</p>
+			<h1 id="_idParaDest-195"><a id="_idTextAnchor198"/>References </h1>
+			<ul>
+				<li>Levine, Sergey. (2019). <em class="italic">Optimal Control and Planning</em>. CS285 Fa19 10/2/19. YouTube. URL: <a href="https://youtu.be/pE0GUFs-EHI">https://youtu.be/pE0GUFs-EHI</a> </li>
+				<li>Levine, Sergey. (20<a id="_idTextAnchor199"/>19). <em class="italic">Model-Based Reinforcement Learning</em>. CS285 Fa19 10/7/19. YouTube. URL: <a href="https://youtu.be/6JDfrPRhexQ">https://youtu.be/6JDfrPRhexQ</a> </li>
+				<li>Levine, Sergey. (2019). <em class="italic">Model-Based Policy Learning</em>. CS285 Fa19 10/14/19. YouTube. URL: <a href="https://youtu.be/9AbBfIgTzoo">https://youtu.be/9AbBfIgTzoo</a>.</li>
+				<li>Ha, David, and Jürgen Schmidhuber. (2018). <em class="italic">World Models</em>. arXiv.org, URL: <a href="https://arxiv.org/abs/1803.10122">https://arxiv.org/abs/1803.10122</a>.</li>
+				<li>Mania, Horia, et al. (2018). <em class="italic">Simple Random Search Provides a Competitive Approach to Reinforcement Learning</em>. arXiv.org, URL: <a href="http://arxiv.org/abs/1803.07055">http://arxiv.org/abs/1803.07055</a></li>
+				<li>Jospin, Laurent Valentin, et al. (2020). <em class="italic">Hands-on Bayesian Neural Networks – a Tutorial for Deep Learning Users</em>. arXiv.org, <a href="http://arxiv.org/abs/2007.06823">http://arxiv.org/abs/2007.06823</a>.</li>
+				<li>Joseph, Trist'n. (2020). <em class="italic">Bootstrapping Statistics. What It Is and Why It's Used. </em>Medium. URL: <a href="https://bit.ly/3fOlvjK">https://bit.ly/3fOlvjK</a>.</li>
+				<li>Richard S. Sutton. (1991). <em class="italic">Dyna, an integrated architecture for learning, planning, and reacting</em>. SIGART Bull. 2, 4 (Aug. 1991), 160–163. DOI: <a href="https://doi.org/10.1145/122344.122377">https://doi.org/10.1145/122344.122377</a> </li>
+			</ul>
+		</div>
+	</body></html>

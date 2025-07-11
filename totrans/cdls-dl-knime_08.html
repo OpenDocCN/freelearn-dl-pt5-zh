@@ -1,0 +1,442 @@
+<html><head></head><body>
+		<div id="_idContainer623">
+			<h1 id="_idParaDest-101"><em class="italic"><a id="_idTextAnchor181"/>Chapter 6: </em>Recurrent Neural Networks for Demand Prediction</h1>
+			<p>We have gathered some experience, by now, with fully connected feedforward neural networks in two variants: implementing a classification task by assigning an input sample to a class in a set of predefined classes or trying to reproduce the shape of an input vector via an autoencoder architecture. In both cases, the output response depends only on the values of the current input vector. At time <img src="image/Formula_B16391_06_001.png" alt=""/>, the output response, <img src="image/Formula_B16391_06_002.png" alt=""/>, depends on, and only on, the input vector, <img src="image/Formula_B16391_06_003.png" alt=""/>, at time <img src="image/Formula_B16391_06_004.png" alt=""/>. The network has no memory of what came before <img src="image/Formula_B16391_06_005.png" alt=""/> and produces <img src="image/Formula_B16391_06_006.png" alt=""/> only based on input <img src="image/Formula_B16391_06_007.png" alt=""/>.</p>
+			<p>With <strong class="bold">Recurrent Neural Networks</strong> (<strong class="bold">RNNs</strong>), we introduce the time component <img src="image/Formula_B16391_06_008.png" alt=""/>. We are going to discover networks where the output response, <img src="image/Formula_B16391_06_009.png" alt=""/>, at time <img src="image/Formula_B16391_06_001.png" alt=""/> depends on the current input sample, <img src="image/Formula_B16391_06_011.png" alt=""/>, as well as on previous input samples, <img src="image/Formula_B16391_06_012.png" alt=""/>, <img src="image/Formula_B16391_06_013.png" alt=""/>, … <img src="image/Formula_B16391_06_014.png" alt=""/>, where the memory of the network of the past <img src="image/Formula_B16391_06_015.png" alt=""/> samples depends on the network architecture.</p>
+			<p>We will first introduce the general concept of RNNs, and then the specific concept of <strong class="bold">Long Short-Term Memory</strong> (<strong class="bold">LSTM</strong>) in the realm of a classic time series analysis task: <strong class="bold">demand prediction</strong>. Then, we will show how to feed the network with not only static vectors, <img src="image/Formula_B16391_06_016.png" alt=""/>, but also sequences of vectors, such as <img src="image/Formula_B16391_06_017.png" alt=""/>, <img src="image/Formula_B16391_06_018.png" alt=""/>, <img src="image/Formula_B16391_06_019.png" alt=""/>, … <img src="image/Formula_B16391_06_020.png" alt=""/>, spanning <img src="image/Formula_B16391_06_021.png" alt=""/> samples of the past input signal. These sequences of input vectors (tensors) built on the training set are used to train and evaluate a practical implementation of an LSTM-based RNN. </p>
+			<p>In summary, this chapter will cover the following topics:</p>
+			<ul>
+				<li>Introducing RNNs</li>
+				<li>The Demand Prediction Problem</li>
+				<li>Data Preparation – Creating the Past</li>
+				<li>Building, Training, and Deploying an LSTM-Based RNN</li>
+			</ul>
+			<h1 id="_idParaDest-102"><a id="_idTextAnchor182"/>Introducing RNNs</h1>
+			<p>Let's start with an<a id="_idIndexMarker484"/> overview of RNNs.</p>
+			<p><strong class="bold">RNNs</strong> are a family of neural networks that cannot be constrained in the feedforward architecture.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">RNNs are obtained by introducing auto or backward connections – that is, recurrent connections – into feedforward neural networks.</p>
+			<p>When introducing a recurrent connection, we introduce the concept of time. This allows RNNs to take context into account; that is, to remember inputs from the past by capturing the dynamic of the signal.</p>
+			<p>Introducing recurrent connections changes the nature of the neural network from static to dynamic and is therefore suitable for analyzing time series. Indeed, RNNs are often used to create solutions to problems involving time-ordered sequences, such as time series analysis, language modeling, free text generation, automatic machine translation, speech recognition, image captioning, and other similar problems investigating the time evolution of a given signal.</p>
+			<h2 id="_idParaDest-103"><a id="_idTextAnchor183"/>Recurrent Neural Networks</h2>
+			<p>As stated in the previous section, the introduction of an auto or backward connection into a feedforward network transforms it into an RNN. For example, let's consider the simple feedforward network depicted in <em class="italic">Figure 6.1</em>, looking at its detailed representation on the left and its compact representation on the right:</p>
+			<div>
+				<div id="_idContainer449" class="IMG---Figure">
+					<img src="image/B16391_06_001.jpg" alt="Figure 6.1 – A simple fully connected feedforward network on the left and its more compact matrix-based representation on the right"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.1 – A simple fully connected feed<a id="_idTextAnchor184"/>forward network on the left and its more compact matrix-based representation on the right</p>
+			<p>The compact <a id="_idIndexMarker485"/>representation of the network in <em class="italic">Figure 6.1</em> includes one multi-dimensional input, <img src="image/Formula_B16391_06_022.png" alt=""/>, one possibly multi-dimensional outpu<a id="_idTextAnchor185"/>t, <img src="image/Formula_B16391_06_023.png" alt=""/>, one hidden layer represented by the box containing the neuron icons, and the two weight matrixes from the input to the hidden layer, <img src="image/Formula_B16391_06_024.png" alt=""/>, and from the hidden to the output layer, <img src="image/Formula_B16391_06_025.png" alt=""/>.</p>
+			<p>Let's now introduce to this network a recurrent connection, feeding the output vector, <img src="image/Formula_B16391_06_026.png" alt=""/>, back into the input layer in addition to the original input vector, <img src="image/Formula_B16391_06_027.png" alt=""/> (<em class="italic">Figure 6.2</em>). This simple change to the network architecture changes the network behavior. Before, the function implemented by the network was just <img src="image/Formula_B16391_06_028.png" alt=""/>, where <img src="image/Formula_B16391_06_029.png" alt=""/> is the current time when the input sample, <img src="image/Formula_B16391_06_030.png" alt=""/>, is presented to the network. Now, the function implemented by the recurrent network assumes the shape <img src="image/Formula_B16391_06_031.png" alt=""/>; that is, the current output depends on the current input, as well as on the output produced in the previous step for the previous input sample. We have introduced the concept of time: </p>
+			<div>
+				<div id="_idContainer460" class="IMG---Figure">
+					<img src="image/B16391_06_002.jpg" alt="Figure 6.2 – Adding a recurrent connection to the feedforward network"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.2 – Adding a recurrent connection to the feedforward <a id="_idTextAnchor186"/>network</p>
+			<p>Thanks to these<a id="_idIndexMarker486"/> recurrent connections, the output of RNNs also contains a bit of the history of the input signal. We then say that they have memory. How far in the past the memory span goes depends on the recurrent architecture and the paradigms contained in it. For this reason, RNNs are more suitable than feedforward networks for analyzing sequential data, because they can also process information from the past. Past input information is metabolized via the output feedback into the input layer through the recurrent connection.</p>
+			<p>The problem now becomes how to train a network where the output depends on the previous output(s) as well. As you can imagine, a number of algorithms have been proposed over the years. The simplest one, and therefore the most commonly<a id="_idIndexMarker487"/> adopted, is <strong class="bold">Back Propagation Through Time</strong> (<strong class="bold">BPTT</strong>) (Goodfellow I, Bengio Y., Courville A., <em class="italic">Deep Learning</em>, MIT Press, (2016)).</p>
+			<p>BPTT is based on the concept of <em class="italic">unrolling</em> the network over time. To understand the concept <a id="_idIndexMarker488"/>of <em class="italic">unrolling</em>, let's take a few glimpses at the network at different times, <img src="image/Formula_B16391_06_032.png" alt=""/>, during training:</p>
+			<ul>
+				<li>At time <img src="image/Formula_B16391_06_033.png" alt=""/>, we have <a id="_idIndexMarker489"/>the original feedforward network, with weight matrixes <img src="image/Formula_B16391_06_034.png" alt=""/> and <img src="image/Formula_B16391_06_035.png" alt=""/>, input <img src="image/Formula_B16391_06_036.png" alt=""/> and <img src="image/Formula_B16391_06_037.png" alt=""/>, and output <img src="image/Formula_B16391_06_038.png" alt=""/>.</li>
+				<li>At time <img src="image/Formula_B16391_06_039.png" alt=""/>, we again have the original feedforward network, with weight matrixes <img src="image/Formula_B16391_06_040.png" alt=""/> and <img src="image/Formula_B16391_06_041.png" alt=""/>, but this time with input <img src="image/Formula_B16391_06_042.png" alt=""/> and <img src="image/Formula_B16391_06_043.png" alt=""/> and output <img src="image/Formula_B16391_06_044.png" alt=""/>.</li>
+				<li>At time <img src="image/Formula_B16391_06_045.png" alt=""/>, again, we have the original feedforward network, with weight matrixes <img src="image/Formula_B16391_06_046.png" alt=""/> and <img src="image/Formula_B16391_06_047.png" alt=""/>, but this time with input <img src="image/Formula_B16391_06_048.png" alt=""/> and <img src="image/Formula_B16391_06_049.png" alt=""/> and output <img src="image/Formula_B16391_06_050.png" alt=""/>.</li>
+				<li>This continues for the <img src="image/Formula_B16391_06_021.png" alt=""/> samples in the input sequence.</li>
+			</ul>
+			<p>Practically, we <a id="_idIndexMarker490"/>can copy the same original feedforward network with static weight matrixes <img src="image/Formula_B16391_06_052.png" alt=""/> and <img src="image/Formula_B16391_06_053.png" alt=""/> <img src="image/Formula_B16391_06_054.png" alt=""/> times, which is as many <img src="image/Formula_B16391_06_055.png" alt=""/> samples as in the input sequence (<em class="italic">Figure 6.3</em>). Each copy of the original network at time <img src="image/Formula_B16391_06_056.png" alt=""/> will have the current input vector, <img src="image/Formula_B16391_06_057.png" alt=""/>, and the previous output vector, <img src="image/Formula_B16391_06_058.png" alt=""/>, as input. More generically, at each time <img src="image/Formula_B16391_06_059.png" alt=""/>, the network copy will produce an output, <img src="image/Formula_B16391_06_060.png" alt=""/>, and a related state, <img src="image/Formula_B16391_06_061.png" alt=""/>. The state, <img src="image/Formula_B16391_06_062.png" alt=""/>, is the network memory and feeds the next copy of the static network, while <img src="image/Formula_B16391_06_063.png" alt=""/> is the dedicated output of each network copy. In some recurrent architectures, <img src="image/Formula_B16391_06_064.png" alt=""/> and <img src="image/Formula_B16391_06_065.png" alt=""/> are identical.</p>
+			<p>Let's summarize. We<a id="_idIndexMarker491"/> have a recurrent network with the following features:</p>
+			<ul>
+				<li>Fed by input tensor <img src="image/Formula_B16391_06_066.png" alt=""/>, of <img src="image/Formula_B16391_06_067.png" alt=""/> size, consisting of a sequence of <img src="image/Formula_B16391_06_068.png" alt=""/> <img src="image/Formula_B16391_06_069.png" alt=""/>-dimensional vectors</li>
+				<li>Producing an output tensor, <img src="image/Formula_B16391_06_070.png" alt=""/>, of <img src="image/Formula_B16391_06_071.png" alt=""/> size, consisting of a sequence of <img src="image/Formula_B16391_06_072.png" alt=""/> <img src="image/Formula_B16391_06_073.png" alt=""/> -dimensional vectors</li>
+				<li>Producing a state tensor, <img src="image/Formula_B16391_06_074.png" alt=""/>, related to output tensor <img src="image/Formula_B16391_06_075.png" alt=""/>, used as the network memory<p class="callout-heading">Important note</p><p class="callout">This recurrent network can also be just a sub-network that is a hidden unit in a bigger neural architecture. In this case, it is fed by the outputs of previous layers, and its output forms the input to the next layers in the bigger network. Then, <img src="image/Formula_B16391_06_076.png" alt=""/> is not the output of the whole network, but just the output of this recurrent unit – that is, an intermediate hidden state of the full network.</p></li>
+			</ul>
+			<p>In <em class="italic">Figure 6.3</em>, we <a id="_idIndexMarker492"/>propose the unrollment over four time steps of the simple recurrent network in <em class="italic">Figure 6.2</em>:</p>
+			<div>
+				<div id="_idContainer506" class="IMG---Figure">
+					<img src="image/B16391_06_003.jpg" alt="Figure 6.3 – Unrolling a recurrent network though time"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.3 – Unrolling a recurrent network though time</p>
+			<p>At this point, we have transformed the recurrent sub-network into a sequence <a id="_idTextAnchor187"/>of <img src="image/Formula_B16391_03_173.png" alt=""/> copies of the original feedforward network – that is, into a much larger static feedforward network. As large as it might be, we do already know how to train fully connected feedforward networks with the backpropagation algorithm. So, the backpropagation algorithm has been adapted to include the unrolling process and to<a id="_idIndexMarker493"/> train the resulting feedforward network. This is the basic BPTT algorithm. Many variations of the BPTT algorithm have also been proposed over the years.</p>
+			<p>We will now dive into the details of the simplest recurrent network, the one made of just one layer of recurrent units.</p>
+			<h2 id="_idParaDest-104"><a id="_idTextAnchor188"/>Recurrent Neural Units</h2>
+			<p>The simplest recurrent neural unit<a id="_idIndexMarker494"/> consists of a network with just one single hidden layer, with activation function <img src="image/Formula_B16391_06_078.png" alt=""/>, with an auto connection. Using the same unrolling-over-time process, we can represent this unit as <img src="image/Formula_B16391_03_252.png" alt=""/> copies of a feedforward network with one hidden layer of just one unit (<em class="italic">Figure 6.4</em>):</p>
+			<div>
+				<div id="_idContainer510" class="IMG---Figure">
+					<img src="image/B16391_06_004.jpg" alt="Figure 6.4 – The simplest recurrent neural unit"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.4 – The simplest recurrent neural unit</p>
+			<p>In this case, the output, <img src="image/Formula_B16391_06_080.png" alt=""/>, is also the state of the network, which is fed back into th<a id="_idTextAnchor189"/>e input – that is, into the input of the next copy of the unrolled network at time <img src="image/Formula_B16391_06_081.png" alt=""/>.</p>
+			<p>This simple recurrent<a id="_idIndexMarker495"/> unit already shows some memory, in the sense that the current output also depends on previously presented samples at the input layer. However, its architecture is a bit too simple to show a considerable memory span. Of course, it depends on the task to solve how long of a memory span is needed. A classic example is sentence completion.</p>
+			<p>To complete a sentence, you need to know the topic of the sentence, and to know the topic, you need to know the previous words in the sentence. For example, analyzing the sentence <em class="italic">Cars drive on the …</em>, we realize that the topic is <em class="italic">cars</em> and then the only logical answer would be <em class="italic">road</em>. To complete this sentence, we need a memory of just four words. Let's now take a more complex sentence, such as <em class="italic">I love the beach. My favorite sound is the crashing of the …</em>. Here, many answers are possible, including <em class="italic">cars</em>, <em class="italic">glass</em>, or <em class="italic">waves</em>. To understand which is the logical answer, we need to go back in the sentence to the word <em class="italic">beach</em>, which is nine words backward. The memory span needed to analyze this sentence is more than double the memory span needed to analyze the previous sentence. This short example shows that sometimes a longer memory span is needed to give the correct answer.</p>
+			<p>The simple recurrent neural unit provides some memory, but often not enough to solve most required tasks. We need something more powerful that can crawl backward farther in the past than just what the simple recurrent unit can do. This is exactly why LSTM units were introduced.</p>
+			<h2 id="_idParaDest-105"><a id="_idTextAnchor190"/>Long Short-Term Memory</h2>
+			<p>LSTM was introduced<a id="_idIndexMarker496"/> for the first time in 1997 (Hochreiter, Sepp and Schmidhuber, Jürgen (1997), <em class="italic">Long Short-term Memory. Neural computation</em>, 9. 1735-80. 10.1162/ neco.1997.9.8.1735, https://www.researchgate.net/publication/13853244_Long_Short-term_Memory). It is a more complex type of recurrent unit, using an additional hidden vector, the cell state or memory state, <img src="image/Formula_B16391_06_082.png" alt=""/>, and the concept of gates.</p>
+			<p><em class="italic">Figure 6.5</em> shows the structure of an unrolled LSTM unit (C. Olah, <em class="italic">Understanding LSTM Networks</em>, 2015, <a href="https://colah.github.io/posts/2015-08-Understanding-LSTMs/">https://colah.github.io/posts/2015-08-Understanding-LSTMs/</a>):</p>
+			<div>
+				<div id="_idContainer514" class="IMG---Figure">
+					<img src="image/B16391_06_005.jpg" alt="Figure 6.5 – LSTM layer"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.5 – LSTM layer</p>
+			<p>As you can see, the different copies of the unit are connected by two hidden vectors. The one on the top is the cell st<a id="_idTextAnchor191"/>ate vector, <img src="image/Formula_B16391_06_083.png" alt=""/>, used to make information travel through the different unit copies. The second one on the bottom is the output vector of the unit.</p>
+			<p>Next, we have the gates, three in total. Gates can open or close (or partially open/close) and, in this<a id="_idIndexMarker497"/> way, they make decisions on what to store or delete from a hidden vector. A gate consists of a sigmoid function and a pointwise multiplication. Indeed, the sigmoid function takes values in [0,1]. Specifically, <img src="image/Formula_B16391_06_084.png" alt=""/> removes the input (forgets it), while <img src="image/Formula_B16391_06_085.png" alt=""/> lets the input pass unaltered (remembers it). In between <img src="image/Formula_B16391_06_086.png" alt=""/> and <img src="image/Formula_B16391_06_087.png" alt=""/>, a variety of nuances of remembering and forgetting are possible.</p>
+			<p>The weights of these sigmoid layers, which implement the gates, are adjusted via the learning process. That is, the gates learn when to allow data to enter, leave, or be deleted through the iterative process of making guesses, backpropagating error, and adjusting weights via gradient descent. The training algorithm for LSTM layers is again an adaptation of the backpropagation algorithm.</p>
+			<p>An LSTM layer contains three gates: a forget gate, an input gate, and an output gate (<em class="italic">Figure 6.5</em>). Let's have a closer look at these gates.</p>
+			<h3>The Forget Gate</h3>
+			<p>The first gate from the left, the <strong class="bold">forget gate</strong>, filters the components from the cell state vector. Based on the<a id="_idIndexMarker498"/> values in the current input vector, <img src="image/Formula_B16391_06_088.png" alt=""/> and in the output vector of the previous unit, <img src="image/Formula_B16391_06_089.png" alt=""/>, the gate produces a forget or remember decision, as follows:</p>
+			<p class="figure-caption"><img src="image/Formula_B16391_06_090.png" alt=""/></p>
+			<p>Here, <img src="image/Formula_B16391_06_091.png" alt=""/> is the weight matrix of the forget gate.</p>
+			<p>The vector of <a id="_idIndexMarker499"/>decision <img src="image/Formula_B16391_06_092.png" alt=""/> is then pointwise multiplied by the hidden cell state vector, <img src="image/Formula_B16391_06_093.png" alt=""/>, to decide what to remember (<img src="image/Formula_B16391_06_094.png" alt=""/>) and what to forget (<img src="image/Formula_B16391_06_095.png" alt=""/>) from the previous state.</p>
+			<p>The question now is why do we want to forget? If LSTM units have been introduced to obtain a longer memory, why should we need to forget something? Take, for example, analyzing a document in a text corpus; you might need to forget all knowledge about the previous document since the two documents are probably unrelated. Therefore, with each new document, the memory should be reset to 0.</p>
+			<p>Even within the same text, if you move to the next sentence and the subject of the text changes, and with the new subject a new gender appears, then you might want to forget the gender of the previous subject, to be ready to incorporate the new one and to adjust the corresponding part of speech accordingly.</p>
+			<h3>The Input Gate</h3>
+			<p>The goal of the input gate is <a id="_idIndexMarker500"/>more straightforward: it keeps the input information that is new and useful. Here, again, a sigmoid gate lets input components pass completely (<img src="image/Formula_B16391_06_096.png" alt=""/>), blocks them completely (<img src="image/Formula_B16391_06_097.png" alt=""/>), or something in between depending on their importance to the final, current, and future outputs. </p>
+			<p>This decision is implemented again as follows:</p>
+			<p><img src="image/Formula_B16391_06_098.png" alt=""/></p>
+			<p>This is done with a new set of weights, <img src="image/Formula_B16391_06_099.png" alt=""/>, of course.</p>
+			<p>The input gate doesn't operate on the previous cell state, <img src="image/Formula_B16391_06_100.png" alt=""/>, directly. Instead, a new cell <a id="_idIndexMarker501"/>state candidate, <img src="image/Formula_B16391_06_101.png" alt=""/>, is created, based on the values in the current input vector, <img src="image/Formula_B16391_06_102.png" alt=""/>, and in the output vector of the previous unit, <img src="image/Formula_B16391_06_103.png" alt=""/>, using a tanh layer. </p>
+			<p>This looks as follows:</p>
+			<p><img src="image/Formula_B16391_06_104.png" alt=""/></p>
+			<p>Again, this is with another set of weights, <img src="image/Formula_B16391_06_105.png" alt=""/>.</p>
+			<p>The input gate now decides which information of the cell candidate state vector, <img src="image/Formula_B16391_06_106.png" alt=""/>, should be added to the cell state vector, <img src="image/Formula_B16391_06_107.png" alt=""/>. Therefore, the candidate state, <img src="image/Formula_B16391_06_108.png" alt=""/>, is multiplied pointwise by the output of the sigmoid layer of the input gate, <img src="image/Formula_B16391_06_109.png" alt=""/>, and then added to the filtered cell state vector, <img src="image/Formula_B16391_06_110.png" alt=""/> The final state, <img src="image/Formula_B16391_06_111.png" alt=""/>, then<a id="_idIndexMarker502"/> results in the following:</p>
+			<p class="figure-caption"><img src="image/Formula_B16391_06_112.png" alt=""/></p>
+			<p>What have we done here? We have added new content to the previous cell state vector, <img src="image/Formula_B16391_06_113.png" alt=""/>. Let's suppose we want to look at a new sentence in the text where <img src="image/Formula_B16391_06_114.png" alt=""/> is a subject with a different gender. In the forget gate, we forgot about the gender previously stored in the cell state vector. Now, we need to fill in the void and push the new gender into memory – that is, into the new cell state vector.</p>
+			<h3>The Output Gate</h3>
+			<p>Finally, the output gate! We have <a id="_idIndexMarker503"/>the new cell state, <img src="image/Formula_B16391_06_115.png" alt=""/>, to pass to the next copy of the unit; we just need to output something for this current time, <img src="image/Formula_B16391_06_116.png" alt=""/>.</p>
+			<p>Again, like all other gates, the output gate applies a sigmoid function to all components of the input vector, <img src="image/Formula_B16391_06_117.png" alt=""/>, and of the previous output vector, <img src="image/Formula_B16391_06_118.png" alt=""/>, in order to decide what to block and what to pass from the newly created state vector, <img src="image/Formula_B16391_06_119.png" alt=""/>, into the final output vector, <img src="image/Formula_B16391_06_120.png" alt=""/>. All decisions, <img src="image/Formula_B16391_06_121.png" alt=""/>, are then pointwise multiplied by the newly created state vector, <img src="image/Formula_B16391_06_122.png" alt=""/>, previously normalized through a <img src="image/Formula_B16391_06_123.png" alt=""/> function to fall in <img src="image/Formula_B16391_06_124.png" alt=""/>:</p>
+			<p><img src="image/Formula_B16391_06_125.png" alt=""/></p>
+			<p><img src="image/Formula_B16391_06_126.png" alt=""/></p>
+			<p>This is with a new set of weights, <img src="image/Formula_B16391_06_127.png" alt=""/>, for this output gate.</p>
+			<p>In this case, the output vector, <img src="image/Formula_B16391_06_128.png" alt=""/>, and the state vector, <img src="image/Formula_B16391_06_129.png" alt=""/>, produced by the LSTM recurrent unit<a id="_idIndexMarker504"/> are different, <img src="image/Formula_B16391_06_130.png" alt=""/> being a filtered version of <img src="image/Formula_B16391_06_131.png" alt=""/>.</p>
+			<p>Why do we need a different output from the unit cell state? Well, sometimes the output needs to be something different from the memory. For example, while the cell state is supposed to carry the memory of the gender to the next unit copy, the output might be required to produce the number, plural or singular, of the subject rather than its gender.</p>
+			<p>LSTM layers are a very powerful recurrent architecture, capable of keeping the memory of a large number of previous inputs. These layers thus fit – and are often used to solve – problems involving ordered sequences of data. If the ordered sequences of data are sorted based on time, then we talk about time series. Indeed, LSTM-based RNNs have been applied often and successfully to time series analysis problems. A classic task to solve in time series analysis is demand prediction. In the next section, we will explore an application of LSTM-based neural networks to solve a demand prediction problem.</p>
+			<h1 id="_idParaDest-106"><a id="_idTextAnchor192"/>The Demand Prediction Problem</h1>
+			<p>Let's continue then by exploring a demand prediction problem<a id="_idIndexMarker505"/> and how it can be treated as a time series analysis problem.</p>
+			<p>Demand prediction is a task related to the need to make estimates about the future. We all agree that knowing what lies ahead in the future makes life much easier. This is true for life events as well as, for example, the prices of washing machines and refrigerators, or demand for electrical energy in an entire city. Knowing how many bottles of olive oil customers will want tomorrow or next week allows for better restocking plans in retail stores. Knowing of a likely increase in the demand for gas or diesel allows a trucking company to better plan its finances. There are <a id="_idIndexMarker506"/>countless examples where this kind of knowledge of the future can be of help.</p>
+			<h2 id="_idParaDest-107"><a id="_idTextAnchor193"/>Demand Prediction</h2>
+			<p><strong class="bold">Demand prediction</strong>, or <a id="_idIndexMarker507"/>demand forecasting, is a big branch of data science. Its goal is to make estimations about future demand using historical data and possibly other external information. Demand prediction can refer to any kind of numbers: visitors to a restaurant, generated kW/h, school new registrations, beer bottles, diaper packages, home appliances, fashion clothing and accessories, and so on. Demand forecasting may be used in production planning, inventory management, and at times in assessing future capacity requirements, or in making decisions on whether to enter a new market.</p>
+			<p>Demand prediction techniques are usually based on time series analysis. Previous values of demand for a given product, goods, or service are stored and sorted over time to form a time series. When past values in the time series are used to predict future values in the same time series, we are talking about autoregressive analysis techniques. When past values from other external time series are also used to predict future values in the time series, then we are talking about multi-regression analysis techniques.</p>
+			<p><strong class="bold">Time series analysis</strong> is a <a id="_idIndexMarker508"/>field of data science with a lot of tradition, as it already offers a wide range of classical techniques. Traditional forecasting techniques stem from statistics and their top techniques are found in<a id="_idIndexMarker509"/> the <strong class="bold">Autoregressive Integrated Moving Average</strong> (<strong class="bold">ARIMA</strong>) model and its variations. These techniques require the assumption of a number of statistical hypotheses, are hard to verify, and are often not realistic. On the other hand, they are satisfied with a relatively small amount of past data.</p>
+			<p>Recently, with the growing popularity of <strong class="bold">machine learning</strong> algorithms, a few data-based regression techniques have also been applied to demand prediction problems. The advantages of these machine learning techniques consist of the absence of required statistical hypotheses and less overhead in data transformation. The disadvantages consist of the need for a larger amount of data. Also, notice that in the case of time series where all required statistical hypotheses are verified, traditional methods tend to perform better.</p>
+			<p>Let's try to predict the next <img src="image/Formula_B16391_06_132.png" alt=""/> values in the time series based on the past <img src="image/Formula_B16391_06_133.png" alt=""/> values. When using a machine learning model for time series analysis, such as, for example, linear regression or a regression tree, we need to supply the vector of the past <img src="image/Formula_B16391_06_021.png" alt=""/> samples as<a id="_idIndexMarker510"/> input to train the model to predict the next <img src="image/Formula_B16391_06_132.png" alt=""/> values. While this strategy is commonly implemented and yields satisfactory results, it is still a static approach to time series analysis – <strong class="bold">static</strong> in the sense that each output response depends only on the corresponding input vector. The order of presentation of input samples to the model does not influence the response. There is no concept of an input sequence, but just of an input vector.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">KNIME Analytics Platform offers a few nodes and standard components to deal with time series analysis. The key node here is the <strong class="bold">Lag Column</strong> node to build a vector of past samples. In addition to the <a id="_idIndexMarker511"/>Lag Column node, a number of components dedicated to time series analysis are available in the <strong class="source-inline">EXAMPLES/00_Components/Time Series</strong> folder in the <strong class="bold">KNIME Explorer</strong> panel. These components use the KNIME GUI to run the <strong class="source-inline">statsmodels</strong> Python module in the background. Because of that, they require the installation of the KNIME Python integration (<a href="https://www.knime.com/blog/setting-up-the-knime-python-extension-revisited-for-python-30-and-20">https://www.knime.com/blog/setting-up-the-knime-python-extension-revisited-for-python-30-and-20</a>).</p>
+			<p>In <em class="italic">Figure 6.6</em>, you can see the list of available components for time series analysis tasks within KNIME Analytics Platform:</p>
+			<div>
+				<div id="_idContainer568" class="IMG---Figure">
+					<img src="image/B16391_06_006.jpg" alt="Figure 6.6 – The EXAMPLES/00_Components/Time Series folder contains components dedicated to time series analysis"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.6 – The EXAMPLES/00_<a id="_idTextAnchor194"/>Components/Time Series folder contains components dedicated to time series analysis</p>
+			<p>All things considered, these<a id="_idIndexMarker512"/> machine learning-based strategies, using regression models, do not fully exploit the sequential structure of the data, where the fact that <img src="image/Formula_B16391_06_136.png" alt=""/> comes after <img src="image/Formula_B16391_06_137.png" alt=""/> carries some additional information. This is where RNNs, and particularly LSTMs, might offer an edge on the other machine learning algorithms, thanks to their internal <strong class="bold">memory</strong>.</p>
+			<p>Let's now introduce the case study for this chapter: predicting energy demand in <strong class="bold">kilowatts </strong>(<strong class="bold">kW</strong>) needed by the hour.</p>
+			<h2 id="_idParaDest-108"><a id="_idTextAnchor195"/>Predicting Energy Demand</h2>
+			<p>As an <a id="_idIndexMarker513"/>example of demand prediction, we want to tackle the problem of electrical energy prediction – that is, of predicting the number of kW needed in the next hour by an average household consumer.</p>
+			<p>One of the hardest problems in the energy industry is matching supply and demand. On the one hand, over-production of energy can be a waste of resources; on the other hand, under-production can leave people without the basic commodities of modern life. The prediction of electrical energy demand at each point in time is therefore a very important topic in data science.</p>
+			<p>For this reason, a couple of years ago energy companies started to monitor the electricity consumption of each household, store, or other entity, by means of smart meters. A pilot project was launched in 2009 by the <a id="_idIndexMarker514"/>Irish <strong class="bold">Commission for Energy Regulation</strong> (<strong class="bold">CER</strong>).</p>
+			<p>The Smart Metering Electricity <strong class="bold">Customer Behaviour Trials</strong> (<strong class="bold">CBTs</strong>) took place between 2009 and 2010 with <a id="_idIndexMarker515"/>over 5,000 Irish homes and businesses participating. The purpose of the trials was to assess the impact on consumers' electricity consumption, in order to inform the cost-benefit analysis for a national rollout. Electric Ireland residential and business customers and Bord Gáis Energy business customers who participated in the trials had an electricity smart meter installed in their homes or on their premises and agreed to take part in the research to help establish how smart metering can help shape energy usage behaviors across a variety of demographics, lifestyles, and home sizes.</p>
+			<p>The original dataset contains over 5,000 time series, each one measuring the electricity usage for each installed smart meter for a bit over a year. All original time series have been aligned and standardized to report energy measures by the hour.</p>
+			<p>The final goal is to predict energy demand across all users. At this point, we have a dilemma: should we train one model for each time series and sum up all predictions to get the demand in the next hour or should we train one single model on all time series to get the global demand for the next hour?</p>
+			<p>Training one model<a id="_idIndexMarker516"/> on a single time series is easier and probably more accurate. However, training 5,000 models (and probably more in real life) can pose a few technical problems. Training one single model on all time series might not be that accurate. As expected, a compromise solution was implemented. Smart energy meters have been clustered based on energy usage profile, and the average time series of hourly energy usage for each cluster has been calculated. The goal now is to calculate the energy demand in the next hour for each clustered time series, weight it by the cluster size, and then sum up all contributions to find the final total energy demand for the next hour.</p>
+			<p>Thirty smart meter clusters have been detected based on the energy used on business days versus the weekend, at different times over the 24 hours, and the average hourly consumption.</p>
+			<p>More details on this data preparation procedure can be found in the <em class="italic">Data Chef ETL Battles. What can be prepared with today's data? Ingredient Theme: Energy Consumption Time Series</em> blog post, available at https://www.knime.com/blog/EnergyConsumptionTimeSeries, and in the <em class="italic">Big Data, Smart Energy, and Predictive Analytics</em> whitepaper, available at <a href="https://files.knime.com/sites/default/files/inline-images/knime_bigdata_energy_timeseries_whitepaper.pdf">https://files.knime.com/sites/default/files/inline-images/knime_bigdata_energy_timeseries_whitepaper.pdf</a>.</p>
+			<p>The final dataset contains 30 time series of average energy usage by the 30 clusters. Each time series shows the electrical profile of a given cluster of smart meters: from stores (high energy consumption from 9 a.m. to 5 p.m. on business days) to nightly business customers (high energy consumption from 9 p.m. to 6 a.m. every day), from family households (high energy consumption from 7 a.m. to 9 a.m. and then again from 6 p.m. to 10 p.m. every business day) to other unclear entities (using energy across 24 hours on all 7 days of the week). For example, cluster 26 refers to stores (<em class="italic">Figure 6.7</em>). Here, electrical energy is used mainly between 9 a.m. and 5 p.m. on all business days:</p>
+			<div>
+				<div id="_idContainer571" class="IMG---Figure">
+					<img src="image/B16391_06_007.jpg" alt="Figure 6.7 – Plot of energy usage by the hour for cluster 26"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.7 – Plot of energy us<a id="_idTextAnchor196"/>age by the hour for cluster 26</p>
+			<p>On the opposite side, cluster 13 includes a number of restaurants (<em class="italic">Figure 6.8</em>), where the energy usage <a id="_idIndexMarker517"/>is pushed to the evening, mainly from 6 p.m. to midnight, every day of the week:</p>
+			<div>
+				<div id="_idContainer572" class="IMG---Figure">
+					<img src="image/B16391_06_008.jpg" alt="Figure 6.8 – Plot of energy usage by the hour for cluster 13"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.8 – Plot of energy us<a id="_idTextAnchor197"/>age by the hour for cluster 13</p>
+			<p>Notice that cluster 26 is the poster child for time series analysis, with a clear seasonality on the 24 hours in a day and the 7 days of the week series. In this chapter, we will continue with an autoregressive analysis of cluster 26's time series. The goal will be to predict the average energy usage in the next hour, based on the average energy usage<a id="_idIndexMarker518"/> in the past <img src="image/Formula_B16391_06_138.png" alt=""/> hours, for cluster 26.</p>
+			<p>Now that we have a set of time series describing the usage of electrical energy by the hour for clusters of users, we will try to perform some predictions of future usage for each cluster. Let's focus first on the data preparation for this time series problem.</p>
+			<h1 id="_idParaDest-109"><a id="_idTextAnchor198"/>Data Preparation – Creating the Past</h1>
+			<p>Let's now implement in <a id="_idIndexMarker519"/>practice a demand prediction application, using the time series for cluster 26. Again, we will have two separate workflows: one to train the LSTM-based RNN and one to deploy it in production. Both applications will include a data preparation phase, which must be exactly the same for both. In this section, we will go through this data preparation phase.</p>
+			<p>Dealing with <strong class="bold">time series</strong>, the <strong class="bold">data preparation</strong> steps are slightly different from what is implemented in other classification or clustering applications. Let's go through these steps:</p>
+			<ul>
+				<li><strong class="bold">Data loading</strong>: Read from the file the time series of the average hourly used energy for the 30 identified clusters and the corresponding times.</li>
+				<li><strong class="bold">Date and time standardization</strong>: Time is usually read as a string from the file. To make sure that it is processed appropriately, it is best practice to transform it into a <strong class="bold">Date&amp;Time</strong> object. A number of nodes are available to deal with Date&amp;Time objects in an appropriate and easy way, but especially in a standardized way.</li>
+				<li><strong class="bold">Timestamp alignment</strong>: Once the time series has been loaded, we need to make sure that its sampling has been consistent with no time holes. Possible time holes need to be filled with missing values. We also need to make sure that the data of the time series has been time-sorted.</li>
+				<li><strong class="bold">Partitioning</strong>: Here, we <a id="_idIndexMarker520"/>need to create a training set to train the network and a test set to evaluate its performance. Differently from classification problems, here we need to respect the time order so as not to mix the past and future of the time series in the same set. Past samples should be reserved for the training set and future samples for the test set.</li>
+				<li><strong class="bold">Missing value imputation</strong>: Missing value imputation for time series is also different from missing value imputation in a static dataset. Since what comes after depends on what was there before, most techniques of missing value imputation for time series are based on previous and/or the following sample values.</li>
+				<li><strong class="bold">Creating the input vector of past samples</strong>: Once the time series is ready for analysis, we need to build the tensors to feed the network. The tensors must consist of <img src="image/Formula_B16391_06_021.png" alt=""/> past samples that the network will use to predict the value for the next sample in time. So, we need to produce sequences of <img src="image/Formula_B16391_03_173.png" alt=""/> past <img src="image/Formula_B16391_06_141.png" alt=""/>-dimensional vectors (the <img src="image/Formula_B16391_06_142.png" alt=""/> past samples) for all training and test records.</li>
+				<li><strong class="bold">Creating the list to feed the network</strong>: Finally, the input tensors of past samples must be transformed into a list of values, as this is the input format required by <a id="_idIndexMarker521"/>
+the network.</li>
+			</ul>
+			<p>Let's start with data loading.</p>
+			<h2 id="_idParaDest-110"><a id="_idTextAnchor199"/>Data Loading and Standardization</h2>
+			<p>The dataset is read from a <strong class="bold">CSV</strong> file via the <strong class="bold">File Reader</strong> node: 30 time series and one date column. The date column is imported by the File Reader node as a string and must be <a id="_idIndexMarker522"/>converted into a Date&amp;Time object to make sure it is processed – for example, sorted – appropriately in the next steps. <strong class="bold">Date&amp;Time</strong> is the internal <a id="_idIndexMarker523"/>standard object to represent date and time entities in KNIME Analytics Platform. In order to convert a string into a Date&amp;Time object, we use the <strong class="bold">String to Date&amp;Time</strong> node:</p>
+			<div>
+				<div id="_idContainer578" class="IMG---Figure">
+					<img src="image/B16391_06_009.jpg" alt="Figure 6.9 – The String to Date&amp;Time node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.9 – The String to Date&amp;Tim<a id="_idTextAnchor200"/>e node and its configuration window</p>
+			<p>In the configuration window (<em class="italic">Figure 6.9</em>), you must select the string input columns containing the date and/or time information and define the date/time format. You can do this manually, by providing a string format – for example, as <strong class="source-inline">dd.mm.yyyy</strong>, where <strong class="source-inline">dd</strong> indicates the day, <strong class="source-inline">mm</strong> the month, and <strong class="source-inline">yyyy</strong> the year. </p>
+			<p>For example, if you have<a id="_idIndexMarker524"/> date format of <strong class="source-inline">day(2).month(2).year(4)</strong>, you can manually add the option <strong class="source-inline">dd.MM.yyyy</strong>, if this is not available <a id="_idIndexMarker525"/>in the <strong class="bold">Date format</strong> options. When manually adding the date/time type, you must select the appropriate <strong class="bold">New type</strong> option: <strong class="bold">Date or Time</strong> or <strong class="bold">Date&amp;time</strong>.</p>
+			<p>Alternatively, you can provide the date/time format automatically, by pressing the <strong class="bold">Guess data type and format</strong> button. With this last option, KNIME Analytics Platform will parse your string to find out the date/time format. It works most of the time! If it does not, you can always revert to manually entering the date/time format. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">In the node description of the <strong class="bold">String to Data&amp;Time</strong> node, you can find an overview of possible placeholders in the format structures. The most important ones are <strong class="bold">y</strong> for year, <strong class="bold">M</strong> for month in year, <strong class="bold">d</strong> for day of month, <strong class="bold">H</strong> for hour of day (between 0 and 23), <strong class="bold">m</strong> for minute of hour, and <strong class="bold">s</strong> for second of minute. Many more placeholders are supported – for example, <strong class="bold">W</strong> for week of month or <strong class="bold">D</strong> for day of year.</p>
+			<p>The String to Date&amp;Time node is just one of the many nodes that deals with Date&amp;Time objects, all contained in the <strong class="bold">Other Data Types/Time Series</strong> folder in the <strong class="bold">Node Repository</strong> panel. Some nodes manipulate Date&amp;Time objects, such as, for example, to calculate a time difference or produce a time shift; other nodes are used to convert Date&amp;Time objects from one format to another.</p>
+			<p>After that, the Column Filter node is inserted to isolate the time series for cluster 26 only. The only required standardization here was about the date conversion from a string to a Date&amp;Time object. We can now move on to data cleaning.</p>
+			<h2 id="_idParaDest-111"><a id="_idTextAnchor201"/>Data Cleaning and Partitioning</h2>
+			<p>The <strong class="bold">Timestamp Alignment</strong> component<a id="_idIndexMarker526"/> is inserted to check for time holes in the time series. This component checks whether the selected<a id="_idIndexMarker527"/> timestamp column is uniformly sampled in the selected time<a id="_idIndexMarker528"/> scale. Missing values will be inserted at skipped sampling times. In this case, it checks whether the <strong class="bold">rowID</strong> column, containing the timestamps, has missing sampling times considering an hourly sampling rate.</p>
+			<p>The Timestamp Alignment component is part of the time series-dedicated component set available in <strong class="source-inline">EXAMPLES/00_Components/Time Series</strong>. To create an instance in your workflow, just drag and drop it into the workflow editor or double-click it.</p>
+			<p>After that, we partition the data into a training set and test set, to train the LSTM-based RNN and evaluate it. We have not provided an additional validation set here to evaluate the network performance throughout the training process. We decided to keep things simple and just provide a training set to the Keras Network Learner node and a test set to measure the error on the time series prediction task:</p>
+			<div>
+				<div id="_idContainer579" class="IMG---Figure">
+					<img src="image/B16391_06_010.jpg" alt="Figure 6.10 – The Partitioning node and its configuration window. Notice the Take from top data extraction mode for time series analysis"/>
+				</div>
+			</div>
+			<p class="figure-caption">F<a id="_idTextAnchor202"/>igure 6.10 – The Partitioning node and its configuration window. Notice the Take from top data extraction mode for time series analysis</p>
+			<p>To separate the input dataset <a id="_idIndexMarker529"/>into training and test sets, we use again a <strong class="bold">Partitioning</strong> node. Here, we<a id="_idIndexMarker530"/> decided to implement an 80%–20% split: 80% of the input data will be directed toward training and 20% toward testing. In addition, we set the extraction procedure to <strong class="bold">Take from top</strong> (<em class="italic">Figure 6.10</em>). In a time series analysis problem, we want to keep the intrinsic time order of the data: we use the past to train the network and the future to test it. When using the <strong class="bold">Take from top</strong> data extraction option, the top percentage of the data is designated to the top output port, while the remaining at the bottom to the lower output port. If the data is time-sorted from past to future, then this data extraction modality preserves the time order of the data.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">In a time series analysis problem, partitioning should use the <strong class="bold">Take from top</strong> data extraction modality, in order to preserve the time order of the data and use the past for training and the future for testing.</p>
+			<p>As for every dataset, the operation for missing value imputation is an important one; first, because neural networks cannot deal with missing values and second, because choosing the right missing value imputation technique can affect your final results.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">Missing value imputation must be implemented after the Timestamp Alignment component since this component, by definition, creates missing values.</p>
+			<p>In <a href="B16391_04_Final_NM_ePUB.xhtml#_idTextAnchor101"><em class="italic">Chapter 4</em></a>, <em class="italic">Building and Training a Feedforward Network</em>, we already introduced the <strong class="bold">Missing Value</strong> node and its different strategies to impute missing values. Some of <a id="_idIndexMarker531"/>these strategies are especially useful when it comes to<a id="_idIndexMarker532"/> sequential data, as they take the previous and/or following values in a time series into account. Possible strategies are as follows:</p>
+			<ul>
+				<li><strong class="bold">Average/linear interpolation</strong>, replacing the missing value with the average value of previous and next sample</li>
+				<li><strong class="bold">Moving average</strong>, replacing the missing value with the mean value of the sample window</li>
+				<li><strong class="bold">Next</strong>, replacing the missing value with the value of the next sample</li>
+				<li><strong class="bold">Previous</strong>, replacing the missing value with the value of the previous sample</li>
+			</ul>
+			<p>We went for linear interpolation between the previous and next values to impute missing values in the time series (<em class="italic">Figure 6.11</em>):</p>
+			<p class="figure-caption"><a id="_idTextAnchor203"/></p>
+			<div>
+				<div id="_idContainer580" class="IMG---Figure">
+					<img src="image/B16391_06_011.jpg" alt="Figure 6.11 – The Missing Value node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.11 – The Missing Value node and its configuration window</p>
+			<p>The formula to use for <a id="_idIndexMarker533"/>missing value imputation is calculated in the <strong class="bold">Missing Value</strong> node on the training data, applied to the test data with the <strong class="bold">Missing Value (Apply)</strong> node, and saved to a file through the Model Writer node. The <a id="_idIndexMarker534"/>pure application on the test set of the formula defined on the training set prevents the test data from interfering with the implementation of any transformation required for model training.</p>
+			<p>Let's focus next on the creation of input tensors for the neural network.</p>
+			<h2 id="_idParaDest-112"><a id="_idTextAnchor204"/>Creating the Input Tensors</h2>
+			<p>We have read the <a id="_idIndexMarker535"/>data, converted the date cells into Date&amp;Time objects, isolated the time series for cluster 26, assigned missing values to missing sampling steps, partitioned the data into 80% for the training set and 20% for the test set, applied a linear interpolation between previous and next value for missing value imputation. The data is ready, it is now time to create the input tensors for the neural network.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">A key node to create vectors of past samples that is so often needed in time series analysis is the Lag Column node.</p>
+			<p><em class="italic">Figure 6.12</em> shows the <a id="_idIndexMarker536"/>Lag Column node and its configuration windo<a id="_idTextAnchor205"/>w:</p>
+			<div>
+				<div id="_idContainer581" class="IMG---Figure">
+					<img src="image/B16391_06_012.jpg" alt="Figure 6.12 – The Lag Column node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.12 – The Lag Column node and its configuration window</p>
+			<p>The <strong class="bold">Lag Column</strong> node makes copies of the selected column and shifts them down a number, <img src="image/Formula_B16391_06_143.png" alt=""/>, of cells, where <img src="image/Formula_B16391_06_144.png" alt=""/> cells, where <img src="image/Formula_B16391_06_145.png" alt=""/> is the lag interval and <img src="image/Formula_B16391_06_146.png" alt=""/> is the <strong class="bold">Lag</strong> setting in the configuration window.</p>
+			<p>The Lag Column node <a id="_idIndexMarker537"/>is a very simple yet very powerful node that comes in handy in a lot of situations. If the input column is time-sorted, then shifting down the cells corresponds to moving them into the past or the future, depending on the time order.</p>
+			<p>In <em class="italic">Figure 6.13</em>, we explain this concept:</p>
+			<div>
+				<div id="_idContainer586" class="IMG---Figure">
+					<img src="image/B16391_06_013.jpg" alt="Figure 6.13 – The Lag Column node takes snapshots of the same column at different times, as defined by the Lag and Lag interval settings"/>
+				</div>
+			</div>
+			<p class="figure-caption">Fig<a id="_idTextAnchor206"/>ure 6.13 – The Lag Column node takes snapshots of the same column at different times, as defined by the Lag and Lag interval settings</p>
+			<p>Considering Lag = 4 and Lag Interval = 2, the Lag Column node produces four copies of the selected column, each copy moving backward with a step of 2. That is, besides the selected column at current time <em class="italic">t</em>, we will also have four snapshots of the same column at time <em class="italic">t</em>-2, <em class="italic">t</em>-4, <em class="italic">t</em>-6, and <em class="italic">t</em>-8 (<em class="italic">Figure 6.13</em>).</p>
+			<p>For our demand prediction problem, we used the values for the average energy used by cluster 26 in the immediate 200 past hours to predict the average energy need at the current hour. That is, we built an input vector with the 200 immediate past samples, using a Lag Column node with Lag=200 and Lag Interval=1 (<em class="italic">Figure 6.12</em>).</p>
+			<p>For space reasons, we then transformed the vector of cells into a collection of cells using the <strong class="bold">Column Aggregator</strong> node, as it is one of the possible formats to feed the neural network via the Keras Network Learner node. The Column Aggregator node is<a id="_idIndexMarker538"/> another way to produce <strong class="bold">lists</strong> of data cells. The node groups the selected columns per row and aggregates their cells using the selected aggregation method. In this case, the <strong class="bold">List</strong> aggregation method was selected and applied to the 200 past values of cluster 26, as created via the Lag Column node.</p>
+			<p>The workflow snippet, implementing data preparation part to feed the upcoming RNN for the demand prediction problem, is shown in <em class="italic">Figure 6.14</em>:</p>
+			<div>
+				<div id="_idContainer587" class="IMG---Figure">
+					<img src="image/B16391_06_014.jpg" alt="Figure 6.14 – Data preparation for demand prediction: date and time standardization, time alignment, missing value imputation, creating the input vector of past samples, and partitioning"/>
+				</div>
+			</div>
+			<p class="figure-caption">Fig<a id="_idTextAnchor207"/>ure 6.14 – Data preparation for demand prediction: date and time standardization, time alignment, missing value imputation, creating the input vector of past samples, and partitioning</p>
+			<p>The data is ready. Let's now build, train, and test the LSTM-based RNN to predict the average demand of electrical energy for cluster 26 at the current hour given the average energy used in the previous 200 hours by the same cluster 26.</p>
+			<h1 id="_idParaDest-113"><a id="_idTextAnchor208"/>Building, Training, and Deploying an LSTM-Based RNN</h1>
+			<p>Let's proceed with the next step: building a simple LSTM-based RNN for demand prediction. First, we will train the network, then we will test it, and finally, we will deploy it. In this case study, we used no validation set for the network and we performed no optimization on the static hyperparameters of the network, such as, for example, the size of the LSTM layer.</p>
+			<p>A relatively simple network is already achieving good error measures on the test set for our demand prediction task, and therefore, we decided to focus this section on how to test a model for time series prediction rather than on how to optimize the static parameters of a neural network. We looked at the optimization loop in <a href="B16391_05_Final_NM_ePUB.xhtml#_idTextAnchor152"><em class="italic">Chapter 5</em></a>, <em class="italic">Autoencoder for Fraud Detection</em>. In general, this optimization loop can also be applied to optimize network hyperparameters. Let's begin by building an LSTM-based RNN.</p>
+			<h2 id="_idParaDest-114"><a id="_idTextAnchor209"/>Building the LSTM-Based RNN</h2>
+			<p>For this case study, we<a id="_idIndexMarker539"/> went for the simplest possible LSTM-based RNN: an RNN with just one hidden LSTM layer. So, the final network consists of the following:</p>
+			<ul>
+				<li>One input layer accepting tensors of 200 past vectors – each past vector being just the previous sample, that is, with size 1 – obtained through a Keras Input Layer node with Shape = 200, 1.</li>
+				<li>One hidden layer with 100 LSTM units, accepting the previous tensor as the only input, through the <strong class="bold">Keras LSTM Layer</strong> node</li>
+				<li>A classic dense layer as output with just one neuron producing the predicted value for the next sample in the time series, obtained through the Keras Dense Layer node with the ReLU activation function. </li>
+			</ul>
+			<p>The nodes used to build this neural architecture are shown in <em class="italic">Figure 6.15</em>:</p>
+			<div>
+				<div id="_idContainer588" class="IMG---Figure">
+					<img src="image/B16391_06_015.jpg" alt="Figure 6.15 – Building a very basic, very simple LSTM-based RNN"/>
+				</div>
+			</div>
+			<p class="figure-caption">Fig<a id="_idTextAnchor210"/>ure 6.15 – Building a very basic, very simple LSTM-based RNN</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">The size of the input tensor was [200,1], which is a sequence of 200 1-sized vectors. If the length of the input sequence is not known, we can use <em class="italic">?</em> to indicate unknown sequence length. The NLP case studies in the next chapter will show you some examples of this.</p>
+			<p>We have already <a id="_idIndexMarker540"/>described the Keras Input Layer node and the Keras Dense Layer node in previous chapters. Let's explore, in this section, just the Keras LSTM Layer node.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">Until now, we have used the term vector when we've talked about the input, the cell state, and the output. A tensor is a more generalized form, representing a vector stretching along <em class="italic">k</em>-dimensions. A rank 0 tensor is equal to a scalar value, a rank 1 tensor is equal to a vector, and a rank 2 tensor is equal to a matrix.</p>
+			<p>Notice that the Keras LSTM Layer node accepts up to three input tensors: one with the input values of the sequence and two to initialize the hidden state tensors, <img src="image/Formula_B16391_06_147.png" alt=""/> and <img src="image/Formula_B16391_06_148.png" alt=""/>.</p>
+			<p>If the previous neural layer produces more than one tensor as output, in the configuration window of the current LSTM layer, via a drop-down menu, you can select which tensor should be used as input or to initialize the hidden states.</p>
+			<p>We will explore more complex neural architectures in the next chapters. Here, we have limited our architecture to the simplest classic LSTM layer configuration, accepting just one input tensor from the input layer. The one input tensor accepted as input can be seen <a id="_idIndexMarker541"/>in the configuration window of the LSTM Layer node in <em class="italic">Figure 6.16</em>:</p>
+			<div>
+				<div id="_idContainer591" class="IMG---Figure">
+					<img src="image/B16391_06_016.jpg" alt="Figure 6.16 – The Keras LSTM Layer node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure<a id="_idTextAnchor211"/> 6.16 – The Keras LSTM Layer node and its configuration window</p>
+			<p>For the LSTM layer, we can set two activation functions, called <strong class="bold">Activation</strong> and <strong class="bold">Recurrent activation</strong>. The <strong class="bold">Recurrent activation</strong> function is used by the gates to filter the input<a id="_idIndexMarker542"/> components. The function selected as <strong class="bold">Activation</strong> is used to create the candidates for the cell state, <img src="image/Formula_B16391_06_149.png" alt=""/>, and to normalize the new cell state, <img src="image/Formula_B16391_06_150.png" alt=""/>, before applying the output gate. This means that for the standard LSTM unit, which we introduced in this chapter, the setting for <strong class="bold">Activation</strong> is the tanh function and for <strong class="bold">Recurrent activation</strong> the sigmoid function.</p>
+			<p>We set the layer to add biases to the different layers of the LSTM unit but decided to not use the dropout.</p>
+			<p>The <strong class="bold">Implementation</strong> and <strong class="bold">Unroll</strong> setting options don't have any impact on the results but can improve the performance depending on your hardware and the sequence length. When activating the <strong class="bold">Unroll</strong> checkbox, the network will be unrolled before training, which can speed up the learning process, but it is memory-expensive and only suitable for short input sequences. If unchecked, a so-called symbolic<a id="_idIndexMarker543"/> loop is used in the TensorFlow backend.</p>
+			<p>You can choose whether to return the intermediate output tensors <img src="image/Formula_B16391_06_151.png" alt=""/> as a full sequence or just the last output tensor, <img src="image/Formula_B16391_06_152.png" alt=""/> (the <strong class="bold">Return sequences</strong> option). In addition, you can also output the hidden cell state tensor as output (the <strong class="bold">Return state</strong> option). In the energy demand prediction case study, only the final output tensor of the LSTM unit is used to feed the next dense layer with the ReLU activation function. Therefore, the two checkboxes are not activated.</p>
+			<p>The other three tabs in the node configuration window set the regularization terms, initialization strategies, and constraints on the learning algorithm. We set no regularizations and no constraints in this layer. Let's train this network.</p>
+			<h2 id="_idParaDest-115"><a id="_idTextAnchor212"/>Training the LSTM-Based RNN</h2>
+			<p>The Keras Network<a id="_idIndexMarker544"/> Learner node then follows to train this LSTM-based RNN on the training set. We know about this node already. Let's summarize the specs used in its configuration window for this case study here:</p>
+			<ul>
+				<li>The input tensor is accepted with conversion to <strong class="bold">From Collection of Number (double)</strong>.</li>
+				<li>The output vector is produced with conversion to <strong class="bold">Number (double)</strong>.</li>
+				<li>The loss function is set to <strong class="bold">Mean Squared Error</strong> (<strong class="bold">MSE</strong>) in the <strong class="bold">Target</strong> tab.</li>
+				<li>The number of epochs is set to <strong class="source-inline">50</strong>, the training batch size to <strong class="source-inline">256</strong>, and the training algorithm to <strong class="bold">Adam</strong> – an optimized version of backpropagation – in the <strong class="bold">Options</strong> tab.</li>
+				<li>The learning rate is set to be <strong class="source-inline">0.001</strong> with no learning rate decay.</li>
+			</ul>
+			<p>For this network, with just one neuron in the output layer, the MSE loss function on a training batch takes on a simpler form and becomes the following:</p>
+			<p><img src="image/Formula_B16391_06_153.png" alt=""/></p>
+			<p>Here, <img src="image/Formula_B16391_06_154.png" alt=""/> is the<a id="_idIndexMarker545"/> batch size, <img src="image/Formula_B16391_06_155.png" alt=""/> is the output value for training sample <img src="image/Formula_B16391_06_156.png" alt=""/>, and <img src="image/Formula_B16391_06_157.png" alt=""/> is the corresponding target answer.</p>
+			<p>Since we are talking about number prediction and MSE as the loss function, the plot in the <strong class="bold">Loss</strong> tab of the <strong class="bold">Learning Monitor</strong> view is the one to take into account to evaluate the learning process. Since we are trying to predict exact numbers, the accuracy is not meaningful in this case. <em class="italic">Figure 6.17</em> shows the <strong class="bold">Learning Monitor</strong> view of the Keras Network Learner node for this demand prediction example:</p>
+			<div>
+				<div id="_idContainer601" class="IMG---Figure">
+					<img src="image/B16391_06_017.jpg" alt="Figure 6.17 – Plot of the MSE loss function over training epochs in the Loss tab of &#13;&#10;the Learning Monitor view"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.17 – Plot o<a id="_idTextAnchor213"/>f the MSE loss function over training epochs in the Loss tab of the Learning Monitor view</p>
+			<p>The screenshot in <em class="italic">Figure 6.17</em> shows that after just a few batch training iterations, we <a id="_idIndexMarker546"/>reach an acceptable prediction error, at least on the training set. After training, the network should be applied to the test set, using the <strong class="bold">Keras Network Executor</strong> node, and saved for deployment as a Keras file using the <strong class="bold">Keras Network Writer</strong> node.</p>
+			<p>Let's now apply the trained LSTM network to the test set.</p>
+			<h2 id="_idParaDest-116"><a id="_idTextAnchor214"/>Testing the LSTM-Based RNN</h2>
+			<p>In theory, to <a id="_idIndexMarker547"/>test the performance of the network, we just need to apply the network to the input tensors in the test set. This is easily done with a <strong class="bold">Keras Network Executor</strong> node.</p>
+			<p><em class="italic">Figure 6.18</em> shows the inside of the <strong class="bold">In-sample testing</strong> component: </p>
+			<div>
+				<div id="_idContainer602" class="IMG---Figure">
+					<img src="image/B16391_06_018.jpg" alt="Figure 6.18 – Inside of the In-sample testing component"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.18 – Insid<a id="_idTextAnchor215"/>e of the In-sample testing component</p>
+			<p>The In-sample testing <a id="_idIndexMarker548"/>component selects the number of input sequences to test on (the <strong class="bold">Row Filter</strong> node), then passes them through the <strong class="bold">Keras Network Executor</strong> node, and joins the predictions with the corresponding target answers.</p>
+			<p>After that, and outside of the <strong class="bold">In-sample testing</strong> component, the <strong class="bold">Numeric Scorer</strong> node calculates some error metrics and the <strong class="bold">Line Plot (Plotly)</strong> node shows the original time series and the reconstructed time series (final workflow in <em class="italic">Figure </em><em class="italic">6.25</em>). The numeric error metrics quantify the error, while the line plot gives a visual idea of how faithful the predictions are. Predictions generated with this approach are called <strong class="bold">in-sample</strong> predictions.</p>
+			<p>The Numeric Scorer node <a id="_idIndexMarker549"/>calculates six error metrics (<em class="italic">Figure 6.19</em>): R<span class="superscript">2</span>, <strong class="bold">Mean Absolute Error</strong> (<strong class="bold">MAE</strong>), MSE, <strong class="bold">Root Mean Squared Error</strong> (<strong class="bold">RMSE</strong>), <strong class="bold">Mean Signed Difference</strong> (<strong class="bold">MSD</strong>), and <strong class="bold">Mean Absolute Percentage Error</strong> (<strong class="bold">MAPE</strong>). The corresponding formulas are shown here:</p>
+			<div>
+				<div id="_idContainer603" class="IMG---Figure">
+					<img src="image/Formula_B16391_06_158.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer604" class="IMG---Figure">
+					<img src="image/Formula_B16391_06_159.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer605" class="IMG---Figure">
+					<img src="image/Formula_B16391_06_160.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer606" class="IMG---Figure">
+					<img src="image/Formula_B16391_06_161.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer607" class="IMG---Figure">
+					<img src="image/Formula_B16391_06_162.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer608" class="IMG---Figure">
+					<img src="image/Formula_B16391_06_163.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_B16391_06_164.png" alt=""/> is the number of<a id="_idIndexMarker550"/> predictions from the test set, <img src="image/Formula_B16391_06_165.png" alt=""/> is the output value for the test sample <img src="image/Formula_B16391_06_166.png" alt=""/>, and <img src="image/Formula_B16391_06_167.png" alt=""/> is the corresponding target answer. We chose to apply the network on a test set of 600 tensors, generated the corresponding predictions, and calculated the error metrics. This is the result we got:</p>
+			<div>
+				<div id="_idContainer613" class="IMG---Figure">
+					<img src="image/B16391_06_019.jpg" alt="Figure 6.19 – Error measures between in-sample predicted 600 values and the corresponding target values"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.19 – Error measures be<a id="_idTextAnchor216"/>tween in-sample predicted 600 values and the corresponding target values</p>
+			<p>Each metric has its pros and cons. Commonly adopted errors for time series predictions are MAPE, MAE, or MSE. MAPE, for example, shows just 9% error on the next 600 values of the<a id="_idIndexMarker551"/> predicted time series, which is a really good result. The plot in<em class="italic"> Figure 6.20</em> proves it:</p>
+			<div>
+				<div id="_idContainer614" class="IMG---Figure">
+					<img src="image/B16391_06_020.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.20 – The next 600 in-s<a id="_idTextAnchor217"/>ample predicted values against the next 600 target values in the time series</p>
+			<p>This is an easy test. For each value to predict, we feed the network with the previous history of real values. This is a luxury situation that we cannot always afford. Often, we predict the next 600 values, one by one, based just on past predicted values. That is, once we have trained the network, we trigger the next prediction with the first 200 real past values in the test set. After that, however, we predict the next value based on the latest 199 real values plus the currently predicted one; then again based on the latest 198 real values plus the previously predicted one and the currently predicted one, and so on. This is a suboptimal, yet more realistic, situation. Predictions generated with this approach are called <strong class="bold">out-sample</strong> predictions <a id="_idIndexMarker552"/>and this kind of testing is called out-sample testing.</p>
+			<p>To implement out-sample testing, we need to implement the loop that feeds the current prediction back into the vector of past samples. This loop has been implemented in the deployment workflow as well. Let's have a look at the details of this implementation.</p>
+			<h2 id="_idParaDest-117"><a id="_idTextAnchor218"/>Building a Deployment Loop</h2>
+			<p>To implement<a id="_idIndexMarker553"/> out-sample testing, we need to implement the loop described in the previous section, where the currently predicted value becomes part of the tensor of past values for the next prediction. This is done in the component named <strong class="bold">Deployment Loop</strong> (<em class="italic">Figure 6.21</em>), which is also inside the out-sample testing component in the final workflow (<em class="italic">Figure 6.25</em>):</p>
+			<div>
+				<div id="_idContainer615" class="IMG---Figure">
+					<img src="image/B16391_06_021.jpg" alt="Figure 6.21 – The deployment loop. Notice the recursive loop to pass back &#13;&#10;the new input sequence at each iteration"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.21 – The deployment l<a id="_idTextAnchor219"/>oop. Notice the recursive loop to pass back the new input sequence at each iteration</p>
+			<p>Here, a <strong class="bold">recursive loop</strong>, formed by a <strong class="bold">Recursive Loop Start</strong> node and a <strong class="bold">Recursive Loop End</strong> node, predicts, at each iteration, the next value and forms the new input sequence for the network, by eliminating the oldest sample and adding the latest prediction. The <strong class="bold">Recursive Loop Start</strong> node<a id="_idIndexMarker554"/> requires no configuration, while the <strong class="bold">Recursive Loop End</strong> node requires the ending<a id="_idIndexMarker555"/> condition for the loop. We<a id="_idIndexMarker556"/> parameterized this ending condition (600 predictions) through the flow variable, named <strong class="source-inline">no_preds</strong>, created in the <strong class="bold">Integer Configuration</strong> node (<strong class="source-inline">no_preds=600</strong>).</p>
+			<p>The Integer Configuration node belongs to a special group of configuration nodes, so its configuration window transfers into the configuration window of the component that contains it. As a consequence, the <strong class="bold">Deployment Loop</strong> component has a configuration setting for the number of predictions to create with the recursive loop, as shown in <em class="italic">Figure 6.22</em>:</p>
+			<div>
+				<div id="_idContainer616" class="IMG---Figure">
+					<img src="image/B16391_06_022.jpg" alt="Figure 6.22 – The configuration window of the Deployment Loop component"/>
+				</div>
+			</div>
+			<p class="figure-caption">F<a id="_idTextAnchor220"/>igure 6.22 – The configuration window of the Deployment Loop component</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">The recursive loop is one of the few loops in KNIME Analytics Platform that allows you to pass the results back to be consumed in the next iteration.</p>
+			<p>The <strong class="bold">Deployment Loop</strong> component uses <a id="_idIndexMarker557"/>two more new important nodes:</p>
+			<ul>
+				<li><strong class="bold">The Keras to TensorFlow Network Converter node</strong>: The Keras to TensorFlow Converter node converts a Keras deep learning model with a TensorFlow backend into a TensorFlow model. TensorFlow models are executed using the TensorFlow Java API, which is usually faster than the Python kernel available via the Keras Python API. If we use the Keras Network Executor node within the recursive loop, a Python kernel must be started at each iteration, which slows down the network execution. A TensorFlow model makes the network execution much faster.</li>
+				<li><strong class="bold">The TensorFlow Network Executor node</strong>: The configuration window of the TensorFlow Network Executor node is similar to the configuration window of the Keras Network Executor node, the only difference being the backend engine, which in this case is TensorFlow.</li>
+			</ul>
+			<p>For out-sample testing, the deployment loop is triggered with the first tensor in the test set and from there it generates 600 predictions autonomously. In the out-sample testing component, these predictions are then joined with the target values and outside of the out-sample testing component, the Numeric Error node calculates the selected error metrics.</p>
+			<p>Obviously, for out-sample <a id="_idIndexMarker558"/>testing, the error values become larger (<em class="italic">Figure 6.23</em>), since the prediction error is influenced by the prediction errors in the previous steps. MAPE, for example, reaches 18%, which is practically double the result from in-sample testing:</p>
+			<div>
+				<div id="_idContainer617" class="IMG---Figure">
+					<img src="image/B16391_06_023.jpg" alt="Figure 6.23 – Error measures between the out-sample predicted 600 values and &#13;&#10;the corresponding target values"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor221"/>Figure 6.23 – Error measures between the out-sample predicted 600 values and the corresponding target values</p>
+			<p>In <em class="italic">Figure 6.24</em>, we can see the prediction error when visualizing the predicted time series and comparing it with the original time series for the first 600 out-sample predictions:</p>
+			<div>
+				<div id="_idContainer618" class="IMG---Figure">
+					<img src="image/B16391_06_024.jpg" alt="Figure 6.24 – The next 600 out-sample predicted values (orange) against the next 600 target values (blue) in the time series"/>
+				</div>
+			</div>
+			<p class="figure-caption">F<a id="_idTextAnchor222"/><a id="_idTextAnchor223"/>igure 6.24 – The next 600 out-sample predicted values (orange) against the next 600 target values (blue) in the time series</p>
+			<p>There, we can see that the first predictions are quite correct, but they start deteriorating the further we move from the onset of the test set. This effect is, of course, not present for in-sample predictions. Indeed, the error values on the first out-sample predictions are comparable to the error values for the corresponding in-sample predictions.</p>
+			<p>We have performed here a<a id="_idIndexMarker559"/> pretty crude time series prediction since we have not taken into account the seasonality prediction as a separate problem. We have somehow let the network manage the whole prediction by itself, without splitting seasonality and residuals. Our results are satisfactory for this use case. However, for more complex use cases, the seasonality index could be calculated, the seasonality subtracted, and predictions performed only on the residual values of the time series. Hopefully, this would be an easier problem and would lead to more accurate predictions. Nevertheless, we are satisfied with the prediction error, especially considering that the network had to manage the prediction of the seasonality as well. </p>
+			<p>The final workflow, building, training, and in-sample testing the network, is shown in <em class="italic">Figure 6.25</em>:</p>
+			<div>
+				<div id="_idContainer619" class="IMG---Figure">
+					<img src="image/B16391_06_025.jpg" alt="Figure 6.25 – The final workflow to prepare the data and build, train, and test the LSTM-based network on a time series prediction problem"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor224"/>F<a id="_idTextAnchor225"/>igure 6.25 – The final workflow to prepare the data and build, train, and test the LSTM-based network on a time series prediction problem</p>
+			<p>This workflow is <a id="_idIndexMarker560"/>available in the book's GitHub space. Let's now move on to the deployment workflow.</p>
+			<h2 id="_idParaDest-118"><a id="_idTextAnchor226"/>Deploying the LSTM-Based RNN</h2>
+			<p>Deployment at this point is easy. We read the deployment data, for<a id="_idIndexMarker561"/> example, from a <strong class="source-inline">.table</strong> file; then, we apply the same data preparation steps as for the training and test data. We isolate the first input sequence with 200 past samples; we apply the deployment loop to generate <img src="image/Formula_B16391_06_168.png" alt=""/> new samples (here, we went for <img src="image/Formula_B16391_06_169.png" alt=""/>); we apply the trained LSTM-based RNN inside the deployment loop; and finally, we visualize the predictions with a Line Plot (Plotly) node. Notice that this time there are no predictions versus target values, since the deployment data is real-world data and not lab data, and as such does not have any target values to be compared to.</p>
+			<p>The deployment workflow is shown in <em class="italic">Figure 6.26</em> and is available on KNIME Hub at <a href="https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%206/">https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%206/</a>:</p>
+			<div>
+				<div id="_idContainer622" class="IMG---Figure">
+					<img src="image/B16391_06_026.jpg" alt="Figure 6.26 – The deployment workflow for a demand prediction problem"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figu<a id="_idTextAnchor227"/>re 6.26 – The deployment workflow for a demand prediction problem</p>
+			<p>This is the<a id="_idIndexMarker562"/> deployment workflow, including data reading, the same data preparation as for the data in the training workflow, network reading, and a deployment loop to generate the predictions. </p>
+			<p>In this last section, we have learned how to apply the deployment loop to a deployment workflow to generate new predictions in real life.</p>
+			<h1 id="_idParaDest-119"><a id="_idTextAnchor228"/>Summary</h1>
+			<p>In this chapter, we introduced a new recurrent neural unit: the LSTM unit. We showed how it is built and trained, and how it can be applied to a time series analysis problem, such as demand prediction.</p>
+			<p>As an example of a demand prediction problem, we tried to predict the average energy consumed by a cluster of users in the next hour, given the energy used in the previous 200 hours. We showed how to test in-sample and out-sample predictions and some numeric measures commonly used to quantify the prediction error. Demand prediction applied to energy consumption is just one of the many demand prediction use cases. The same approach learned here could be applied to predict the number of customers in a restaurant, the number of visitors to a web site, or the amount of a type of food required in a supermarket.</p>
+			<p>In this chapter, we also introduced a new loop in KNIME Analytics Platform, the recursive loop, and we mentioned a new visualization node, the Line Plot (Plotly) node.</p>
+			<p>In the next chapter, we will continue with RNNs, focusing on different text-related applications.</p>
+			<h1 id="_idParaDest-120"><a id="_idTextAnchor229"/>Questions and Exercises</h1>
+			<p>Check your level of understanding of the concepts explored in this chapter by answering the following questions:</p>
+			<ol>
+				<li>Why are LSTM units suitable for time series analysis?<p>a). Because they are faster than classic feedforward networks</p><p>b). Because they can remember past input tensors</p><p>c). Because they use gates</p><p>d). Because they have hidden states</p></li>
+				<li>What is the data extraction option to use for partitioning in time series analysis?<p>a). Draw randomly</p><p>b). Take from top</p><p>c). Stratified Sampling</p><p>d). Linear Sampling</p></li>
+				<li>What is a tensor?<p>a). A tensor is a two-dimensional vector.</p><p>b). A tensor is a <em class="italic">k</em>-dimensional vector.</p><p>c). A tensor is just a number.</p><p>d). A tensor is a sequence of numbers.</p></li>
+				<li>What is the difference between in-sample and out-sample testing?<p>a). In-sample testing uses the real past values from the test set to make the predictions. Out-sample testing uses past prediction values to make new predictions.</p><p>b). In-sample testing is more realistic than out-sample testing.</p><p>c). In-sample testing is more complex than out-sample testing.</p><p>d). In-sample testing applies the trained network while out-sample testing uses rules.</p></li>
+			</ol>
+		</div>
+	</body></html>

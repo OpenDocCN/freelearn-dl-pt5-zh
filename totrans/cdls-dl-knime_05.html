@@ -1,0 +1,465 @@
+<html><head></head><body>
+		<div id="_idContainer351">
+			<h1 id="_idParaDest-53"><em class="italic"><a id="_idTextAnchor101"/>Chapter 4: </em>Building and Training a Feedforward Neural Network</h1>
+			<p>In <a href="B16391_03_Final_PG_ePUB.xhtml#_idTextAnchor073"><em class="italic">Chapter 3</em></a>, <em class="italic">Getting Started with Neural Networks</em>, you learned the basic theory behind neural networks and deep learning. This chapter sets that knowledge into practice. We will implement two very simple classification examples: a multiclass classification using the <strong class="bold">iris flower</strong> dataset, and a binary classification using the adult dataset, also known as the <strong class="bold">census income</strong> dataset.</p>
+			<p>These two datasets are quite small and the corresponding classification solutions are also quite simple. A fully connected feedforward network will be sufficient in both examples. However, we decided to show them here as toy examples to describe all of the required steps to build, train, and apply a fully connected feedforward classification network with <strong class="bold">KNIME Analytics Platform</strong> and <strong class="bold">KNIME Keras Integration</strong>.</p>
+			<p>These steps include commonly used preprocessing techniques, the design of the neural architecture, the setting of the activation functions, the training and application of the network, and lastly, the evaluation of the results.</p>
+			<p>Thus, this chapter covers the following main topics:</p>
+			<ul>
+				<li>Preparing the Data</li>
+				<li>Building a Feedforward Neural Architecture</li>
+				<li>Training the Network</li>
+				<li>Testing and Applying the Network</li>
+			</ul>
+			<h1 id="_idParaDest-54"><a id="_idTextAnchor102"/>Preparing the Data</h1>
+			<p>In <a href="B16391_03_Final_PG_ePUB.xhtml#_idTextAnchor073"><em class="italic">Chapter 3</em></a>, <em class="italic">Getting Started with Neural Networks</em>, we introduced the backpropagation<a id="_idIndexMarker279"/> algorithm, which is used by gradient descent algorithms to train a neural network. These algorithms work on numbers and can't handle nominal/categorical input features or class values. Therefore, nominal input features or nominal output values must be encoded into numerical values if we want the network to make use of them. In this section, we will show several numerical encoding techniques and the corresponding nodes in KNIME Analytics Platform to carry them out.</p>
+			<p>Besides that, we will also go through many other classic data preprocessing steps to feed machine learning algorithms: creating training, validation, and test sets from the original dataset; normalization; and missing value imputation.</p>
+			<p>Along the way, we will also <a id="_idIndexMarker280"/>show you how to import data, how to perform a few additional data operations, and some commonly used tricks within KNIME Analytics Platform. The workflows described in this chapter are available on the KNIME Hub: <a href="https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%204/">https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%204/</a>.</p>
+			<h2 id="_idParaDest-55"><a id="_idTextAnchor103"/>Datasets and Classification Examples</h2>
+			<p>Before we dive<a id="_idIndexMarker281"/> into the different preprocessing steps, let's have a quick look at the two selected datasets and the associated classification examples:</p>
+			<ul>
+				<li>Classification of<a id="_idIndexMarker282"/> three iris flowers based on the Iris dataset</li>
+				<li>Classification of income (binary class) based on the data from the adult dataset</li>
+			</ul>
+			<p>Our first dataset gives us an example of a multiclass classification problem.</p>
+			<p>The Iris dataset<a id="_idIndexMarker283"/> consists of examples of flowers from three species of iris plants: Iris-setosa, Iris-virginica, and Iris-versicolor. Each flower is described through four measures: sepal length (cm), sepal width (cm), petal length (cm), and petal width (cm). This is a small dataset with 50 examples for each species, with 150 samples in total. <em class="italic">Figure 4.1</em> shows an overview of the dataset.</p>
+			<p>The goal is to train a neural network with one hidden layer (eight units and the ReLU activation function) to distinguish the three species from each other based on the four input features.</p>
+			<p>Part of the Iris dataset is displayed in the following tables<a id="_idTextAnchor104"/>:</p>
+			<div>
+				<div id="_idContainer320" class="IMG---Figure">
+					<img src="image/B16391_04_001.jpg" alt="Figure 4.1 – Overview of the Iris dataset, used here to implement a multiclass classification"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.1 – Overview of the Iris dataset, used here to implement a multiclass classification</p>
+			<p>The second<a id="_idIndexMarker284"/> example dataset provides us with a binary classification problem.</p>
+			<p>The adult dataset<a id="_idIndexMarker285"/> consists of 32,561 samples of people living in the US. Each record describes a person through 14 demographics features, including their current annual income (&gt; 50K/&lt;= 50K). <em class="italic">Figure 4.2</em> shows an overview of the features in the dataset: numerical features, such as age and hours worked per week, and nominal features, such as work class and marital status.</p>
+			<p>The goal is to train a neural network to predict whether a person earns more or less than 50K per year, using all the other attributes as input features. The network we want to use should have two hidden layers, each one with eight units and the ReLU activation function.</p>
+			<p>Some of the census income dataset displayed in tables looks as follow<a id="_idTextAnchor105"/>s:</p>
+			<div>
+				<div id="_idContainer321" class="IMG---Figure">
+					<img src="image/B16391_04_002.jpg" alt="Figure 4.2 – Overview of the adult dataset, used here to implement a binary class classification"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.2 – Overview of the adult dataset, used here to implement a binary class classification</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">To get an overview of the dataset, you can <a id="_idIndexMarker286"/>use the <strong class="bold">Data Explorer</strong> node. This node displays some statistical measures of the input data within an interactive view. In <em class="italic">Figure 4.1</em> and <em class="italic">Figure 4.2</em>, you can see the view of the node for the two example datasets.</p>
+			<p>To summarize the Iris dataset, it consists of four numerical features, plus the iris nominal class; the adult dataset consists of 14 mixed features, numerical and nominal. The first step in the data preparation would, therefore, be to transform all nominal features into numerical ones. Let's move on, then, to the encoding techniques.</p>
+			<h2 id="_idParaDest-56"><a id="_idTextAnchor106"/>Encoding of Nominal Features</h2>
+			<p>Nominal features, sometimes also called<a id="_idIndexMarker287"/> categorical features, can assume only string-type values. For example, the only possible values for a feature describing hair color can be a string type, such as <strong class="source-inline">black</strong>, <strong class="source-inline">brown</strong>, <strong class="source-inline">blond</strong>, and <strong class="source-inline">red</strong>; a feature describing gender traditionally assumes only two string-type values, <strong class="source-inline">female</strong> and <strong class="source-inline">male</strong>; and the possible values for an education feature can be strings, such as <strong class="source-inline">Doctorate</strong>, <strong class="source-inline">Masters</strong>, <strong class="source-inline">Bachelors</strong>, or <strong class="source-inline">Some-college</strong>. This last example is taken from the column named <strong class="source-inline">education</strong> in the adult dataset. These values should be transformed into numbers before being fed to a neural network.</p>
+			<p>There are two common <a id="_idIndexMarker288"/>ways to encode nominal features:</p>
+			<ul>
+				<li><strong class="bold">Integer encoding</strong></li>
+				<li><strong class="bold">One-hot encoding</strong></li>
+			</ul>
+			<p>Integer encoding assigns an integer <a id="_idIndexMarker289"/>value to each possible nominal value of a feature. For example, <strong class="source-inline">"black"</strong> can be 1, <strong class="source-inline">"brown"</strong> can be 2, <strong class="source-inline">"blond"</strong> can be 3, and <strong class="source-inline">"red"</strong> can be 4. We have chosen the numbers 1, 2, 3, and 4 but it could have been any other set of numbers. This approach introduces an artificial relationship between the different values – for example, that <strong class="source-inline">"black"</strong> is closer to <strong class="source-inline">"brown"</strong> than to <strong class="source-inline">"red"</strong>. This can reflect a true relationship across values in ordinal or hierarchical features, such as education, where <strong class="source-inline">"Doctorate"</strong> is closer to <strong class="source-inline">"Masters"</strong> than to <strong class="source-inline">"Some-college"</strong>. However, in other cases, such as the previously mentioned hair color one, it introduces a new additional relationship that does not reflect reality and can bias the model during learning. Generally speaking, using the integer encoding approach on nominal unordered features can lead to worse-performing models.</p>
+			<p>One-hot vector encoding overcomes this problem by representing each feature with a vector, where the distance across all the vectors is always the same. The vector consists of the same quantity of binary components as possible values in the original feature. Each component is then associated with one of the values and is set to <strong class="source-inline">1</strong> for that value; the other components remain set to <strong class="source-inline">0</strong>. In the hair color example, <strong class="source-inline">"black"</strong> becomes <img src="image/Formula_B16391_04_001.png" alt=""/>, <strong class="source-inline">"brown"</strong> becomes <img src="image/Formula_B16391_04_002.png" alt=""/>, <strong class="source-inline">"blond"</strong> becomes <img src="image/Formula_B16391_04_003.png" alt=""/>, and <strong class="source-inline">"red"</strong> becomes <img src="image/Formula_B16391_04_004.png" alt=""/>.</p>
+			<p class="callout-heading">Important note </p>
+			<p class="callout">A one-hot vector<a id="_idIndexMarker290"/> is a vector with a single <strong class="source-inline">1</strong> and all other values being <strong class="source-inline">0</strong>. It can be used to encode different classes without adding any artificial distance between them.</p>
+			<p>Let's see now how to implement these encodings with KNIME nodes.</p>
+			<h3>Integer Encoding in KNIME Analytics Platform</h3>
+			<p>To perform<a id="_idIndexMarker291"/> integer encoding, you can use the <strong class="bold">Category to Number</strong> node. This node has one data input port (represented by a black<a id="_idIndexMarker292"/> triangle in the <a id="_idIndexMarker293"/>following diagram) and two output ports:</p>
+			<ul>
+				<li>A data output port (black triangle) with the integer-encoded data</li>
+				<li>A PMML model output port (blue square) with the mapping rules</li>
+			</ul>
+			<p><em class="italic">Figure 4.3</em> shows you the node, as well as its configuration window<a id="_idTextAnchor107"/>:</p>
+			<div>
+				<div id="_idContainer326" class="IMG---Figure">
+					<img src="image/B16391_04_003.jpg" alt="Figure 4.3 – The Category to Number node performs an integer encoding on the selected columns"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.3 – The Category to Number node performs an integer encoding on the selected columns</p>
+			<p>In the <a id="_idIndexMarker294"/>upper part of the configuration window, you can select the<a id="_idIndexMarker295"/> string-type input columns to apply the integer encoding to. The columns in the <strong class="bold">Include</strong> framework will be transformed, while the columns in the <strong class="bold">Exclude</strong> framework will be left unchanged. You can move columns from one framework to the other using the buttons between them.</p>
+			<p>By default, values in the original columns are replaced with the integer-encoded values. However, the <strong class="bold">Append columns</strong> checkbox creates additional columns for the integer-encoded values so as not to overwrite the original columns. If you activate this checkbox, you can also define a custom suffix for the new columns' headers.</p>
+			<p>In the lower part of the configuration window, you can define the encoding rule: the start value, the increment, the maximum allowed number of categories, and an integer value for all missing values.</p>
+			<p>The default integer value is transferred to the output PMML transformation model. <strong class="bold">PMML</strong> stands for <strong class="bold">Predictive Model Markup Language</strong> and is a way to describe and exchange predictive models <a id="_idIndexMarker296"/>between different applications. The<a id="_idIndexMarker297"/> PMML model at the blue square output port contains the mapping function built in this node and to be applied to other datasets. When applying this integer encoding PMML model, the default value is assigned to all input values not represented by the current mapping (if any). If no default value is present, a <a id="_idIndexMarker298"/>missing value will be used instead.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">To apply the same integer encoding mapping stored in the PMML output port to another dataset, you <a id="_idIndexMarker299"/>can use the <strong class="bold">Category to Number (Apply)</strong> node.</p>
+			<p>The <strong class="bold">Category to Number</strong> node<a id="_idIndexMarker300"/> defines the mapping automatically. This means you cannot manually define which nominal value should be represented by which integer value. If you wish to do so, you have other options in KNIME <a id="_idIndexMarker301"/>Analytics Platform, and we will introduce two of them: the <strong class="bold">Cell Replacer</strong> node and the <strong class="bold">Rule Engine</strong> node.</p>
+			<p>The <strong class="bold">Cell Replacer</strong> node replaces<a id="_idIndexMarker302"/> cell values in a column according to a dictionary table. It has two inputs:</p>
+			<ul>
+				<li>The top input for the table with the target column whose values are to be replaced</li>
+				<li>The lower input for the dictionary table</li>
+			</ul>
+			<p><em class="italic">Figure 4.4</em> shows the configuration window of the Cell Repla<a id="_idTextAnchor108"/>cer node:</p>
+			<div>
+				<div id="_idContainer327" class="IMG---Figure">
+					<img src="image/B16391_04_004.jpg" alt="Figure 4.4 – The Cell Replacer node implements an encoding mapping based on a dictionary"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.4 – The Cell Replacer node implements an encoding mapping based on a dictionary</p>
+			<p>In the <a id="_idIndexMarker303"/>upper part of the configuration window, you can select the <a id="_idIndexMarker304"/>target column from the input table at the top input port; this means the column whose values you want to replace based on the dictionary values.</p>
+			<p>In the <strong class="bold">Dictionary table</strong> part of the configuration window, you can select, from the data table at the lower input port, the column with the lookup values – that is, the <strong class="bold">Input (Lookup)</strong> column – and the column containing the replacement values – that is, the <strong class="bold">Output (Replacement)</strong> column.</p>
+			<p>Any occurrence in the target column (first input) that matches the lookup value is replaced with the corresponding replacement value. The result is stored in the output column, which is either added to the table or replaces the original target column.</p>
+			<p>Missing values are treated as ordinary values; that is, they are valid values both as lookup and replacement values. If there are duplicates in the lookup column in the dictionary table, the last occurrence (lowest row) defines the replacement pair.</p>
+			<p>For the integer encoding example, you need a dictionary table to map the nominal values and the integer values. For example, each education level should be mapped to a corresponding integer value. You can then feed the original dataset into the top input port and <a id="_idIndexMarker305"/>this map/dictionary table into the <a id="_idIndexMarker306"/>lowest input port.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The <strong class="bold">Table Creator</strong> node can <a id="_idIndexMarker307"/>be helpful to manually create the lookup table.</p>
+			<p>If you don't have a dictionary table and you don't want to create one, you can use the <strong class="bold">Rule Engine</strong> node.</p>
+			<p>The <a id="_idIndexMarker308"/>Rule Engine node transforms the values in the input columns according to a set of manually defined rules, which are defined in its configuration window.</p>
+			<p><em class="italic">Figure 4.5</em> shows you the configuration window of the Rul<a id="_idTextAnchor109"/>e Engine node:</p>
+			<div>
+				<div id="_idContainer328" class="IMG---Figure">
+					<img src="image/B16391_04_005.jpg" alt="Figure 4.5 – The Rule Engine node implements an integer encoding from user-defined rules"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.5 – The Rule Engine node implements an integer encoding from user-defined rules</p>
+			<p>In <a id="_idIndexMarker309"/>the <strong class="bold">Expression</strong> part of the configuration <a id="_idIndexMarker310"/>window, you can define the set of rules to apply. Each rule consists of an antecedent (condition) and a consequence, joined by <strong class="source-inline">=&gt;</strong>, in the form of <strong class="source-inline">"antecedent =&gt; consequence"</strong>. The results are either inserted into a new column or replace the values in a selected column. For each data row in the input table, the rule-matching process moves from the top rule to the lowest: the first matching rule determines the outcome, and then the rule process stops. The last default condition, collecting all the remaining data rows, is expressed as <strong class="source-inline">"TRUE =&gt; consequence"</strong>.</p>
+			<p>The outcome of a rule may be a string (in between <strong class="source-inline">"</strong> or <strong class="source-inline">/</strong> symbols), a number, a Boolean constant, or a reference to another column. If no rule matches, the outcome is a missing value. References to other columns are represented by the column name in between <strong class="source-inline">$</strong>. You can insert a column reference by hand or by double-clicking on a column in <strong class="bold">Column List</strong> on the left side of the configuration window.</p>
+			<p>Besides the <strong class="bold">Expression</strong> panel, you find the <strong class="bold">Function</strong>, <strong class="bold">Column List</strong>, and <strong class="bold">Flow Variable List</strong> panels. The <strong class="bold">Function</strong> panel lists all functions, the <strong class="bold">Column List</strong> panel lists all input columns, and <strong class="bold">Flow Variable List</strong> contains all the available flow variables. Double-clicking on any of them adds them to the <strong class="bold">Expression</strong> window with the right syntax. Also, selecting any of the functions shows a description as well as an example.</p>
+			<p>To summarize, there are <a id="_idIndexMarker311"/>many ways to implement integer encoding <a id="_idIndexMarker312"/>in KNIME Analytics Platform. We introduced three options:</p>
+			<ul>
+				<li>The <strong class="bold">Category to Number</strong> node offers an automatic, easy approach if you do not want to define the mapping by hand.</li>
+				<li>The <strong class="bold">Cell Replacer</strong> node is really useful if you have a lookup table at hand. </li>
+				<li>The <strong class="bold">Rule Engine</strong> node is useful if you want to manually define the mapping between the nominal values and the integer values via a set of rules.</li>
+			</ul>
+			<p>Next, let's look at one-hot encoding in KNIME Analytics Platform.</p>
+			<h3>One-Hot-Encoding in KNIME Analytics Platform</h3>
+			<p>To perform<a id="_idIndexMarker313"/> one-hot encoding on nominal features, there is the <strong class="bold">One to Many</strong> node. This node<a id="_idIndexMarker314"/> takes the list of nominal values available in a column, builds <a id="_idIndexMarker315"/>a vector with as many components, and produces the one-hot encoding of each value: one value to become many binary cells, hence the name.</p>
+			<p>In the configuration window, you can select the string-type columns on which to perform the one-hot encoding. For each column, as many new columns will be created as there are different values. The header of each new column will be the original value in the nominal column and its cells take a value of either <strong class="source-inline">0</strong> or <strong class="source-inline">1</strong>, depending on the presence or absence of the header value in the original column.</p>
+			<p><em class="italic">Figure 4.6</em> shows the configuration w<a id="_idTextAnchor110"/>indow of the node:</p>
+			<p class="figure-caption"> </p>
+			<div>
+				<div id="_idContainer329" class="IMG---Figure">
+					<img src="image/B16391_04_006.jpg" alt="Figure 4.6 – The One to Many node implements the one-hot encoding for nominal features"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.6 – The One to Many node implements the one-hot encoding for nominal features</p>
+			<p>Creating<a id="_idIndexMarker316"/> one-hot encoded vectors leads to very large<a id="_idIndexMarker317"/> and very sparse data tables with many zeros. This can weigh on the workflow performance during execution. The Keras Learner node does accept large and sparse one-hot-encoded data tables. However, it also offers a very nice optional feature that avoids this whole step of explicitly creating the data table with the one-hot-encoded vectors. It can create the one-hot-encoded vectors internally from an integer-encoded version of the original column. In this way, the one-hot encoding representation of the data remains hidden within the <strong class="bold">Keras Network Learner</strong> node and<a id="_idIndexMarker318"/> is never passed from node to node. In this case, the value of each integer-encoded cell must be presented to the Keras Network Learner node as a collection type cell. To create a collection type cell, you can use the <strong class="bold">Create Collection Column</strong> node. In the <em class="italic">Training the Network</em> section of this chapter, you will see how to configure the Keras Network Learner node properly to make use of this feature.</p>
+			<p><em class="italic">Figure 4.7</em> shows the configuration window<a id="_idIndexMarker319"/> of the <strong class="bold">Create Collection Column</strong> node. In the <strong class="bold">Exclude-Include</strong> frame, you select one or more columns to aggregate in a collection-type<a id="_idIndexMarker320"/> column. In the lower part of the configuration <a id="_idIndexMarker321"/>window, you can decide whether to remove the original columns and define the new colle<a id="_idTextAnchor111"/>ction type column's name:</p>
+			<div>
+				<div id="_idContainer330" class="IMG---Figure">
+					<img src="image/B16391_04_007.jpg" alt="Figure 4.7 – The Create Collection Column node aggregates the values from multiple columns as a collection into one single column"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.7 – The Create Collection Column node aggregates the values from multiple columns as a collection into one single column</p>
+			<p>Notice that for this two-step one-hot encoding – first integer encoding, then one-hot encoding – you need to create the integer encoding column with one of the nodes listed in the previous section, and then apply the <strong class="bold">Create Collection Column</strong> node to just one column: the integer-encoded column that we have just created.</p>
+			<h3>Encoding of Categorical Target Variables</h3>
+			<p>In the last chapter, we <a id="_idIndexMarker322"/>talked about different activation functions and loss functions that can be used to build network architectures and train networks to solve classification problems. Of course, the activation function in the output layer and the loss function must match. Not only that, but the class encoding must also match the chosen activation and loss function. This means that not only must nominal input features be encoded, but class values too. The same encoding techniques and nodes, as described in this section, can be used for class encoding as well.</p>
+			<p>A common approach to binary classification is to encode the two classes with <img src="image/Formula_B16391_04_005.png" alt=""/> and <img src="image/Formula_B16391_04_006.png" alt=""/> and then to train the network to predict the probability for the <img src="image/Formula_B16391_04_007.png" alt=""/> class. In this case, either the Category to Number node or the Rule Engine node can work.</p>
+			<p>In the case of a multiclass problem, there are also two options to encode the class column: the <strong class="bold">One to Many</strong> node on <a id="_idIndexMarker323"/>its own or the Category to Number followed by the Create Collection Column node.</p>
+			<p>Another recommended preprocessing step for neural networks is normalization.</p>
+			<h2 id="_idParaDest-57"><a id="_idTextAnchor112"/>Normalization</h2>
+			<p>Most neural networks are<a id="_idIndexMarker324"/> trained using some variant of stochastic gradient descent with the backpropagation algorithm to calculate the gradient. Input features with non-comparable ranges can create problems during learning, as the input features with the largest range can overpower the calculation of the weight update, possibly even overshooting a local minimum. This can create oscillations and slow down the convergence of the learning process. To speed up the learning phase, it is recommended to normalize the data in advance; for example, by using the z-score normalization so that the values in each column are Gaussian-distributed with a mean of 0.0 and a standard deviation of 1.0.</p>
+			<p>In <em class="italic">Figure 4.8</em>, you can see the <strong class="bold">Normalizer</strong> node and<a id="_idIndexMarker325"/> its configuration<a id="_idIndexMarker326"/> window, as well <a id="_idIndexMarker327"/>as the <strong class="bold">Normalizer (Apply)</strong> node<a id="_idTextAnchor113"/>:</p>
+			<div>
+				<div id="_idContainer334" class="IMG---Figure">
+					<img src="image/B16391_04_008.jpg" alt="Figure 4.8 – The Normalizer node creates a normalization function for the selected input columns. The Normalizer (Apply) node applies the same normalization function to another dataset"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.8 – The Normalizer node creates a normalization function for the selected input columns. The Normalizer (Apply) node applies the same normalization function to another dataset</p>
+			<p>The Normalizer node creates a normalization function on the selected input columns and normalizes them. The Normalizer (Apply) node takes an external predefined normalization function and applies it to the input data. A classic case for the application of this pair of nodes is on training and test sets. The Normalizer node normalizes the training data and the Normalizer (Apply) node applies the same normalization transformation to the test data.</p>
+			<p>The Normalizer node has one data input port and two output ports:</p>
+			<ul>
+				<li>One data output port with the normalized input data</li>
+				<li>One model output port containing the normalization parameters, which can be used on another dataset in a <a id="_idIndexMarker328"/>Normalizer (Apply) node</li>
+			</ul>
+			<p>In the configuration window of the Normalizer node, you can select the numerical columns to normalize and the normalization method.</p>
+			<p>The<a id="_idIndexMarker329"/> configuration window of the Normalizer (Apply) node is minimal since all of the necessary parameters are contained in the input normalization model.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">With a Partitioning node, you can create the training and test sets <em class="italic">before</em> normalizing the data.</p>
+			<h2 id="_idParaDest-58"><a id="_idTextAnchor114"/>Other Helpful Preprocessing Nodes</h2>
+			<p>Missing values can be a<a id="_idIndexMarker330"/> problem when training a neural network, as the backpropagation algorithm can't handle them. The placeholder value to represent missing values in a KNIME data table is a red question mark.</p>
+			<p>A powerful node to impute <a id="_idIndexMarker331"/>missing values is the <strong class="bold">Missing Value</strong> node. This node allows you to select between many imputation methods, such as mean value, fixed value, and most frequent value, to name just a few.</p>
+			<p><em class="italic">Figure 4.9</em> shows the two tabs of the configuration window of the node. In the first tab, the <strong class="bold">Default</strong> tab, you can select an imputation method to apply to all columns of the same type in the dataset; all columns besides those set in the second tab of the configuration, the <strong class="bold">Column Settings</strong> tab. In this second tab, you can define the imputation method for each individual colu<a id="_idTextAnchor115"/>mn:</p>
+			<div>
+				<div id="_idContainer335" class="IMG---Figure">
+					<img src="image/B16391_04_009.jpg" alt="Figure 4.9 – The Missing Value node selects among many imputation methods for missing values"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.9 – The Missing Value node selects among many imputation methods for missing values</p>
+			<p>Most neural <a id="_idIndexMarker332"/>networks are trained in a supervised way. Therefore, another necessary step is the creation of a training set and a test set, and optionally a validation set. To create different disjoint subsets, you<a id="_idIndexMarker333"/> can use the <strong class="bold">Partitioning</strong> node.</p>
+			<p>In the configuration window of the <a id="_idIndexMarker334"/>Partitioning node in <em class="italic">Figure 4.10</em>, you can set the size for the first partition, by either an absolute or a relative percentage number. Below that, you can set the sampling technique to create this first subset, by random extraction following the data distribution according to the categories in a selected column (stratified sampling), linearly every <em class="italic">n</em> data rows, or just sequentially starting from the top. The top output port produces the resulting partition; the lower output port produces all other remaining data rows:</p>
+			<div>
+				<div id="_idContainer336" class="IMG---Figure">
+					<img src="image/B16391_04_010.jpg" alt="Figure 4.10 – The Partitioning node creates two disjoint subsets"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.10 – The Partitioning node creates two disjoint subsets</p>
+			<p>For <a id="_idIndexMarker335"/>classification problems, the <strong class="bold">Stratified sampling</strong> option is recommended. It ensures that the distribution of the categories in the selected column is (approximately) retained in the two partitions. For time-series analysis, the <strong class="bold">Take from top</strong> option is preferable, if your data is sorted ascending by date. Samples further back in time will be in one partition and more recent samples in the other.</p>
+			<p>To create an additional validation set, a sequence of two Partitioning nodes is needed.</p>
+			<p>We have talked about encoding for categorical features, normalization for numerical features, missing value imputation, and partitioning of the dataset. It is likely that those are not the only nodes you might need to prepare your data for the neural network.</p>
+			<p>Let's see how the data preparation works in practice, by implementing the data preparation part on the two example datasets we have described previously.</p>
+			<h2 id="_idParaDest-59"><a id="_idTextAnchor116"/>Data Preparation on the Iris Dataset</h2>
+			<p>In <em class="italic">Figure 4.11</em>, you can see the<a id="_idIndexMarker336"/> part of the workflow dedicated to accessing and preparing the data for the upcoming neural network.</p>
+			<p>The workflow <a id="_idIndexMarker337"/>starts with reading the Iris dataset<a id="_idIndexMarker338"/> using the <strong class="bold">Table Reader</strong> node. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">You can find the dataset in the data folder for this chapter.</p>
+			<p>As the dataset has only numerical input features (petal and sepal measures), there is no need for e<a id="_idTextAnchor117"/>ncoding:</p>
+			<div>
+				<div id="_idContainer337" class="IMG---Figure">
+					<img src="image/B16391_04_011.jpg" alt="Figure 4.11 – This workflow snippet shows the preprocessing for the data in the iris dataset example"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.11 – This workflow snippet shows the preprocessing for the data in the iris dataset example</p>
+			<p>However, the target variable contains three different categories: the names of each flower species. The categories in this nominal column need to be converted into numbers via some encoding technique. To avoid the introduction of non-existent relationships, we opted for one-hot encoding. To implement the one-hot encoding, we chose the combination of integer encoding via nodes and one-hot encoding within the Keras Learner node. We will talk about the one-hot encoding internal to the Keras Learner node in the <em class="italic">Training the Network</em> section. Here, we will focus on the creation of an integer encoding of the flower classes inside a collection type column: </p>
+			<ol>
+				<li value="1">In order to <a id="_idIndexMarker339"/>transform the species names into an index, we use<a id="_idIndexMarker340"/> the <strong class="bold">Rule Engine</strong> node, with the following rules: <p class="source-code">$class$ = "Iris-setosa" =&gt; 0</p><p class="source-code">$class$ = "Iris-virginica" =&gt; 1</p><p class="source-code">TRUE =&gt; 2</p><p>In addition, we decided to replace the values in the <strong class="source-inline">class</strong> column.</p></li>
+				<li>Afterward, we<a id="_idIndexMarker341"/> pass the results from the Rule Engine node through a <strong class="bold">Create Collection Column</strong> node, to format the encoded class values as collection type cells. This means we include the <strong class="source-inline">class</strong> column, and we exclude all other columns in the configuration window.</li>
+				<li>Next, the training and test sets are created with a <strong class="bold">Partitioning</strong> node, using 75% of the data for training and the remaining 25% for testing. </li>
+				<li>Lastly, the data is normalized using the z-score normalization.</li>
+			</ol>
+			<p>The Iris dataset is quite small and quite well defined. Only a few nodes, the minimum required, were sufficient to implement the data preparation part.</p>
+			<p>Let's see now what happens on a more complex (but still small) dataset, such as the adult dataset.</p>
+			<h2 id="_idParaDest-60"><a id="_idTextAnchor118"/>Data Preparation on the Adult Dataset</h2>
+			<p>The <a id="_idIndexMarker342"/>workflow in <em class="italic">Figure 4.12</em> is part of the example <a id="_idIndexMarker343"/>on income prediction that reads and preprocesses the ad<a id="_idTextAnchor119"/>ult dataset: </p>
+			<div>
+				<div id="_idContainer338" class="IMG---Figure">
+					<img src="image/B16391_04_012.jpg" alt="Figure 4.12 – This workflow snippet shows the preprocessing for the data in the adult dataset example"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.12 – This workflow snippet shows the preprocessing for the data in the adult dataset example</p>
+			<p>Like for the Iris dataset, you can find the two datasets used in the workflow in the data folder for this chapter: the adult dataset and a dictionary Excel sheet. In the adult dataset, education levels are spelled out as text. The dictionary Excel file provides a map between the education levels and the corresponding standard integer codes. We could use these integer codes as the numerical encoding of the education input feature.</p>
+			<p>Next, the <strong class="bold">Cell Replacer</strong> node <a id="_idIndexMarker344"/>replaces all educational levels with the corresponding codes. We get one encoding practically without effort.</p>
+			<p>Some of the nominal <a id="_idIndexMarker345"/>columns have missing values. Inside the <strong class="bold">Missing Value</strong> node, they get imputed with a fixed value: <strong class="source-inline">"Missing"</strong>.</p>
+			<p>Next, we proceed with the encoding of all other nominal features, besides education. For the following features, an <a id="_idIndexMarker346"/>integer encoding is used, implemented by the <strong class="bold">Category to Number</strong> node: marital status, race, and sex. We can afford to use the integer encoding here, because the features are either binary or with just a few categories.</p>
+			<p>For the remaining nominal features – work class, occupation, relationship, and native-country – one-hot encoding is used, implemented <a id="_idIndexMarker347"/>by the <strong class="bold">One to Many</strong> node. Remember that this node creates one new column for each value in each of the selected columns. So, after this transformation, the dataset has 82, instead of the original 14, features.</p>
+			<p>Next, the training, validation, and test <a id="_idIndexMarker348"/>sets are created with a sequence of two <strong class="bold">Partitioning</strong> nodes, always <a id="_idIndexMarker349"/>using a stratified sampling based on the <strong class="source-inline">Income</strong> class column.</p>
+			<p>Lastly, the <strong class="source-inline">Income</strong> column gets integer encoded on all subsets and all their data is normalized.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">To hide complexity and to tidy up your workflows, you can create <strong class="bold">metanodes</strong>. Metanodes<a id="_idIndexMarker350"/> are depicted as gray nodes and contain sub-workflows of nodes. To create a metanode, select the nodes you want to hide, right-click, and select <strong class="bold">Create Metanode</strong>.</p>
+			<p>Our data is ready. Let's now build the neural network.</p>
+			<h1 id="_idParaDest-61"><a id="_idTextAnchor120"/>Building a Feedforward Neural Architecture</h1>
+			<p>To build a<a id="_idIndexMarker351"/> neural network architecture using the KNIME Keras integration, you can use a chain of Keras layer nodes. The available nodes to construct layers are grouped by categories in the <strong class="bold">Keras-&gt;Layers</strong> folder in the <strong class="bold">Node Repository</strong>, such as <strong class="bold">Advanced Activations</strong>, <strong class="bold">Convolution</strong>, <strong class="bold">Core</strong>, <strong class="bold">Embedding</strong>, and <strong class="bold">Recurrent</strong>, to name just a few. </p>
+			<p>Each layer displayed in the <strong class="bold">Keras-&gt;Layers</strong> folder has a specialty. For example, layers in <strong class="bold">Advanced Activations</strong> create layers with units with specific activation functions; layers in <strong class="bold">Convolution</strong> create layers for convolutional neural networks; <strong class="bold">Core</strong> contains all classic layers, such as the <strong class="bold">Input</strong> layer to collect the input values and the <strong class="bold">Dense</strong> layer for a fully connected feedforward neural network; and so on.</p>
+			<p>We will explore many of these layers along the way in this book. However, in this current chapter, we will limit ourselves to the basic layers needed in a fully connected feedforward neural network.</p>
+			<p>The first layer in<a id="_idIndexMarker352"/> any network is the layer that receives the input values. Let's start from the Keras Input Layer node.</p>
+			<h2 id="_idParaDest-62"><a id="_idTextAnchor121"/>The Keras Input Layer Node</h2>
+			<p>Building a neural network always starts with defining the input layer of the network. The <strong class="bold">Keras Input Layer</strong> node can<a id="_idIndexMarker353"/> help you with this task. Indeed, this node builds the required inputs for the network to accept the input values.</p>
+			<p>On the left of <em class="italic">Figure 4.13</em>, you can see the Keras Input Layer node and on the right its configuration window. As you can see, the node does not have an input port, just one output port of a different shape and color (red square) from the <a id="_idIndexMarker354"/>nodes encountered so far: this is <a id="_idTextAnchor122"/>the <strong class="bold">Keras Network Port</strong>:</p>
+			<div>
+				<div id="_idContainer339" class="IMG---Figure">
+					<img src="image/B16391_04_013.jpg" alt="Figure 4.13 – The Keras Input Layer node defines the input layer of your neural network"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.13 – The Keras Input Layer node defines the input layer of your neural network</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The color and shape of a port indicate which ports can be connected with each other. Most of the time, only ports of the same color and shape can be connected, but there are exceptions. For example, you can connect a gray square, which is a Python DL port, with a Keras port, a red square.</p>
+			<p>Each layer node has a <a id="_idIndexMarker355"/>configuration window, with the setting options required for this specific layer. Compared to other layer nodes, this node has a simple configuration window with only a few setting options.</p>
+			<p>The most important setting is <strong class="bold">Shape</strong>. <strong class="bold">Shape</strong> allows you to define the input shape of your network, meaning how many neurons your input layer has. Remember, the number of neurons in the input layer has to match the number of your preprocessed input columns.</p>
+			<p>The Iris dataset has four features that we will use as inputs: sepal length, sepal width, petal length, and petal width. Therefore, the input shape here is 4.</p>
+			<p>In addition, in the configuration window of the Keras Input Layer node, you can set the following:</p>
+			<ul>
+				<li>A <strong class="bold">Name prefix</strong> for the layer, so it is easier to identify it later on (optional).</li>
+				<li>A <strong class="bold">Batch size</strong> (optional). Remember, the batch size is one of the setting options for the training. The recommended way is to define the batch size in the learner and executor node. In addition, you have the option to define it here. If a batch size is defined, then the batch size option in the learner and executor nodes are not available.</li>
+				<li>The <strong class="bold">Data type</strong> and <strong class="bold">Data format</strong> of the input.</li>
+			</ul>
+			<p>Your network now has its first layer, the input layer. Now, you can continue to build your network by creating and connecting the next layer node to the output of the Keras Input Layer node – for example, a <strong class="bold">Keras Dense Layer</strong> node.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">To create a node and immediately connect it to an existing node, select the existing node in the workflow editor and double-click the new node in the Node Repository. This will create the new node and connect it automatically to the selected existing node.</p>
+			<h2 id="_idParaDest-63"><a id="_idTextAnchor123"/>The Keras Dense Layer Node</h2>
+			<p>The <strong class="bold">Keras Dense Layer</strong> node<a id="_idIndexMarker356"/> implements a classic layer in a feedforward fully connected network. The parameters to set here are the number of neural units and the activation function.</p>
+			<p><em class="italic">Figure 4.14</em> shows the configuration window of this node. The setting options are split into two tabs: <strong class="bold">Options</strong> and <strong class="bold">Advanced</strong>.</p>
+			<p>The <strong class="bold">Options</strong> tab contains the most important settings, such as the number of neurons, also known as units, and the activation function.</p>
+			<p>In addition, the <strong class="bold">Input tensor</strong> setting defines the part of the input tensor coming from the previous node. In a feedforward network, the input tensor is the output tensor from the previous layer. However, some layer nodes – such as, for example, the <strong class="bold">Keras LSTM Layer</strong> node – create not<a id="_idIndexMarker357"/> just one hidden output tensor, but multiple. In such cases, you must select one among the different input tensors, or hidden states, produced by the previous layer node. Keras Input Layer, like Keras Dense Layer, produces only one output vector and this is what we select as input tensor to our Keras Dense Layer node.</p>
+			<p>In the upper part of the <strong class="bold">Advanced</strong> tab, you can select how to randomly initialize the weights and biases of the network; this means the starting values for all weights and biases before the first iteration of the learning process.</p>
+			<p>The lower part of the <strong class="bold">Advanced</strong> tab allows you to add norm regularization for the weights in this layer. Norm regularization is a technique to avoid overfitting, which we introduced in <a href="B16391_03_Final_PG_ePUB.xhtml#_idTextAnchor073"><em class="italic">Chapter 3</em></a>, <em class="italic">Getting Started with Neural Networks</em>. In the configuration window, you can select whether to apply it to the kernel weight matrix, the bias vector, and/or the layer activation. After activating the corresponding checkbox, you can select between using the L1 norm as a penalty term, the L2 norm as a penalty term, or both. Lastly, you can set the value for the regularization parameter, <img src="image/Formula_B16391_04_008.png" alt=""/>, for the penalty terms and constraints on the weight and bias values.</p>
+			<p>By using the <strong class="bold">Keras Input Layer</strong> node and <a id="_idIndexMarker358"/>multiple Keras Dense Layer nodes, you can build a feedforward network for many different tasks, such as, for example, to<a id="_idTextAnchor124"/> classify iris flowers:</p>
+			<div>
+				<div id="_idContainer341" class="IMG---Figure">
+					<img src="image/B16391_04_014.jpg" alt="Figure 4.14 – The Keras Dense Layer node allows you to add a fully connected layer to your neural network, including a selection of commonly used activation functions"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.14 – The Keras Dense Layer node allows you to add a fully connected layer to your neural network, including a selection of commonly used activation functions</p>
+			<p>Configuration of the other layer nodes is similar to what was described here for the dense and input layers, and you will learn more about them in the next chapters.</p>
+			<p>Since both basic examples used in this chapter refer to feedforward networks, we now have all of the necessary pieces to build both feedforward neural networks.</p>
+			<h2 id="_idParaDest-64"><a id="_idTextAnchor125"/>Building a Neural Network for Iris Flower Classification</h2>
+			<p>For the multiclass<a id="_idIndexMarker359"/> classification problem <a id="_idIndexMarker360"/>using the Iris dataset, the goal was to build a fully connected feedforward neural network with three layers:</p>
+			<ul>
+				<li>One input layer with four units, one for each input feature</li>
+				<li>One hidden layer with eight units and the ReLU activation function</li>
+				<li>One output layer with three units, one for each output class, meaning one for each iris species, with the softmax activation function</li>
+			</ul>
+			<p>We opted for the ReLU activation function in the hidden layer for its better performance when used in hidden layers, and for the softmax activation function in the output layer for its probabilistic interpretability. The output unit with the highest output from the softmax function is the unit with the highest class probability. </p>
+			<p><em class="italic">Figure 4.15</em> shows the neural network architecture used for the iri<a id="_idTextAnchor126"/><a id="_idTextAnchor127"/>s classification problem:</p>
+			<div>
+				<div id="_idContainer342" class="IMG---Figure">
+					<img src="image/B16391_04_015.jpg" alt="Figure 4.15 – A diagram of the feedforward network used for the iris flower example"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.15 – A diagram of the feedforward network used for the iris flower example</p>
+			<p><em class="italic">Figure 4.16</em> shows the <a id="_idIndexMarker361"/>workflow snippet with the<a id="_idIndexMarker362"/> three layer nodes building the network and their configuration windows, including the number of units<a id="_idTextAnchor128"/> and activation functions:</p>
+			<div>
+				<div id="_idContainer343" class="IMG---Figure">
+					<img src="image/B16391_04_016.jpg" alt="Figure 4.16 – This workflow snippet builds the neural network in Figure 4.15 for the Iris dataset example. The configuration windows below them show you the nodes' configurations"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.16 – This workflow snippet builds the neural network in Figure 4.15 for the Iris dataset example. The configuration windows below them show you the nodes' configurations</p>
+			<p>The input<a id="_idIndexMarker363"/> layer has four input units, <strong class="source-inline">Shape = 4</strong>, for the<a id="_idIndexMarker364"/> four numerical input features. The first Keras Dense Layer node, which is the hidden layer, has eight units and uses the ReLU activation function. In the output layer, the softmax activation function is used with three units, one unit for each class.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">In the last layer, the name prefix <strong class="bold">Output</strong> has been used. This makes it easier to identify the layer in the <strong class="bold">Executor</strong> node and has the advantage that the layer name doesn't change if more Keras Dense Layer nodes are added as hidden layers.</p>
+			<h2 id="_idParaDest-65"><a id="_idTextAnchor129"/>Building a Neural Network for Income Prediction</h2>
+			<p>The <a id="_idIndexMarker365"/>second proposed example was a binary<a id="_idIndexMarker366"/> classification problem: predicting income (greater or lower than 50K per year) in the adult dataset. Here, we adopted a neural network with two hidden layers, with four layers in total:</p>
+			<ul>
+				<li>One input layer with 81 units, as many as input features</li>
+				<li>One hidden layer with six units and the ReLU activation function</li>
+				<li>One more hidden layer with six units and the ReLU activation function</li>
+				<li>One output layer with one unit and the sigmoid activation function</li>
+			</ul>
+			<p>The output layer uses a classic implementation for the binary classification problem: one single unit with the sigmoid activation function. The sigmoid function, spanning a range of 0 and 1, can easily implement class attribution using <strong class="source-inline">0</strong> for one class and <strong class="source-inline">1</strong> for the other. Thus, for a binary classification problem, where the two classes are encoded as <strong class="source-inline">0</strong> and <strong class="source-inline">1</strong>, one sigmoid function alone can produce the probability for the class encoded as <strong class="source-inline">1</strong>.</p>
+			<p><em class="italic">Figure 4.17</em> shows you the workflow snippet that builds this fully connected feedforward neural network:</p>
+			<div>
+				<div id="_idContainer344" class="IMG---Figure">
+					<img src="image/B16391_04_017.jpg" alt="Figure 4.17 – This workflow snippet builds the fully connected feedforward neural network used as a solution for the adult dataset example"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor130"/></p>
+			<p class="figure-caption">Figure 4.17 – This workflow snippet builds the fully connected feedforward neural network used as a solution for the adult dataset example</p>
+			<p>After preprocessing, the adult dataset ends up having 82 columns, 81 input features, and the target column. Therefore, the input layer has <strong class="source-inline">Shape = 81</strong>. Next, the two hidden layers are built using two Keras Dense Layer nodes with <strong class="source-inline">Units = 6</strong> and the ReLU activation function. The output layer consists of a Keras Dense Layer node, again with <strong class="source-inline">Units = 1</strong> and the sigmoid activation function.</p>
+			<p>In this section, you've learned how to build a feedforward neural network using the KNIME Keras integration nodes. The next step is to set the other required parameters for the network training, such as, for example, the loss function, and then to train the network.</p>
+			<h1 id="_idParaDest-66"><a id="_idTextAnchor131"/>Training the Network</h1>
+			<p>We have the data <a id="_idIndexMarker367"/>ready and we have the network. The goal of this section is to show you how to train the network with the data in the training set. This requires the selection of the loss function, the setting of the training parameters, the specification of the training set and the validation set, and the tracking of the training progress.</p>
+			<p>The key node for network training and for all<a id="_idIndexMarker368"/> these training settings is the <strong class="bold">Keras Network Learner</strong> node. This is a really powerful, really flexible node, with many possible settings, distributed over four tabs: <strong class="bold">Input Data</strong>, <strong class="bold">Target Data</strong>, <strong class="bold">Options</strong>, and <strong class="bold">Advanced Options</strong>.</p>
+			<p>The Keras Network Learner node has three input ports:</p>
+			<ul>
+				<li><strong class="bold">Top port</strong>: The neural network you want to train</li>
+				<li><strong class="bold">Middle port</strong>: The training set</li>
+				<li><strong class="bold">Lowest port</strong>: The optional validation set</li>
+			</ul>
+			<p>It has one output port, exporting the trained network. </p>
+			<p>In addition, the node has the <strong class="bold">Learning Monitor</strong> view, which you can use to monitor the network training progress.</p>
+			<p>Let's find out first how to select the loss function before we continue with the training parameters.</p>
+			<h2 id="_idParaDest-67"><a id="_idTextAnchor132"/>Selecting the Loss Function</h2>
+			<p>In <a href="B16391_03_Final_PG_ePUB.xhtml#_idTextAnchor073"><em class="italic">Chapter 3</em></a>, <em class="italic">Getting Started with Neural Networks</em>, we introduced many loss functions, each <a id="_idIndexMarker369"/>one suitable for a specific task, as the last design choice for your network. For example, mean squared error is commonly used in regression problems or categorical cross-entropy in multiclass classification problems. In the lower part of the <strong class="bold">Target Data</strong> tab, you can either select between different standard prepackaged <a id="_idIndexMarker370"/>loss functions or define your own custom loss function using Python (see <em class="italic">Figure 4.18</em>)<a id="_idTextAnchor133"/>:</p>
+			<div>
+				<div id="_idContainer345" class="IMG---Figure">
+					<img src="image/B16391_04_018.jpg" alt="Figure 4.18 – In the Target Data tab of the Keras Network Learner node, you can select the target columns and the loss function"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.18 – In the Target Data tab of the Keras Network Learner node, you can select the target columns and the loss function</p>
+			<p>Now that the network structure is defined and you have selected the correct loss function, the next step is to define which columns of the input dataset are the inputs for your network and which column contains the target values.</p>
+			<h2 id="_idParaDest-68"><a id="_idTextAnchor134"/>Defining the Input and Output Data</h2>
+			<p>Defining the input and <a id="_idIndexMarker371"/>output columns is something you<a id="_idIndexMarker372"/> can do in the <strong class="bold">Input Data</strong> and <strong class="bold">Target Data</strong> tabs. Let's focus first on the input data.</p>
+			<p>The input data is the data that your network expects as input, which means the columns that fit the input size of the network. In the <strong class="bold">Input Data</strong> tab, the number of input neurons for the selected network and the consequent shape are reported at the very top:</p>
+			<div>
+				<div id="_idContainer346" class="IMG---Figure">
+					<img src="image/B16391_04_019.jpg" alt="Figure 4.19 – In the Input Data tab of the Keras Network Learner node, you can &#13;&#10;select the input column(s) and the correct conversion"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.19 – In the Input Data tab of the Keras Network Learner node, you can select the input column(s) and the correct conversion</p>
+			<p>Next, you must select the conversion type; this means the transformation for the selected input columns into a format that is accepted by the network input specification. The possible conversion types are as follows:</p>
+			<ul>
+				<li><strong class="bold">From Collection of Number (integer) to One-Hot Tensor</strong></li>
+				<li><strong class="bold">From Number (double)</strong></li>
+				<li><strong class="bold">From Number (integer)</strong></li>
+				<li><strong class="bold">From Collection of Number (double)</strong></li>
+				<li><strong class="bold">From Collection of Number (integer)</strong></li>
+				<li><strong class="bold">From Image</strong></li>
+			</ul>
+			<p>Conversion type 1, <strong class="bold">From Collection of Numbers (integer) to One-Hot Tensor</strong>, is a really helpful transformation when the network requires one-hot vectors. Instead of creating a matrix with all the one-hot vectors, which takes up space and resources, you can input a sequence of integer-encoded values and then transform them, one by one, into one-hot vectors. During execution, the node creates the one-hot vectors and inputs them into the network. The whole process is hidden from the end user and no additional large, sparse data tables are created.</p>
+			<p>The other conversion types just take the input columns in the specified format (double, integer, or image) and present them to the network.</p>
+			<p>After selecting the<a id="_idIndexMarker373"/> conversion type, you can select<a id="_idIndexMarker374"/> the input columns to the network through an include-exclude frame. Notice that the frame has been pre-loaded with all the input columns matching the selected conversion type.</p>
+			<p>Let's now select the target column. The target data must match the specifications from the output layer. This means that, if your output layer has 20 units, your target data must be 20-dimensional vectors; or, if your output layer has only one unit, your target data must also consist of one single value for each training sample or data row.</p>
+			<p>In the <strong class="bold">Target Data</strong> tab, at the very top, the number of neurons in the output layer of the network and the resulting shape is reported. Like in the <strong class="bold">Input Data</strong> tab, here you can select from many conversion options to translate from the input dataset into the network specifications. The menu, with all the available conversion types to select from, has been preloaded with the conversion types that fit the specifications of the output layer of the network.</p>
+			<p>For multiclass <a id="_idIndexMarker375"/>classification problems, the conversion <a id="_idIndexMarker376"/>type from a collection of numbers (integer) to one-hot tensor is really helpful. Instead of creating the one-hot vectors in advance, you need only to encode the position of the class (1) in the input collection cell.</p>
+			<p>Let's move on to the training parameters.</p>
+			<h2 id="_idParaDest-69"><a id="_idTextAnchor135"/>Setting the Training Parameters</h2>
+			<p>Now that the network<a id="_idIndexMarker377"/> and the loss function have been defined, the next step is to set the training parameters. For example, which optimizer do you want to use? How many epochs do you want to train for? There are many parameters to be defined.</p>
+			<p>All the training parameters can be found in the <strong class="bold">Options</strong> and <strong class="bold">Advanced Options</strong> tabs. In <em class="italic">Figure 4.20</em>, you can see the <strong class="bold">Options</strong> tab of the <strong class="bold">Keras Network Learner<a id="_idTextAnchor136"/></strong> node:</p>
+			<div>
+				<div id="_idContainer347" class="IMG---Figure">
+					<img src="image/B16391_04_020.jpg" alt="Figure 4.20 – In the Options tab of the Keras Network Learner node, you can set all the training parameters"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.20 – In the Options tab of the Keras Network Learner node, you can set all the training parameters</p>
+			<p>In the<a id="_idIndexMarker378"/> upper part of the <strong class="bold">Options</strong> tab, in the configuration window, you can define the number of epochs and the batch size. This determines the number of data rows from the training and validation sets to feed the network in batches within each training iteration.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">If you defined a batch size in the Keras Input Layer node, the batch size settings are deactivated.</p>
+			<p>Under that, there <a id="_idIndexMarker379"/>are two checkboxes. One shuffles the training data randomly before each epoch, and one sets a random seed. Shuffling the training data often improves the learning process. Indeed, updating the network with the same batches in the same order in each epoch can have a detrimental effect on the convergence speed of the training. If the shuffling checkbox is selected, the random seed checkbox becomes active and the displayed number is used to generate the random sequence for the shuffling operation. The usage of a random seed produces a repeatable random shuffling procedure and therefore allows us to repeat the results of a specific training run. Clicking the <strong class="bold">New seed</strong> button generates a new random seed and a new random shuffling procedure. Disabling the checkbox for the random seed creates a new seed for each node execution.</p>
+			<p>In the lower part of the <strong class="bold">Options</strong> tab, you can select the <strong class="bold">Optimizer algorithm</strong>, and its parameters to use during training. The optimizer algorithm is the training algorithm. For example, you can select the <strong class="bold">RMSProp</strong> optimizer and then the corresponding <strong class="bold">Learning rate</strong> and <strong class="bold">Learning rate decay</strong> values. When the node is selected, the <strong class="bold">Description</strong> panel on the right is populated with details about the node. A list of optimizers is provided, as well as links to the original Keras library explaining all the parameters required in this frame.</p>
+			<p>At the very bottom of the <strong class="bold">Options</strong> tab, you can constrain the size of the gradient values. If <strong class="bold">Clip norm</strong> is checked, the gradients whose L2 norm exceeds the given norm will be clipped to that norm. If <strong class="bold">Clip value</strong> is checked, the gradients whose absolute value exceeds the given value will be clipped to that value (or the negated value, respectively).</p>
+			<p>The <strong class="bold">Advanced Options</strong> tab contains a few additional settings for special termination and learning rate reduction cases. The last option allows you to specify which GPU to use on systems with multiple GPUs.</p>
+			<h2 id="_idParaDest-70"><a id="_idTextAnchor137"/>Tracking the Training Progress</h2>
+			<p>After setting all the training<a id="_idIndexMarker380"/> parameters, you can start training your network by executing the node. While executing the node, you can check the learning progress in the <strong class="bold">Learning Monitor</strong> view. You can open the <strong class="bold">Learning Monitor</strong> view by right-clicking on the Keras Network Learner node and selecting <strong class="bold">View: Learning Monitor</strong>; see <em class="italic">Figure 4.21</em>.</p>
+			<p>By default, the <strong class="bold">Learning Monitor</strong> view shows the evolution of the accuracy curve, in red, on the training set after each weight update, which means after a data batch has passed through the network. The accuracy values are reported on the <em class="italic">y</em> axis and the progressive number of the batch on the <em class="italic">x</em> axis.</p>
+			<p>Clicking on <strong class="bold">Loss</strong> above the line plot shows the loss curve on the training set instead of the accuracy.</p>
+			<p>More information about the training progress is available in the <strong class="bold">Keras Log Output</strong> view. This can be selected in the top part of the Keras Learning node's view, in the last tab after <strong class="bold">Accuracy</strong> a<a id="_idTextAnchor138"/>nd <strong class="bold">Loss</strong>:</p>
+			<div>
+				<div id="_idContainer348" class="IMG---Figure">
+					<img src="image/B16391_04_021.jpg" alt="Figure 4.21 – The Learning Monitor view shows the progress of the learning process"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.21 – The Learning Monitor view shows the progress of the learning process</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The <strong class="bold">Learning Monitor</strong> view of the Keras Network Learner node allows you to track the learning of your model. You can open it by right-clicking on the executing node and selecting <strong class="bold">View: Learning Monitor</strong>.</p>
+			<p>If you are using a validation set, a blue line appears in the accuracy/loss plot. The blue line shows the corresponding progress of the training procedure on the validation set.</p>
+			<p>Under the plot, you<a id="_idIndexMarker381"/> have the option to zoom in on the <em class="italic">x</em> axis – the batch axis – to see the progress after each batch in more detail.</p>
+			<p>The <strong class="bold">Smoothing</strong> checkbox introduces the moving average curve of the original accuracy or loss curve. The <strong class="bold">Log Scale </strong>checkbox changes the curve representation to a logarithmic scale for a more detailed evaluation of the training run.</p>
+			<p>Finally, at the bottom of the view, you can see the <strong class="bold">Stop learning</strong> button. This is an option for on-demand early stopping of the training process. If training is stopped before it is finished, the network is saved in the current status.</p>
+			<h2 id="_idParaDest-71"><a id="_idTextAnchor139"/>Training Settings for Iris Flower Classification</h2>
+			<p>For the iris flower classification<a id="_idIndexMarker382"/> example based on the Iris dataset, we used the following settings in the Network Learner node.</p>
+			<p>In the first tab, the <strong class="bold">Input Data</strong> tab, the four numerical inputs are selected as the input features. During the data preparation part, we applied no nominal feature encoding on the input features. So, we just feed them as they are into the input layer of the network, by using the <strong class="bold">From Number (double)</strong> conversion type.</p>
+			<p>In the second tab, the <strong class="bold">Target Data</strong> tab, the target column is selected. If you remember, during the data preparation part, we integer encoded the class into a collection cell to proceed later with the one-hot encoding conversion. So, we selected the <strong class="source-inline">class_collection</strong> input column, containing the integer-encoded class as a collection, and we applied the <strong class="bold">From Collection of Number (integer) to One-Hot Tensor</strong> conversion. Therefore, during the execution, the Keras Network Learner node creates the one-hot encoding version of the three classes in a three-dimensional vector, as it is also required to match the network output. In the lower part of this second tab, select the <strong class="bold">Categorical cross entropy</strong> loss function.</p>
+			<p>In the third tab, named <strong class="bold">Options</strong>, the training parameters are defined. The network is trained using 50 epochs, a training batch size of 5, and the <strong class="bold">RMSProp</strong> optimizer.</p>
+			<p>The settings in the <strong class="bold">Advanced Options</strong> tab are left inactive, by default.</p>
+			<h2 id="_idParaDest-72"><a id="_idTextAnchor140"/>Training Settings for Income Prediction</h2>
+			<p>For a multiclass classification problem, such as the income prediction<a id="_idIndexMarker383"/> example based on the adult dataset, the settings are a bit different. We used the following settings.</p>
+			<p>In the first tab, <strong class="bold">Input Data</strong>, the <strong class="bold">From Number (double)</strong> conversion is selected and the 81 input feature columns are included. Only the target column, <strong class="source-inline">Income</strong>, is in the <strong class="source-inline">Exclude</strong> part. Here, in the data preparation phase, some of the input features were already numerical and have not been encoded, some have been integer encoded, and some have been one-hot encoded via KNIME native nodes. So, all input features are ready to be fed as they are into the network. Notice that, since we decided to mix integer encoding, one-hot encoding, and original features, the only possible encoding applicable to all those different features is a simple <strong class="bold">From Number</strong> type of transformation.</p>
+			<p>Also, in the second tab, <strong class="bold">Target Data</strong>, the <strong class="bold">From Number (double)</strong> conversion is selected, as the target is just a numerical value: <strong class="source-inline">0</strong> or <strong class="source-inline">1</strong>. This also fits the one output from the sigmoid function in the output layer of the network. In the include-exclude frame, only the target column, <strong class="source-inline">Income</strong>, is included. Next, the <strong class="bold">Binary cross entropy</strong> loss function is selected, to fit a binary classification problem such as this one.</p>
+			<p>In the third tab, <strong class="bold">Options</strong>, we set the network to be trained for 80 epochs with a training batch size of 80 data rows. In this example, we also use a validation set, to be able to already see, during training, the network progress on data not included in the training set. For the processing of the validation set, a batch size of 40 data rows is set. Lastly, we select <strong class="bold">Adam</strong> as the optimizer for this training process.</p>
+			<p>Again, the settings in the last tab, <strong class="bold">Advanced Options</strong>, are disabled by default.</p>
+			<h1 id="_idParaDest-73"><a id="_idTextAnchor141"/>Testing and Applying the Network</h1>
+			<p>Now<a id="_idIndexMarker384"/> that the neural<a id="_idIndexMarker385"/> network has been trained, the last step is to apply the network to the test set and evaluate its performance.</p>
+			<h2 id="_idParaDest-74"><a id="_idTextAnchor142"/>Executing the Network</h2>
+			<p>To<a id="_idIndexMarker386"/> execute a trained network, you can use the <strong class="bold">Keras Network Executor</strong> node, as in <em class="italic">Figure 4.22</em>. The<a id="_idIndexMarker387"/> node has two input ports: a Keras network port for the trained network and a data input port for the test set or new data.</p>
+			<p>In the first tab of the configuration window, named <strong class="bold">Options</strong>, you can select, in the upper part, the backend engine, the batch size for the input data, and whether to also keep the original input columns in the output data table.</p>
+			<p>Under that, you can specify the input columns and the required conversion. Like in the Keras Network Learner node, the input specifications from the neural network are printed at the top. Remember that, since you are using the same network and the same format for the data, the settings for the input features must be the same as the ones in the Keras Network Learner node.</p>
+			<p>In the last part of this tab, you can add the settings for the output(s). First, you need to specify where to take the output from; this should be the output layer from the input network. To add one output layer, click on the <strong class="bold">add output</strong> button. In the new window, you see a menu containing all layers from the input network. If you configured prefixes in the layer nodes, you could see them in the drop-down menu, making it easier for you to recognize the layer of interest. Select the<a id="_idTextAnchor143"/> output layer:</p>
+			<div>
+				<div id="_idContainer349" class="IMG---Figure">
+					<img src="image/B16391_04_022.jpg" alt="Figure 4.22 – The Keras Network Executor node runs the network on new data. In the configuration window, you can select the outputs by clicking on the add output button"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.22 – The Keras Network Executor node runs the network on new data. In the configuration window, you can select the outputs by clicking on the add output button</p>
+			<p>In all use<a id="_idIndexMarker388"/> cases included in this book, the last layer of the network is used as the output layer. This layer is easily recognizable, as it is the only one without the <strong class="bold">(hidden)</strong> suffix in the drop-down list.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">You can also output the output of a hidden layer, for example, for debugging purposes.</p>
+			<p>Finally, select<a id="_idIndexMarker389"/> the appropriate conversion type, to get the output values in the shape you prefer – for example, in one cell as a list (<strong class="bold">To List of Number (double)</strong>) or with a new column for each output unit (<strong class="bold">To Number (double)</strong>). In this last case, you can define a prefix to append to the names of the output columns.</p>
+			<p>The <strong class="bold">Advanced Options</strong> part contains settings to let the network run on GPU-enabled machines.</p>
+			<h2 id="_idParaDest-75"><a id="_idTextAnchor144"/>Extracting the Predictions and Evaluating the Network Performance</h2>
+			<p>Depending on the use case, the<a id="_idIndexMarker390"/> network outputs might need some <a id="_idIndexMarker391"/>postprocessing to extract the predictions. For example, in a binary classification problem, with one output unit and a sigmoid activation function, the output value is the probability for the class encoded as <strong class="source-inline">1</strong>. In this case, to produce the actual class assignment, you could apply a threshold to the probability inside a Rule Engine node.</p>
+			<p>The last step is the evaluation of the model. To evaluate a classification model, you can use either<a id="_idIndexMarker392"/> the <strong class="bold">Scorer</strong> node or the <strong class="bold">ROC Curve</strong> node. The output of the Scorer node gives you common performance <a id="_idIndexMarker393"/>metrics, such as the accuracy, Cohen's kappa, or the confusion matrix.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Another really nice node to evaluate the <a id="_idIndexMarker394"/>performance for the binary classification problem is the <strong class="bold">Binary Classification Inspector</strong> node. The node is part of the KNIME Machine Learning Interpretability Extension: <a href="https://hub.knime.com/knime/extensions/org.knime.features.mli/latest">https://hub.knime.com/knime/extensions/org.knime.features.mli/latest</a>.</p>
+			<p>For the evaluation of regression solutions, the <strong class="bold">Numeric Scorer</strong> node calculates <a id="_idIndexMarker395"/>some error measures, such as mean squared error, root mean squared error, mean absolute error, mean absolute percentage error, mean signed difference, and R-squared.<a id="_idTextAnchor145"/></p>
+			<h2 id="_idParaDest-76"><a id="_idTextAnchor146"/>Testing the Network Trained to Classify Iris Flowers</h2>
+			<p>In <em class="italic">Figure 4.23</em>, you can see the part <a id="_idIndexMarker396"/>of the workflow that applies the trained network, extracts the predictions, and evaluates the network trained to classify iris flowers:</p>
+			<p class="figure-caption"> <a id="_idTextAnchor147"/></p>
+			<div>
+				<div id="_idContainer350" class="IMG---Figure">
+					<img src="image/B16391_04_023.jpg" alt="Figure 4.23 – This workflow snippet applies the trained network and extracts &#13;&#10;and evaluates the predictions for the iris flower example"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.23 – This workflow snippet applies the trained network and extracts and evaluates the predictions for the iris flower example</p>
+			<p>In the configuration window of the <strong class="bold">Keras Network Executor</strong> node, the four input features are selected as input<a id="_idIndexMarker397"/> columns. In the lower part of the <strong class="bold">Options</strong> tab, the output layer has been selected by clicking on the <strong class="bold">add output</strong> button. As we didn't use any prefixes in the configuration window of the layer nodes, the last layer here is just called <strong class="source-inline">"dense_2/Softmax:0_"</strong>, as a <strong class="bold">Conversion</strong> type of <strong class="bold">To Number (double)</strong> is selected. As the Iris dataset has three different possible class values, the node adds three new columns with the three probabilities for the three classes. Another conversion option is <strong class="bold">To List of Number (double)</strong>. This conversion option would lead to only one new column, with all the class probabilities in one cell packaged as a list.</p>
+			<p>Next, the predictions are extracted with the Rule Engine node. The probabilities for the different classes are in the <strong class="source-inline">$Output_1/Softmax:0_0for class 0</strong>, and<strong class="source-inline"> Output_1/Softmax:0_1</strong> columns for class 1, and <strong class="source-inline">Output_1/Softmax:0_2</strong> for class 2. Here, the class with the highest probability is selected as the predicted outcome.</p>
+			<p>The first rule checks whether the class encoded as <strong class="source-inline">0</strong> has the highest probability by comparing it to the probability for the other two classes. The second rule does the same for the class encoded as <strong class="source-inline">1</strong>, and the third rule for the class encoded as <strong class="source-inline">2</strong>. The last rule defines a default value.</p>
+			<p>These rules are <a id="_idIndexMarker398"/>applied with the following code:</p>
+			<p class="source-code">$Output_1/Softmax:0_0$ &gt; $Output_1/Softmax:0_1$ AND $Output_1/Softmax:0_0$ &gt; $Output_1/Softmax:0_2$ =&gt; 0</p>
+			<p class="source-code">$Output_1/Softmax:0_1$ &gt; $Output_1/Softmax:0_0$ AND $Output_1/Softmax:0_1$ &gt;$Output_1/Softmax:0_2$ =&gt; 1</p>
+			<p class="source-code">$Output_1/Softmax:0_2$ &gt; $Output_1/Softmax:0_0$ AND $Output_1/Softmax:0_2$ &gt;$Output_1/Softmax:0_1$ =&gt; 2</p>
+			<p class="source-code">TRUE =&gt; 3</p>
+			<p>Lastly, the Scorer node is used to evaluate network performance.</p>
+			<h2 id="_idParaDest-77"><a id="_idTextAnchor148"/>Testing the Network Trained for Income Prediction</h2>
+			<p>The same node<a id="_idIndexMarker399"/> combination with different settings can be used to apply the trained network, extract the predictions, and evaluate the model for the income prediction example on the adult dataset.</p>
+			<p>In the configuration window of the Keras Network Executor node, in the <strong class="bold">Options</strong> tab, the 81 input features are included, and the <strong class="source-inline">dense_3</strong> output layer is added as the output. In this case, the output of the network is the probability for the class encoded as <strong class="source-inline">1</strong>, <strong class="source-inline">"&gt;50K"</strong>. </p>
+			<p>Finally, the Rule Engine node checks whether the output probability is higher or lower than the <strong class="source-inline">0.5</strong> threshold using the following code: </p>
+			<p class="source-code">$dense_3/Softmax:0_0$ &lt; 0.5=&gt; "&lt;=50K"</p>
+			<p class="source-code">TRUE =&gt; "&gt;50K"</p>
+			<p>Lastly, the network performance is evaluated with the Scorer node.</p>
+			<p>With this, we have gone through the whole process, from data access and data preparation to defining, training, applying, and evaluating a neural network using KNIME Analytics Platform.</p>
+			<h1 id="_idParaDest-78"><a id="_idTextAnchor149"/>Summary</h1>
+			<p>We have reached the end of this chapter, where you have learned how to perform the different steps involved in training a neural network in KNIME Analytics Platform.</p>
+			<p>We started with common preprocessing steps, including different encodings, normalization, and missing value handling. Next, you learned how to define a neural network architecture by using different Keras layer nodes without writing code. We then moved on to the training of the neural network and you learned how to define the loss function, as well as how you can monitor the learning progress, apply the network to new data, and extract the predictions.</p>
+			<p>Each section closed with small example sessions, preparing you to perform all these steps on your own.</p>
+			<p>In the next chapter, you will see how these steps can be applied to the first use case of the book: fraud detection using an autoencoder.</p>
+			<h1 id="_idParaDest-79"><a id="_idTextAnchor150"/>Questions and Exercises</h1>
+			<p>Check your level of understanding of the concepts presented in this chapter by answering the following questions:</p>
+			<ol>
+				<li value="1">How can you set the loss function to train your neural network?<p>a) By using the Keras Loss Function node</p><p>b) By using the Keras Output Layer node</p><p>c) In the configuration window of the Keras Network Learner node</p><p>d) In the configuration window of the Keras Network Executor node</p></li>
+				<li>How can you one-hot encode your features?<p>a) By using the One Hot Encoding node</p><p>b) By using the One to Many node </p><p>c) By creating an integer encoding using the Category to Number node and afterward, the Integer to One Hot Encoding node</p><p>d) By creating an integer encoding, transforming it into a collection cell, and selecting the right conversion</p></li>
+				<li>How can you define the number of neurons for the input of your network?<p>a) By using a Keras Input Layer node.</p><p>b) By using a Keras Dense Layer node without any input network.</p><p>c) The input dimension is set automatically based on the selected features in the Keras Network Learner node.</p><p>d) By using a Keras Start Layer node.</p></li>
+				<li>How can you monitor the training of your neural network on a validation set?<p>a) Feed a validation set into the optional input port of the Keras Network Learner node and open the training monitor view. The performance of the validation set is shown in red.</p><p>b) Click on the <strong class="bold">apply on validation set</strong> button in the training monitor view.</p><p>c) Feed a validation set into the optional input port of the Keras Network Learner node and open the training monitor view. The performance of the validation set is shown in blue.</p><p>d) Feed a validation set into the optional input port of the Keras Network Learner node and open the validation set tab of the training monitor view. Build a workflow to read the Iris dataset and to train a neural network with one hidden layer (eight units and the ReLU activation function) to distinguish the three species from each other based on the four input features.</p></li>
+			</ol>
+		</div>
+	</body></html>

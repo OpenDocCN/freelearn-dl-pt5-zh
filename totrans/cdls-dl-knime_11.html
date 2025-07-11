@@ -1,0 +1,452 @@
+<html><head></head><body>
+		<div id="_idContainer863">
+			<h1 id="_idParaDest-158"><em class="italic"><a id="_idTextAnchor316"/>Chapter 9: </em>Convolutional Neural Networks for Image Classification</h1>
+			<p>In the previous chapters, we talked about <strong class="bold">Recurrent Neural Networks</strong> (<strong class="bold">RNNs</strong>) and how they can be applied to different types of sequential data and use cases. In this chapter, we want to talk about another family of neural networks, called <strong class="bold">Convolutional Neural Networks</strong> (<strong class="bold">CNNs</strong>). CNNs are especially powerful when used on data with grid-like topology and spatial dependencies, such as images or videos.</p>
+			<p>We will start with a general introduction to CNNs, explaining the basic idea behind a convolution layer and introducing some related terminology such as padding, pooling, filters, and stride.</p>
+			<p>Afterward, we will build and train a CNN for image classification from scratch. We will cover all required steps: from reading and preprocessing of the images to defining, training, and applying the CNN. </p>
+			<p>To train a neural network from scratch, a huge amount of labeled data is usually required. For some specific domains, such as images or videos, such a large amount of data might not be available, and the training of a network might become impossible. Transfer learning is a proposed solution to handle this problem. The idea behind transfer learning consists of using a state-of-the-art neural network trained for a task A as a starting point for another, related, task B.</p>
+			<p>In this chapter, we will cover the following topics:</p>
+			<ul>
+				<li>Introduction to CNNs</li>
+				<li>Classifying Images with CNNs</li>
+				<li>Introduction to Transfer Learning</li>
+				<li>Applying Transfer Learning for Cancer Type Prediction</li>
+			</ul>
+			<h1 id="_idParaDest-159"><a id="_idTextAnchor317"/>Introduction to CNNs</h1>
+			<p>CNNs are <a id="_idIndexMarker808"/>commonly used in image processing and have been the winning models in several image-processing competitions. They are often used, for example, for image classification, object detection, and semantic segmentation.</p>
+			<p>Sometimes, CNNs are also used for non-image-related tasks, such as recommendation systems, videos, or time-series analysis. Indeed, CNNs are not only applied to two-dimensional data with a grid structure but can also work when applied to one- or three-dimensional data. In this chapter, however, we focus on the most common <a id="_idIndexMarker809"/>CNN application area: <strong class="bold">image processing</strong>.</p>
+			<p>A CNN is a neural<a id="_idIndexMarker810"/> network with at least one <strong class="bold">convolution layer</strong>. As the name states, convolution layers perform a convolution mathematical transformation on the input data. Through such a mathematical transformation, convolution layers acquire the ability to detect and extract a number of features from an image, such as edges, corners, and shapes. Combinations of such extracted features are used to classify images or to detect specific objects within an image.</p>
+			<p>A convolution layer is often found together <a id="_idIndexMarker811"/>with a <strong class="bold">pooling layer</strong>, also commonly used in the feature extraction part of image processing.</p>
+			<p>The goal of this section is thus to explain how convolution layers and pooling layers work separately and together and to detail the different setting options for the two layers.</p>
+			<p>As mentioned, in this chapter we will focus on CNNs for image analysis. So, before we dive into the details of CNNs, let’s quickly review how images are stored.</p>
+			<h2 id="_idParaDest-160"><a id="_idTextAnchor318"/>How are Images Stored?</h2>
+			<p>A grayscale image<a id="_idIndexMarker812"/> can be stored as a matrix, where each cell represents one pixel of the image<a id="_idIndexMarker813"/> and the cell value represents the gray level of the pixel. For example, a black and white image, with size <img src="image/Formula_B16391_09_001.png" alt=""/> pixels, can be represented as a matrix with dimensions <img src="image/Formula_B16391_09_002.png" alt=""/>, where each value of the matrix ranges between <img src="image/Formula_B16391_09_003.png" alt=""/> and <img src="image/Formula_B16391_09_004.png" alt=""/>. <img src="image/Formula_B16391_09_005.png" alt=""/> is a black pixel, <img src="image/Formula_B16391_09_006.png" alt=""/> is a white pixel, and a value in between corresponds to a level of gray in the grayscale. </p>
+			<p><em class="italic">Figure 9.1</em> here depicts an example:</p>
+			<div>
+				<div id="_idContainer748" class="IMG---Figure">
+					<img src="image/B16391_09_001.jpg" alt="Figure 9.1 – Matrix representation of a grayscale 5 x 5 image"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure <a id="_idTextAnchor319"/>9.1 – Matrix representation of a grayscale 5 x 5 image</p>
+			<p>As each pixel is represented by one gray value only, one <strong class="bold">channel</strong> (matrix) is sufficient to represent this image. For color images, on the other hand, more than one value is needed to define the color of each pixel. One option is to use the three values specifying the intensity of red, green, and blue to define the pixel color. In the following screenshot, to represent a color image, three channels are used<a id="_idIndexMarker814"/> instead of one: (<em class="italic">Figure 9.2</em>):</p>
+			<div>
+				<div id="_idContainer749" class="IMG---Figure">
+					<img src="image/B16391_09_002.jpg" alt="Figure 9.2 – Representing a 28 x 28 color image using three channels for RGB"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure <a id="_idTextAnchor320"/>9.2 – Representing a 28 x 28 color image using three channels for RGB</p>
+			<p>Moving from a grayscale image to <a id="_idIndexMarker815"/>a <strong class="bold">red, green, and blue</strong> (<strong class="bold">RGB</strong>) image, the more general concept of <strong class="bold">tensor</strong>—instead <a id="_idIndexMarker816"/>of a simple matrix—becomes necessary. In this way, the grayscale image can be described as a tensor of <img src="image/Formula_B16391_09_007.png" alt=""/>, while a color image with <img src="image/Formula_B16391_09_008.png" alt=""/> pixels can be represented with a <img src="image/Formula_B16391_09_009.png" alt=""/> tensor.</p>
+			<p>In general, a tensor representing an image with <img src="image/Formula_B16391_09_010.png" alt=""/> pixels height, <img src="image/Formula_B16391_09_011.png" alt=""/> pixels width, and <img src="image/Formula_B16391_09_012.png" alt=""/> channels has the dimension <img src="image/Formula_B16391_09_013.png" alt=""/> x <img src="image/Formula_B16391_09_014.png" alt=""/> x <img src="image/Formula_B16391_09_015.png" alt=""/>.</p>
+			<p>But why do we<a id="_idIndexMarker817"/> need special networks to analyze images? Couldn’t we just <strong class="bold">flatten</strong> the image, represent each image as a long vector, and train a standard fully connected feedforward neural network?</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">The process of transforming a <a id="_idIndexMarker818"/>matrix representation of an image into a vector is called <strong class="bold">flattening</strong>.</p>
+			<h2 id="_idParaDest-161"><a id="_idTextAnchor321"/>Why do we need CNNs?</h2>
+			<p>For basic binary <a id="_idIndexMarker819"/>images, flattening and fully connected feedforward networks might yield acceptable performance. However, with more complex images, with strong pixel dependencies throughout the image, the combination of flattening and feedforward neural networks usually fails.</p>
+			<p>Indeed, the spatial dependency is lost when the image is flattened into a vector. As a result, fully connected feedforward networks are not translation-invariant. This means that they produce different results for shifted versions of the same image. For example, a network might learn to identify a cat in the upper-left corner of an image, but the same network is not able to detect a cat in the lower-right corner of the same image.</p>
+			<p>In addition, the <a id="_idIndexMarker820"/>flattening of an image produces a very long vector, and therefore it requires a very large fully connected feedforward network with many weights. For example, for a <img src="image/Formula_B16391_09_016.png" alt=""/> pixel image with three channels, the network needs <img src="image/Formula_B16391_09_017.png" alt=""/> inputs. If the next layer has <img src="image/Formula_B16391_09_018.png" alt=""/> neurons, we would need to train <img src="image/Formula_B16391_09_019.png" alt=""/> weights only in the first layer. You see that the number of weights can quickly become unmanageable, likely leading to overfitting during training.</p>
+			<p>Convolution layers, which are the main building block of a CNN, allow us to solve this problem by exploiting the spatial properties of the image. So, let’s find out how a convolution layer works.</p>
+			<h2 id="_idParaDest-162"><a id="_idTextAnchor322"/>How does a Convolution Layer work?</h2>
+			<p>The idea of <a id="_idIndexMarker821"/>CNNs is to use filters to detect patterns—also called features—such as corners, vertical edges, and horizontal edges, in different parts of an image.</p>
+			<p>For an image with one channel a <strong class="bold">filter</strong> is a <a id="_idIndexMarker822"/>small matrix, often of size <img src="image/Formula_B16391_09_020.png" alt=""/> or <img src="image/Formula_B16391_09_021.png" alt=""/>, called a <strong class="bold">kernel</strong>. Different<a id="_idIndexMarker823"/> kernels—that is, matrices with different values—filter different patterns. A kernel moves across an image and performs a convolution operation. That convolution operation gives a name to the layer. The output of such a convolution is<a id="_idIndexMarker824"/> called a <strong class="bold">feature map</strong>.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">For an input image with three channels (for example, an input tensor with shape <img src="image/Formula_B16391_09_022.png" alt=""/>), a kernel with kernel size 2 has the shape <img src="image/Formula_B16391_09_023.png" alt=""/>. This means the kernel can incorporate information from all channels but only within a small (2 x 2, in this example) region of the input image.</p>
+			<p><em class="italic">Figure 9.3</em> here shows <a id="_idIndexMarker825"/>an example of how a convolution is calculated for an image of size <img src="image/Formula_B16391_09_024.png" alt=""/> and a kernel with size <img src="image/Formula_B16391_09_025.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer769" class="IMG---Figure">
+					<img src="image/B16391_09_003.jpg" alt="Figure 9.3 – Example of a convolution obtained by applying a 3 x 3 kernel to a 4 x 4 image"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.3 – Example of a convoluti<a id="_idTextAnchor323"/>on obtained by applying a 3 x 3 kernel to a 4 x 4 image</p>
+			<p>In this example, we start by<a id="_idIndexMarker826"/> applying the kernel to the upper-left <img src="image/Formula_B16391_09_026.png" alt=""/> region of the image. The image values are elementwise multiplied with the kernel values and then summed up, as follows:</p>
+			<p class="figure"><img src="image/Formula_B16391_09_027.png" alt=""/></p>
+			<p>The result of this elementwise multiplication and sum is the first value, in the upper-left corner, in the output feature map. The kernel is then moved across the whole image to calculate all other values of the output feature map.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">The convolution operation is denoted with a * and is different from a matrix multiplication. Even though the layer is called convolution, most neural network libraries actually implement a related function<a id="_idIndexMarker827"/> called <strong class="bold">cross-correlation</strong>. To perform a correct convolution, according to its mathematical definition, the kernel in addition must be flipped. For CNNs this doesn’t make a difference because the weights are learned anyway.</p>
+			<p>In a<a id="_idIndexMarker828"/> convolution layer, a large number of filters (kernels) are trained in parallel on the input dataset and for the required task. That is, the weights in the kernel are not set manually but are adjusted automatically as weights during the network training procedure. During execution, all trained kernels are applied to calculate the feature map.</p>
+			<p>The dimension of the feature map is then a tensor of size <img src="image/Formula_B16391_09_028.png" alt=""/>. In the example in <em class="italic">Figure 9.3</em>, we applied only one kernel, and the dimension of the feature map is <img src="image/Formula_B16391_09_029.png" alt=""/>.</p>
+			<p>Historically, kernels were designed manually for selected tasks. For example, the kernel in <em class="italic">Figure 9.3</em> detects vertical lines. <em class="italic">Figure 9.4</em> here shows you the impact of some other handcrafted kernels:</p>
+			<div>
+				<div id="_idContainer774" class="IMG---Figure">
+					<img src="image/B16391_09_004.jpg" alt="Figure 9.4 – Impact of some hand-crafted kernels on the original image"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.4 – Impact of some hand-crafted<a id="_idTextAnchor324"/> kernels on the original image</p>
+			<p>The <a id="_idIndexMarker829"/>convolution operation is just a part of the convolution layer. After that, a bias and a non-linear activation function are applied to each entry in the feature map. For example, we can add a bias value to each value in the feature map and then <a id="_idIndexMarker830"/>apply <strong class="bold">rectified liner unit</strong> (<strong class="bold">ReLU</strong>) as an activation function to set all values below the bias to 0.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">In <a href="B16391_03_Final_PG_ePUB.xhtml#_idTextAnchor073"><em class="italic">Chapter 3</em></a>, <em class="italic">Getting Started with Neural Networks</em>, we introduced dense layers. In a dense layer, the weighted sum of the input is first calculated; then, a bias value is added to the sum, and the activation function is applied. In a convolutional layer, the weighted sum of the dense layer is replaced by the convolution.</p>
+			<p>A <a id="_idIndexMarker831"/>convolution layer has multiple setting options. We have already introduced three of them along the way, and they are listed here:</p>
+			<ul>
+				<li>The kernel size, which is often <img src="image/Formula_B16391_09_030.png" alt=""/></li>
+				<li>The number of filters</li>
+				<li>The activation function, where ReLU is the one most commonly used</li>
+			</ul>
+			<p>There are three more setting options: padding, stride, and dilation rate. Let’s continue with padding.</p>
+			<h2 id="_idParaDest-163"><a id="_idTextAnchor325"/>Introducing Padding</h2>
+			<p>When we <a id="_idIndexMarker832"/>applied the filter in the example in <em class="italic">Figure 9.3</em>, the dimension of the feature map shrunk compared to the dimension of the input image. The input image had a size of <img src="image/Formula_B16391_09_031.png" alt=""/> and the feature map a size of <img src="image/Formula_B16391_09_032.png" alt=""/>.</p>
+			<p>In addition, by looking at the feature map, we can see that pixels in the inner part of the input image (cells with values f, g, j, and k) are more often considered in the convolution than pixels at corners and borders. This implies that inner values will get a higher weight in further analysis. To overcome this issue, images can be zero-padded by adding zeros in additional external cells (<em class="italic">Figure 9.5</em>). This is a process <a id="_idIndexMarker833"/>called <strong class="bold">padding</strong>. </p>
+			<p><em class="italic">Figure 9.5</em> here shows you an example of a <a id="_idIndexMarker834"/>zero-padded input:</p>
+			<div>
+				<div id="_idContainer778" class="IMG---Figure">
+					<img src="image/B16391_09_005.jpg" alt="Figure 9.5 – Example of a zero-padded image"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.5 – Example of a zero-padded ima<a id="_idTextAnchor326"/>ge</p>
+			<p>Here, two cells with value zero have been added to each row and column, all around the original image. If a kernel of size <img src="image/Formula_B16391_09_033.png" alt=""/> is now applied to this padded image, the output dimension of the feature map would be the same as the dimension of the original image. The number of cells to use for zero padding is one more setting available in convolution layers.</p>
+			<p>Two other settings that influence the output size, if no padding is used, are called <strong class="bold">stride</strong> and <strong class="bold">dilation rate</strong>.</p>
+			<h2 id="_idParaDest-164"><a id="_idTextAnchor327"/>Introducing Stride and Dilation Rate</h2>
+			<p>In the example in <em class="italic">Figure 9.3</em>, we applied the filter to every pixel. For images of a large size, it is not always necessary to perform the convolution on every single pixel. Instead of always shifting the kernel by one pixel, we could shift it by more than one horizontal or vertical pixel.</p>
+			<p>The number of pixels used for the kernel shift is <a id="_idIndexMarker835"/>called <strong class="bold">stride</strong>. The stride is normally defined by a tuple, specifying the number of cells for the shift in the horizontal and vertical direction. A higher stride value, without padding, leads to a downsampling of the input image.</p>
+			<p>The top part of <em class="italic">Figure 9.6</em> shows how a kernel of size 3 x 3 moves across an image with stride 2, 2.</p>
+			<p>Another setting option for a convolution<a id="_idIndexMarker836"/> layer is the <strong class="bold">dilation rate</strong>. The dilation rate indicates that only one cell out of <img src="image/Formula_B16391_09_034.png" alt=""/> consecutive cells in the input image is used for the convolution operation. A dilation rate of <img src="image/Formula_B16391_09_035.png" alt=""/> uses only one every two pixels from the input image for the convolution. A dilation rate of <img src="image/Formula_B16391_09_036.png" alt=""/> uses one of three consecutive pixels. As for the stride, a dilation rate is a tuple of values for the horizontal and vertical direction. When using a dilation rate higher than <img src="image/Formula_B16391_09_037.png" alt=""/>, the kernel gets dilated to a larger field of view on the original image. So, a 3 x 3 kernel with dilation rate <img src="image/Formula_B16391_09_038.png" alt=""/> explores a field of view of size 5 x 5 in the input image, while using only nine convolution parameters.</p>
+			<p>For a <img src="image/Formula_B16391_09_039.png" alt=""/> kernel and a dilation rate of <img src="image/Formula_B16391_09_040.png" alt=""/>, the kernel scans an area of <img src="image/Formula_B16391_09_041.png" alt=""/> on the input image using only its corner values (see the lower part of <em class="italic">Figure 9.6</em>). This means for a<a id="_idIndexMarker837"/> dilation rate of <img src="image/Formula_B16391_09_042.png" alt=""/>, we have a gap of size 1. For a dilation rate of <img src="image/Formula_B16391_09_043.png" alt=""/>, we would have a gap size of 2, and so on:</p>
+			<div>
+				<div id="_idContainer790" class="IMG---Figure">
+					<img src="image/B16391_09_006.jpg" alt="Figure 9.6 – Impact of different stride and dilation rate values on the output feature map"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.6 – Impact of different stride and dilation rate val<a id="_idTextAnchor328"/>ues on the output feature map</p>
+			<p>Another commonly used layer in CNNs is the pooling layer.</p>
+			<h2 id="_idParaDest-165"><a id="_idTextAnchor329"/>Introducing Pooling</h2>
+			<p>The idea of <strong class="bold">pooling</strong> is to <a id="_idIndexMarker838"/>replace an area of the feature map with summary statistics. For example, pooling can replace each <img src="image/Formula_B16391_09_044.png" alt=""/> area of the feature map with its <a id="_idIndexMarker839"/>maximum value, called <strong class="bold">max pooling</strong>, or its <a id="_idIndexMarker840"/>average value, called <strong class="bold">average pooling</strong> (<em class="italic">Figure 9.7</em>):</p>
+			<div>
+				<div id="_idContainer792" class="IMG---Figure">
+					<img src="image/B16391_09_007.jpg" alt="Figure 9.7 – Results of max and average pooling"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.7 – Results of max and average pooling</p>
+			<p>A pooling layer reduces the dimension of the input image in a more efficient way and allows the extraction of dominant, rotational, and positional-invariant features.</p>
+			<p>As with a filter, in pooling we need to define the size of the explored area for which to calculate the summary statistics. A commonly used setting is a pooling size of <img src="image/Formula_B16391_09_045.png" alt=""/> pixels and a stride of two pixels in each direction. This setting halves the image dimension.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">Pooling layers don’t have any weights, and all settings are defined during the configuration of the layer. They are static layers, and their parameters do not get trained like the other weights in the network.</p>
+			<p>Pooling layers <a id="_idIndexMarker841"/>are normally used after one convolution layer or multiple-stacked convolution layers.</p>
+			<p>Convolution layers can be applied to input images as well as to feature maps. Indeed, multiple convolution layers are often stacked on top of each other in a CNN. In such a hierarchy, the first convolution layer may extract low-level features, such as edges. The filters in the next layer then work on top of the extracted features and may learn to detect shapes, and so on.</p>
+			<p>The final extracted features can then be used for different tasks. In the case of image classification, the feature map—resulting from the stacking of multiple convolution layers—is flattened, and a classifier network is applied on top of it.</p>
+			<p>To summarize, a standard CNN for image classification first uses a series of convolution and pooling layers, then a flattened layer, and then a series of dense layers for the final classification.</p>
+			<p>Now that we are familiar with convolutional layers and pooling layers, let’s see how they can be introduced inside a network for image classification.</p>
+			<h1 id="_idParaDest-166"><a id="_idTextAnchor330"/>Classifying Images with CNNs</h1>
+			<p>In this section, we will<a id="_idIndexMarker842"/> see how to build and train from scratch a CNN for image classification.</p>
+			<p>The goal is to classify handwritten digits between 0 and 9 with the data from the <strong class="bold">MNIST database</strong>, a <a id="_idIndexMarker843"/>large database of handwritten digits commonly used for training various image-processing applications. The MNIST database contains 60,000 training images and 10,000 testing images of handwritten digits and can be downloaded from this website: <a href="http://yann.lecun.com/exdb/mnist/">http://yann.lecun.com/exdb/mnist/</a>.</p>
+			<p>To read and preprocess images, KNIME Analytics Platform offers a set of dedicated nodes and components, available after installing the <strong class="bold">KNIME Image Processing Extension</strong>.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The KNIME Image<a id="_idIndexMarker844"/> Processing Extension (<a href="https://www.knime.com/community/image-processing">https://www.knime.com/community/image-processing</a>) allows you to read in more than 140 different format types of images (thanks to the Bio-Formats <strong class="bold">Application Processing Interface</strong> (<strong class="bold">API</strong>)). In addition, it can be used to apply well-known image-processing techniques such as segmentation, feature extraction, tracking, and classification, taking advantage of the graphical user interface within KNIME Analytics Platform.</p>
+			<p class="callout">In general, the nodes operate on multi-dimensional image data (for example, videos, 3D images, multi-channel images, or even a combination of these), via the internal library <strong class="source-inline">ImgLib2-API</strong>. Several nodes calculate image features (for example, Zernike, texture, or histogram features) for segmented images (for example, a single cell). Machine learning algorithms are applied on the resulting feature vectors for the final classification.</p>
+			<p>To apply and train neural networks on images, we need one further extension: the <strong class="bold">KNIME Image Processing - Deep Learning Extension</strong>. This extension introduces a number of useful image operations—for example, some conversions necessary for image data to feed the <strong class="bold">Keras Network Learner</strong> node.</p>
+			<p class="callout-heading">Important note</p>
+			<p class="callout">To train and apply <a id="_idIndexMarker845"/>neural networks on images, you need to install the following extensions:</p>
+			<p class="callout">KNIME Image Processing (<a href="https://www.knime.com/community/image-processing">https://www.knime.com/community/image-processing</a>)</p>
+			<p class="callout">KNIME Image Processing – Deep Learning <a id="_idIndexMarker846"/>Extension (<a href="https://hub.knime.com/bioml-konstanz/extensions/org.knime.knip.dl.feature/latest">https://hub.knime.com/bioml-konstanz/extensions/org.knime.knip.dl.feature/latest</a>)</p>
+			<p>Let’s get started with reading and preprocessing the handwritten digits.</p>
+			<h2 id="_idParaDest-167"><a id="_idTextAnchor331"/>Reading and Preprocessing Images</h2>
+			<p>For this<a id="_idIndexMarker847"/> case study, we use a subset of the <a id="_idIndexMarker848"/>MNIST dataset: 10,000 image samples for training and 1,500 for testing. Each image has <img src="image/Formula_B16391_09_046.png" alt=""/> pixels and only one channel. The training and testing images are saved in two different folders, with progressive numbers as filenames. In addition, we have a table with the image labels, sorted by the order of the image filenames.</p>
+			<p>The goal of the reading and preprocessing workflow is to read the images and to match them with their labels. Therefore, the following steps are implemented (also shown in <em class="italic">Figure 9.8</em>):</p>
+			<ol>
+				<li>Read and sort the images for training.</li>
+				<li>Import the digit labels for the training images.</li>
+				<li>Match the labels with the images.</li>
+				<li>Transform the pixel type from unsigned byte to float.</li>
+				<li>Convert the labels into a collection cell.</li>
+			</ol>
+			<p>These steps are performed by the workflow shown in the following screenshot:</p>
+			<div>
+				<div id="_idContainer795" class="IMG---Figure">
+					<img src="image/B16391_09_008.jpg" alt="Figure 9.8 – This workflow reads a subset of the MNIST dataset, adds the corresponding labels, and transforms the pixel type from unsigned byte to float"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor332"/></p>
+			<p class="figure-caption">Figure 9.8 – This workflow reads a subset of the MNIST dataset, adds the corresponding labels, and transforms the pixel type from unsigned byte to float</p>
+			<p>To read the<a id="_idIndexMarker849"/> images, we use the <strong class="bold">Image Reader (Table)</strong> node<a id="_idIndexMarker850"/>. This node expects an input column with the <strong class="bold">Uniform Resource Locator</strong> (<strong class="bold">URL</strong>) paths <a id="_idIndexMarker851"/>to the image files. To create the sorted list of URLs, the <strong class="bold">List Files</strong> node first <a id="_idIndexMarker852"/>gets all paths to the image files in the training folder. Then, the <strong class="bold">Sort images</strong> metanode is used. <em class="italic">Figure 9.9</em> here shows you the inside of the metanode<a id="_idTextAnchor333"/>:</p>
+			<div>
+				<div id="_idContainer796" class="IMG---Figure">
+					<img src="image/B16391_09_009.jpg" alt="Figure 9.9 – Inside of the Sort images metanode"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.9 – Inside of the Sort images metanode</p>
+			<p>The metanode extracts the image number from the filename with a <strong class="bold">String Manipulation</strong> node and sorts them with a <strong class="bold">Sorter</strong> node. The <strong class="bold">Image Reader (Table)</strong> node then reads the images.</p>
+			<p>The <strong class="bold">File Reader</strong> node, in the<a id="_idIndexMarker853"/> lower branch, reads the table with the image labels.</p>
+			<p>In the next step, the <strong class="bold">Column Appender</strong> node<a id="_idIndexMarker854"/> appends the correct label to each image. Since images have<a id="_idIndexMarker855"/> been sorted as to match their corresponding label, a simple appending operation is sufficient. <em class="italic">Figure 9.10</em> here shows a subset of the output of the <strong class="bold">Column Appender</strong> no<a id="_idTextAnchor334"/>de:</p>
+			<div>
+				<div id="_idContainer797" class="IMG---Figure">
+					<img src="image/B16391_09_010.jpg" alt="Figure 9.10 – Output of the Column Appender node, with the digit image and the corresponding label"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.10 – Output of the Column Appender node, with the digit image and the corresponding label</p>
+			<p>Next, the <strong class="bold">Image Calculator</strong> node changes<a id="_idIndexMarker856"/> the pixel type from <em class="italic">unsigned byte</em> to <em class="italic">float</em>, by dividing each pixel value by 255.</p>
+			<p>Finally, the <strong class="bold">Create Collection Column</strong> node creates <a id="_idIndexMarker857"/>a collection cell for each label. The<a id="_idIndexMarker858"/> collection cell is required to create the<a id="_idIndexMarker859"/> one-hot vector-encoded classes, to use during training.</p>
+			<p>Now that we have read and preprocessed the training images, we can design the network structure.</p>
+			<h2 id="_idParaDest-168"><a id="_idTextAnchor335"/>Designing the Network</h2>
+			<p>In this section, you <a id="_idIndexMarker860"/>will learn how to define a classical CNN for image classification.</p>
+			<p>A classical CNN for image classification consists of two parts, which are trained together in an end-to-end fashion, as follows:</p>
+			<ul>
+				<li><strong class="bold">Feature Extraction</strong>: The first part performs the feature extraction of the images, by training a number of filters.</li>
+				<li><strong class="bold">Classification</strong>: The second part trains a classification network on the extracted features, available in the flattened feature map resulting from the feature extraction part.</li>
+			</ul>
+			<p>We start with a simple network structure with only one convolution layer, followed by a pooling layer for the feature extraction part. The resulting feature maps are then flattened, and a simple classifier network, with just one hidden layer with the ReLU activation function, is trained on them. </p>
+			<p>The workflow here in <em class="italic">Figure 9.11</em> shows this network str<a id="_idTextAnchor336"/>ucture:</p>
+			<div>
+				<div id="_idContainer798" class="IMG---Figure">
+					<img src="image/B16391_09_011.jpg" alt="Figure 9.11 – This workflow snippet builds a simple CNN for the classification of the MNIST dataset"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.11 – This workflow snippet builds a simple CNN for the classification of the MNIST dataset</p>
+			<p>The workflow <a id="_idIndexMarker861"/>starts with a <strong class="bold">Keras Input Layer</strong> node to <a id="_idIndexMarker862"/>define the input shape. The images of the MNIST dataset have <img src="image/Formula_B16391_09_047.png" alt=""/> pixels and only one channel, as they are grayscale images. Thus, the input is a tensor of shape <img src="image/Formula_B16391_09_048.png" alt=""/>, and therefore the input shape is set to <img src="image/Formula_B16391_09_049.png" alt=""/>.</p>
+			<p>Next, the convolutional layer is implemented<a id="_idIndexMarker863"/> with a <strong class="bold">Keras Convolution 2D Layer</strong> node. <em class="italic">Figure 9.12</em> here shows you the configuration window of the no<a id="_idTextAnchor337"/>de:</p>
+			<div>
+				<div id="_idContainer802" class="IMG---Figure">
+					<img src="image/B16391_09_012.jpg" alt="Figure 9.12 – Keras Convolution 2D Layer node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.12 – Keras Convolution 2D Layer node and its configuration window</p>
+			<p>The setting <a id="_idIndexMarker864"/>named <strong class="bold">Filters</strong> sets the number of filters to apply. This will be the last dimension of the feature map. In this example, we decided to train <em class="italic">32</em> filters.</p>
+			<p>Next, you can set the <strong class="bold">Kernel size</strong> option in pixels—that is, an integer tuple defining the height and width of each kernel. For the MNIST dataset, we use a kernel size of <img src="image/Formula_B16391_09_050.png" alt=""/>. This means the setting is <img src="image/Formula_B16391_09_051.png" alt=""/>.50.</p>
+			<p>Next, you can set the <strong class="bold">Strides</strong> option, which is again defined by a tuple of two integers, specifying the strides of the convolution along the height and width of the image. Any stride value greater than 1 is incompatible with any <strong class="source-inline">dilation_rate</strong> greater than 1.</p>
+			<p>Next, you can select whether you want to use zero padding or not. The <strong class="bold">Padding</strong> option allows you to select between <strong class="bold">Valid</strong> and <strong class="bold">Same</strong>. <strong class="bold">Valid</strong> means no padding is performed. <strong class="bold">Same</strong> means zero padding is performed, such that the output dimension of the feature map is the same as the input dimension. As we have mainly black pixels on the border of the images, we decided not to zero-pad the images and selected <strong class="bold">Valid</strong>.</p>
+			<p>Next, you can<a id="_idIndexMarker865"/> select the <strong class="bold">Dilation rate</strong> option, as an integer tuple. Currently, specifying any dilation rate value greater than 1 is incompatible with specifying any stride value greater than 1. A dilation rate of <img src="image/Formula_B16391_09_052.png" alt=""/> means that no pixels are skipped. A dilation rate of <img src="image/Formula_B16391_09_053.png" alt=""/> means every second pixel is used. This means a gap size of 1. We use <img src="image/Formula_B16391_09_054.png" alt=""/> for the dilation rate .52.</p>
+			<p>Last, the <strong class="bold">Activation function</strong> option must be selected. For this case study, we went for the most commonly used activation function for convolutional layers: <strong class="bold">ReLU</strong>.</p>
+			<p>The output tensor of the convolutional layer (that is, our feature map) has the dimension <img src="image/Formula_B16391_09_055.png" alt=""/>, as we have <img src="image/Formula_B16391_09_056.png" alt=""/> filters and we don’t use padding.</p>
+			<p>Next, a <strong class="bold">Keras Max Pooling 2D Layer</strong> node<a id="_idIndexMarker866"/> is used to apply max pooling on the two dimensions. </p>
+			<p><em class="italic">Figure 9.13</em> here <a id="_idIndexMarker867"/>shows you the configuration window of the node:</p>
+			<div>
+				<div id="_idContainer810" class="IMG---Figure">
+					<img src="image/B16391_09_013.jpg" alt="Figure 9.13 – Keras Max Pooling 2D Layer node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figur<a id="_idTextAnchor338"/>e 9.13 – Keras Max Pooling 2D Layer node and its configuration window</p>
+			<p>In the configuration window of the <strong class="bold">Keras Max Pooling 2D Layer</strong> node, you can define the <strong class="bold">Pool size</strong>. Again, this is an integer tuple defining the pooling window. Remember, the idea of max pooling is to represent each area of the size of the pooling window with the maximum value in the area.</p>
+			<p>The <strong class="bold">stride</strong> is again an integer tuple, setting the step size to shift the pooling window.</p>
+			<p>Lastly, you can select whether to apply zero padding by selecting <strong class="bold">Valid</strong> for no padding, and <strong class="bold">Same</strong> to apply padding.</p>
+			<p>For this MNIST example, we set <strong class="bold">Pool size</strong> as <img src="image/Formula_B16391_09_057.png" alt=""/>, <strong class="bold">Strides</strong> as <img src="image/Formula_B16391_09_058.png" alt=""/>, and applied no padding. Therefore, the dimension of output of the pooling layer is <img src="image/Formula_B16391_09_059.png" alt=""/>.</p>
+			<p>Next, a <strong class="bold">Keras Flatten Layer</strong> node<a id="_idIndexMarker868"/> is used to transform the feature map into a vector, with<a id="_idIndexMarker869"/> dimension <img src="image/Formula_B16391_09_060.png" alt=""/>.</p>
+			<p>After the <strong class="bold">Keras Flatten Layer</strong> node, we build a simple classification network with one hidden layer and one output layer. The hidden layer with the ReLU activation function and 100 units is implemented by the first <strong class="bold">Keras Dense Layer</strong> node in <em class="italic">Figure 9.11</em>, while the output layer is implemented by the second (and last) <strong class="bold">Keras Dense Layer</strong> node in <em class="italic">Figure 9.11</em>. As it is a multiclass classification problem with 10 different classes, here the softmax activation function with 10 units is used. In addition, the <strong class="bold">Name prefix</strong> <em class="italic">output</em> is used so that we can identify the output layer more easily when applying the network to new data.</p>
+			<p>Now that we have defined the network structure, we can move on to train the CNN.</p>
+			<h2 id="_idParaDest-169"><a id="_idTextAnchor339"/>Training and Applying the Network</h2>
+			<p>To train the<a id="_idIndexMarker870"/> CNN built in the previous section, we again use the <strong class="bold">Keras Network Learner</strong> node. In the previous chapters, we<a id="_idIndexMarker871"/> already saw that this node offers many conversion types for input and target data (such as, for example, the <strong class="bold">From Collection of Number (integers) to One-Hot Tensor</strong> option). Installing the <strong class="bold">KNIME Image Processing – Deep Learning Extension</strong> adds one more conversion option: <strong class="bold">From Image (Auto-mapping)</strong>. This new conversion option allows us to select an image column from the input table and to automatically create the tensor to feed into the network. </p>
+			<p><em class="italic">Figure 9.14</em> here shows the <strong class="bold">Input Data</strong> tab of the configuration window of the <strong class="bold">Keras Network Learner</strong> node, including this additional conversion option:</p>
+			<div>
+				<div id="_idContainer815" class="IMG---Figure">
+					<img src="image/B16391_09_014.jpg" alt="Figure 9.14 – Input Data tab of the configuration window of the Keras Network Learner node with the additional conversion option, From Image (Auto-mapping)"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.1<a id="_idTextAnchor340"/>4 – Input Data tab of the configuration window of the Keras Network Learner node with the additional conversion option, From Image (Auto-mapping)</p>
+			<p>In the <strong class="bold">Target Data</strong> tab, the conversion option from <strong class="bold">From Collection of Number (integer) to One-Hot Tensor</strong> is selected for the column with the collection cell of the image label.</p>
+			<p>On<a id="_idIndexMarker872"/> the bottom, the <em class="italic">Categorical cross entropy</em> activation function is selected, as the problem is a multiclass classification problem.</p>
+			<p>In the <strong class="bold">Options</strong> tab, the <a id="_idIndexMarker873"/>following training parameters are set:</p>
+			<ul>
+				<li><strong class="bold">Number of epochs</strong>: <strong class="source-inline">10</strong></li>
+				<li><strong class="bold">Training batch size</strong>: <strong class="source-inline">200</strong></li>
+				<li><strong class="bold">Optimizer</strong>: <strong class="source-inline">Adadelta with the default settings</strong></li>
+			</ul>
+			<p><em class="italic">Figure 9.15</em> here shows the progress of the training procedure in the <strong class="bold">Learning Monitor</strong> view of the <strong class="bold">Keras Network Learner</strong> node after node execution:</p>
+			<div>
+				<div id="_idContainer816" class="IMG---Figure">
+					<img src="image/B16391_09_015.jpg" alt="Figure 9.15 – The Learning Monitor view shows the training progress of the network"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.<a id="_idTextAnchor341"/>15 – The Learning Monitor view shows the training progress of the network</p>
+			<p>The <strong class="bold">Learning Monitor</strong> view shows the progress of the network during training over the<a id="_idIndexMarker874"/> many training batches. On the <a id="_idIndexMarker875"/>right-hand side, you can see the accuracy for the last few batches. <strong class="bold">Current Value</strong> shows you the accuracy for the last batch, which is in this case <strong class="bold">0.995</strong>.</p>
+			<p>Now that we have a trained CNN satisfactorily performing on the training set, we can apply it to the test set. Here, the same reading and preprocessing steps as for the training set must also be applied on the test set.</p>
+			<p>The <strong class="bold">Keras Network Executor</strong> node<a id="_idIndexMarker876"/> applies the trained network on the images in the test set. In the configuration window, the last layer, producing the probability distribution of the different digits, is selected as output.</p>
+			<p>At this point, a<a id="_idIndexMarker877"/> bit of postprocessing is<a id="_idIndexMarker878"/> required in order to extract the final prediction from the network output.</p>
+			<h2 id="_idParaDest-170"><a id="_idTextAnchor342"/>Prediction Extraction and Model Evaluation</h2>
+			<p>The <a id="_idIndexMarker879"/>output of the <strong class="bold">Keras Network Executor</strong> node<a id="_idIndexMarker880"/> is a table with 12 columns, comprising the following:</p>
+			<ul>
+				<li>The image column</li>
+				<li>The true class value, named <strong class="bold">Actual Value</strong></li>
+				<li>10 columns with the probability values for the image classes with the column headers: <strong class="source-inline">output/Softmax:0_x</strong>, where <strong class="source-inline">x</strong> is a number between 0 and 9 encoding the class</li>
+			</ul>
+			<p>The goal of the postprocessing is to extract the class with the highest probability and then to evaluate the network performance. This is implemented by the workflow snippet shown here in <em class="italic">Figure 9.16</em>:</p>
+			<div>
+				<div id="_idContainer817" class="IMG---Figure">
+					<img src="image/B16391_09_016.jpg" alt="Figure 9.16 – This workflow snippet extracts the digit class with the highest probability and evaluates the network performance on the test set"/>
+				</div>
+			</div>
+			<p class="figure-caption">Fig<a id="_idTextAnchor343"/>ure 9.16 – This workflow snippet extracts the digit class with the highest probability and evaluates the network performance on the test set</p>
+			<p>The <strong class="bold">Many to One</strong> node extracts the <a id="_idIndexMarker881"/>column header<a id="_idIndexMarker882"/> of the column with the highest<a id="_idIndexMarker883"/> probability in each row.</p>
+			<p>Then, the <strong class="bold">Column Expression</strong> node<a id="_idIndexMarker884"/> extracts the class from the column header.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The <strong class="bold">Column Expression</strong> node is a very powerful node. It provides the possibility to append an arbitrary number of new columns or modify existing columns using expressions.</p>
+			<p class="callout">For each column to be appended or modified, a separate expression can be defined. These <a id="_idIndexMarker885"/>expressions can be simply created using predefined<a id="_idIndexMarker886"/> functions, similarly to the <strong class="bold">Math Formula</strong> and the <strong class="bold">String Manipulation</strong> nodes. Nevertheless, there is no restriction on the number of lines an expression can have and the number of functions it can use. Additionally, intermediate results of functions or calculations can be stored within an expression by assigning them to temporary variables (using <strong class="source-inline">=</strong>).</p>
+			<p class="callout">Available flow variables and columns of the input table can be accessed via the provided access functions variable ("<strong class="source-inline">variableName</strong>") and column ("<strong class="source-inline">columnName</strong>").</p>
+			<p><em class="italic">Figure 9.17</em> here <a id="_idIndexMarker887"/>shows you the <a id="_idIndexMarker888"/>configuration window of the <strong class="bold">Column Expression</strong> node, with the expression used in the workflow snippet in <em class="italic">Figure 9.16</em> to extract the class information. In this case, the expression extracts the last character from the strings in the column named <strong class="bold">Detected Digit<a id="_idTextAnchor344"/></strong>:</p>
+			<div>
+				<div id="_idContainer818" class="IMG---Figure">
+					<img src="image/B16391_09_017.jpg" alt="Figure 9.17 – The Column Expression node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.17 – The Column Expression node and its configuration window</p>
+			<p>Next, the<a id="_idIndexMarker889"/> data type of the predicted class is <a id="_idIndexMarker890"/>converted from <strong class="source-inline">String</strong> to <strong class="source-inline">Integer</strong> with the <strong class="bold">String to Number</strong> node, and the network performance is evaluated on the test set with the <strong class="bold">Scorer </strong>node.</p>
+			<p><em class="italic">Figure 9.18</em> here shows the view produced by the <strong class="bold">Scorer</strong> nod<a id="_idTextAnchor345"/>e:</p>
+			<div>
+				<div id="_idContainer819" class="IMG---Figure">
+					<img src="image/B16391_09_018.jpg" alt="Figure 9.18 – View of the Scorer node, showing the performance of the network on the test set"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.18 – View of the Scorer node, showing the performance of the network on the test set</p>
+			<p>As you can see, this<a id="_idIndexMarker891"/> simple CNN has already <a id="_idIndexMarker892"/>reached an accuracy of 94% and a Cohen’s kappa of 0.934 on the test set. The complete workflow is available on the KNIME Hub: <a href="https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%209/">https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%209/</a>.</p>
+			<p>In this section, we built and trained from scratch a simple CNN, reaching an acceptable performance for this rather simple image classification task. Of course, we could try to further improve the performance of this network by doing the following:</p>
+			<ul>
+				<li>Increasing the number of training epochs</li>
+				<li>Adding a second convolutional layer together with a pooling layer</li>
+				<li>Using batch normalization for training</li>
+				<li>Using augmentation</li>
+				<li>Using dropout</li>
+			</ul>
+			<p>We leave this up to you, and continue with another way of network learning, called transfer learning.</p>
+			<h1 id="_idParaDest-171"><a id="_idTextAnchor346"/>Introduction to transfer learning</h1>
+			<p>The general idea of <strong class="bold">transfer learning</strong> is to reuse the knowledge gained by a network trained for task <strong class="bold">A</strong> on <a id="_idIndexMarker893"/>another related task <strong class="bold">B</strong>. For example, if we train a network to recognize sailing boats (task A), we can use this network as a starting point to train a new model to recognize motorboats (task B). In this case, task A is called the <em class="italic">source task</em> and task B the <em class="italic">target task</em>.</p>
+			<p>Reusing a trained network as the starting point to train a new network is different from the traditional way of training networks, whereby neural networks are trained on their own for specific tasks on specific datasets. <em class="italic">Figure 9.19</em> here visualizes the traditional way of network training, whereby different systems are trained for different tasks and doma<a id="_idTextAnchor347"/>ins:</p>
+			<div>
+				<div id="_idContainer820" class="IMG---Figure">
+					<img src="image/B16391_09_019.jpg" alt="Figure 9.19 – Traditional way of training machine learning models and neural networks"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.19 – Traditional way of training machine learning models and neural networks</p>
+			<p>But why should we use transfer learning instead of training models in the traditional, isolated way?</p>
+			<h2 id="_idParaDest-172"><a id="_idTextAnchor348"/>Why use Transfer Learning?</h2>
+			<p>Current <a id="_idIndexMarker894"/>state-of-the-art neural networks have shown amazing performance in tackling specific complex tasks. Sometimes, these models are even better than humans, beating world champions at board games or at detecting objects in images. To train these successful networks, usually a huge amount of labeled data is required, as well as a vast amount of computational resources and time.</p>
+			<p>To get a comprehensive labeled dataset for a new domain, in order to be able to train a network to reach state-of-art-performance, can be difficult or even impossible. As an example, the often-used <strong class="bold">ImageNet database</strong>, which is used to train state-of-the-art models, has been developed over the course of many years. It would take time to create a similar new dataset for a new image domain. However, when these state-of-the-art models are applied to other related domains, they often suffer a considerable loss in performance, or, even worse, they break down. This happens due to the model bias toward the training data and domain.</p>
+			<p>Transfer learning<a id="_idIndexMarker895"/> allows us to use the knowledge gained during training on a task and domain where sufficient labeled data was available as a starting point, to train new models in domains where not enough labeled data is yet available. This approach has shown great results in many computer vision and <strong class="bold">natural language processing </strong>(<strong class="bold">NLP</strong>) tasks. </p>
+			<p><em class="italic">Figure 9.20</em> here visualizes the idea behind transfer learning:</p>
+			<div>
+				<div id="_idContainer821" class="IMG---Figure">
+					<img src="image/B16391_09_020.jpg" alt="Figure 9.20 – Idea behind transfer learning"/>
+				</div>
+			</div>
+			<p class="figure-caption">F<a id="_idTextAnchor349"/>igure 9.20 – Idea behind transfer learning</p>
+			<p>Before we talk about how we can apply transfer learning when training a neural network, let’s have a quick look at the formal definition of transfer learning and the many scenarios in which it can be applied.</p>
+			<h2 id="_idParaDest-173"><a id="_idTextAnchor350"/>Formal Definition of Transfer Learning</h2>
+			<p>A formal definition<a id="_idIndexMarker896"/> of transfer learning and of the related scenarios can be found in the paper by Sinno Jialin Pan and Qiang Yang, <em class="italic">A Survey on Transfer Learning</em>, IEEE Transactions on Knowledge and Data Engineering, 2009<em class="italic"> </em>(<a href="https://ieeexplore.ieee.org/abstract/document/5288526">https://ieeexplore.ieee.org/abstract/document/5288526</a>).</p>
+			<p>The definition involves the <a id="_idIndexMarker897"/>concept of a <strong class="bold">domain</strong> and a <strong class="bold">task</strong>.</p>
+			<p>In the <a id="_idIndexMarker898"/>paper, a <strong class="bold">domain</strong> <img src="image/Formula_B16391_09_061.png" alt=""/> is introduced as tuple {<img src="image/Formula_B16391_09_062.png" alt=""/>where <img src="image/Formula_B16391_09_063.png" alt=""/> is the feature space and a <img src="image/Formula_B16391_09_064.png" alt=""/> the marginal probability distribution for <img src="image/Formula_B16391_09_065.png" alt=""/>.</p>
+			<p>For a given domain, <img src="image/Formula_B16391_09_066.png" alt=""/>, a task <img src="image/Formula_B16391_09_067.png" alt=""/> consists of the following two components as well:</p>
+			<ul>
+				<li>A label space <img src="image/Formula_B16391_09_068.png" alt=""/></li>
+				<li>A predictive function <img src="image/Formula_B16391_09_069.png" alt=""/></li>
+			</ul>
+			<p>Here, the predictive function <img src="image/Formula_B16391_09_070.png" alt=""/> could be the conditional probability distribution <img src="image/Formula_B16391_09_071.png" alt=""/> In general, the predictive function is a function trained on the labeled training data to predict the label <img src="image/Formula_B16391_09_072.png" alt=""/> for any sample <img src="image/Formula_B16391_09_073.png" alt=""/> in the feature space.</p>
+			<p>Using this<a id="_idIndexMarker899"/> terminology, <strong class="bold">transfer learning</strong> is defined by Sinno Jialin Pan and Qiang Yang in the following way:</p>
+			<p class="author-quote"><em class="italic">"Given a source domain </em><img src="image/Formula_B16391_09_074.png" alt=""/><em class="italic"> and learning task </em><img src="image/Formula_B16391_09_075.png" alt=""/><em class="italic">, a target domain </em><img src="image/Formula_B16391_09_076.png" alt=""/><em class="italic"> and learning task </em><img src="image/Formula_B16391_09_077.png" alt=""/><em class="italic"> , transfer learning aims to help improve the learning of the target predictive function </em><img src="image/Formula_B16391_09_078.png" alt=""/><em class="italic"> in </em><img src="image/Formula_B16391_09_079.png" alt=""/> <em class="italic">using the knowledge in </em><img src="image/Formula_B16391_09_080.png" alt=""/><em class="italic"> and </em><img src="image/Formula_B16391_09_081.png" alt=""/><em class="italic">, where </em><img src="image/Formula_B16391_09_082.png" alt=""/><em class="italic">, or </em><img src="image/Formula_B16391_09_083.png" alt=""/>."</p>
+			<p>Sebastian Ruder<a id="_idIndexMarker900"/> uses this definition in his article, <em class="italic">Transfer Learning - Machine Learning’s Next Frontier</em>, <em class="italic">2017</em> ( <a href="https://ruder.io/transfer-learning/">https://ruder.io/transfer-learning/</a>) to describe the following <em class="italic">four scenarios</em> in which transfer learning can be used:</p>
+			<ol>
+				<li value="1">Different feature spaces: <img src="image/Formula_B16391_09_084.png" alt=""/><p>An example in the paper is cross-lingual adaptation, where we have documents in different languages.</p></li>
+				<li>Different marginal probabilities: <img src="image/Formula_B16391_09_085.png" alt=""/><p>An example comes in the form of documents that discuss different topics. This scenario is called <em class="italic">domain adaption</em>.</p></li>
+				<li>Different label spaces: <img src="image/Formula_B16391_09_086.png" alt=""/><p>(for example, if we have documents with different labels).</p></li>
+				<li>Different conditional probabilities <img src="image/Formula_B16391_09_087.png" alt=""/>
+This usually occurs together with scenario 3.</li>
+			</ol>
+			<p>Now that we have a basic understanding of transfer learning, let’s find out next how transfer learning can be applied to the field of deep learning.</p>
+			<h2 id="_idParaDest-174"><a id="_idTextAnchor351"/>Applying Transfer Learning</h2>
+			<p>In a neural network, the <a id="_idIndexMarker901"/>knowledge gained during training is stored in the weights of the layers. For example, in the case of CNNs, a number of filters are trained to extract a number of features. Thus, the knowledge of how to extract such features from an image is stored in the weights of the kernels for the implemented filters.</p>
+			<p>In a stacked CNN for image classification, the initial convolution layers are responsible for extracting low-level features such as edges, while the next convolution layers extract higher-level features such as body parts, animals, or faces. The last layers are trained to classify the images, based on the extracted features.</p>
+			<p>So, if we want to train a CNN for a different image-classification task, on different images and with different labels, we must not train the new filters from scratch, but we can use the previously trained convolution layers in a state-of-the-art network as the starting point. Hopefully, the new training procedure will be faster and will require a smaller amount of data.</p>
+			<p>To use the trained layers from another network as the training starting point, we need to extract the convolution layers from the original network and then build some new layers on top. To do so, we have the following two options:</p>
+			<ul>
+				<li>We freeze the weights of the trained layers and just train the added layers based on the output of the frozen layers. This approach is often used in NLP applications, where trained embeddings are reused.</li>
+				<li>We use the trained weights to initialize new convolution layers in the network and then fine-tune them while training the added layers. In this case, a small training rate is used to not unlearn the learned knowledge from the source task.</li>
+			</ul>
+			<p>For the last case<a id="_idIndexMarker902"/> study of this book, we want to train a neural network to predict cancer type from histopathology slide images. To speed up the learning process and considering the relatively small dataset we have, we will apply transfer learning starting from the convolution layers in the popular VGG16 network used here as the source network.</p>
+			<h1 id="_idParaDest-175"><a id="_idTextAnchor352"/>Applying Transfer Learning for Cancer Type Prediction</h1>
+			<p>We <a id="_idIndexMarker903"/>will introduce here a new (and final) case study. We will start from the state-of-the-art VGG16 network as a source network to train a new target network on a<a id="_idIndexMarker904"/> dataset of images<a id="_idIndexMarker905"/> describing three different subtypes of lymphoma, which<a id="_idIndexMarker906"/> are <strong class="bold">chronic lymphocytic leukemia</strong> (<strong class="bold">CLL</strong>), <strong class="bold">follicular lymphoma</strong> (<strong class="bold">FL</strong>), and <strong class="bold">mantle cell lymphoma</strong> (<strong class="bold">MCL</strong>).</p>
+			<p>A typical task for a pathologist in a hospital is to look at histopathology slide images and make a decision about the type of lymphoma. Even for experienced pathologists this is a difficult task and, in many cases, follow-up tests are required to confirm the diagnosis. An assistive technology that can guide pathologists and speed up their job would be of great value. </p>
+			<p>VGG16<a id="_idIndexMarker907"/> is one of the winner models on the ImageNet Challenge from 2014. It is a stacked CNN network, using kernels of size <img src="image/Formula_B16391_09_026.png" alt=""/> with an increasing depth—that is, with an increasing number of filters. The original network was trained on the ImageNet dataset, containing images <img src="image/Formula_B16391_09_089.png" alt=""/>, referring to more than 1,000 classes.</p>
+			<p><em class="italic">Figure 9.21</em> shows you the network structure of the VGG16 model.</p>
+			<p>It starts with two convolution layers, each with 64 filters. After a max pooling layer, again two convolution layers are used, this time each with 128 filters. Then, another max pooling layer is followed by three convolution layers, each with 256 filters. After one more max pooling layer, there are again three convolution layers, each with 512 filters, followed by another pooling layer and three <a id="_idIndexMarker908"/>convolution layers each with 512 filters. After one last pooling layer, three dense layers are used:</p>
+			<div>
+				<div id="_idContainer851" class="IMG---Figure">
+					<img src="image/B16391_09_021.jpg" alt="Figure 9.21 – Network structure of the VGG16 model"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.21 – Network structure of the VGG16 mo<a id="_idTextAnchor353"/>del</p>
+			<p>In this case study, we would like to reuse the trained convolution layers of the VGG16 model and add some layers on top for the cancer cell classification task. During training, the convolution layers will be frozen and only the added layers will be trained.</p>
+			<p>To do so, we build three separate sub-workflows: one workflow to download the data, one workflow to preprocess the images, and a third workflow to train the neural network, using transfer learning. You can download the workflow with the three sub-workflows from the KNIME Hub: <a href="https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%209/">https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%209/</a>. Let’s start with the workflow to download the data.</p>
+			<h2 id="_idParaDest-176"><a id="_idTextAnchor354"/>Downloading the Dataset</h2>
+			<p>The full dataset<a id="_idIndexMarker909"/> with images of cancer cells is available as a single <strong class="source-inline">tar.gz</strong> file containing 374 images: <a href="https://ome.grc.nia.nih.gov/iicbu2008/lymphoma/index.html">https://ome.grc.nia.nih.gov/iicbu2008/lymphoma/index.html</a>. The workflow shown in <em class="italic">Figure 9.22</em> downloads the file and creates a table with the file path and the class information for each image:</p>
+			<div>
+				<div id="_idContainer852" class="IMG---Figure">
+					<img src="image/B16391_09_022.jpg" alt="Figure 9.22 – This workflow downloads the full labeled dataset of images of cancer cells"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.22 – This workflow downloads the full <a id="_idTextAnchor355"/>labeled dataset of images of cancer cells</p>
+			<p>Therefore, the <a id="_idIndexMarker910"/>workflow first defines a directory for the downloaded data using the <strong class="bold">Create Directory</strong> node. Next, the <strong class="bold">GET Request</strong> node <a id="_idIndexMarker911"/>and the <strong class="bold">Binary Objects to Files</strong> node are used to download and save the <strong class="source-inline">tar.gz</strong> file into the <a id="_idIndexMarker912"/>created directory. The <strong class="bold">Unzip Files</strong> node<a id="_idIndexMarker913"/> unzips the downloaded file. As a result, we get three sub-directories—one for each lymphoma type. Next, the workflow creates a data table that stores the path to the image files<a id="_idIndexMarker914"/> using the <strong class="bold">List Files</strong> node. Based on the subfolder, the <strong class="bold">Rule Engine</strong> node<a id="_idIndexMarker915"/> adds the class label according to its class of lymphoma. Finally, the created table is written into a <strong class="source-inline">.table</strong> file. </p>
+			<p>The next step is to preprocess the images.</p>
+			<h2 id="_idParaDest-177"><a id="_idTextAnchor356"/>Reading and Preprocessing the Images</h2>
+			<p>In the next <a id="_idIndexMarker916"/>step, the table<a id="_idIndexMarker917"/> created by the workflow in <em class="italic">Figure 9.22</em> is read and the images are preprocessed. Each image has dimensions 1388px, 1040px, and three-color channels; this means <img src="image/Formula_B16391_09_090.png" alt=""/>. To reduce the spatial complexity of computation, we use a similar approach as that taken in the paper <em class="italic">Histology Image Classification Using Supervised Classification and Multimodal Fusion </em>(<a href="https://ieeexplore.ieee.org/document/5693834">https://ieeexplore.ieee.org/document/5693834</a>), where each image is chopped into 25 blocks. For this use case, we decided to chop each image into blocks of size <img src="image/Formula_B16391_09_091.png" alt=""/>.</p>
+			<p>The loading and preprocessing steps are performed by the workflow shown here in <em class="italic">Figure 9.23</em>:</p>
+			<div>
+				<div id="_idContainer855" class="IMG---Figure">
+					<img src="image/B16391_09_023.jpg" alt="Figure 9.23 – This workflow loads and preprocesses the image"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.23 – This workflow loads and prepro<a id="_idTextAnchor357"/>cesses the image</p>
+			<p>This second <a id="_idIndexMarker918"/>workflow starts with<a id="_idIndexMarker919"/> reading the table created in the first workflow, including the paths to the images as well as the class information. Next, the <strong class="bold">Category To Number</strong> node encodes the different nominal class values (FL, MCL, and CLL) with an index, before the dataset is split into a training set and a test set using the <strong class="bold">Partitioning</strong> node. For this case study, we decided to use 60% of the data for training and 40% of the data for testing, using stratified sampling on the <strong class="bold">class</strong> column.</p>
+			<p>In the <strong class="bold">Load and preprocess images (Local Files)</strong> component, the images are uploaded and preprocessed. </p>
+			<p><em class="italic">Figure 9.24</em> here shows you the inside of this component:</p>
+			<div>
+				<div id="_idContainer856" class="IMG---Figure">
+					<img src="image/B16391_09_024.jpg" alt="Figure 9.24 – Inside of the Load and preprocess images (Local Files) component"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.24 – Inside of the Load and prepro<a id="_idTextAnchor358"/>cess images (Local Files) component</p>
+			<p>The <a id="_idIndexMarker920"/>component uses a <a id="_idIndexMarker921"/>loop to load and preprocess one image after the other. The <strong class="bold">Chunk Loop Start</strong> node, with<a id="_idIndexMarker922"/> one row per chunk, starts the loop, while<a id="_idIndexMarker923"/> the <strong class="bold">Loop End</strong> node, concatenating the resulting rows from the loop iterations, ends the loop.</p>
+			<p>In the loop body, one image is always loaded with the <strong class="bold">Image Reader (Table)</strong> node. The image is then normalized using the <strong class="bold">Image Calculator</strong> node, dividing each pixel value by 255.</p>
+			<p>Next, the <strong class="bold">Image Cropper</strong> node<a id="_idIndexMarker924"/> is used to crop the image to a size that is dividable by 64. Since the original size of the images is 1388px 1040px, the first 44 pixels of the left side and the top 16 pixels of each image are cropped. </p>
+			<p><em class="italic">Figure 9.25</em> here shows you the configuration window of the node:</p>
+			<div>
+				<div id="_idContainer857" class="IMG---Figure">
+					<img src="image/B16391_09_025.jpg" alt="Figure 9.25 – Image Cropper node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.25 – Image Cropper node and it<a id="_idTextAnchor359"/>s configuration window</p>
+			<p>Next, the <strong class="bold">Splitter</strong> node <a id="_idIndexMarker925"/>splits each image into 336 images of size 64 x 64 pixels, storing <a id="_idIndexMarker926"/>each new<a id="_idIndexMarker927"/> sub-image in a new column, for a total of ~75,000 patches. <em class="italic">Figure 9.26</em> here shows you the <strong class="bold">Advanced</strong> tab of the configuration window of the <strong class="bold">Splitter</strong> node, where the maximum size for each dimension of the resulting images has been set:</p>
+			<div>
+				<div id="_idContainer858" class="IMG---Figure">
+					<img src="image/B16391_09_026.jpg" alt="Figure 9.26 – The Splitter node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.26 – The Splitter node and i<a id="_idTextAnchor360"/>ts configuration window</p>
+			<p>Next, the table is transposed into one column and renamed, before the class information is added to each image with the <strong class="bold">Cross Joiner</strong> node.</p>
+			<p>Now that we have the prepared images, we can continue with the last workflow.</p>
+			<h2 id="_idParaDest-178"><a id="_idTextAnchor361"/>Training the Network</h2>
+			<p>The first step<a id="_idIndexMarker928"/> of the training workflow is to define the network structure using <em class="italic">VGG16’s convolution layers</em> as a starting point.</p>
+			<p>The VGG16 model was originally trained to predict the classes in the ImageNet dataset. Despite the 1,000 classes in the dataset, none of them matches the three cancer types for this study. Therefore, we recycle only the trained convolution layers of the VGG16 network. We will then add some new neural layers on top for the classification task, and finally fine-tune the resulting network to our task.</p>
+			<p>To train the final network, we will use the <strong class="bold">Keras Network Learner</strong> node and the ~75,000 patches created from the <a id="_idIndexMarker929"/>training set images. These steps are performed by the workflow shown here in <em class="italic">Figure 9.27</em>:</p>
+			<div>
+				<div id="_idContainer859" class="IMG---Figure">
+					<img src="image/B16391_09_027.jpg" alt="Figure 9.27 – Training workflow to train the new network to classify images of cancer cells"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.27 – Training workflow to t<a id="_idTextAnchor362"/>rain the new network to classify images of cancer cells</p>
+			<p>The <a id="_idIndexMarker930"/>workflow first reads the VGG16 network with the <strong class="bold">Keras Network Reader</strong> node. The <strong class="bold">Keras Network Reader</strong> node can <a id="_idIndexMarker931"/>read models in three different file formats. Models are saved in a <strong class="source-inline">.h5</strong> file with the complete network structure and weights, or networks are saved in <strong class="source-inline">.json</strong> or <strong class="source-inline">.yaml</strong> files with just the network structure.</p>
+			<p>In this case, we read the <strong class="source-inline">.h5</strong> file of the trained VGG16 network because we aim to use all of the knowledge embedded inside the network.</p>
+			<p>The output tensor of the VGG16 network has dimensions <img src="image/Formula_B16391_09_092.png" alt=""/>, which is the size of the output of the last max pooling layer. Before we can add some dense layers<a id="_idIndexMarker932"/> for the classification task, we flatten the output using the <strong class="bold">Keras Flatten Layer</strong> node.</p>
+			<p>Now, a dense layer with <strong class="bold">ReLU</strong> activation and 64 neurons is added using a <strong class="bold">Keras Dense Layer</strong> node. Next, a <strong class="bold">Dropout Layer</strong> node is introduced, with a dropout rate of <img src="image/Formula_B16391_09_093.png" alt=""/> Finally, one last <strong class="bold">Keras Dense Layer</strong> node defines the output of the network. As we are dealing with a classification problem with three different classes, the <strong class="bold">softmax</strong> activation function with three units is adopted.</p>
+			<p>If we were to connect the output of the last <strong class="bold">Keras Dense Layer</strong> node to a <strong class="bold">Keras Network Learner </strong>node, we would fine-tune all layers, including the trained convolution layers from the VGG16 model. We do not want to lose all that knowledge! So, we decided to not fine-tune the layers of the VGG16 model but to train only the newly added layers. Therefore, the layers of the VGG16 model must be frozen.</p>
+			<p>To freeze layers of a network, we use<a id="_idIndexMarker933"/> the <strong class="bold">Keras Freeze Layers</strong> node. <em class="italic">Figure 9.28</em> here shows you the configuration window of this node:</p>
+			<div>
+				<div id="_idContainer862" class="IMG---Figure">
+					<img src="image/B16391_09_028.jpg" alt="Figure 9.28 – The Keras Freeze Layers node and its configuration window"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 9.28 – The Keras Freeze Layers<a id="_idTextAnchor363"/> node and its configuration window</p>
+			<p>In the <a id="_idIndexMarker934"/>configuration window, you can select the layer(s) to freeze. Later on, when training the network, the weights of the selected layers will not be updated. All other layers will be trained. We froze every layer except the ones we added at the end of the VGG16 network.</p>
+			<p>In the lower branch of the workflow, we read the training data using the <strong class="bold">Table Reader</strong> node and we one-hot encode the class using the <strong class="bold">One to Many</strong> node.</p>
+			<p>Now that we have the training data and the network structure, we can fine-tune it with the <strong class="bold">Keras Network Learner</strong> node.</p>
+			<p>As with all other case studies in this book, the columns for the input data and target data are selected in the configuration window of the <strong class="bold">Keras Network Learner</strong> node, together with the required conversion type. In this case, the <strong class="bold">From Image </strong>conversion for the input column and from Number (double) for the target column have been selected. Because this is a multiclass classification task, the <strong class="bold">Categorical cross entropy</strong> loss function has been adopted. To fine-tune this network, it has been trained for 5 epochs using a training batch size of 64 and RMSProp with the default settings as optimizer.</p>
+			<p>Once the network has been fine-tuned, we evaluate its performance on the test images. The preprocessed test images, as patches of 64 x 64 px, are read with a <strong class="bold">Table Reader</strong> node. To predict the class of an image, we generate predictions for each of the 64 x 64px patches using the <strong class="bold">Keras Network Executor</strong> node. Then, all predictions are combined using a simple majority voting scheme, implemented in the <strong class="bold">Extract Prediction</strong> metanode.</p>
+			<p>Finally, the <a id="_idIndexMarker935"/>network is evaluated using the <strong class="bold">Scorer</strong> node. The classifier has achieved 96% accuracy (fine-tuning for a few more epochs can push the accuracy to 98%).</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">In this use case, the VGG16 model is only used for feature extraction. Therefore, another approach is to apply the convolutional layers of the VGG16 model to extract the features beforehand and to feed them as input into a classic feedforward neural network. This has the advantage that the forward pass through VGG16 would be done only once per image, instead of doing it in every batch update.</p>
+			<p>We could now save the network and deploy it to allow a pathologist to access those predictions via a web browser, for example. How this can be done using KNIME Analytics Platform and KNIME Server is shown in the next chapter.</p>
+			<h1 id="_idParaDest-179"><a id="_idTextAnchor364"/>Summary</h1>
+			<p>In this chapter, we explored CNNs, focusing on image data.</p>
+			<p>We started with an introduction to convolution layers, which motivates the name of this new family of neural networks. In this introduction, we explained why CNNs are so commonly used for image data, how convolutional networks work, and the impact of the many setting options. Next, we discussed pooling layers, commonly used in CNNs to efficiently downsample the data.</p>
+			<p>Finally, we put all this knowledge to work by building and training from scratch a CNN to classify images of digits between 0 and 9 from the MNIST dataset. Afterward, we discussed the concept of transfer learning, introduced four scenarios in which transfer learning can be applied, and showed how we can use transfer learning in the field of neural networks.</p>
+			<p>In the last section, we applied transfer learning to train a CNN to classify histopathology slide images. Instead of training it from scratch, this time we reused the convolutional layers of a trained VGG16 model for the feature extraction of the images.</p>
+			<p>Now that we have covered the many different use cases, we will move on to the next step, which is the deployment of the trained neural networks. In the next chapter, you will learn about different deployment options with KNIME software. </p>
+			<h1 id="_idParaDest-180"><a id="_idTextAnchor365"/>Questions and Exercises</h1>
+			<ol>
+				<li value="1">What is the kernel size in a convolutional layer?<p>a) The area summarized by a statistical value</p><p>b) The size of the matrix moving across an image</p><p>c) The number of pixels to shift the matrix</p><p>d) The size of the area used by a layer</p></li>
+				<li>What is a pooling layer?<p>a) A pooling layer is a commonly used layer in RNNs</p><p>b) A pooling layer summarizes an area with a statistical value</p><p>c) A pooling layer is a commonly used layer in feedforward networks</p><p>d) A pooling layer can be used to upsample images</p></li>
+				<li>When is transfer learning helpful?<p>a) To transfer data to another system</p><p>b) If no model is available</p><p>c) If not enough labeled data is available</p><p>d) To compare different models</p></li>
+			</ol>
+		</div>
+	</body></html>

@@ -1,0 +1,413 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer014">
+<h1 class="chapter-number" id="_idParaDest-16"><a id="_idTextAnchor013"/>1</h1>
+<h1 id="_idParaDest-17"><a id="_idTextAnchor014"/>Introducing Deep Learning with Amazon SageMaker</h1>
+<p><strong class="bold">Deep learning</strong> (<strong class="bold">DL</strong>) is a fairly new but actively developing area of <strong class="bold">machine learning</strong> (<strong class="bold">ML</strong>). Over the past 15 years, DL has moved from research labs to our homes (such as smart homes and smart speakers) and cars (that is, self-driving capabilities), phones (for example, photo enhancement software), and applications you use every day (such as recommendation systems in your favorite video platform).</p>
+<p>DL models are achieving and, at times, exceeding human accuracy on tasks such as computer vision (object detection and segmentation, image classification tasks, and image generation) and language tasks (translation, entity extraction, and text sentiment analysis). Beyond these areas, DL is also actively applied to complex domains such as healthcare, information security, robotics, and automation.</p>
+<p>We should expect that DL applications in these domains will only grow over time. With current results and future promises also come challenges when implementing DL models. But before talking about the challenges, let’s quickly refresh ourselves on what DL is.</p>
+<p>In this chapter, we will do the following:</p>
+<ul>
+<li>We’ll get a quick refresher on DL and its challenges</li>
+<li>We’ll provide an overview of Amazon SageMaker and its value proposition for DL projects</li>
+<li>We’ll provide an overview of the foundational SageMaker components – that is, managed training and hosting stacks</li>
+<li>We’ll provide an overview of other key AWS services</li>
+</ul>
+<p>These will be covered in the following topics:</p>
+<ul>
+<li>Exploring DL with Amazon SageMaker</li>
+<li>Choosing Amazon SageMaker for DL workloads</li>
+<li>Exploring SageMaker’s managed training stack</li>
+<li>Using SageMaker’s managed hosting stack</li>
+<li>Integration with AWS services</li>
+</ul>
+<h1 id="_idParaDest-18"><a id="_idTextAnchor015"/>Technical requirements</h1>
+<p>There are several hands-on code samples in this chapter. To follow along with them, you will need the following:</p>
+<ul>
+<li>An AWS account and IAM user with permission to manage Amazon SageMaker resources.</li>
+<li>A computer or cloud host with Python3 and SageMaker SDK installed (<a href="https://pypi.org/project/sagemaker/">https://pypi.org/project/sagemaker/</a>).</li>
+<li>Have the AWS CLI installed (see <a href="https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.xhtml">https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.xhtml</a>) and configured to use IAM user (see the instructions at <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.xhtml">https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.xhtml</a>).</li>
+<li>To use certain SageMaker instance types for training purposes, you will likely need to request a service limit increase in your AWS account. For more information, go to <a href="https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.xhtml">https://docs.aws.amazon.com/general/latest/gr/aws_service_limits.xhtml</a>.</li>
+</ul>
+<p>All of the code in this chapter can be downloaded from <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker</a>.</p>
+<h1 id="_idParaDest-19"><a id="_idTextAnchor016"/>Exploring DL with Amazon SageMaker</h1>
+<p>DL is a subset<a id="_idIndexMarker000"/> of the ML field, which uses a specific type of architecture: layers <a id="_idIndexMarker001"/>of learnable parameters connected to each other. In this architecture, each layer is “learning” a representation from a training dataset. Each new training data sample slightly tweaks the learnable parameters across all the layers of the model to minimize the loss function. The number of stacked layers constitutes the “depth” of the model. At inference time (that is, when we use our model to infer output from the input signal), each layer<a id="_idIndexMarker002"/> receives input from the previous layer’s output, calculates its representation based on the input, and sends it to the next layer.</p>
+<div>
+<div class="IMG---Figure" id="_idContainer009">
+<img alt="Figure 1.1 – Fully connected DL network " height="1025" src="image/B17519_01_001.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 1.1 – Fully connected DL network</p>
+<p>Simple DL models can consist of<a id="_idIndexMarker003"/> just a few fully connected layers, while <strong class="bold">state-of-the-art</strong> (<strong class="bold">SOTA</strong>) models have hundreds of layers with millions and billions of learnable parameters. And the model size<a id="_idIndexMarker004"/> continues to grow. For example, let’s take a look at the evolution of the GPT family of models for various NLP tasks. The GPT-1 model was released in 2018 and had 110 million parameters; the GPT-2 model released in 2019 had 1,500 million parameters; the latest version, GPT-3, was released in 2020 and has 175 billion parameters!</p>
+<p>As the number of parameters grows, DL practitioners deal with several engineering problems:</p>
+<ul>
+<li>How do we fit models into instance memory at training time? If it’s not possible, then how do we split the model between the memory of multiple GPU devices and/or compute nodes?</li>
+<li>How can we organize communication between multiple nodes at training time so that the overall model can aggregate learnings from individual nodes?</li>
+</ul>
+<p>Layer internals are<a id="_idIndexMarker005"/> also becoming more complex and require more <a id="_idIndexMarker006"/>computing power. DL models also typically require vast amounts of data in specific formats. </p>
+<p>So, to be able to successfully train and use SOTA DL models, ML engineers need to solve the following tasks (beyond implementing the SOTA model, of course):</p>
+<ul>
+<li>Gain access to a large number of specialized compute resources during training and inference</li>
+<li>Set up and maintain a software stack (for example, GPU libraries, DL frameworks, and acceleration libraries)</li>
+<li>Implement, manage, and optimize distributed training jobs </li>
+<li>Implement, deploy, and monitor inference pipelines</li>
+<li>Organize time- and cost-efficient experiments when tuning model performance</li>
+<li>Pre-process, label, and access large datasets (GBs and TBs of data)</li>
+</ul>
+<p>As you can see, these tasks are not necessarily related to solving any specific business problem. However, you need to get all these components right to ensure that a particular business case can be solved using DL models with the highest possible accuracy in time and within expected budgets.</p>
+<h2 id="_idParaDest-20"><a id="_idTextAnchor017"/>Using SageMaker</h2>
+<p>Amazon SageMaker is an AWS service that promises to simplify the lives of ML practitioners by removing “undifferentiated heavy lifting” (such as the tasks mentioned previously) and lets you<a id="_idIndexMarker007"/> focus on actually solving business problems instead. It integrates various functional capabilities to build, train, and deploy ML models. SageMaker was first introduced in late 2017 and has since expanded greatly, adding more than 200 features in 2020 alone according to AWS’s <em class="italic">Re:invent 2020</em> keynotes. </p>
+<p>Amazon SageMaker caters to a broad audience and set of use cases, including the following (this is a non-exclusive list):</p>
+<ul>
+<li>Developers without much ML background</li>
+<li>Enterprise data science teams</li>
+<li>Leading research organizations who are looking to run cutting-edge research</li>
+</ul>
+<p>SageMaker is a managed service as it abstracts the management of underlying compute resources and software components via APIs. AWS customers use these APIs to create training jobs, manage model artifacts, and deploy models for inference on Amazon SageMaker. AWS is responsible <a id="_idIndexMarker008"/>for the high availability of SageMaker resources and provides respective <strong class="bold">Service-Level Agreements</strong> (<strong class="bold">SLAs</strong>). Amazon SageMaker has a “pay as you go” model, with customers paying only for the resources they consume.</p>
+<p>In this book, we will explore SageMaker capabilities that are relevant for DL models and workloads, and we will build <a id="_idIndexMarker009"/>end-to-end solutions for <a id="_idIndexMarker010"/>popular DL use cases, such as <strong class="bold">Natural Language Processing</strong> (<strong class="bold">NLP</strong>) and <strong class="bold">Computer Vision</strong> (<strong class="bold">CV</strong>). </p>
+<p>We will focus <a id="_idIndexMarker011"/>on the following Amazon SageMaker capabilities:</p>
+<ul>
+<li>Model development phase:<ul><li>Data preparation using SageMaker GroundTruth</li><li>Data pre- and post-processing using SageMaker Processing</li><li>Integration with data storage solutions – Amazon S3, Amazon EFS, and Amazon FSx for Lustre</li><li>Developing models using SageMaker Studio IDE and Notebooks</li></ul></li>
+<li>Training phase:<ul><li>Managed training instances and software stack</li><li>DL containers for TensorFlow and Pytorch frameworks</li><li>Implementing distributed training using SageMaker’s DataParallel and ModelParallel libraries</li><li>Monitoring and <a id="_idIndexMarker012"/>debugging training with SageMaker Debugger</li></ul></li>
+<li>Inference:<ul><li>Managed hosting platform for batch and real-time inference</li><li>Model monitoring at inference time</li><li>Compute instances for DL serving</li></ul></li>
+</ul>
+<p>As we progress through the book, we will also learn how to use the SageMaker API and SDKs to programmatically manage<a id="_idIndexMarker013"/> our resources. Additionally, we will discuss optimization strategies and SageMaker capabilities to reduce cost and time-to-market.</p>
+<p>This book focuses on DL capabilities, so we will set several SageMaker features and capabilities aside. You<a id="_idIndexMarker014"/> can explore Amazon SageMaker further by reading the SageMaker documentation (<a href="https://docs.aws.amazon.com/sagemaker/latest/dg/whatis.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/whatis.xhtml</a>) and practical blog posts (<a href="https://aws.amazon.com/blogs/machine-learning/category/artificial-intelligence/sagemaker/">https://aws.amazon.com/blogs/machine-learning/category/artificial-intelligence/sagemaker/</a>).</p>
+<p>In the next section, we’ll find out exactly how SageMaker can help us with DL workloads.</p>
+<h1 id="_idParaDest-21"><a id="_idTextAnchor018"/>Choosing Amazon SageMaker for DL workloads</h1>
+<p>As discussed earlier, DL workloads <a id="_idIndexMarker015"/>present several engineering challenges due to their need to access high quantities of specialized resources (primarily GPU devices and high-throughput storage solutions). However, managing a software<a id="_idIndexMarker016"/> stack can also present a challenge as new versions of ML and DL frameworks are released frequently. Due to high associated costs, it’s also imperative to organize your training and inference efficiently to avoid waste.</p>
+<p>Let’s review how SageMaker can address these challenges. </p>
+<h2 id="_idParaDest-22"><a id="_idTextAnchor019"/>Managed compute and storage infrastructure</h2>
+<p>SageMaker provides a fully <a id="_idIndexMarker017"/>managed compute infrastructure for your training and inference workloads. SageMaker Training and Inference clusters <a id="_idIndexMarker018"/>can scale to tens and up to hundreds of individual instances within minutes. This can be particularly useful in scenarios where you need to access a large compute cluster with short notice and for a limited period (for example, you need to train a complex DL model on a large dataset once every couple of months). As with other AWS services, SageMaker resources provide advanced auto-scaling features for inference endpoints so that customers can match demand without resource overprovisioning.</p>
+<p>You can also choose from a growing number of available compute instances based on the requirements of specific DL models and types of workload. For instance, in many scenarios, you would need to use a GPU-based instance to train your DL model, while it may be possible to use cheaper CPU instances at inference time without this having an impact on end user performance. SageMaker gives you the flexibility to choose the most optimal instances for particular DL models and tasks.</p>
+<p>In case of failure, AWS will automatically replace faulty instances without any customer intervention.</p>
+<p>These SageMaker features greatly benefit customers as SageMaker simplifies capacity planning and operational management of your ML infrastructure.</p>
+<h2 id="_idParaDest-23"><a id="_idTextAnchor020"/>Managed DL software stacks</h2>
+<p>To build, train, and <a id="_idIndexMarker019"/>deploy DL models, you need<a id="_idIndexMarker020"/> to use various frameworks and software components to perform specialized computations and communication between devices and nodes in distributed clusters. Creating and maintaining software stacks across various development environments can be labor-intensive.</p>
+<p>To address these needs, as part of the SageMaker ecosystem, AWS provides multiple pre-built open source Docker containers for popular DL frameworks such as PyTorch, TensorFlow, MXNet, and others. These containers are built and tested by AWS and optimized for specific tasks (for instance, different containers for training and inference) and compute platforms (CPU or GPU-based containers, different versions of CUDA toolkits, and others).</p>
+<p>Since Docker containers provide interoperability and encapsulation, developers can utilize pre-built SageMaker containers to build and debug their workloads locally before deploying them to a cloud cluster to shorten the development cycle. You also have the flexibility to extend or modify SageMaker containers based on specific requirements.</p>
+<h3>Advanced operational capabilities</h3>
+<p>While Amazon SageMaker utilizes several popular open source solutions for DL, it also provides several unique <a id="_idIndexMarker021"/>capabilities to address certain challenges when operationalizing your ML workloads, such as the following:</p>
+<ul>
+<li>SageMaker Debugger</li>
+<li>SageMaker Model Monitor</li>
+<li>SageMaker’s DataParallel/ModelParallel distributed training libraries</li>
+</ul>
+<p>Let’s move on next to look at integration with other AWS services.</p>
+<h3>Integration with other AWS services</h3>
+<p>Amazon SageMaker is well integrated with other AWS services so that developers can build scalable, performant, and secure workloads. </p>
+<p>In the next <a id="_idIndexMarker022"/>section, we’ll see how Amazon SageMaker’s managed training stack can be leveraged to run DL models.</p>
+<h1 id="_idParaDest-24"><a id="_idTextAnchor021"/>Exploring SageMaker’s managed training stack </h1>
+<p>Amazon SageMaker <a id="_idIndexMarker023"/>provides a set of capabilities and integration points with other AWS services to configure, run, and monitor ML training jobs. With SageMaker managed training, developers can<a id="_idIndexMarker024"/> do the following:</p>
+<ul>
+<li>Choose from a variety of built-in algorithms and containers, as well as BYO models</li>
+<li>Choose from a wide range of compute instances, depending on the model requirements</li>
+<li>Debug and profile their training process in near-real-time using SageMaker Debugger</li>
+<li>Run bias detection and model explainability jobs</li>
+<li>Run incremental training jobs, resume from checkpoints, and use spot instances</li>
+</ul>
+<p class="callout-heading">Spot instances</p>
+<p class="callout">Amazon EC2 Spot Instances provides<a id="_idIndexMarker025"/> customers with access to unused compute capacity at a lower price point (up to 90%). Spot instances will be released when someone else claims them, which results in workload interruption.</p>
+<ul>
+<li>Run model tuning jobs to search for optimal combinations of model hyperparameters</li>
+<li>Organize training jobs in a searchable catalog of experiments</li>
+</ul>
+<p>Amazon SageMaker provides the <a id="_idIndexMarker026"/>following capabilities out of the box:</p>
+<ul>
+<li>Provisioning, bootstrapping, and tearing down training nodes</li>
+<li>Capturing training job logs and metrics</li>
+</ul>
+<p>In this section, we<a id="_idIndexMarker027"/> will go over all the stages of a SageMaker training job and the components involved. Please refer to the following diagram for a visual narrative that provides a step-by-step guide on creating, managing, and monitoring your first SageMaker training job. We will address the advanced features of SageMaker’s managed training stack in <em class="italic">Part 2</em> of this book:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer010">
+<img alt="Figure 1.2 – Amazon SageMaker training stack " height="1362" src="image/B17519_01_002.jpg" width="1640"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 1.2 – Amazon SageMaker training stack</p>
+<p>Let’s walk through each step in turn. </p>
+<p>We will also provide <a id="_idIndexMarker028"/>code snippets to illustrate how to perform a SageMaker training job<a id="_idIndexMarker029"/> configuration using the SageMaker Python SDK (<a href="https://sagemaker.readthedocs.io/en/stable/">https://sagemaker.readthedocs.io/en/stable/</a>).</p>
+<h2 id="_idParaDest-25"><a id="_idTextAnchor022"/>Step 1 – configuring and creating a training job</h2>
+<p>You can <a id="_idIndexMarker030"/>instantiate a SageMaker training job via an API call.</p>
+<p>SageMaker defines <a id="_idIndexMarker031"/>several mandatory configuration parameters that need to be supplied by you. They are listed as follows.</p>
+<h3>Choosing an algorithm to train</h3>
+<p>Amazon SageMaker supports several types of ML algorithms:</p>
+<ul>
+<li><strong class="bold">Built-in algorithms</strong> are available out of the box for all SageMaker users. At the time of<a id="_idIndexMarker032"/> writing, 18 built-in algorithms cover a variety of use cases, including DL algorithms for computer vision and NLP tasks. The user is only responsible for providing algorithm hyperparameters.</li>
+<li><strong class="bold">Custom algorithms</strong> are developed by the user. AWS is not responsible for training logic in this <a id="_idIndexMarker033"/>case. The training script will be executed inside a Docker container. Developers can choose to use AWS-authored Docker images with pre-installed software dependencies or can use BYO Docker images.</li>
+<li><strong class="bold">Marketplace algorithms</strong> are developed by third-party vendors and available via the AWS Marketplace. Similar to built-in algorithms, they typically offer a fully managed<a id="_idIndexMarker034"/> experience where the user is responsible for providing algorithm hyperparameters. Unlike built-in algorithms, which are free to use, the user usually pays a fee for using marketplace algorithms.</li>
+</ul>
+<h3>Defining an IAM role</h3>
+<p>Amazon SageMaker relies on the Amazon IAM service and, specifically, IAM roles to define which AWS resources<a id="_idIndexMarker035"/> and services can be accessed from the training job. That’s why, whenever scheduling a SageMaker training job, you need to provide an IAM role, which will be then assigned to training nodes. </p>
+<h3>Defining a training cluster</h3>
+<p>Another set of<a id="_idIndexMarker036"/> required parameters defines the hardware configuration of the training cluster, which includes several compute instances, types of instances, and instance storage.</p>
+<p>It’s recommended that you carefully choose your instance type based on specific requirements. At a minimum, ML engineers need to understand which compute device is used at training time. For example, in most cases for DL models, you will likely need to use a GPU-based instance, while many classical ML algorithms (such as linear regression or Random Forest) are CPU-bound.</p>
+<p>ML engineers also need to consider how many instances to provision. When provisioning multiple nodes, you need to make sure that your algorithm and training script support distributed training.</p>
+<p>Built-in algorithms usually provide recommended instance types and counts in their public documentation. They also define whether distributed training is supported or not. In the latter case, you should configure a single-node training cluster.</p>
+<h3>Defining training data</h3>
+<p>Amazon SageMaker supports <a id="_idIndexMarker037"/>several storage solutions for training data:</p>
+<ul>
+<li><strong class="bold">Amazon S3</strong>: This is a low-cost, highly durable, and highly available object storage. This is <a id="_idIndexMarker038"/>considered a default choice for storing training datasets. Amazon S3 supports two types of input mode (also defined in training job configuration) for training datasets:<ul><li><strong class="bold">File</strong>: Amazon SageMaker copies the training dataset from the S3 location to a local directory</li><li><strong class="bold">Pipe</strong>: Amazon SageMaker streams data directly from S3 to the container via a Unix-named pipe</li><li><strong class="bold">FastFile</strong>: A new file streaming capability<a id="_idIndexMarker039"/> provided by Amazon SageMaker.</li></ul></li>
+<li><strong class="bold">Amazon EFS</strong>: This is an elastic<a id="_idIndexMarker040"/> filesystem service. If it’s used to persist training data, Amazon SageMaker will automatically mount the training instance to a shared filesystem.</li>
+<li><strong class="bold">Amazon FSx for Luster</strong>: This is a high-performant <a id="_idIndexMarker041"/>shared filesystem optimized for the lowest latency and highest throughput.</li>
+</ul>
+<p>Before training can <a id="_idIndexMarker042"/>begin, you need to make sure that data is persisted in one of these solutions, and then provide the location of the datasets.</p>
+<p>Please note that you can provide the locations of several datasets (for example, training, test, and evaluation sets) in your training job.</p>
+<h3>Picking your algorithm hyperparameters</h3>
+<p>While it’s not<a id="_idIndexMarker043"/> strictly mandatory, in most cases, you will need to define certain hyperparameters of the algorithm. Examples of such hyperparameters include the batch size, number of training epochs, and learning rate. </p>
+<p>At training time, these hyperparameters will be passed to the training script as command-line arguments. In the case of custom algorithms, developers are responsible for parsing and setting hyperparameters in the training script. </p>
+<h3>Defining the training metrics</h3>
+<p>Metrics are another optional <a id="_idIndexMarker044"/>but important parameter. SageMaker provides out-of-the-box integration with Amazon CloudWatch to stream training logs and metrics. In the case of logs, SageMaker will automatically stream <strong class="source-inline">stdout</strong> and <strong class="source-inline">stderr</strong> from the training container to CloudWatch. </p>
+<p class="callout-heading">stdout and stderr </p>
+<p class="callout"><strong class="source-inline">stdout</strong> and <strong class="source-inline">stderr</strong> are standard data streams in <a id="_idIndexMarker045"/>Linux and Unix-like OSs. Every time you run a Linux command, these data streams are established automatically. Normal command <a id="_idIndexMarker046"/>output is sent to <strong class="source-inline">stdout</strong>; any error messages are sent to <strong class="source-inline">stderr</strong>.</p>
+<p>In the case of metrics, the user needs to define the regex pattern for each metric first. At training time, the SageMaker utility<a id="_idIndexMarker047"/> running on the training instance will monitor <strong class="source-inline">stdout</strong> and <strong class="source-inline">stderr</strong> for the regex pattern match, then extract the value of the metric and submit the metric name and value to CloudWatch. As a result, developers can monitor training processes in CloudWatch in near-real time.</p>
+<p>Some common examples of training metrics include loss value and accuracy measures.</p>
+<h3>Configuring a SageMaker training job for image classification</h3>
+<p>In the following<a id="_idIndexMarker048"/> Python code sample, we will <a id="_idIndexMarker049"/>demonstrate how to<a id="_idIndexMarker050"/> configure a simple training job for a built-in <strong class="bold">image classification</strong> algorithm (<a href="https://docs.aws.amazon.com/sagemaker/latest/dg/image-classification.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/image-classification.xhtml</a>):</p>
+<ol>
+<li>Begin with your initial imports:<p class="source-code">import sagemaker</p><p class="source-code">from sagemaker import get_execution_role</p></li>
+<li>The <strong class="source-inline">get_execution_role()</strong> method allows you to get the current IAM role. This role will be used to call the SageMaker APIs, whereas <strong class="source-inline">sagemaker.Session()</strong> stores the context of the interaction with SageMaker and other AWS services such as S3:<p class="source-code">role = get_execution_role() </p><p class="source-code">sess = sagemaker.Session() </p></li>
+<li>The<strong class="source-inline">.image_uris.retrieve()</strong> method allows you to identify the correct container with the built-in image classification algorithm. Note that if you choose to use custom containers, you will need to specify a URI for your specific training container:<p class="source-code">training_image = sagemaker.image_uris.retrieve('image-classification', sess.boto_region_name)</p></li>
+<li>Define the number of instances in the training cluster. Since image classification supports distributed training, we can allocate more than one instance to the training cluster to<a id="_idIndexMarker051"/> speed up training:<p class="source-code">num_instances = 2</p></li>
+<li>The image classification algorithm requires GPU-based instances, so we will choose to use a SageMaker P2 instance type:<p class="source-code">instance_type = "ml.p2.xlarge"</p></li>
+<li>Next, we must <a id="_idIndexMarker052"/>define the location of training and validation datasets. Note that the image classification algorithm supports several data formats. In this case, we choose to use the JPG file format, which also requires <strong class="source-inline">.lst</strong> files to list all the available images:<p class="source-code">data_channels = {</p><p class="source-code">    'train': f"s3://{sess.default_bucket()}/data/train", </p><p class="source-code">    'validation': f"s3://{sess.default_bucket()}/data/validation", </p><p class="source-code">    'train_lst': f"s3://{sess.default_bucket()}/data/train.lst",</p><p class="source-code">    'vadidation_lst': f"s3://{sess.default_bucket()}/data/validation.lst",</p><p class="source-code">}</p></li>
+<li>Configure the training hyperparameters:<p class="source-code">hyperparameters=dict(</p><p class="source-code">    use_pretrained_model=1,</p><p class="source-code">    image_shape='3,224,224',</p><p class="source-code">    num_classes=10,</p><p class="source-code">    num_training_samples=40000, # TODO: update it</p><p class="source-code">    learning_rate=0.001,</p><p class="source-code">    mini_batch_size= 8    </p><p class="source-code">)</p></li>
+<li>Configure <a id="_idIndexMarker053"/>the <strong class="source-inline">Estimator</strong> object, which<a id="_idIndexMarker054"/> encapsulates training job configuration:<p class="source-code">image_classifier = sagemaker.estimator.Estimator(</p><p class="source-code">    training_image,</p><p class="source-code">    role, </p><p class="source-code">    train_instance_count= num_instances, </p><p class="source-code">    train_instance_type= instance_type,</p><p class="source-code">    sagemaker_session=sess,</p><p class="source-code">    hyperparameters=hyperparameters,</p><p class="source-code">)</p></li>
+<li>The <strong class="source-inline">fit()</strong> method submits the training job to the SageMaker API. If there are no issues, you should observe a new training job instance in your AWS Console. You can do so by going to <strong class="bold">Amazon SageMaker</strong> | <strong class="bold">Training</strong> | <strong class="bold">Training Jobs</strong>:<p class="source-code">image_classifier.fit(inputs=data_channels, job_name="sample-train")</p></li>
+</ol>
+<p>Next, we’ll provision the training cluster.</p>
+<h2 id="_idParaDest-26"><a id="_idTextAnchor023"/>Step 2 – provisioning the SageMaker training cluster</h2>
+<p>Once you <a id="_idIndexMarker055"/>submit a request for the training job, SageMaker automatically does the following:</p>
+<ul>
+<li>Allocates the requested number of training nodes</li>
+<li>Allocates the Amazon EBS volumes and mounts them on the training nodes</li>
+<li>Assigns an IAM role to each node</li>
+<li>Bootstraps various utilities (such as Docker, SageMaker toolkit libraries, and so on)</li>
+<li>Defines the training configuration (hyperparameters, input data configuration, and so on) as an environment variable</li>
+</ul>
+<p>Next up is the training data.</p>
+<h2 id="_idParaDest-27"><a id="_idTextAnchor024"/>Step 3 – SageMaker accesses the training data</h2>
+<p>When your training<a id="_idIndexMarker056"/> cluster is ready, SageMaker establishes access to training data for compute instances. The exact mechanism to access training data depends on your storage solution:</p>
+<ul>
+<li>If data is stored in S3 and the input mode is <strong class="bold">File</strong>, then data will be downloaded to instance EBS volumes. Note that depending on the dataset’s size, it may take minutes to download the data.</li>
+<li>If the data is stored in S3 and the input mode is <strong class="bold">Pipe</strong>, then the data will be streamed from S3 at training time as needed.</li>
+<li>If the data is stored in S3 and the input mode is <strong class="bold">FastFile</strong>, then the training program will access the files as if they are stored on training nodes. However, under the hood, the files will be streamed from S3.</li>
+<li>If the data is stored in EFS or FSx for Luster, then the training nodes will be mounted on the filesystem.</li>
+</ul>
+<p>The training continues with deploying the container.</p>
+<h2 id="_idParaDest-28"><a id="_idTextAnchor025"/>Step 4 – SageMaker deploys the training container</h2>
+<p>SageMaker automatically<a id="_idIndexMarker057"/> pulls the training images from the ECR repository. Note that built-in algorithms abstract the underlying training images so that users don’t have to define the container image, just the algorithm to be used. </p>
+<h2 id="_idParaDest-29"><a id="_idTextAnchor026"/>Step 5 – SageMaker starts and monitors the training job</h2>
+<p>To start the <a id="_idIndexMarker058"/>training job, SageMaker issues the following command on all training nodes: </p>
+<p class="source-code">docker run [TrainingImage] train</p>
+<p>If the training cluster has instances with GPU devices, then <strong class="source-inline">nvidia-docker</strong> will be used. </p>
+<p>Once the training script has started, SageMaker does the following:</p>
+<ul>
+<li>Captures <strong class="source-inline">stdout</strong>/<strong class="source-inline">stderr</strong> and sends it to CloudWatch logs.</li>
+<li>Runs a regex pattern match for metrics and sends the metric values to CloudWatch.</li>
+<li>Monitors for a <strong class="source-inline">SIGTERM</strong> signal from the SageMaker API (for example, if the user decides to stop the training job earlier).</li>
+<li>Monitors if an early stopping condition occurs and issues <strong class="source-inline">SIGTERM</strong> when this happens.</li>
+<li>Monitors for the exit code <a id="_idIndexMarker059"/>of the training script. In the case of a non-zero exit code, SageMaker will mark the training job as “failed.”</li>
+</ul>
+<h2 id="_idParaDest-30"><a id="_idTextAnchor027"/>Step 6 – SageMaker persists the training artifacts</h2>
+<p>Regardless<a id="_idIndexMarker060"/> of whether the training job fails or succeeds, SageMaker stores artifacts in the following locations:</p>
+<ul>
+<li>The <strong class="source-inline">/opt/ml/output</strong> directory, which can be used to persist any training artifacts after the job is completed.</li>
+<li>The <strong class="source-inline">/opt/ml/model</strong> directory, the content of which will be compressed into <strong class="source-inline">.tar</strong> format and stored in the SageMaker model registry.</li>
+</ul>
+<p>Once you <a id="_idIndexMarker061"/>have your first model trained to solve a particular business problem, the next step is to use your model (in ML parlance, <strong class="bold">perform inference</strong>). In the next few sections, we will learn what capabilities SageMaker provides to run ML inference workloads for various use cases.</p>
+<h1 id="_idParaDest-31"><a id="_idTextAnchor028"/>Using SageMaker’s managed hosting stack</h1>
+<p>Amazon SageMaker supports<a id="_idIndexMarker062"/> several types of managed hosting infrastructure:</p>
+<ul>
+<li>A persistent synchronous HTTPS endpoint for real-time inference</li>
+<li>An asynchronous endpoint for near-real-time inference</li>
+<li>A transient Batch Transform job that performs inference across the entire dataset</li>
+</ul>
+<p>In the next section, we will discuss use cases regarding when to use what type of hosting infrastructure, and we’ll review real-time inference endpoints in detail.</p>
+<h2 id="_idParaDest-32"><a id="_idTextAnchor029"/>Real-time inference endpoints</h2>
+<p>Real-time endpoints are <a id="_idIndexMarker063"/>built for use cases where you need to get inference results as soon as possible. SageMaker’s real-time endpoint is an HTTPS endpoint: model inputs are provided by the client via a POST request payload, and inference results are returned in the response body. The communication is synchronous. </p>
+<p>There are many scenarios <a id="_idIndexMarker064"/>when real-time endpoints are applicable, such as the following:</p>
+<ul>
+<li>To provide movie recommendations when the user opens a streaming application, based on the user’s watch history, individual ratings, and what’s trending now</li>
+<li>To detect objects in a<a id="_idIndexMarker065"/> real-time video stream</li>
+<li>To generate a suggested next word as the user inputs text</li>
+</ul>
+<p>SageMaker real-time endpoints provide customers with a range of capabilities to design and manage their <a id="_idIndexMarker066"/>inference workloads:</p>
+<ul>
+<li>Create a fully managed compute infrastructure with horizontal scaling (meaning that a single endpoint can use multiple compute instances to serve high traffic load without performance degradation)</li>
+<li>There is a wide spectrum of EC2 compute instance types to choose from based on model requirements including AWS’ custom chip Inferentia and SageMaker Elastic Inference</li>
+<li>Pre-built inference containers for popular DL frameworks</li>
+<li>Multi-model and multi-container endpoints</li>
+<li>Model production variants for A/B testing</li>
+<li>Multi-model inference pipelines</li>
+<li>Model monitoring for performance, accuracy, and bias</li>
+<li>SageMaker Neo and SageMaker Edge Manager to optimize and manage inference at edge devices</li>
+</ul>
+<p>Since this is a<a id="_idIndexMarker067"/> managed capability, Amazon SageMaker is responsible for the following aspects of managing users’ real-time endpoints:</p>
+<ul>
+<li>Provisioning and scaling the underlying compute infrastructure based on customer-defined scaling policies</li>
+<li>Traffic shaping between model versions and containers in cases where multiple models are deployed on a single SageMaker endpoint.</li>
+<li>Streaming logs and metrics at the level of the compute instance and model.</li>
+</ul>
+<h2 id="_idParaDest-33"><a id="_idTextAnchor030"/>Creating and using your SageMaker endpoint</h2>
+<p>Let’s walk through the <a id="_idIndexMarker068"/>process of configuring, provisioning, and <a id="_idIndexMarker069"/>using your first SageMaker real-time endpoint. This will help to build your understanding of its internal workings and the available configuration options. The following diagram provides a visual guide:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer011">
+<img alt="Figure 1.3 – SageMaker inference endpoint deployment and usage " height="1261" src="image/B17519_01_003.jpg" width="1654"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 1.3 – SageMaker inference endpoint deployment and usage</p>
+<h3>Step 1 – initiating endpoint creation</h3>
+<p>There are several ways to initiate <a id="_idIndexMarker070"/>SageMaker endpoint creation: the SageMaker Python SDK, the boto3 SDK, the AWS CLI, or via a CloudFormation template. As part of the request, there are several parameters that you need to provide, as follows:</p>
+<ul>
+<li><strong class="bold">Model definition</strong> in SageMaker Model Registry, which will be used at inference time. The model definition includes references to serialized model artifacts in S3 and a reference to the inference container (or several containers in the case of a multi-container endpoint) in Amazon ECR.</li>
+<li><strong class="bold">Endpoint configuration</strong>, which defines the number and type of compute instances, and (optional) a combination of several models (in the case of a multi-model endpoint) or <a id="_idIndexMarker071"/>several model production variants (in the case of A/B testing).</li>
+</ul>
+<h3>Step 2 – configuring the SageMaker endpoint for image classification</h3>
+<p>The following Python code <a id="_idIndexMarker072"/>sample shows how to create and deploy an endpoint using the previously trained image classification model:</p>
+<ol>
+<li value="1">Begin with your initial imports, IAM role, and SageMaker session instantiation:<p class="source-code">import sagemaker</p><p class="source-code">from sagemaker import get_execution_role</p><p class="source-code">role = get_execution_role()</p><p class="source-code">sess = sagemaker.Session()</p></li>
+<li>Retrieve the inference container URI for the image classification algorithm:<p class="source-code">image_uri = sagemaker.image_uris.retrieve('image-classification', sess.boto_region_name)</p></li>
+<li>Define where the model artifacts (such as trained weights) are stored in S3:<p class="source-code">model_data = f"s3://{sess.default_bucket}/model_location"</p></li>
+<li>Create a SageMaker <strong class="source-inline">Model</strong> object that encapsulates the model configuration:<p class="source-code">model = Model(</p><p class="source-code">image_uri=image_uri, </p><p class="source-code">model_data=model_data,</p><p class="source-code">name="image-classification-endpoint",</p><p class="source-code">sagemaker_session=sess,</p><p class="source-code">role=role</p><p class="source-code">)</p></li>
+<li>Define the endpoint configuration parameters:<p class="source-code">endpoint_name = "image-classification-endpoint"</p><p class="source-code">instance_type = "ml.g4dn.xlarge"</p><p class="source-code">instance_count = 1</p></li>
+<li>The <strong class="source-inline">.predict()</strong> method submits a request to SageMaker to create an endpoint with a specific<a id="_idIndexMarker073"/> model deployed:<p class="source-code">predictor = model.deploy(</p><p class="source-code">instance_type=instance_type, </p><p class="source-code">initial_instance_count=instance_count,</p><p class="source-code">endpoint_name=endpoint_name,</p><p class="source-code">)</p></li>
+</ol>
+<p>With that done, SageMaker gets to work.</p>
+<h3>Step 3 – SageMaker provisions the endpoint</h3>
+<p>Once your <a id="_idIndexMarker074"/>provision request is submitted, SageMaker performs the following actions:</p>
+<ul>
+<li>It will allocate several instances according to the endpoint configuration</li>
+<li>It will deploy an inference container</li>
+<li>It will download the model artifacts</li>
+</ul>
+<p>It takes several minutes to complete endpoint provisioning from start to finish. The provisioning time depends on the number of parameters, such as instance type, size of the inference container, and the size of the model artifacts that need to be uploaded to the inference instance(s).</p>
+<p>Please <a id="_idIndexMarker075"/>note that SageMaker doesn’t expose inference instances directly. Instead, it uses a fronting load balancer, which then distributes the traffic between provisioned instances. As SageMaker is a managed service, you will never interact with inference instances directly, only via the SageMaker API.</p>
+<h3>Step 4 – SageMaker starts the model server</h3>
+<p>Once the endpoint has been <a id="_idIndexMarker076"/>fully provisioned, SageMaker starts the inference container by running the following command, which executes the <strong class="source-inline">ENTRYPOINT</strong> command in the container:</p>
+<p class="source-code">docker run image serve</p>
+<p>This script does the following:</p>
+<ul>
+<li>Starts the model server, which exposes the HTTP endpoint</li>
+<li>Makes the model server load the model artifacts in memory</li>
+<li>At inference time, it makes the model server execute the inference script, which defines how to preprocess data </li>
+</ul>
+<p>In the case of SageMaker-managed Docker images, the model server and startup logic are already implemented by AWS. If you choose to BYO serving container, then this needs to be implemented separately.</p>
+<p>SageMaker captures the <strong class="source-inline">stdout</strong>/<strong class="source-inline">stderr</strong> streams and automatically streams them to CloudWatch logs. It also streams instances metrics such as the number of invocations total and per instance, invocation errors, and latency measures.</p>
+<h3>Step 5 – the SageMaker endpoint serves traffic</h3>
+<p>Once the model server is up <a id="_idIndexMarker077"/>and running, end users can send a <strong class="source-inline">POST</strong> request to the SageMaker endpoint. The endpoint authorizes the request based on the authorization headers (these headers are automatically generated when using the SageMaker Python SDK or the AWS CLI based on the IAM profile). If authorization is successful, then the payload is sent to the inference instance. </p>
+<p>The running model server handles the request by executing the inference script and returns the response payload, which is then delivered to the end user.</p>
+<h3>Step 6 – SageMaker scales the inference endpoint in or out</h3>
+<p>You may choose to define an auto-scaling policy to scale endpoint instances in and out. In this case, SageMaker will add or remove compute nodes behind the endpoint to match demand<a id="_idIndexMarker078"/> more efficiently. Please note that SageMaker only supports horizontal scaling, such as adding or removing compute nodes, and not changing instance type.</p>
+<p>SageMaker supports several types of scaling events:</p>
+<ul>
+<li>Manual, where the <a id="_idIndexMarker079"/>user updates the endpoint configuration via an API call</li>
+<li>A target tracking policy, where SageMaker scales in or out based on the value of the user-defined metric (for example, the number of invocations or resource utilization)</li>
+<li>A step scaling policy, which provides the user with more granular control over how to adjust the number of instances based on how much threshold is breached</li>
+<li>A scheduled scaling policy, which allows you to scale the SageMaker endpoint based on a particular schedule (for example, scale in during the weekend, where there’s low traffic, and scale out during the weekday, where there’s peak traffic)</li>
+</ul>
+<h3>Advanced model deployment patterns</h3>
+<p>We just reviewed <a id="_idIndexMarker080"/>the anatomy of a simple, single-model real-time endpoint. However, in many real-life scenarios where there are tens or hundreds of models that need to be available at any given point in time, this approach will lead to large numbers of underutilized or unevenly utilized inference nodes.</p>
+<p>This is a generally <a id="_idIndexMarker081"/>undesirable situation as it will lead to high compute costs without any end user value. To address this problem, Amazon SageMaker provides a few advanced deployment options that allow you to combine several models within the same real-time endpoint and, hence, utilize resources more efficiently.</p>
+<h4>Multi-container endpoint</h4>
+<p>When deploying<a id="_idIndexMarker082"/> a multi-container endpoint, you may specify up to 15 different containers within the same endpoint. Each inference container has model artifacts and its own runtime environment. This allows you to deploy models built in various frameworks and runtime environments within a single SageMaker endpoint.</p>
+<p>At creation time, you define a unique container hostname. Each container can then be invoked independently. During endpoint invocation, you are required to provide this container hostname as one of the request headers. SageMaker will automatically route the inference request to a correct container based on this header.</p>
+<p>This feature comes in handy when there are several models with relatively low traffic and different runtime environments (for example, Pytorch and TensorFlow). </p>
+<h4>Inference pipeline</h4>
+<p>Like a multi-container <a id="_idIndexMarker083"/>endpoint, the inference pipeline allows you to combine different models and container runtimes within a single SageMaker endpoint. However, the containers are called sequentially. This feature is geared toward scenarios where an inference request requires pre and/or post-processing with different runtime requirements; for example:</p>
+<ul>
+<li>The pre-processing phase is done using the scikit-learn library</li>
+<li>Inference is done using a DL framework</li>
+<li>Post-processing is done using a custom runtime environment, such as Java or C++</li>
+</ul>
+<p>By <a id="_idIndexMarker084"/>encapsulating different phases of the inference pipeline in separate containers, changes in one container won’t impact adversely other containers, such as updating the dependency version. Since containers within inference pipelines are located on the same compute node, this guarantees low latency during request handoff between containers.</p>
+<h4>Multi-model endpoint</h4>
+<p>Multi-model endpoints allow you to deploy hundreds of models within a single endpoint. Unlike multi-container <a id="_idIndexMarker085"/>endpoints and inference pipelines, a multi-model endpoint has a single runtime environment. SageMaker automatically loads model artifacts into memory and handles inference requests. When a model is no longer needed, SageMaker unloads it from memory to free up resources. This leads to some additional latency when invoking the model for the first time after a while. Model artifacts are stored on Amazon S3 and loaded by SageMaker automatically.</p>
+<p>At the core of the multi-model endpoint is the AWS-developed open source Multi-Model Server, which provides model management capabilities (loading, unloading, and resource allocation) and an HTTP frontend to receive inference requests, execute inference code for a given model, and return the resulting payload.</p>
+<p>Multi-model endpoints are optimal when there’s a large number of homogeneous models and end users can tolerate warmup latency. </p>
+<h2 id="_idParaDest-34"><a id="_idTextAnchor031"/>SageMaker asynchronous endpoints</h2>
+<p>So far, we have discussed SageMaker real-time endpoints, which work synchronously: users invoke<a id="_idIndexMarker086"/> the endpoint by sending a POST request, wait for the endpoint to run inference code, and then return the inference results in the response payload. The inference code is expected to complete within 60 seconds; otherwise, the SageMaker endpoint will return a timeout response.</p>
+<p>In certain scenarios, however, this<a id="_idIndexMarker087"/> synchronous communication pattern can be problematic:</p>
+<ul>
+<li>Large models can take a considerable time to perform inference</li>
+<li>Large payload sizes (for instance, high-resolution imagery)</li>
+</ul>
+<p>For such scenarios, SageMaker provides Asynchronous Endpoints, which allow you to queue inference requests and process them asynchronously, avoiding potential timeouts. Asynchronous endpoints also allow for a considerably larger payload size of up to 1 GB, whereas SageMaker real-time endpoints have a limit of 5 MB. Asynchronous endpoints can be scaled to 0 instances when the inference queue is empty to provide additional cost savings. This is specifically useful for scenarios with sporadic inference traffic patterns.</p>
+<p>The main tradeoff of asynchronous endpoints is that the inference results are delivered in <em class="italic">near</em> real-time and<a id="_idIndexMarker088"/> may not be suited for scenarios where consistent latency is expected:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer012">
+<img alt="Figure 1.4 – SageMaker asynchronous endpoint " height="827" src="image/B17519_01_004.jpg" width="1644"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 1.4 – SageMaker asynchronous endpoint</p>
+<h2 id="_idParaDest-35"><a id="_idTextAnchor032"/>SageMaker Batch Transform</h2>
+<p>SageMaker Batch <a id="_idIndexMarker089"/>Transform allows you to get predictions for a batch of inference inputs. This can be useful for scenarios where there is a recurrent business<a id="_idIndexMarker090"/> process and there are no strict latency requirements. An example is a nightly job that calculates risks for load applications.</p>
+<p> SageMaker Batch Transform is beneficial for <a id="_idIndexMarker091"/>the following use cases:</p>
+<ul>
+<li>Customers only pay for resources that are consumed during job execution</li>
+<li>Batch Transform jobs can scale to GBs and tens of compute nodes</li>
+</ul>
+<p>When scheduling a Batch Transform job, you define the cluster configuration (type and number of compute nodes), model <a id="_idIndexMarker092"/>artifacts, inference container, the input S3 location for the inference dataset, and the output S3 location for the generated predictions. Please note that customers can use the same container for SageMaker real-time endpoints and the Batch Transform job. This allows developers to use the same models/containers for online predictions (as real-time endpoints) and offline (as Batch Transform jobs):</p>
+<div>
+<div class="IMG---Figure" id="_idContainer013">
+<img alt="Figure 1.5 – SageMaker Batch Transform job " height="698" src="image/B17519_01_005.jpg" width="1646"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US"> </p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 1.5 – SageMaker Batch Transform job</p>
+<p>With that, you <a id="_idIndexMarker093"/>understand how to train a simple DL model using a SageMaker training job and then create a real-time endpoint to perform inference. Before we proceed further, we need to learn about several foundational AWS services that are used by Amazon SageMaker that you will see throughout this book.</p>
+<h1 id="_idParaDest-36"><a id="_idTextAnchor033"/>Integration with AWS services</h1>
+<p>Amazon SageMaker relies on<a id="_idIndexMarker094"/> several AWS services, such as storage and key management. In this section, we will review some key integrations with other AWS services and use cases when they can be useful.</p>
+<h2 id="_idParaDest-37"><a id="_idTextAnchor034"/>Data storage services</h2>
+<p>Data storage services are key to building any ML workload. AWS provides several storage solutions to address a wide <a id="_idIndexMarker095"/>range of real-life use cases.</p>
+<p><strong class="bold">Amazon S3</strong> is a form of <a id="_idIndexMarker096"/>serverless object storage and one of AWS’s foundational services. SageMaker utilizes S3 for a wide range of use cases, such as the following:</p>
+<ul>
+<li>To store training datasets</li>
+<li>To store model artifacts and training output</li>
+<li>To store inference inputs and outputs for Asynchronous Endpoints and Batch Transform jobs</li>
+</ul>
+<p>Amazon S3 is a highly durable, scalable, and cost-efficient storage solution. When accessing data stored on S3, developers may choose to either download the full dataset from the S3 location to SageMaker compute nodes or stream the data. Downloading a large dataset from S3 to SageMaker compute nodes to add to the training job’s startup time.</p>
+<h2 id="_idParaDest-38"><a id="_idTextAnchor035"/>Amazon EFS</h2>
+<p><strong class="bold">Amazon Elastic File System</strong> (<strong class="bold">EFS</strong>) is an elastic filesystem service. Amazon SageMaker supports storing<a id="_idIndexMarker097"/> training datasets in EFS locations. At training time, SageMaker nodes mount to the EFS location and directly access the training datasets. In this case, no data movement is required for nodes to access data, which typically results in reduced startup times for training jobs. EFS also allows multiple nodes to persist and seamlessly share data (since this is a shared system). This can be beneficial when the cache or system state needs to be shared across training nodes.</p>
+<h2 id="_idParaDest-39"><a id="_idTextAnchor036"/>Amazon FSx for Lustre</h2>
+<p><strong class="bold">Amazon FSx for Lustre</strong> is a <a id="_idIndexMarker098"/>shared filesystem service designed specifically for low-latency, high-performance scenarios. Amazon FSx automatically copies data from the S3 source and makes it available for SageMaker compute nodes. Amazon FSx has similar benefits to EFS – that is, a reduced startup time for training jobs and a shared filesystem. </p>
+<h2 id="_idParaDest-40"><a id="_idTextAnchor037"/>Orchestration services</h2>
+<p>Orchestration<a id="_idIndexMarker099"/> services allow you to integrate SageMaker-based workloads with the rest of the IT ecosystem.</p>
+<h3>AWS Step Functions</h3>
+<p>AWS Step Functions is a <a id="_idIndexMarker100"/>serverless workflow service that allows you to orchestrate business processes and interactions with other <a id="_idIndexMarker101"/>AWS services. With Step Functions, it’s easy to combine individual steps into reusable and deployable workflows. It supports visual design and branching and conditional logic.</p>
+<p>Step Functions provides native integration with SageMaker resources. Step Functions can be useful in scenarios where you need to orchestrate complex ML pipelines using multiple services in addition to SageMaker. AWS provides developers with the AWS Step Functions Data Science Python SDK to develop, test, and execute such pipelines.</p>
+<h3>Amazon API Gateway</h3>
+<p>Amazon API Gateway is a fully <a id="_idIndexMarker102"/>managed API management <a id="_idIndexMarker103"/>service that’s used to develop, monitor, and manage APIs. API Gateway supports several features that can be helpful when developing highly-scalable and secure ML inference APIs:  </p>
+<ul>
+<li>Authentication and authorization mechanisms</li>
+<li>Request caching, rate limiting, and throttling</li>
+<li>Firewall features</li>
+<li>Request headers and payload transformation</li>
+</ul>
+<p>API Gateway allows you to insulate SageMaker real-time endpoints from external traffic and provide an additional layer of security. It also allows you to provide end users with a unified API without exposing the specifics of the SageMaker runtime API. </p>
+<h2 id="_idParaDest-41"><a id="_idTextAnchor038"/>Security services</h2>
+<p>Robust<a id="_idIndexMarker104"/> security controls are a must-have for any ML workload, especially when dealing with private and sensitive data. While this book does not focus on security, it’s important to understand the basic aspects of permissions and data encryption on AWS.</p>
+<h3>AWS IAM</h3>
+<p><strong class="bold">AWS Identity and Access Management</strong> (<strong class="bold">IAM</strong>) allows customers <a id="_idIndexMarker105"/>to manage access to AWS services and resources. In the case of SageMaker, IAM has a twofold<a id="_idIndexMarker106"/> function:</p>
+<ul>
+<li>IAM roles and policies define which AWS resources SageMaker jobs can access and manage – for example, whether the training job with the assumed IAM role can access the given dataset on S3 or not.</li>
+<li>IAM roles and policies define which principal (user or service) can access and manage SageMaker resources. For instance, it defines whether the given user can schedule a SageMaker training job with a specific cluster configuration.</li>
+</ul>
+<p>Reviewing IAM is outside the scope of this book, but you need to be aware of it. Setting up IAM permissions and roles are prerequisites when working with SageMaker.</p>
+<h3>Amazon VPC</h3>
+<p><strong class="bold">Amazon Virtual Private Cloud</strong> (<strong class="bold">VPC</strong>) is a service that allows you to run your cloud workloads in <a id="_idIndexMarker107"/>logically isolated private networks. This network-level isolation provides an additional level of security and<a id="_idIndexMarker108"/> control over who can access your workload. SageMaker allows you to run training and inference workloads inside a dedicated VPC so that you can control egress and ingress traffic to and from your SageMaker resources.</p>
+<h3>AWS KMS</h3>
+<p><strong class="bold">AWS Key Management Service</strong> (<strong class="bold">KMS</strong>) is used to encrypt underlying data. It also manages access<a id="_idIndexMarker109"/> to cryptographic keys when <a id="_idIndexMarker110"/>encrypting and decrypting data. In the context of SageMaker, KMS is primarily used to encrypt training data, model artifacts, and underlying disks in SageMaker clusters. KMS is integrated with all available storage solutions, such as S3, EFS, and EBS (underlying disk volumes).</p>
+<h2 id="_idParaDest-42"><a id="_idTextAnchor039"/>Monitoring services</h2>
+<p>AWS has dedicated services to<a id="_idIndexMarker111"/> monitor the management, auditing, and execution of other AWS resources. </p>
+<h3>Amazon CloudWatch</h3>
+<p><strong class="bold">CloudWatch</strong> provides<a id="_idIndexMarker112"/> monitoring and observability capabilities. In the <a id="_idIndexMarker113"/>context of SageMaker, it’s used primarily for two purposes: </p>
+<ul>
+<li>To store and manage logs coming from SageMaker resources such as endpoints or training jobs. By default, SageMaker ships <strong class="source-inline">stdout</strong>/<strong class="source-inline">stderr</strong> logs to CloudWatch. </li>
+<li>To store time series metrics. SageMaker provides several metrics out of the box (for example, for real-time endpoints, it streams latency and invocation metrics). However, developers can implement custom metrics.</li>
+</ul>
+<h3>Amazon CloudTrail</h3>
+<p><strong class="bold">CloudTrail</strong> captures all activities (such as<a id="_idIndexMarker114"/> API calls) related to managing any AWS resources, including SageMaker resources. Typically, CloudTrail is used for <a id="_idIndexMarker115"/>governance and auditing purposes, but it can be used to build event-driven workflows. For instance, developers can use it to monitor resource creation or update requests and programmatically react to specific events.</p>
+<h1 id="_idParaDest-43"><a id="_idTextAnchor040"/>Summary</h1>
+<p>We started this chapter by providing a general overview of the DL domain and its challenges, as well as the Amazon SageMaker service and its value proposition for DL workloads. Then, we reviewed the core SageMaker capabilities: managed training and managed hosting. We examined the life cycle of a SageMaker training job and real-time inference endpoint. Code snippets demonstrated how to configure and provision SageMaker resources programmatically using its Python SDK. We also looked at other relevant AWS services as we will be using them a lot in the rest of this book. This will help us as we now have a good grounding in their uses and capabilities.</p>
+<p>In the next chapter, we will dive deeper into the foundational building blocks of any SageMaker workload: runtime environments (specifically, supported DL frameworks) and containers. SageMaker provides several popular pre-configured runtime environments and containers, but it also allows you to fully customize them via its “BYO container” feature. We will learn when to choose one of these options and how to use them.</p>
+</div>
+</div></body></html>

@@ -1,0 +1,112 @@
+<html><head></head><body>
+		<div id="_idContainer090">
+			<h1 id="_idParaDest-115"><em class="italic"><a id="_idTextAnchor117"/>Chapter 8</em>: Topic Classification Using AutoKeras</h1>
+			<p>Sometimes, we need to categorize some specific text, such as a product or movie review, into one or more categories by assigning tags or topics. Topic classification is a supervised machine learning technique that does exactly this job: predicting which categories a given text belongs to. Being a supervised model, it needs to be trained with a set of already categorized train data, along with the texts and the categories that each one belongs to.</p>
+			<p>This chapter will be mainly practical since we laid the foundations for text-based tasks in previous chapters. By the end of this chapter, you will have learned how to create a topic classifier with AutoKeras, as well as how to apply it to any topic or category-based dataset.</p>
+			<p>The main topics that will be covered in this chapter are as follows: </p>
+			<ul>
+				<li>Understanding topic classification </li>
+				<li>Creating a topic classifier with AutoKeras </li>
+				<li>Customizing the model search space</li>
+			</ul>
+			<p>First, let's look at the technical requirements for this chapter.</p>
+			<h1 id="_idParaDest-116"><a id="_idTextAnchor118"/>Technical requirements</h1>
+			<p>All the code examples in this book are available as Jupyter notebooks that can be downloaded from <a href="https://github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras">https://github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras</a>.</p>
+			<p>Since the code cells can be executed, each notebook can be self-installed; simply add a code snippet with the requirements you need. For this reason, at the beginning of each notebook, there is a code cell for environment setup that installs AutoKeras and its dependencies.</p>
+			<p>So, to run the code examples for this chapter, all you need is a computer with Ubuntu Linux as its OS and the Jupyter Notebook installed, which you can do with the following line of code:</p>
+			<p class="source-code">$ apt-get install python3-pip jupyter-notebook</p>
+			<p>Alternatively, you can run these notebooks using Google Colaboratory, in which case you will only need a web browser. See <a href="B16953_02_Final_PG_ePub.xhtml#_idTextAnchor029"><em class="italic">Chapter 2</em></a>, <em class="italic">AutoKeras with Google Colaboratory</em>, for more details. Furthermore, in the <em class="italic">Installing AutoKeras</em> section of that chapter, you will find other installation options.</p>
+			<p>Now, let's put what we've learned into practice by looking at some practical examples.</p>
+			<h1 id="_idParaDest-117"><a id="_idTextAnchor119"/>Understanding topic classification</h1>
+			<p>We saw a small example of topic classification in <a href="B16953_05_Final_PG_ePub.xhtml#_idTextAnchor077"><em class="italic">Chapter 5</em></a>, <em class="italic">Text Classification and Regression Using AutoKeras</em>, with <a id="_idIndexMarker319"/>the example of the spam classifier. In that case, we predicted a category (spam/no spam) from the content of an email. In this section, we will use a similar text classifier to categorize each article in its corresponding topic. By doing this, we will obtain a model that determines which topics (categories) correspond to each news item.</p>
+			<p>For example, let's say our model has input the following title:</p>
+			<p class="source-code">"The match could not be played due to the eruption of a tornado"</p>
+			<p>This will output the <strong class="source-inline">weather</strong> and <strong class="source-inline">sports</strong> topics, as shown in the following diagram:</p>
+			<div>
+				<div id="_idContainer085" class="IMG---Figure">
+					<img src="image/B16953_08_01.jpg" alt="Figure 8.1 – Workflow of a news topic classifier"/>
+				</div>
+			</div>
+			<p class="figure-caption"> Figure 8.1 – Workflow of a news topic classifier</p>
+			<p>The previous diagram shows a simplified version of a topic classifier pipeline. The raw text is processed by the <a id="_idIndexMarker320"/>classifier and the output will be one or more categories.</p>
+			<p>Later in this chapter, we will apply a text classi<a id="_idTextAnchor120"/>fier to a Reuters newswire dataset to put every article into one or more of the 46 categories. Most of the concepts of text classification were already explained in <a href="B16953_05_Final_PG_ePub.xhtml#_idTextAnchor077"><em class="italic">Chapter 5</em></a>, <em class="italic">Text Classification and Regression Using AutoKeras</em>, so in this chapter, we will simply review some of them in a practical way by implementing the topic classifier.</p>
+			<h1 id="_idParaDest-118"><a id="_idTextAnchor121"/>Creating a news topic classifier</h1>
+			<p>The model we are <a id="_idIndexMarker321"/>going to create will classify news from the Reuters newswire classification dataset. It will read the raw text of each news item and classify it into sections, assigning a label corresponding to the section that they belong to (Sports, Weather, Travel, and so on).</p>
+			<p>Reuters newswire is a dataset that contains 11,228 newswires from Reuters, labeled over 46 topics.</p>
+			<p>The text of each news item is encoded as a list of word indexes. These are integers that are indexed by frequency in the dataset. So, here, integer <em class="italic">1</em> encodes the first most frequent word in the data, <em class="italic">2</em> encodes the second most frequent, and so on.</p>
+			<p>The notebook that contains the complete source code can be found at <a href="https://github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras/blob/main/Chapter08/Chapter8_Reuters.ipynb">https://github.com/PacktPublishing/Automated-Machine-Learning-with-AutoKeras/blob/main/Chapter08/Chapter8_Reuters.ipynb</a>.</p>
+			<p>Now, let's have a look at the relevant cells of the notebook in detail:</p>
+			<ul>
+				<li><strong class="bold">Installing AutoKeras</strong>: As we've mentioned in previous chapters, this snippet at the top of the notebook is responsible for installing AutoKeras and its dependencies using the pip package manager:<p class="source-code">!pip3 install autokeras</p></li>
+				<li><strong class="bold">Importing the necessary packages</strong>:  The following lines load <strong class="source-inline">tensorflow</strong>, the built-in Keras Reuters <a id="_idIndexMarker322"/>dataset, into memory, as well as <strong class="source-inline">numpy</strong> and <strong class="source-inline">AutoKeras</strong>, as the necessary dependencies for this project:<p class="source-code">import tensorflow as tf</p><p class="source-code">from tensorflow.keras.datasets import reuters </p><p class="source-code">import numpy as np</p><p class="source-code">import autokeras as ak</p></li>
+				<li><strong class="bold">Creating the datasets</strong>: First, we must load and preprocess the Reuters newswire dataset by using the <strong class="source-inline">reuters_raw</strong> function. Have a look at the code in the notebook for more details:<p class="source-code">(x_train, y_train), (x_test, y_test) = reuters_raw()</p><p class="source-code">print(x_train.shape)  # (8982,)</p><p class="source-code">print(y_train.shape)  # (8982, 1)</p><p>Here is the output of the preceding code:</p><p class="source-code">Downloading data from <strong class="bold">https://storage.googleapis.com/tensorflow/tf-keras-datasets/reuters.npz</strong></p><p class="source-code">2113536/2110848 [==============================] - 0s 0us/step</p><p class="source-code">Downloading data from <strong class="bold">https://storage.googleapis.com/tensorflow/tf-keras-datasets/reuters_word_index.json</strong></p><p class="source-code">557056/550378 [==============================] - 0s 0us/step</p><p class="source-code">(8982,)</p><p class="source-code">(8982, 1)</p></li>
+				<li><strong class="bold">Visualizing the dataset samples</strong>: Next, we can print some words from the first sample to have an <a id="_idIndexMarker323"/>idea of what it contains:<p class="source-code">print(x_train[0][:50])</p><p>Here is the output of the preceding code:</p><p class="source-code">&lt;START&gt; &lt;UNK&gt; &lt;UNK&gt; said as a result of its decemb</p></li>
+			</ul>
+			<p>Let's look at the distribution of the most frequent words in a word cloud. A word cloud (also known as a tag cloud) is a <a id="_idIndexMarker324"/>text-based data visualization technique where words are displayed in different sizes based on how often they appear in the text:</p>
+			<div>
+				<div id="_idContainer086" class="IMG---Figure">
+					<img src="image/B16953_08_02.jpg" alt="Figure 8.2 – A word cloud of the newswire dataset"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.2 – A word cloud of the newswire dataset</p>
+			<p>Now, let's create the newswire classifier model.</p>
+			<h2 id="_idParaDest-119"><a id="_idTextAnchor122"/>Creating the classifier</h2>
+			<p>Now, we will <a id="_idIndexMarker325"/>use the AutoKeras <strong class="source-inline">TextClassifier</strong> to find the best classification model. Just for this example, we will set <strong class="source-inline">max_trials</strong> (the maximum number of different Keras models to try) to 2. We will not set the epochs parameter; instead, we will define an <strong class="source-inline">EarlyStopping</strong> callback of <strong class="source-inline">2</strong> epochs. We're doing this so that the training process stops if the validation loss does not improve in two consecutive epochs:</p>
+			<p class="source-code">clf = ak.TextClassifier(max_trials=2)</p>
+			<p class="source-code">cbs = [tf.keras.callbacks.EarlyStopping(patience=2)]</p>
+			<p>Let's run the training process to search for the optimal classifier for the training dataset:</p>
+			<p class="source-code">clf.fit(x_train, y_train, callbacks=cbs)</p>
+			<p>Here is the output:</p>
+			<div>
+				<div id="_idContainer087" class="IMG---Figure">
+					<img src="image/B16953_08_03.jpg" alt="Figure 8.3 – Notebook output of text classifier training&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.3 – Notebook output of text classifier training</p>
+			<p>The previous output shows that the accuracy of the training dataset is increasing.</p>
+			<p>As we can see, we achieved a 0.965 loss value in the validation set. This is a really good number just for 1 minute <a id="_idIndexMarker326"/>of training. We have limited the search to two architectures (<strong class="source-inline">max_trials = 2</strong>). Increasing this number would give us a more accurate model, although it would also take longer to finish.</p>
+			<h2 id="_idParaDest-120"><a id="_idTextAnchor123"/>Evaluating the model</h2>
+			<p>Now, it's time to <a id="_idIndexMarker327"/>evaluate the best model with the testing dataset:</p>
+			<p class="source-code">Clf.evaluate(x_test, y_test)</p>
+			<p>Here is the output:</p>
+			<p class="source-code">71/71 [==============================] – 1s 7ms/step – loss: 0.9743 – accuracy: 0.7778</p>
+			<p class="source-code">[0.9742580652236938, 0.777827262878418]</p>
+			<p>As we can see, 0.77 (77%) is a good final prediction score for the training time we've invested (less than a couple of minutes).</p>
+			<h2 id="_idParaDest-121"><a id="_idTextAnchor124"/>Visualizing the model</h2>
+			<p>Now, let's look at a <a id="_idIndexMarker328"/>little summary of the architecture for the best generated model:</p>
+			<p class="source-code">Model = clf.export_model()</p>
+			<p class="source-code">model.summary()</p>
+			<p>Here is the output:</p>
+			<div>
+				<div id="_idContainer088" class="IMG---Figure">
+					<img src="image/B16953_08_04.jpg" alt="Figure 8.4 – Best model architecture summary&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.4 – Best model architecture summary</p>
+			<p>As we can see, AutoKeras has chosen a convolution model (Conv1D) to perform this task. As we explained at the beginning of this chapter, this kind of architecture works great when the order of the elements in the sequence is not important for the prediction.</p>
+			<p>Here is a visual representation of this:</p>
+			<div>
+				<div id="_idContainer089" class="IMG---Figure">
+					<img src="image/B16953_08_05.jpg" alt="Figure 8.5 – Best model architecture visualization&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 8.5 – Best model architecture visualization</p>
+			<h2 id="_idParaDest-122"><a id="_idTextAnchor125"/>Evaluating the model</h2>
+			<p>As you already know, generating <a id="_idIndexMarker329"/>models and choosing the best one is done by AutoKeras automatically, but let's explain these blocks in more detail.</p>
+			<p>Each block represents a layer and the output of each is connected to the input of the next except for the first block, whose input is the text, and the last block, whose output is the predicted number. The blocks before Conv1D are all data preprocessing blocks and they are in charge of vectorizing the text generating embeddings to feed this Conv1D block, as well as reducing the dimension of the filters through the max pooling layer. Notice that AutoKeras has also added several dropout blocks to reduce overfitting.</p>
+			<h1 id="_idParaDest-123"><a id="_idTextAnchor126"/>Customizing the model search space</h1>
+			<p>We can customize <a id="_idIndexMarker330"/>the model's search to restrict the search space by using <strong class="source-inline">AutoModel</strong> instead of <strong class="source-inline">TextClassifier</strong>, for example, by setting <strong class="source-inline">TextBlock</strong> for some specific configurations. </p>
+			<p>In the following code snippet, we're telling AutoKeras to only generate models that use <strong class="source-inline">'ngram'</strong> to vectorize the sentences. Remember that if we do not specify any of these arguments, AutoKeras will automatically try all the possible combinations until the number reaches the <strong class="source-inline">max_trial</strong> parameter:</p>
+			<p class="source-code">input_node = ak.TextInput()</p>
+			<p class="source-code">output_node = ak.TextBlock(block_type="ngram")(input_node)</p>
+			<p class="source-code">output_node = ak.ClassificationHead()(output_node)</p>
+			<p class="source-code">clf = ak.AutoModel(inputs=input_node, </p>
+			<p class="source-code">                   outputs=output_node, overwrite=True,</p>
+			<p class="source-code">                   max_trials=1)</p>
+			<p class="source-code">clf.fit(x_train, y_train, epochs=2)</p>
+			<p>Now, let's summarize what we've learned in this chapter.</p>
+			<h1 id="_idParaDest-124"><a id="_idTextAnchor127"/>Summary</h1>
+			<p>In this chapter, we learned how to solve a topic classification task by implementing a high-performance text classifier that categorizes news articles in just a few lines of code.</p>
+			<p>Now that we've laid the groundwork for working with text, we're ready to move on to the next chapter, where you'll learn how to handle multimodal and multitasking data using AutoKeras.</p>
+		</div>
+	</body></html>

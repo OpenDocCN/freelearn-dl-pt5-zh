@@ -1,0 +1,466 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer053">
+<h1 class="chapter-number" id="_idParaDest-113"><a id="_idTextAnchor110"/>7</h1>
+<h1 id="_idParaDest-114"><a id="_idTextAnchor111"/>Operationalizing Deep Learning Training</h1>
+<p>In <a href="B17519_01.xhtml#_idTextAnchor013"><em class="italic">Chapter 1</em></a>, <em class="italic">Introducing Deep Learning with Amazon SageMaker</em>, we discussed how SageMaker integrates with CloudWatch Logs and Metrics to provide visibility into your training process by collecting training logs and metrics. However, <strong class="bold">deep learning</strong> (<strong class="bold">DL</strong>) training jobs are prone to multiple types of specific issues related to model architecture and training configuration. Specialized tools are required to monitor, detect, and react to these issues. Since many training jobs run for hours and days on large amounts of compute instances, the cost of errors is high. </p>
+<p>When running DL training jobs, you need to be aware of two types of issues:</p>
+<ul>
+<li>Issues with model and training configuration, which prevent the model from efficient learning during training. Examples of such issues include vanishing and exploding gradients, <a id="_idIndexMarker588"/>overfitting and underfitting, not decreasing loss, and others. The process of finding such errors is known as <strong class="bold">debugging</strong>.</li>
+<li>Suboptimal model and training configuration, which doesn’t allow you to fully utilize available hardware resources. For instance, let’s say that the batch size is smaller than the optimal value and the GPU resources are underutilized. This leads to a slower <a id="_idIndexMarker589"/>than possible training speed. We call the process of finding such issues <strong class="bold">profiling</strong>.</li>
+</ul>
+<p>In this chapter, we will review the available open source and SageMaker capabilities for training, debugging, and <a id="_idIndexMarker590"/>profiling. We will start with the popular open source tool for training monitoring and debugging called <strong class="bold">TensorBoard</strong> and review how it can be integrated with SageMaker’s training infrastructure. Then, we will compare it to the proprietary <strong class="bold">SageMaker Debugger</strong>, which provides advanced capabilities to help you automatically detect various types of issues and manage your training job accordingly. You will develop practical experience in using both tools.</p>
+<p>Another type of problem you typically need to solve when operationalizing your DL models is establishing an efficient way to find optimal combinations of model hyperparameters. This process is known as <strong class="bold">hyperparameter tuning</strong>. It is especially relevant in the initial <a id="_idIndexMarker591"/>stages of model development and adoption when you need to establish a production-ready model baseline. SageMaker <a id="_idIndexMarker592"/>provides an automated way to tune your model using a feature called <strong class="bold">Automatic Model Tuning</strong>. </p>
+<p>Finally, we will discuss how to reduce the cost of your training job and model tuning jobs by using <strong class="bold">EC2 Spot Instances</strong>.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li>Debugging training jobs</li>
+<li>Profiling your DL training</li>
+<li>Hyperparameter optimization</li>
+<li>Using EC2 Spot Instances</li>
+</ul>
+<p>After reading this chapter, you will be able to establish profiling and debugging procedures for your large-scale DL training to minimize unnecessary costs and time to train. You will also know how to organize hyperparameter tuning and optimize it for cost using Spot Instances.</p>
+<h1 id="_idParaDest-115"><a id="_idTextAnchor112"/>Technical requirements</h1>
+<p>In this chapter, we will provide code samples so that you can develop practical skills. The full code examples are available here: <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter7/">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter7/</a>.</p>
+<p>To follow along with this code, you will need the following:</p>
+<ul>
+<li>An AWS account and IAM user with permission to manage Amazon SageMaker resources.</li>
+<li>Have a SageMaker notebook, SageMaker Studio notebook, or local SageMaker compatible environment established.</li>
+<li>Access to GPU training instances in your AWS account. Each example in this chapter will provide recommended instance types to use. You may need to increase your compute quota for <strong class="bold">SageMaker Training Job</strong> to have GPU instances enabled. In this case, please follow the instructions at <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml</a>.</li>
+<li>You must install the required Python libraries by running <strong class="source-inline">pip install -r requirements.txt</strong>. The file that contains the required libraries is located at the root of <strong class="source-inline">chapter7</strong>.</li>
+</ul>
+<h1 id="_idParaDest-116"><a id="_idTextAnchor113"/>Debugging training jobs</h1>
+<p>To effectively monitor <a id="_idIndexMarker593"/>and debug DL training jobs, we need to have access to the following information:</p>
+<ul>
+<li>Scalar values such as <a id="_idIndexMarker594"/>accuracy and loss, which we use to measure the quality of the training process</li>
+<li>Tensor values such as <a id="_idIndexMarker595"/>weights, biases, and gradients, which represent the internal state of the model and its optimizers</li>
+</ul>
+<p>Both TensorBoard and SageMaker Debugger allow you to collect tensors and scalars, so both can be used to debug the model and training processes. However, unlike TensorBoard, which is primarily used for training visualizations, SageMaker Debugger provides functionality to react to changes in model states in near-real time. For example, it allows us to stop training jobs earlier if training loss hasn’t decreased for a certain period. </p>
+<p>In this section, we will dive deep into how to use TensorBoard and SageMaker Debugger. We will review the features of both solutions in detail and then develop practical experiences of using both solutions to debug your training script.</p>
+<p>Please note that we will use the same examples for both debugging and profiling tasks.</p>
+<h2 id="_idParaDest-117"><a id="_idTextAnchor114"/>Using TensorBoard with SageMaker</h2>
+<p>TensorBoard is an open <a id="_idIndexMarker596"/>source tool developed originally for <a id="_idIndexMarker597"/>the TensorFlow framework, but it is now available <a id="_idIndexMarker598"/>for other DL frameworks, including PyTorch. TensorBoard supports <a id="_idIndexMarker599"/>the following features for visualizing and inspecting the training process:</p>
+<ul>
+<li>Tracking <a id="_idIndexMarker600"/>scalar values (loss, accuracy, and others) over time.</li>
+<li>Capturing tensors such as weights, biases, and gradients and how they change over time. This can be useful for visualizing weights and biases and verifying that they are changing expectedly.</li>
+<li>Experiment tracking via a dashboard of hyperparameters.</li>
+<li>Projecting high-dimensional embeddings to a lower-dimensionality space.</li>
+<li>Capturing images, audio, and text data.</li>
+</ul>
+<p>Additionally, TensorBoard comes with native profiling capabilities for TensorFlow programs. Profiling is also available for PyTorch via an add-on.</p>
+<h3>Debugging PyTorch training</h3>
+<p>Let’s review how <a id="_idIndexMarker601"/>TensorBoard can help you to get insights into <a id="_idIndexMarker602"/>your training process and debug it using a practical example. We will use a pre-trained ResNet model from the PyTorch model zoo and train it to recognize two classes: bees and ants.  </p>
+<p>We provide code highlights in this section. The full training code is available here: <a href="https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter7/1_TensorBoard_PyTorch.ipynb">https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter7/1_TensorBoard_PyTorch.ipynb</a>.</p>
+<h4>Modifying the training script</h4>
+<p>To use TensorBoard, we <a id="_idIndexMarker603"/>need to make minimal changes to our training script. Follow these steps:</p>
+<ol>
+<li>First, we must import and initialize TensorBoard’s <strong class="source-inline">SummaryWriter</strong> object. Here, we are using the S3 location to write TensorBoard summaries:<p class="source-code">from torch.utils.tensorboard import SummaryWriter</p><p class="source-code">tb_writer = SummaryWriter(args.tb_s3_url)</p></li>
+<li>Next, we must capture some training artifacts that won’t change during training – in our case, the model graph. Note that we need to execute the model’s forward path on the sample data to do so:<p class="source-code">sample_inputs, _ = next(iter(dataloaders_dict["val"]))</p><p class="source-code">tb_writer.add_graph(model, sample_inputs, verbose=False, use_strict_trace=False)</p></li>
+<li>In our training loop, we capture the scalars and tensors that we wish to inspect. We <a id="_idIndexMarker604"/>use the epoch number as the time dimension. Let’s say that in our case, we wish to capture the following data:<ul><li>How accuracy and loss change every epoch for training and validation datasets</li><li>Distribution of gradients and weights on the first convolutional and last fully connected layers during the training phase</li><li>The training hyperparameters and how they impact performance</li></ul></li>
+</ol>
+<p>To capture these parameters, we must add the following code to our training loop:</p>
+<p class="source-code">tb_writer.add_histogram("conv1.weight", model.conv1.weight, epoch)</p>
+<p class="source-code">tb_writer.add_histogram("conv1.weight_grad", model.conv1.weight.grad, epoch)</p>
+<p class="source-code">tb_writer.add_histogram("fc.weight", model.fc.weight, epoch)</p>
+<p class="source-code">tb_writer.add_histogram("fc.weight_grad", model.fc.weight.grad, epoch)</p>
+<p class="source-code">tb_writer.add_scalar(f"Loss/{phase}", epoch_loss, epoch)</p>
+<p class="source-code">tb_writer.add_scalar(f"Accuracy/{phase}", epoch_accuracy, epoch)</p>
+<p class="source-code">tb_writer.add_hparams(hparam_dict=vars(args), metric_dict={</p>
+<p class="source-code">                    f"hparam/loss_{phase}": epoch_loss,</p>
+<p class="source-code">                    f"hparam/accuracy_{phase}": epoch_accuracy})</p>
+<p>Now, let’s <a id="_idIndexMarker605"/>review our training job configuration with debugging enabled.</p>
+<h4>Monitoring the training process</h4>
+<p>To start the <a id="_idIndexMarker606"/>SageMaker training job, we need to provide the S3 location where TensorBoard summaries will be written. We can do this by setting the <strong class="source-inline">tb-s3-url</strong> hyperparameter, as shown here:</p>
+<pre class="source-code">
+instance_type = 'ml.p2.xlarge'
+instance_count = 1
+job_name = "pytorch-tb-profiling-12"
+tb_debug_path = f"s3://{bucket}/tensorboard/{job_name}"
+estimator = PyTorch(
+          entry_point="train_resnet_tb.py",
+          source_dir='1_sources',
+          role=role,
+          instance_type=instance_type,
+          sagemaker_session=sagemaker_session,
+          image_uri="763104351884.dkr.ecr.us-east-1.amazonaws.com/pytorch-training:1.10.2-gpu-py38-cu113-ubuntu20.04-sagemaker",
+          instance_count=instance_count,
+          hyperparameters={
+              "batch-size":64,
+              "num-epochs":10,
+              "input-size" : 224,
+              "feature-extract":False,
+              "tb-s3-url": tb_debug_path,
+              "num-data-workers": 4
+          },
+          disable_profiler=True,
+          debugger_hook_config=False,
+          base_job_name=job_name,
+      )</pre>
+<p>Once the training job has started, you can start your TensorBoard locally by running the following command in the terminal: </p>
+<pre class="source-code">
+<strong class="bold">tensorboard --logdir ${tb_debug_path} </strong></pre>
+<p>Note the <a id="_idIndexMarker607"/>following when using TensorBoard in cloud development environments:</p>
+<ul>
+<li>If you are using a SageMaker notebook instance, then TensorBoard will be available here: <strong class="source-inline">https://YOUR_NOTEBOOK_DOMAIN/proxy/6006/</strong></li>
+<li>If you are using SageMaker Studio, then TensorBoard will available here: <strong class="source-inline">https://&lt;YOUR_STUDIO_DOMAIN&gt;/jupyter/default/proxy/6006/</strong></li>
+</ul>
+<p>The TensorBoard data will be updated in near-real time as the training job progresses. Let’s review our training process in TensorBoard:</p>
+<ul>
+<li>On the <strong class="bold">Scalar</strong> and <strong class="bold">Time Series</strong> tabs, you can find changes in scalar values over time. We use the epoch index as an indicator of time. <em class="italic">Figure 7.1</em> shows the training and validation accuracies at every epoch:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer043">
+<img alt="Figure 7.1 – Accuracies over time in TensorBoard " height="329" src="image/B17519_07_001.jpg" width="826"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.1 – Accuracies over time in TensorBoard</p>
+<ul>
+<li>On the <strong class="bold">Graph</strong> tab, you can see visual representations of the model and how data flows from inputs to outputs.</li>
+<li>The <strong class="bold">Histogram</strong> and <strong class="bold">Distributions</strong> tabs visualize tensor distributions over time (for instance, the distribution of weights or gradients changes over epochs). For <a id="_idIndexMarker608"/>example, in <em class="italic">Figure 7.2</em>, we can see how gradient distribution on the last fully connected layer is becoming increasingly concentrated around <strong class="source-inline">0</strong>, which indicates that our model is learning and, hence, the absolute gradient values are decreasing:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer044">
+<img alt="Figure 7.2 – Histogram of model weights in TensorBoard " height="383" src="image/B17519_07_002.jpg" width="674"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.2 – Histogram of model weights in TensorBoard</p>
+<ul>
+<li>The <strong class="bold">HParam</strong> tab allows us to capture and compare hyperparameters side by side. This can be useful for tracking experiments during hyperparameter searches <a id="_idIndexMarker609"/>to identify optimal model and training job configuration.</li>
+</ul>
+<p>Now that we understand how to use TensorBoard to visualize the training process, let’s see how we can use TensorBoard to profile our training job.</p>
+<h3>Profiling PyTorch training</h3>
+<p>TensorBoard provides <a id="_idIndexMarker610"/>out-of-the-box profiling capabilities for TensorFlow programs (including Keras). To profile PyTorch programs in TensorBoard, you <a id="_idIndexMarker611"/>can use the open source <strong class="bold">torch_tb_profiler</strong> plugin. </p>
+<p>When profiling the training process, we are usually interested in the following:</p>
+<ul>
+<li>How efficiently we utilize our resources (GPU and CPU) over time</li>
+<li>What operations (DL operators, data loading, memory transfer, and so on) utilize what resources</li>
+<li>In the case of distributed training, how efficient the communication is between nodes and individual training devices</li>
+<li>How to improve the overall resource utilization and increase training efficiency</li>
+</ul>
+<p>Both the TensorFlow and PyTorch plugins for TensorBoard provide such capabilities for profiling. Let’s review how profiling works for the same task we did for debugging.</p>
+<h4>Modifying the training script</h4>
+<p>To profile <a id="_idIndexMarker612"/>applications using <strong class="source-inline">torch_tb_profiler</strong>, we need to make minimal modifications to our training code. Specifically, we need to wrap our training loop with the plugin context manager, as shown in the following code block:</p>
+<pre class="source-code">
+with torch.profiler.profile(
+    schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=5),
+    on_trace_ready=torch.profiler.tensorboard_trace_handler(
+        os.path.join(os.environ["SM_OUTPUT_DATA_DIR"], "tb_profiler")
+    ),
+    record_shapes=True,
+    profile_memory=True,
+    with_stack=True,
+) as prof:
+    for _, (inputs, labels) in enumerate(dataloaders[phase]):
+      # The rest of training loop without changes</pre>
+<p>The parameters of the context manager that are passed at initialization time define what profiling <a id="_idIndexMarker613"/>data must be gathered and at what intervals. At the time of writing this book, the <strong class="source-inline">torch_db_profiler</strong> plugin doesn’t support writing to the S3 location. Hence, we must write the profiling data to the local output directory stored in the <strong class="source-inline">"SM_OUTPUT_DATA_DIR"</strong> environment variable. After training is done, SageMaker automatically archives and stores the content of this directory to the S3 location.</p>
+<h4>Using TensorBoard Profiler</h4>
+<p>To review the <a id="_idIndexMarker614"/>output of TensorBoard Profiler, we need to download the data to the local environment:</p>
+<ol>
+<li value="1">We will start by getting a path to the profiler data. For this, we can use the training job estimator instance:<p class="source-code">tb_profiler_path = f"{estimator.latest_training_job.describe()['OutputDataConfig']['S3OutputPath']}{estimator.latest_training_job.describe()['TrainingJobName']}/output/output.tar.gz"</p></li>
+<li>Then, in your notebook or terminal window, you can run the following commands to unarchive the profiler data and start TensorBoard:<p class="source-code">aws s3 cp ${ tb_profiler_path} .</p><p class="source-code">mkdir profiler_output</p><p class="source-code">tar -xf output.tar.gz -C profiler_output</p><p class="source-code">tensorboard --logdir ./profiler_output</p></li>
+</ol>
+<p>Upon starting TensorBoard, you should be automatically redirected to the profiler summary. From there, you have access to several views that contain profiling information:</p>
+<ul>
+<li>The <strong class="bold">Overview</strong> tab provides a general summary of the device(s) used for training, their utilization over time, and the breakdown of operations. In our case, for <a id="_idIndexMarker615"/>example, the majority of the time is spent performing kernels that comprise forward and backward model passes. This is generally a good indicator that we utilize our GPU resources on the training model:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer045">
+<img alt="Figure 7.3 – The Overview tab of TensorBoard Profiler " height="359" src="image/B17519_07_003.jpg" width="1392"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.3 – The Overview tab of TensorBoard Profiler</p>
+<ul>
+<li>The <strong class="bold">Operators</strong> tab gives you an idea of how much time specific operators consume (such as convolution or batch normalization). In the following screenshot, we can see, for instance, that the backward pass on convolution layers takes most of the GPU time:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer046">
+<img alt="Figure 7.4 – The Operators tab of TensorBoard Profiler " height="274" src="image/B17519_07_004.jpg" width="627"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.4 – The Operators tab of TensorBoard Profiler</p>
+<ul>
+<li>The <strong class="bold">Kernel</strong> tab breaks <a id="_idIndexMarker616"/>down the time spent performing on specific GPU kernels. For instance, in the following <a id="_idIndexMarker617"/>diagram, you can see that various <strong class="bold">Single-Precision General Matrix Multiply</strong> (<strong class="bold">SGEMM</strong>) kernels take most of the time:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer047">
+<img alt="Figure 7.5 – The Kernel tab of TensorBoard Profiler " height="265" src="image/B17519_07_005.jpg" width="759"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.5 – The Kernel tab of TensorBoard Profiler</p>
+<ul>
+<li>The <strong class="bold">Trace</strong> tab shows the timeline of the profiled operators and GPU kernels, as well as the handoff between CPU and GPU devices (for instance, transferring data inputs from CPU to GPU):</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer048">
+<img alt="" height="655" src="image/B17519_07_006.jpg" width="1306"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.6 – The Trace tab of TensorBoard Profiler</p>
+<ul>
+<li>The <strong class="bold">Memory</strong> tab provides memory utilization over time for a given device. In the following <a id="_idIndexMarker618"/>chart, for instance, you can see allocated memory (that is, memory used to store tensors) and total reserved memory:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer049">
+<img alt="Figure 7.7 – The Memory tab of TensorBoard Profiler " height="467" src="image/B17519_07_007.jpg" width="1312"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.7 – The Memory tab of TensorBoard Profiler</p>
+<p>As you can see, TensorBoard is a great tool for monitoring, debugging, and profiling your training script. TensorBoard, when used with plugins, supports both TensorFlow and PyTorch frameworks. However, one of the drawbacks of TensorBoard is that it doesn’t provide any ways to react to suboptimal conditions, such as underutilization of GPU devices or slow or no convergences of your model during training. To stop training jobs earlier when <a id="_idIndexMarker619"/>such conditions happen, you will need to further instrumentalize your code via callbacks and custom logic. </p>
+<p>SageMaker Debugger addresses these limitations by providing a generic mechanism to detect common training problems and take mitigation actions.</p>
+<h2 id="_idParaDest-118"><a id="_idTextAnchor115"/>Monitoring training with SageMaker Debugger</h2>
+<p>SageMaker Debugger is a <a id="_idIndexMarker620"/>comprehensive SageMaker capability <a id="_idIndexMarker621"/>that allows you to <a id="_idIndexMarker622"/>automatically monitor, debug, and profile DL training jobs running on SageMaker. SageMaker Debugger provides you with insights into your DL training by capturing the internal state of your training loop and instances metrics in near-real time. Debugger also allows you to automatically detect common issues happening during training and take appropriate actions when issues are detected. This allows you to automatically find issues in complex DL training jobs earlier and react accordingly. Additionally, SageMaker Debugger supports writing custom rules for scenarios not covered by built-in rules.</p>
+<p>SageMaker has <a id="_idIndexMarker623"/>several key components:</p>
+<ul>
+<li>The open source <strong class="source-inline">smedebug</strong> library (https://github.com/awslabs/sagemaker-debugger), which integrates <a id="_idIndexMarker624"/>with DL frameworks <a id="_idIndexMarker625"/>and Linux instances to persist debugging and profiling data to Amazon S3, as well as to retrieve and analyze it once the training job has been started</li>
+<li>The SageMaker Python SDK, which allows you to configure the <strong class="source-inline">smedebug</strong> library with no or minimal code changes in your training script</li>
+<li>Automatically provisioned processing jobs to validate output tensors and profiling data against rules</li>
+</ul>
+<p>SageMaker Debugger supports TensorFlow, PyTorch, and MXNet DL frameworks. The <strong class="source-inline">smedebug</strong> library is installed by default in SageMaker DL containers, so you can start using SageMaker Debugger without having to make any modifications to your training script. You can also install the <strong class="source-inline">smdebug</strong> library in a custom Docker container and use all the features of SageMaker Debugger. </p>
+<p class="callout-heading">Note</p>
+<p class="callout">Please note that there are minor differences in the <strong class="source-inline">smedebug</strong> APIs for different DL frameworks.</p>
+<p>The <strong class="source-inline">smedebug</strong> library provides a rich API for configuring, saving, and analyzing captured tensors. It uses a <strong class="source-inline">hook</strong> object to capture tensors and scalars by injecting them into the training process. <strong class="source-inline">hook</strong> allows you to group tensors and scalars into logical tensor <strong class="bold">collections</strong> for analysis. You can define parameters on how often to save a given collection and which tensors to include in the collection when configuring your SageMaker training job. SageMaker Debugger saves default collections without any additional configuration. Note that default collections and their configurations depend on the DL framework. Debugger <em class="italic">rules</em> define which errors we want to monitor and <em class="italic">actions</em> we want to perform once the rule has been triggered. When the rule has been defined, SageMaker Debugger automatically creates a separate processing job to run rule <a id="_idIndexMarker626"/>validation on stored tensors <a id="_idIndexMarker627"/>and trigger actions once the rule is violated. SageMaker Debugger provides multiple built-in rules that address most of the common issues, such as vanishing gradients. You can also define your own custom rule. Note that using Debugger built-in rules is free of charge, while if you choose to use a custom Debugger rule, you will pay the cost of processing jobs and tensor storage. The <strong class="source-inline">Trial</strong> object allows you to query the stored tensors of a given training job for further analysis. You can run tensor queries in real time without waiting for the training job to be fully complete. SageMaker Debugger also supports emitting TensorBoard-compatible summary logs for easy visualization of output tensors and scalars.</p>
+<h3>Using SageMaker Debugger</h3>
+<p>Let’s apply these <a id="_idIndexMarker628"/>concepts to a practical task. We will instrumentalize the ResNet model and fine-tune it for a binary classification task. The full code is available here: https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter7/2_SMDebugger_PyTorch.ipynb.</p>
+<h3>Code instrumentalization</h3>
+<p>The <strong class="source-inline">smedebug</strong> library <a id="_idIndexMarker629"/>requires minimal changes to capture tensors and scalars. First, you need to initiate the <strong class="source-inline">hook</strong> object outside of your training loop, as well as after model and optimizer initialization:</p>
+<pre class="source-code">
+...
+model = initialize_resnet_model(
+    NUM_CLASSES, feature_extract=False, use_pretrained=True
+)
+model.to(torch.device("cuda"))
+optimizer = optim.SGD(params_to_update, lr=0.001, momentum=0.9)
+criterion = nn.CrossEntropyLoss()
+exp_lr_scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+hook = smd.Hook.create_from_json_file()
+hook.register_hook(model)
+hook.register_loss(criterion)
+...</pre>
+<p>Note that we are using <strong class="source-inline">.create_from_json_file()</strong> to create our <strong class="source-inline">hook</strong> object. This method instantiates <strong class="source-inline">hook</strong> based on the hook configuration you provide in the SageMaker training object. Since we are adding both the <strong class="source-inline">model</strong> and <strong class="source-inline">criterion</strong> objects to <strong class="source-inline">hook</strong>, we should expect to see both model parameters (weights, biases, and others), as well as loss scalar.</p>
+<p>Inside our training loop, the only modification we need to make is to differentiate between the training and validation phases by switching between <strong class="source-inline">smedebug.modes.Train</strong> and <strong class="source-inline">smedebug.modes.Eval</strong>. This will allow <strong class="source-inline">smedebug</strong> to segregate the tensors that are captured in the training and evaluation phases:</p>
+<pre class="source-code">
+  for epoch in range(1, args.num_epochs + 1):
+        for phase in ["train", "val"]:
+            if phase == "train":
+                model.train()  # Set model to training mode
+                if hook:
+                    hook.set_mode(modes.TRAIN)
+            else:
+                model.eval()  # Set model to evaluate mode
+                if hook:
+                    hook.set_mode(modes.EVAL)
+            running_corrects = 0
+            running_loss = 0.0
+            step_counter = 0
+            epoch_start = time.time()
+            for _, (inputs, labels) in enumerate(
+            dataloaders[phase]):
+            # inside training loop
+...</pre>
+<p>Now, let’s review <a id="_idIndexMarker630"/>how to configure <strong class="source-inline">hook</strong>, rules, actions, and tensor collections when running a SageMaker training job.</p>
+<h4>Training job configuration</h4>
+<p>As part of the <a id="_idIndexMarker631"/>SageMaker Python SDK, AWS provides the <strong class="source-inline">sagemaker.debugger</strong> library for Debugger configuration. Let’s take a look:</p>
+<ol>
+<li value="1">We will start by importing some Debugger entities:<p class="source-code">from sagemaker.debugger import (</p><p class="source-code">    Rule,</p><p class="source-code">    DebuggerHookConfig,</p><p class="source-code">    TensorBoardOutputConfig,</p><p class="source-code">    CollectionConfig,</p><p class="source-code">    rule_configs,</p><p class="source-code">    ProfilerRule</p><p class="source-code">)</p></li>
+<li>Then, we must define automatic actions and a set of rules. Here, we are using Debugger’s built-in rules to detect some common DL training issues. Note that we can assign different actions to different rules. In our case, we want to stop our training job immediately when the rule is triggered:<p class="source-code">actions = rule_configs.ActionList(</p><p class="source-code">    rule_configs.StopTraining())</p><p class="source-code">rules = [</p><p class="source-code">    Rule.sagemaker(rule_configs.vanishing_gradient(), actions=actions),</p><p class="source-code">    Rule.sagemaker(rule_configs.overfit(), actions=actions),</p><p class="source-code">    Rule.sagemaker(rule_configs.overtraining(), actions=actions),</p><p class="source-code">    Rule.sagemaker(rule_configs.poor_weight_initialization(), actions=actions),</p><p class="source-code">]</p></li>
+<li>Next, we must configure the collection of tensors and how they will be persisted. Here, we will define that we want to persist the weights and losses collection. For <a id="_idIndexMarker632"/>weights, we will also save a histogram that can be further visualized in TensorBoard. We will also set a saving interval for the training and evaluation phases:<p class="source-code">collection_configs=[</p><p class="source-code">        CollectionConfig(</p><p class="source-code">            name="weights",</p><p class="source-code">            parameters={</p><p class="source-code">                "save_histogram": "True"</p><p class="source-code">                }</p><p class="source-code">            ),</p><p class="source-code">        CollectionConfig(name="losses"),</p><p class="source-code">    ]</p><p class="source-code">hook_config = DebuggerHookConfig(</p><p class="source-code">    hook_parameters={"train.save_interval": "1", "eval.save_interval": "1"},</p><p class="source-code">    collection_configs=collection_configs</p><p class="source-code">)</p></li>
+<li>Now, we <a id="_idIndexMarker633"/>are ready to pass these objects to the SageMaker <strong class="source-inline">Estimator</strong> object:<p class="source-code">tb_debug_path = f"s3://{bucket}/tensorboard/{job_name}"</p><p class="source-code">tensorboard_output_config = TensorBoardOutputConfig(</p><p class="source-code">    s3_output_path=tb_debug_path</p><p class="source-code">)</p><p class="source-code">debug_estimator = PyTorch(</p><p class="source-code">          entry_point="train_resnet_sm.py",</p><p class="source-code">          source_dir='2_sources',</p><p class="source-code">          role=role,</p><p class="source-code">          instance_type=instance_type,</p><p class="source-code">          sagemaker_session=sagemaker_session,</p><p class="source-code">          image_uri=image_uri,</p><p class="source-code">          instance_count=instance_count,</p><p class="source-code">          disable_profiler=True,</p><p class="source-code">          rules=rules,</p><p class="source-code">          debugger_hook_config=hook_config,</p><p class="source-code">          tensorboard_output_config=tensorboard_output_config,</p><p class="source-code">          base_job_name=job_name,</p><p class="source-code">      )</p></li>
+</ol>
+<p>Now, we are <a id="_idIndexMarker634"/>ready to start training the job using the <strong class="source-inline">fit()</strong> method. In the next section, we will learn how to retrieve and analyze SageMaker Debugger outputs. </p>
+<h4>Reviewing the Debugger results</h4>
+<p>SageMaker Debugger provides functionality to retrieve and analyze collected tensors from training <a id="_idIndexMarker635"/>jobs as part of the <strong class="source-inline">smedebug</strong> library. In the following steps, we will highlight some key APIs:</p>
+<ol>
+<li value="1">In the following code block, we are creating a new trial object using the S3 path where the tensors were persisted:<p class="source-code">import smdebug.pytorch as smd</p><p class="source-code">tensors_path = debug_estimator.latest_job_debugger_artifacts_path()</p><p class="source-code">trial = smd.create_trial(tensors_path)</p></li>
+<li>Now, let’s output all the available tensors by running the following command:<p class="source-code">print(f"Persisted tensors: {trial.tensor_names()}")</p></li>
+<li>You should be able to see multiple collections with many tensors, including biases, weights, losses, and gradients. Let’s access specific numeric values. Running the following command will return a list of associated scalar values:<p class="source-code">print(f"Loss values {trial.tensor('CrossEntropyLoss_output_0').values()}")</p></li>
+<li>Using a simple plotting function (refer to the sources for its implementation), we can visualize loss for the training and evaluation phases. Running the following command will result in a 2D loss chart. Similarly, you can access and process tensors:<p class="source-code">plot_tensor(trial, "CrossEntropyLoss_output_0")</p></li>
+</ol>
+<p>The following figure visualizes the training and validation losses:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer050">
+<img alt="Figure 7.8 – Training and validation losses " height="454" src="image/B17519_07_008.jpg" width="610"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.8 – Training and validation losses</p>
+<ol>
+<li value="5">Now, let’s review if any rules were triggered during our training:<p class="source-code">for s in debug_estimator.latest_training_job.rule_job_summary():</p><p class="source-code">    print(f"Rule: {s['RuleConfigurationName']}",</p><p class="source-code">          f"status: {s['RuleEvaluationStatus']}")</p></li>
+</ol>
+<p>This <a id="_idIndexMarker636"/>outputs all configured rules; their statuses are as follows:</p>
+<p class="source-code">Rule: VanishingGradient, status: NoIssuesFound</p>
+<p class="source-code">Rule: Overfit, status: NoIssuesFound </p>
+<p class="source-code">Rule: Overtraining, status: NoIssuesFound </p>
+<p class="source-code">Rule: PoorWeightInitialization, status: NoIssuesFound</p>
+<p>As we can see, in our case, no rules were triggered, and our job was completed. You can experiment with rule settings. For instance, you can reset weights on one of the model layers. This will result in triggering the <strong class="source-inline">PoorWeightInitiailization</strong> rule and the training process being stopped.</p>
+<ol>
+<li value="6">Lastly, let’s visually inspect the saved tensors using TensorBoard. For this, we simply <a id="_idIndexMarker637"/>need to start TensorBoard using the S3 path we supplied to the <strong class="source-inline">Estimator</strong> object earlier:<p class="source-code">! tensorboard --logdir  {tb_debug_path}</p></li>
+</ol>
+<p>Feel free to explore TensorBoard on your own. You should expect to find histograms of weights.</p>
+<p>In this section, we reviewed SageMaker Debugger’s key capabilities and learned how to use them. You may have already observed some benefits of SageMaker Debugger over TensorBoard:</p>
+<ul>
+<li>Zero or minimal effort in instrumentalizing your code for SageMaker Debugger</li>
+<li>A rich API to process and analyze output tensors</li>
+<li>A large number of built-in rules and actions with the ability to create custom rules and actions</li>
+<li>TensorBoard functionality is supported out of the box</li>
+</ul>
+<p>With these capabilities, SageMaker Debugger allows you to improve the quality of your training jobs, accelerate experimentation, and reduce unnecessary costs.</p>
+<p>Additionally, SageMaker Debugger provides profiling capabilities. We’ll review them next.</p>
+<h1 id="_idParaDest-119"><a id="_idTextAnchor116"/>Profiling your DL training</h1>
+<p>SageMaker Debugger allows you to collect various types of advanced metrics from your training instances. Once <a id="_idIndexMarker638"/>these metrics have been collected, SageMaker generates detailed metrics visualizations, detects resource bottlenecks, and provides recommendations on how instance utilization can be improved. </p>
+<p>SageMaker Debugger <a id="_idIndexMarker639"/>collects two types of metrics:</p>
+<ul>
+<li><strong class="bold">System metrics</strong>: These <a id="_idIndexMarker640"/>are the resource utilization metrics of training <a id="_idIndexMarker641"/>instances such as CPU, GPU, network, and I/O.</li>
+<li><strong class="bold">Framework metrics</strong>: These <a id="_idIndexMarker642"/>are collected at the DL framework level. This includes <a id="_idIndexMarker643"/>metrics collected by native framework profiles (such as PyTorch profiler or TensorFlow Profiler), data loader metrics, and Python profiling metrics.</li>
+</ul>
+<p>As in the case of debugging, you can define rules that will be automatically evaluated against collected metrics. If a rule is triggered, you can define one or several actions that will be taken. For example, you can send an email if the training job has GPU utilization below a certain threshold. </p>
+<p>It’s time to profile our training code with SageMaker Debugger. You can find the full code in the <em class="italic">Profiling DL Training</em> section at https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter7/2_SMDebugger_PyTorch.ipynb.</p>
+<h3>Configuring the training job for profiling </h3>
+<p>We will start <a id="_idIndexMarker644"/>by defining what system and framework metrics we want to collect. For instance, we can provide a custom configuration for the framework, data loader, and Python. Note that system profiling is enabled by default:</p>
+<pre class="source-code">
+from sagemaker.debugger import (ProfilerConfig, 
+                                FrameworkProfile, 
+                                DetailedProfilingConfig, 
+                                DataloaderProfilingConfig, 
+                                PythonProfilingConfig,
+                                PythonProfiler, cProfileTimer)
+profiler_config=ProfilerConfig(
+    system_monitor_interval_millis=500,
+    framework_profile_params=FrameworkProfile(
+        detailed_profiling_config=DetailedProfilingConfig(
+            start_step=2, 
+            num_steps=1),
+        dataloader_profiling_config=DataloaderProfilingConfig(
+            start_step=2, 
+            num_steps=1),
+        python_profiling_config=PythonProfilingConfig(
+            start_step=2, 
+            num_steps=1, 
+            python_profiler=PythonProfiler.CPROFILE, 
+            cprofile_timer=cProfileTimer.TOTAL_TIME)))</pre>
+<p>Then, we <a id="_idIndexMarker645"/>must provide the profiling config to the SageMaker training job configuration:</p>
+<pre class="source-code">
+profiler_estimator = PyTorch(
+          entry_point="train_resnet_sm.py",
+          source_dir='2_sources',
+          role=role,
+          instance_type='ml.p2.xlarge',
+          sagemaker_session=sagemaker_session,
+          image_uri=image_uri,
+          instance_count=instance_count,
+          hyperparameters={
+              "num-data-workers":8,
+          },
+          disable_profiler=False,
+          profiler_config=profiler_config,
+          rules=rules,
+        #  debugger_hook_config=hook_config,
+        #  tensorboard_output_config=tensorboard_output_config,
+          base_job_name=job_name,
+      )</pre>
+<p>Note that we set <strong class="source-inline">num-data-workers</strong> to <strong class="source-inline">8</strong>, while <strong class="source-inline">ml.p2.xlarge</strong> has only 4 CPU cores. Usually, it’s <a id="_idIndexMarker646"/>recommended to have the number of data workers equal to the number of CPUs. Let’s see if SageMaker Debugger will be able to detect this suboptimal configuration.</p>
+<h4>Reviewing profiling outcomes</h4>
+<p>You can start <a id="_idIndexMarker647"/>monitoring profiling outcomes in near-real time. We will use the <strong class="source-inline">semdebug.profiler</strong> API to process profiling outputs:</p>
+<pre class="source-code">
+training_job_name = profiler_estimator.latest_training_job.job_name
+region = "us-east-1"
+tj = TrainingJob(training_job_name, region)
+tj.wait_for_sys_profiling_data_to_be_available()</pre>
+<p>Once the data is available, we can retrieve and visualize it. Running the following code will chart the CPU, GPU, and GPU memory utilization from system metrics:</p>
+<pre class="source-code">
+from smdebug.profiler.analysis.notebook_utils.timeline_charts import TimelineCharts
+system_metrics_reader = tj.get_systems_metrics_reader()
+system_metrics_reader.refresh_event_file_list()
+view_timeline_charts = TimelineCharts(
+    system_metrics_reader,
+    framework_metrics_reader=None,
+    select_dimensions=["CPU", "GPU"],
+    select_events=["total"],
+)</pre>
+<p>Similarly, you can visualize other collected metrics. SageMaker Debugger also generates a detailed <a id="_idIndexMarker648"/>profiling report that aggregates all visualizations, insights, and recommendations in one place. Once your training job has finished, you can download the profile report and all collected data by running the following command in your terminal:</p>
+<pre class="source-code">
+aws s3 cp s3://&lt;JOB_BUCKET&gt;/&lt;JOB_NAME&gt;/rule-output ./ --recursive</pre>
+<p>Once all the assets have been downloaded, open the <strong class="source-inline">profiler-report.xhtml</strong> file in your browser and review the generated information. Alternatively, you can open <strong class="source-inline">profiler-report.ipynb</strong>, which provides the same insights in the form of an executable Jupyter notebook. </p>
+<p>The report covers the following aspects:</p>
+<ul>
+<li>System usage statistics</li>
+<li>Framework metrics summary</li>
+<li>Summary of rules and their status</li>
+<li>Training loop analysis and recommendations for optimizations</li>
+</ul>
+<p>Note that, in the <em class="italic">Dataloading analysis</em> section, you should see a recommendation to decrease the number of data workers according to our expectations.</p>
+<p>As you can see, SageMaker Debugger provides extensive profiling capabilities, including a recommendation <a id="_idIndexMarker649"/>to improve and automate rule validation with minimal development efforts. Similar to other Debugger capabilities, profiling is free of charge, so long as you are using built-in rules.</p>
+<h1 id="_idParaDest-120"><a id="_idTextAnchor117"/>Hyperparameter optimization</h1>
+<p>A SageMaker Automatic Model Tuning job allows you to run multiple training jobs with a unique combination of hyperparameters in parallel. In other words, a single tuning job creates multiple <a id="_idIndexMarker650"/>SageMaker training jobs. Hyperparameter tuning allows you to speed up your model development and optimization by trying many combinations of hyperparameters in parallel and iteratively moving toward more optimal combinations. However, it doesn’t guarantee that your model performance will always improve. For instance, if the chosen model architecture is not optimal for the task at hand or your dataset is too small for the chosen model, you are unlikely to see any improvements when running hyperparameter optimizations.</p>
+<p>When designing for your tuning job, you need to consider several key parameters of <a id="_idIndexMarker651"/>your tuning job, as follows:</p>
+<ul>
+<li><strong class="bold">Search algorithm</strong> (or <strong class="bold">strategy</strong>): This defines how SageMaker chooses the next combination of hyperparameters. </li>
+<li><strong class="bold">Hyperparameters with ranges</strong>: The SageMaker search algorithm will pick hyperparameter values <a id="_idIndexMarker652"/>within user-defined ranges.</li>
+<li><strong class="bold">Objective metric</strong>: This will be used to compare a combination of hyperparameters and define the best candidate. SageMaker doesn’t restrict you from choosing any arbitrary target metric. </li>
+</ul>
+<p>SageMaker supports two search strategies: <strong class="bold">Bayesian</strong> and <strong class="bold">Random</strong>. Random search selects the next <a id="_idIndexMarker653"/>combination of hyperparameters randomly within <a id="_idIndexMarker654"/>defined ranges. While it’s a simple strategy, it is considered a relatively efficient one. Because the next hyperparameter combination doesn’t depend on previously tried or currently running combinations, you can have a large number of training jobs running in parallel. Bayesian search selects the next combination of hyperparameters based on the outcomes of previous training jobs. Under the hood, SageMaker trains a regression model for this, which takes the results of previous jobs as input (hyperparameters and resulting target metrics) and outputs the candidate hyperparameter combination. Note that the Bayesian model may not converge. In such cases, it makes sense to review identified hyperparameter ranges. </p>
+<p>Choosing hyperparameters and their ranges significantly impacts your tuning job performance. SageMaker supports several types of hyperparameters – categorical, continuous, and integer. You <a id="_idIndexMarker655"/>can combine different types of hyperparameters. For instance, the following code defines the model architecture as a categorical hyperparameter, the learning rate scheduler step is defined as an integer parameter, and the learning rate is defined as a continuous parameter (in other words, a float type): </p>
+<pre class="source-code">
+hyperparameter_ranges = {
+"model_type" : sagemaker.tuner.CategoricalParameter(["resnet", "vgg16", "densenet"]}]),
+"learning_rate" : sagemaker.tuner.ContinuousParameter(0.0001,0.1, scaling_type="Logarithmic"),
+"lr_scheduler_step_size" : sagemaker.tuner.IntegerParameter(10,100, scaling_type="Linear"),
+}</pre>
+<p>Note that for numeric hyperparameters, we also define <strong class="bold">Scaling Type</strong>, which defines the scale of parameters when the search algorithm selects the next value of hyperparameters. In our case, we choose the <strong class="source-inline">"Logarithmic"</strong> scaling type for the learning rate parameter since its range spans multiple orders of magnitude. For the scheduler step size, we choose the <strong class="source-inline">"Linear"</strong> scaling type since its range is narrow.</p>
+<p>You also need to define the objective metric for your hyperparameter tuning job. The objective metric is defined similarly to other metrics via a Regex pattern. Note that you need to ensure that your training script outputs your objective metric in the <strong class="source-inline">stdout/stderr</strong> streams. Follow these steps:</p>
+<ol>
+<li value="1">In the following code, we are defining four metrics that will be captured by SageMaker and then choosing <strong class="source-inline">val_accuracy</strong> as our objective metric to optimize for:<p class="source-code">metric_definitions = [</p><p class="source-code">    {"Name": "train_loss",</p><p class="source-code">     "Regex": "Train Loss = (.*?);"},</p><p class="source-code">    {"Name": "val_loss",</p><p class="source-code">     "Regex": "Val Loss=(.*?);"},</p><p class="source-code">    {"Name": "train_accuracy",</p><p class="source-code">     "Regex": "Train Accuracy = (.*?);"},</p><p class="source-code">    {"Name": "val_accuracy",</p><p class="source-code">     "Regex": "Val Accuracy = (.*?);"},]</p><p class="source-code">objective_metric_name = "val_accuracy"</p></li>
+<li>Next, we must define the parameters of the training job. Note that the hyperparameters <a id="_idIndexMarker656"/>that are provided as part of the training job configuration will be static and won’t be changed as part of the tuning job:<p class="source-code">estimator = PyTorch(</p><p class="source-code">          entry_point="train_script.py",</p><p class="source-code">          role=role,</p><p class="source-code">          instance_type=instance_type,</p><p class="source-code">          sagemaker_session=sagemaker_session,</p><p class="source-code">          image_uri=image_uri,</p><p class="source-code">          instance_count=instance_count,</p><p class="source-code">          hyperparameters={</p><p class="source-code">              "batch-size":64,</p><p class="source-code">              "num-epochs":5,</p><p class="source-code">          })</p></li>
+<li>Then, we must combine our objective metric, metric definitions, and hyperparameter ranges in the <strong class="source-inline">HyperParameterTuner</strong> object, which will orchestrate the <a id="_idIndexMarker657"/>creation of child training jobs and track the overall status of your tuning. Additionally, we must provide the total max number of training jobs and the number of concurrent training jobs. These parameters will have an impact on how quickly the tuning job will run and its total cost:<p class="source-code">tuner = sagemaker.tuner.HyperparameterTuner(</p><p class="source-code">     estimator,</p><p class="source-code">     objective_metric_name,</p><p class="source-code">     hyperparameter_ranges,</p><p class="source-code">     metric_definitions,</p><p class="source-code">     objective_type="Maximize",</p><p class="source-code">     max_jobs=200,</p><p class="source-code">     max_parallel_jobs=10)</p></li>
+</ol>
+<p>Also, pay attention to the <strong class="source-inline">objective_type</strong> parameter, which defines whether the tuning job will try to maximize or minimize the objective metric. Since we chose <strong class="source-inline">accuracy</strong> as our objective metric, we want to maximize it.</p>
+<ol>
+<li value="4">Once the tuner object has been instantiated, you can use the <strong class="source-inline">.fit()</strong> method to start training:<p class="source-code">tuner.fit({"train":train_data_location, "val":val_data_location})</p></li>
+<li>Once the job is completed, you can analyze the outcomes of the tuning job. For this, you can navigate to the AWS console and inspect them visually. Alternatively, you can export tuner job results and statistics to a pandas DataFrame for further analysis, as shown here:<p class="source-code">tuner = sagemaker.HyperparameterTuningJobAnalytics(tuning_job_name)</p><p class="source-code">tuner_results = tuner.dataframe()</p></li>
+</ol>
+<p>Using this method, you <a id="_idIndexMarker658"/>can perform more advanced analytics, such as defining the correlation between various hyperparameters and objective metrics. This type of analysis, for instance, may uncover cases where your hyperparameter ranges need to be modified to further improve the target metric.</p>
+<h1 id="_idParaDest-121"><a id="_idTextAnchor118"/>Using EC2 Spot Instances</h1>
+<p>Running large training and <a id="_idIndexMarker659"/>model tuning jobs can be very expensive. One approach to minimize costs is to use EC2 Spot Instances from a pool of unused compute resources in a chosen AWS region. Thus, Spot Instances are considerably cheaper than regular on-demand instances (up to 90%). However, Spot Instances can be stopped with short notice if the spot capacity of the chosen instance type is exhausted in a given AWS region. </p>
+<p>SageMaker simplifies the provisioning of Spot Instances for training jobs and fully handles interruption and training job restarts when the spot capacity is available again. When the training job is interrupted and then restarted, we want to continue our training process rather than starting from scratch. To support this, your training script needs to be modified so that it can save and restart the training job.</p>
+<p>To support spot training, your training script needs the following modifications:</p>
+<ul>
+<li>When loading the model for the first time, check if there is a model copy already available in the <strong class="source-inline">/opt/ml/checkpoints</strong> path. If the checkpointed model is available, this means that we trained this model previously. To continue training, we need to load the checkpointed model and proceed with training. If the checkpointed model is not available, we proceed with regular model loading:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer051">
+<img alt="Figure 7.9 – Uploading the checkpoint artifacts to S3 storage " height="438" src="image/B17519_07_009.jpg" width="1163"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.9 – Uploading the checkpoint artifacts to S3 storage</p>
+<ul>
+<li>In your training script, you need to specify the checkpoint handler (refer to the DL framework documentation for this) and store your model checkpoints in the designated directory – that is, <strong class="source-inline">/opt/ml/checkpoints</strong>. In the case of Spot Instance <a id="_idIndexMarker660"/>interruption, SageMaker will automatically copy the content of this directory to S3. When the Spot Instance is available again, SageMaker will copy your checkpoints from S3 back to the <strong class="source-inline">/opt/ml/checkpoints</strong> directory:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer052">
+<img alt="Figure 7.10 – Restoring the checkpoint artifacts from S3 storage " height="436" src="image/B17519_07_010.jpg" width="1157"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 7.10 – Restoring the checkpoint artifacts from S3 storage</p>
+<p>When using Spot Instances, please be aware that using spot training may result in longer and unpredictable training times. Each Spot Instance interruption will result in additional startup time during restart. The amount of available spot capacity depends on the instance type and AWS region. GPU-based instance types in certain AWS regions may have very limited <a id="_idIndexMarker661"/>spot capacity. Note that spot capacity constantly fluctuates. You can use the <strong class="bold">Amazon Spot Instance advisor</strong> feature to determine available spot capacity for different EC2 instances, the chance of interruption, and cost savings compared to regular on-demand instances. </p>
+<h1 id="_idParaDest-122"><a id="_idTextAnchor119"/>Summary</h1>
+<p>This chapter concludes <em class="italic">Part 2</em> of this book. In this and the two previous chapters, we discussed how to build and optimize large-scale training jobs. First, we reviewed the available specialized hardware for DL training and how to choose optimal instance types. Then, we discussed how to engineer distributed training using open source and Amazon proprietary solutions. In this chapter, we discussed how to efficiently operationalize your model training. We reviewed different issues that may occur during training and how to detect and mitigate them. We also discussed how to manage and optimize hyperparameter tuning.</p>
+<p>In <em class="italic">Part 3</em>, <em class="italic">Serving Deep Learning Models</em>, we will dive deep into DL inference on Amazon SageMaker. We will discuss what hardware is available for inference and how to engineer your inference server. Then, we will review the operational aspects of model serving. In the next chapter, <a href="B17519_08.xhtml#_idTextAnchor121"><em class="italic">Chapter 8</em></a>, <em class="italic">Considering Hardware for Inference</em>, we will review the available hardware accelerators suitable for inference workloads, discuss selection criteria, and explain how you can optimize your model for inference on specific hardware accelerators using model compilers and SageMaker Neo.</p>
+</div>
+</div>
+
+<div id="sbo-rt-content"><div>
+<div id="_idContainer054">
+</div>
+</div>
+<div class="Content" id="_idContainer055">
+<h1 id="_idParaDest-123"><a id="_idTextAnchor120"/>Part 3: Serving Deep Learning Models</h1>
+<p>In this chapter, we will focus on hosting trained models on Amazon SageMaker. We will review available software and hardware options and provide recommendations on what to choose and when.</p>
+<p>This section comprises the following chapters:</p>
+<ul>
+<li><a href="B17519_08.xhtml#_idTextAnchor121"><em class="italic">Chapter 8</em></a>, <em class="italic">Considering Hardware for Inference</em></li>
+<li><a href="B17519_09.xhtml#_idTextAnchor137"><em class="italic">Chapter 9</em></a>, <em class="italic">Implementing Model Servers</em></li>
+<li><a href="B17519_10.xhtml#_idTextAnchor154"><em class="italic">Chapter 10</em></a>, <em class="italic">Operationalizing Inference Workloads</em></li>
+</ul>
+</div>
+<div>
+<div id="_idContainer056">
+</div>
+</div>
+</div></body></html>

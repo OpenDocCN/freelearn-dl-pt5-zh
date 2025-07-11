@@ -1,0 +1,596 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating Polyphonic Melodies</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Building on the last chapter where we created drum sequences, we can now proceed to create the heart of music—its melody. In this chapter, you'll learn the importance of <strong>Long Short-Term Memory</strong> (<strong>LSTM</strong>) networks in generating longer sequences. We'll see how to use a monophonic Magenta model, the Melody RNN<span>—</span>an LSTM network with a loopback and attention configuration. You'll also learn to use two polyphonic models, the Polyphony RNN and Performance RNN, both LSTM networks using a specific encoding, with the latter having support for note velocity and expressive timing.</p>
+<p class="mce-root">The following topics will be covered in this chapter:</p>
+<ul>
+<li class="mce-root">LSTM for long-term dependencies</li>
+<li>Generating melodies with the Melody RNN</li>
+<li>Generating polyphony with the Polyphony RNN and Performance RNN</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we'll use the following tools:</p>
+<ul>
+<li>The <strong>command line</strong> or <strong>bash</strong> to launch Magenta from the Terminal</li>
+<li><strong>Python</strong> and its libraries to write music generation code using Magenta</li>
+<li><strong>Magenta</strong> to generate music in MIDI</li>
+<li><strong>MuseScore</strong> or <strong>FluidSynth</strong> to listen to the generated MIDI</li>
+</ul>
+<p class="mce-root"/>
+<p>In Magenta, we'll make the use of the <strong>Melody RNN</strong>, <strong>the Polyphony RNN</strong>, and <strong>Performance RNN</strong> models. We'll be explaining those models in depth, but if you feel like you need more information, the model's README in Magenta's source code (<a href="https://github.com/tensorflow/magenta/tree/master/magenta/models">github.com/tensorflow/magenta/tree/master/magenta/models</a>) is a good place to start. You can also take a look at Magenta's code, which is well documented. We also provide additional content in the last section, <em>Further reading</em>.</p>
+<p>The code for this chapter is in this book's <span>GitHub repository </span><span>in the</span> <span><kbd>Chapter03</kbd> </span><span>folder, located at</span> <a href="https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter03">github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter03</a><span>. The examples and code snippets will presume you are located in the chapter folder. For this chapter, you should do</span> <kbd>cd Chapter03</kbd><span> before you start.</span></p>
+<p>Check out the following video to see the Code in Action:<br/>
+<a href="http://bit.ly/314KEzq">http://bit.ly/314KEzq</a></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">LSTM for long-term dependencies</h1>
+                </header>
+            
+            <article>
+                
+<p>In the previous chapter, we learned how <strong>Recurrent Neural Networks</strong> (<strong>RNNs</strong>) are essential for music generation because they make it possible to operate on a sequence of vectors and remember past events. This second part is really important in music generation since past events play an important role in defining the global musical structure. Let's consider the example of a broken minor ninth chord of "A," "C," "E," "G," "B." To predict the last note, "B," the network has to remember four events back to know that this is probably a minor ninth chord being played.</p>
+<p>Unfortunately, as the gap between the relevant information and the point where it is needed grows, RNNs become unable to learn the dependency. In theory, the network could be able to do it, but in practice, it is really difficult. Two common problems with vanilla RNNs are the vanishing gradient problem and the exploding gradient problem, which we'll get to see in this section.</p>
+<p>Fortunately, LSTM networks, introduced in 1997, solve that problem. They are a special type of RNN where each neuron has a memory cell with special gates. As introduced in the previous chapter, the Drums RNN model is an LSTM network as are all of the models in this chapter. Now, let's have a look at how LSTMs work.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Looking at LSTM memory cells</h1>
+                </header>
+            
+            <article>
+                
+<p>LSTM networks have been popular since their invention and for a good reason: they were designed specifically to handle the long-term dependency problem we've been talking about. In Magenta, the RNN models are LSTM networks.</p>
+<p>Let's have a quick refresher with the RNN diagram from the previous chapter. We'll take the same diagram but zoom in on one of the cells and add a bit of detail:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9bdbdd46-7734-433c-8e93-002d7318f688.png"/></p>
+<p><span>We see here that the repeated module is pretty simple: it takes the output from the previous layer, concatenates it with the current input, and uses an activation function (such as tanh, sigmoid, or ReLU) layer to produce both the layer's output and the next layer's input. We also remember that long-term information has to travel through all of the cells and layers in a sequential matter, meaning that information has to be multiplied at each step. This is where the vanishing gradient problem arrives: the values getting multiplied many times by small numbers tend to vanish.</span></p>
+<p class="mce-root"/>
+<p>Let's now see how an LSTM memory cell is designed:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/5596566d-df05-4002-953c-3af38fe8f087.png"/></p>
+<p>The first thing to notice here is the added horizontal line, annotated { ..., <em>c(t-1)</em>, <em>c(t)</em> , <em>c(t+1), ...</em> }, that carries the cell state information forward. The cell state can be modified by three gates—<strong>forget</strong>, <strong>input</strong>, and <strong>output</strong>. We won't go into details on how those gates work since this is outside the scope of this book, but we'll be looking at an example of how it works for our use case.</p>
+<div class="packt_infobox">Check out the last section, <em>Further reading</em>, for references containing more information on LSTM.</div>
+<p>Let's take our example of a broken minor ninth chord to illustrate how the gate layers work. The network is training and has received so far "A", "C", "E", "G", "B", which is its current state. Now the LSTM sees a new note, "C", and what happens? First, let's have a look at the <strong>forget gate layer</strong>. The LSTM will look at <em>h(t-1)</em>, the previous layer output, and <em>x(t)</em>, the current input, which is "C", and output a number for each element in the previous cell state, <em>c(t-1)</em>. The state is then multiplied by that output, varying from 0 to 1, meaning a value closer to 0 will result in a state losing this value, and a value closer to 1 will result in a state keeping this value. Because the input is a "C", and in our state, we already saw a full chord, the network might learn to forget previous information because we are starting a new chord.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>Next, the <strong>input gate layer</strong> will look at <em>h(t-1)</em> and <em>x(t)</em> and decide what additions are going to be made to the state. Using this, the forget gate output gets updated, producing <em>c(t)</em>. The cell state now has new content, meaning our input "C" is now added in the cell state, which will be useful for later layers to detect, for example, a potential start of a C major chord. At this point, the network might also learn other chords, depending on the training data. A properly trained network will learn about the different musical chords based on its training and will output predictions accordingly during inference.</p>
+<p>Finally, the <strong>output gate layer</strong> will produce the output, <em>h(t)</em>, by looking at the new state <em>c(t)</em>, <em>h(t-1)</em>, and <em>x(t)</em>. At this point, the state is already updated and doesn't need further updates. Since our model just saw a "C", it might want to output an "E" to constitute a C Major chord.</p>
+<p>This is a simplified explanation of LSTM but it serves the purpose of understanding how it works for our use case.</p>
+<div class="packt_tip">Looking at the code, you can see where the LSTM memory cell is used. In the <kbd>events_rnn_graph.py</kbd> module, the <kbd>make_rnn_cell</kbd> function uses <kbd>tf.contrib.rnn.BasicLSTMCell</kbd>. You can see that Magenta uses TensorFlow as a backing engine, as LSTM is not defined in Magenta.</div>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Exploring alternative networks</h1>
+                </header>
+            
+            <article>
+                
+<p>To summarize the last section, we have RNNs, which are capable of handling sequences and looking at past events, and LSTM, a specific memory cell implementation for an RNN. Often, a network might be called only RNN but actually uses LSTM memory cells.</p>
+<p>While LSTMs are a huge step forward for keeping long-term information, there are possible improvements. Another type of similar memory cell, <strong>Gated Recurrent Units</strong> (<strong>GRU</strong>), has gained popularity in recent years for its simpler design. Because of that, GRUs are also less expressive, which is a trade-off to look out for.</p>
+<p>A problem with LSTMs is that they use more resources to run because the memory cell takes more memory and more computation to operate. A popular idea for further improvement is the introduction of <strong>attention</strong>, where the RNN can look at a subset of past outputs, making it possible to look at past events without using too much cell memory. We'll be looking at attention in the <em>Having attention for specific steps </em><span>section.</span></p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating melodies with the Melody RNN</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we'll be building on our previous chapter's knowledge by using our Python code to generate music with a new model, the Melody RNN. This section will show how to generate monophony and the next section will show how to handle polyphony.</p>
+<p><strong>Monophony</strong> is the simplest form of musical texture, where the notes, a <strong>melody</strong>, are played by a single instrument, one by one. Sometimes, a melody can be played by multiple instruments, or multiple singers, at a different octave (for example, in a choir), but are still considered monophonic because the backing score is.</p>
+<p><strong>Polyphony,</strong> on the other hand, consists of two or more melody lines played together. For example, a piano score played with two hands is polyphonic since there are two separate melodies to be played together.</p>
+<p>An instrument can be monophonic or polyphonic. For example, a monophonic synthesizer will be able to play only one note at a time (so if you press two notes, only one will come out), and a polyphonic synthesizer or a classic piano will be able to play multiple notes at the same time.</p>
+<p>Here is a small monophonic example from the piano score of <em>Fur Elisa</em> from Beethoven, at bar #37:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/913a7d9b-fcc0-4081-abda-a187742ad89e.png" style="width:45.08em;height:6.67em;"/></p>
+<p>You notice there's only one melody and the notes are played one by one. And here is a small polyphonic example from the same score, at bar #25:<span class="underline"><br/></span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/137820cb-6808-4adc-8a01-fe8bd3ca0f5f.png" style="width:52.58em;height:12.25em;"/></p>
+<p>In this example, you have two melodies played at the same time, typically using both hands on the piano.</p>
+<p>Does polyphony sound familiar? It might, because percussion scores are polyphonic in essence, since multiple melodies (kick drum, hit hats, snare, and so on) are played together to form a complete rhythm. What we're going to see in the next section about polyphony is a bit different though, since we'll need a way to represent a note that spans longer than a single step's length, unlike the previous chapter.</p>
+<p>Let's start by writing some code to generate melodies.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating a song for Fur Elisa</h1>
+                </header>
+            
+            <article>
+                
+<p>For this example, we'll be using a small primer from the piano score of <em>Fur Elisa</em> to generate melodies based on it. The primer looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c35cee40-f6be-436f-aa05-d833c79960a0.png"/></p>
+<p>Notice the time signature is 3/8. We'll be looking into this in a later section, <em>Losing track of time</em>.</p>
+<p>Since you already know how to generate a sequence, we'll only provide what has changed from the previous code; you can reuse what you've written from the previous chapter. We'll be encapsulating the code in a <kbd>generate</kbd> function, making it easy to call with different models and configurations.</p>
+<p class="mce-root"/>
+<div class="packt_tip">You can follow this example in the <kbd>chapter_03_example_01.py</kbd> file in the source code of this chapter. There are more comments and content in the source code, so you should go check it out.<br/>
+<br/>
+You can find the <kbd>generate</kbd> function in that file. We'll be making more versions of this method as we go. The primer for this example is located at <kbd>primers/Fur_Elisa_Beethoveen_Monophonic.mid</kbd>.</div>
+<p>We'll go through the important changes in the <kbd>generate</kbd> function by explaining the new content step by step. The new function signature is as follows:</p>
+<pre><span>from magenta.music import DEFAULT_QUARTERS_PER_MINUTE<br/>from magenta.protobuf.music_pb2 import NoteSequence<br/><br/>def </span><strong>generate</strong>(bundle_name: <span>str</span>,<br/>             sequence_generator,<br/>             generator_id: <span>str</span>,<br/>             primer_filename: <span>str </span>= <span>None</span>,<br/>             qpm: float = DEFAULT_QUARTERS_PER_MINUTE,<br/>             total_length_steps: <span>int </span>= <span>64</span>,<br/>             temperature: <span>float </span>= <span>1.0</span>,<br/>             beam_size: <span>int </span>= <span>1</span>,<br/>             branch_factor: <span>int </span>= <span>1</span>,<br/>             steps_per_iteration: <span>int </span>= <span>1</span>) -&gt; NoteSequence:</pre>
+<p>At the beginning of the function, we can keep the same code we previously had, changing the references to the Drums RNN bundle, generator, and configuration to the respective parameters—<kbd>bundle_name</kbd>, <kbd>sequence_generator</kbd>, and <kbd>generator_id</kbd>:</p>
+<ol>
+<li>First, we'll handle the <kbd>primer_filename</kbd> parameter by using the MIDI file to note sequence function we previously saw, using an empty sequence if no primer is provided:</li>
+</ol>
+<pre style="padding-left: 60px"><span>import magenta.music as mm<br/><br/>if </span>primer_filename:<br/>  primer_sequence = mm.midi_io.<strong>midi_file_to_note_sequence</strong>(<br/>    os.path.join(<span>"primers"</span>, primer_filename))<br/><span>else</span>:<br/>  primer_sequence = NoteSequence()</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<ol start="2">
+<li>Then, we'll handle the <kbd>qpm</kbd> parameter. If a primer sequence has a tempo, we'll use it. If not, we'll use the provided <kbd>qpm</kbd> parameter:</li>
+</ol>
+<pre style="padding-left: 60px"><span>if </span>primer_sequence.tempos:<br/>  <span>if </span><span>len</span>(primer_sequence.tempos) &gt; <span>1</span>:<br/>    <span>raise </span><span>Exception</span>(<span>"No support for multiple tempos"</span>)<br/>  qpm =<strong> primer_sequence.tempos[<span>0</span>].qpm</strong></pre>
+<p style="padding-left: 60px">This introduces the <kbd>tempos</kbd> attribute on the <kbd>NoteSequence</kbd> message, which contains a list of tempo changes. As in MIDI, a score can have multiple tempos, each of them starting and stopping at a specific time. We won't be handling multiple tempos for the sake of simplicity and because Magenta doesn't handle them.</p>
+<ol start="3">
+<li>We then change how we calculate the primer length. This used to be a fixed value, but now we take the end of the last note, given by <kbd>total_time</kbd>, a sequence attribute, and round it up to the closest step beginning. We then calculate the sequence length in seconds from that value:</li>
+</ol>
+<pre style="padding-left: 60px">primer_sequence_length_steps = math.ceil(primer_sequence.total_time<br/>                                         / seconds_per_step)<br/><strong>primer_sequence_length_time</strong> = (primer_sequence_length_steps <br/>                               * seconds_per_step)</pre>
+<p style="padding-left: 60px">The resulting primer end time will be of <kbd>primer_sequence_length_time</kbd>. Remember Magenta handles sequences in seconds, so we always have to calculate timing in seconds.</p>
+<ol start="4">
+<li>We also change how the generation length is calculated by subtracting the primer length by the provided <kbd>total_length_steps</kbd> value:</li>
+</ol>
+<pre style="padding-left: 60px">generation_length_steps = total_length_steps - primer_sequence_length_steps<br/><strong>generation_length_time</strong> = generation_length_steps * seconds_per_step</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<div class="packt_tip">We've been using bars to calculate the primer and generation length in the previous chapter, and now, we are using steps to do the same thing. Both approaches are useful in different circumstances and we wanted to show both.<br/>
+<br/>
+More often than not, using steps is easier to calculate because you don't need to worry about time signatures, which makes the number of steps per bar change.<br/>
+<br/>
+Using bars, on the other hand, makes it easier to make loops that start and stop with proper timing as we did in the previous chapter's exercises.</div>
+<ol start="5">
+<li>We can also add <kbd>beam_size</kbd>, <kbd>branch_factor</kbd>, and <kbd>steps_per_iteration</kbd> to the generator options, as follows:</li>
+</ol>
+<pre style="padding-left: 60px">generator_options.args[<span>'<strong>beam_size</strong>'</span>].int_value = beam_size<br/>generator_options.args[<span>'<strong>branch_factor</strong>'</span>].int_value = branch_factor<br/>generator_options.args[<span>'<strong>steps_per_iteration</strong>'</span>].int_value = steps_per_iteration</pre>
+<ol start="6">
+<li>Finally, we'll save the MIDI and plot to disk so that we can listen to the sequence and show it. It is the same code you saw previously with a bit more information in the filename, with the <kbd>&lt;generator_name&gt;_&lt;generator_id&gt;_&lt;date_time&gt;.&lt;format&gt;</kbd> pattern:</li>
+</ol>
+<pre style="padding-left: 60px"><strong><span># Writes the resulting midi file to the output directory</span></strong><br/>date_and_time = time.strftime(<span>'%Y-%m-%d_%H%M%S'</span>)<br/>generator_name = <span>str</span>(generator.__class__).split(<span>"."</span>)[<span>2</span>]<br/>midi_filename = <span>"%s_%s_%s.mid" </span>% (generator_name,<br/>                                  generator_id,<br/>                                  date_and_time)<br/>midi_path = os.path.join(<span>"output"</span>, midi_filename)<br/>mm.midi_io.note_sequence_to_midi_file(sequence, midi_path)<br/><span>print</span>(<span>"Generated midi file: " </span>+ <span>str</span>(os.path.abspath(midi_path)))<br/><br/><strong><span># Writes the resulting plot file to the output directory</span></strong><br/>date_and_time = time.strftime(<span>'%Y-%m-%d_%H%M%S'</span>)<br/>generator_name = <span>str</span>(generator.__class__).split(<span>"."</span>)[<span>2</span>]<br/>plot_filename = <span>"%s_%s_%s.html" </span>% (generator_name,<br/>                                   generator_id,<br/>                                   date_and_time)<br/>plot_path = os.path.join(<span>"output"</span>, plot_filename)<br/>pretty_midi = mm.midi_io.note_sequence_to_pretty_midi(sequence)<br/>plotter = Plotter()<br/>plotter.save(pretty_midi, plot_path)<br/><span>print</span>(<span>"Generated plot file: " </span>+ <span>str</span>(os.path.abspath(plot_path)))</pre>
+<ol start="7">
+<li>We can now call our brand new <kbd>generate</kbd> method! Let's do a simple example with the Melody RNN model:</li>
+</ol>
+<pre style="padding-left: 60px"><span>from </span>magenta.models.melody_rnn <span>import </span>melody_rnn_sequence_generator<br/><br/>generate(<br/>  <span>"<strong>basic_rnn.mag</strong>"</span>,<br/>  <strong>melody_rnn_sequence_generator</strong>,<br/>  <span>"<strong>basic_rnn</strong>"</span>,<br/>  <span>primer_filename</span>=<span>"Fur_Elisa_Beethoveen_Polyphonic.mid"</span>,<br/>  <span>total_length_steps</span>=<span>64</span>)</pre>
+<p style="padding-left: 60px">So, we've used the <kbd>basic_rnn.mag</kbd> pre-trained bundle with the <kbd>basic_rnn</kbd> configuration and <kbd>melody_rnn_sequence_generator</kbd>. We've asked for 64 steps, which is 4 bars in 4/4 time. But didn't we say the primer has a 3/8 time signature? Yes, but the generated sequence will be in 4/4 time, so we have to make our calculations based on that. We'll be discussing this in a later section, <em>Losing track of time</em>.</p>
+<p style="padding-left: 60px">Calling the method will generate two files in the <kbd>output</kbd> directory, a MIDI <kbd>.mid</kbd> file and a plot <kbd>.html</kbd> file.</p>
+<ol start="8">
+<li>To listen to the generated MIDI, use your software synthesizer or MuseScore. For the software synth, refer to the following command depending on your platform and replace <kbd>PATH_TO_SF2</kbd> and <kbd>PATH_TO_MIDI</kbd> with the proper values:
+<ul>
+<li>Linux: <kbd>fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI</kbd></li>
+<li>macOS: <kbd>fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI</kbd></li>
+<li>Windows: <kbd><kbd>fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI</kbd></kbd></li>
+</ul>
+</li>
+<li>Opening the plot file, we get something like this:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/fe689195-4587-4e81-9176-11fd328db9e3.png"/></p>
+<p>If you listen to it, you'll hear that the generated sample is in the same key as the primer and with similar notes, but the global structure of the primer is lost. That is because the <kbd>basic_rnn</kbd> configuration doesn't learn musical structure as well as the lookback configuration since the encoded vector doesn't contain step positions and repeating musical steps.</p>
+<p>Let's see how we can fix that by looking at the <kbd>attention_rnn</kbd> and <kbd>lookback_rnn</kbd> configurations, which are both LSTMs with specific encodings.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding the lookback configuration</h1>
+                </header>
+            
+            <article>
+                
+<p>To see the lookback configuration in action, we'll first generate a new sequence using the following parameters:</p>
+<pre>generator.generate(<br/>  <span>"<strong>lookback_rnn.mag</strong>"</span>,<br/>  melody_rnn_sequence_generator,<br/>  <span>"<strong>lookback_rnn</strong>"</span>,<br/>  <span>primer_filename</span>=<span>"Fur_Elisa_Beethoveen_Monophonic.mid"</span>,<br/>  <span>total_length_steps</span>=<span>64</span>,<br/>  temperature=1.1)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p>You can see we're using the same <kbd>melody_rnn_sequence_generator</kbd> function but changing the configuration and bundle files. Let's look at the generated sample for the <strong>lookback</strong> configuration:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/aefd249b-b189-4ed5-b98d-511ef245995f.png"/></p>
+<p>You can see here that bar 1 and bar 3 have a repeating musical structure annotated with <strong>s1</strong> and <strong>s2</strong> in the diagram, with bar 0 and bar 2 also having a similar structure.</p>
+<p>If repeating musical structures rings a bell, this is because we've already seen that concept—the Drums RNN uses a lookback encoder, namely, <kbd>LookbackEventSequenceEncoderDecoder</kbd>, the same as we are using here. In the section on encoding in the previous chapter, we saw that the drum notes are encoded into a one-hot vector for the input of the RNN. We have the same thing here, but instead, it's the melody that gets encoded as a one-hot vector.</p>
+<p class="mce-root"/>
+<p>Let's take the diagram we had in <a href="b60deee5-c58f-45eb-88a2-23718802e580.xhtml">Chapter 2</a>, <em>Generating Drum Sequences with Drums RNN</em>, and add more details:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3cbcba20-c5ba-4ad9-a3a9-a32489c1f1de.png"/></p>
+<p>We provide a small example vector for the sake of the example. The index range for the one-hot encoding is 16, which means we can encode 16 classes only. Remember that the encoding for the drum classes had a length of 512. The <kbd>basic_rnn</kbd> <span>configuration </span>of the Melody RNN model encodes the melody to 36 classes by mapping only a portion of the pitches. If we want the full pitch range of 127, we should use the <kbd>mono_rnn</kbd> configuration. The total length of the vector is 55 since we have 3 times a one-hot encoding of 16 classes, plus a binary counter of 5 bits, plus 2 lookback flags.</p>
+<p>Let's break it down into five parts and explain the vector's composition:</p>
+<ol>
+<li>First, we encode the <strong>event of the current step</strong>, which is the part we've already explained in the previous chapter. In the example vector, the event class 1 is encoded, meaning the lowest pitch is played at the current step.</li>
+<li>Then, we encode the <strong>event of the next step for the first lookback</strong>. So, what is a lookback? When the encoder-decoder gets initialized, it takes by default the lookback distances of <em>[default steps per bar, default steps per bar * 2]</em>, namely, [16, 32], which corresponds to the last two bars in the 4/4 time signature. Now, we are looking at the first lookback, which is 16 steps, or 1 bar, before the current step. The encoded event is the next step of that first lookback. In the example vector, the event class 6 is encoded, meaning the corresponding pitch was played 15 steps ago.</li>
+</ol>
+<p> </p>
+<ol start="3">
+<li>Then, we encode the <strong>event of the next step for the second lookback</strong>, which is 31 steps, or 2 bars minus one step, before the current step. In the example vector, the event class 8 is encoded, meaning the corresponding pitch was played 31 steps ago.</li>
+<li>Then, we encode the <strong>step position in the bar binary counter</strong>. The 5-bit vector can encode values from 0 to 15, which is the range of steps we have in 4/4 music. This helps the model to learn musical structure by keeping track of its position inside a bar. In the example vector, the position in the bar is the third step.</li>
+<li>Finally, we encode the <strong>repeating lookback flags</strong>, which encodes whether the current step is repeating the first lookback or second lookback. It helps to learn whether the event is new content or a repetition of previous content. In the example vector, there are no repetitions.</li>
+</ol>
+<div class="mce-root packt_tip">Magenta's source code is well documented and you can see this code in the <kbd>encoder_decoder.py</kbd> <span>file </span>in the <kbd>magenta.music</kbd> module. The class we are looking at is <kbd>LookbackEventSequenceEncoderDecoder</kbd> and the method is <kbd>events_to_input</kbd>.<br/>
+<br/>
+Also, if you are wondering how the models are configured, you can go find the configuration module. For the Melody RNN, search for the <kbd>melody_rnn_model.py</kbd> file; you'll find, in this module, the configurations we are talking about in this section.</div>
+<p>This is important information to feed the model because it enables it to keep the musical structure of the sequence. The model also uses custom labels to reduce the complexity of the information the model has to learn to represent. Since music often has repeating structures on one bar and two bars, the model will use custom labels as appropriate, for example, <kbd>repeat-1-bar-ago</kbd> and <kbd>repeat-2-bar-ago</kbd>. This makes it easier for the model to repeat such phrases without having to store them in its memory cell.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Understanding the attention mask</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we understand the lookback configuration, let's have a look at the attention configuration. We'll start by generating a sequence using the following:</p>
+<pre>generator.generate(<br/>  <span>"<strong>attention_rnn.mag</strong>"</span>,<br/>  melody_rnn_sequence_generator,<br/>  <span>"<strong>attention_rnn</strong>"</span>,<br/>  <span>primer_filename</span>=<span>"Fur_Elisa_Beethoveen_Monophonic.mid"</span>,<br/>  <span>total_length_steps</span>=<span>128</span>,<br/>  temperature=1.1)</pre>
+<p>We're generating a longer sequence of 128 steps to try and see the longer dependencies in the musical structure. Let's look at the generated sample for the <strong>attention</strong> configuration:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/0035273a-8557-4892-8ba0-d7d1b8a04d22.png"/></p>
+<p>You can see here that, during the eight-bar generation, the model was able to keep track of the musical structure for six bars before wandering off. As previously stated in this chapter's first section, <em>Looking at an LSTM memory cell</em>, attention models are relatively new but powerful tools to remember long-term structures.</p>
+<p>In Magenta, attention is implemented by looking at the previous <em>n</em> steps using an attention mechanism. The exact way the attention mechanism works is outside the scope of this book, but we'll show an example to have an idea of how it works.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>First, an <em>n</em> length vector is calculated using the previous <em>n</em> steps and the current cell state. This gives us how much attention each step should receive. By normalizing it, we get the <strong>attention mask</strong>. For example, it could be <em>[0.2, 0.8, 0.5]</em> for <em>n</em> equals 3, with the first element (0.2) corresponding to the attention the previous step gets, the second element (0.8) the attention for the step before that, and so on.</p>
+<p>Then, we take the three previous steps' output and apply the attention mask on them. The output of a step, for example <em>[0.0, 1.0, 1.0, 0.0]</em>, represents to the encoding of one step. Take a look at this example:</p>
+<ul>
+<li><strong>Step 1</strong>: <em>[0.0, 1.0, 1.0, 0.0]</em> becomes <em>[0.0, 0.2, 0.2, 0.0]</em> by applying 0.2 (the first element of the attention mask) to each value.</li>
+<li><strong>Step 2</strong>: <em>[0.0, 0.0, 1.0, 0.0]</em> becomes <em>[0.0, 0.0, 0.8, 0.0]</em> by applying 0.8 (the second element of the attention mask) to each value.</li>
+<li><strong>Step 3</strong>: <em>[0.5, 0.0, 0.0, 0.0]</em> becomes <em>[0.25, 0.0, 0.0, 0.0]</em> by applying 0.5 (the third element of the attention mask) to each value.</li>
+</ul>
+<p>Finally, we sum the resulting vectors and get <em>[0.25, 0.2, 1.0, 0.0]</em>, which corresponds to the <em>n</em> previous outputs, each contributing in a different proportion. That resulting vector is then combined with the RNN output for that current step and applied to the input of the next step.</p>
+<p>By using attention, we can directly inject information of the previous outputs into the current step's calculation, without having to store all of the information about the cell's state. This is a powerful mechanism that has usage in many network types.</p>
+<p>In Magenta, you can see when attention is used by searching for the <kbd>attn_length</kbd> argument in the model configuration. If that argument is provided, when the RNN cell is instantiated, an attention wrapper is used. You can see the code in <kbd>events_rnn_graph.py</kbd> in <kbd>make_rnn_cell</kbd>:</p>
+<pre><span># Add attention wrapper to first layer.<br/></span>cell = tf.contrib.rnn.AttentionCellWrapper(cell, attn_length, <br/>                                           <span>state_is_tuple</span>=<span>True</span>)</pre>
+<p>The length of the attention will define the number of steps (<em>n</em>) of the previous outputs the attention will take into account during training. You can see that the Drums RNN, the Melody RNN, and Improv RNN have attention configurations.</p>
+<p>To change the attention configuration during training to 64 steps, for example, use the <kbd>attn_length=64</kbd><span> </span><span>hyperparameter</span><span>.</span></p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Losing track of time</h1>
+                </header>
+            
+            <article>
+                
+<p>By now, you will have noticed that we lost the initial primer time signature of 3/8. To understand what 3/8 means, let's go back to what we've learned. First, let's remember we have 4 steps per quarter note because this is mainly the sample rate in Magenta. Then, we have the following:</p>
+<ul>
+<li>In <strong>4</strong>/<strong>4 time</strong>, you have 4 steps per quarter notes times 4 quarter notes in a bar (numerator), which equals 16 steps per bar.</li>
+<li>In <strong>3</strong>/<strong>4 time</strong>, you have 4 steps per quarter notes times 3 quarter notes in a bar (numerator), which equals 12 steps per bar.</li>
+<li>In <strong>3</strong>/<strong>8 time</strong>, you have 2 steps per eight notes times 3 eight notes in a bar (numerator), which equals 6 steps per bar. This is because an eight note means it is half the time of a quarter note, so we have 2 steps per eight notes.</li>
+</ul>
+<p>Why are we looking into this? We are doing so because time signature doesn't change how many steps or notes we have in a score, but it does change its structure. Because the Melody RNN model supposes a certain structure, it won't be able to adapt to a new one. In our case, the model assumes 4/4 time for two reasons:</p>
+<ul>
+<li>The binary counter representing the position in the bar is defined for 4/4 time because it counts from 0 to 15 for one bar (instead of 0 to 5 in 3/8 time).</li>
+<li>The default lookback in the model is configured to [16, 32] steps, which are the number of steps to lookback in 4/4 time for 1 and 2 bars respectively (instead of 6 and 12 in 3/8 time).</li>
+</ul>
+<p>Those are the reasons why this model won't understand our primer's time signature, and finds structures and repetitions on 4/4 time instead of 3/8 time. You might also notice the generate sequence doesn't have a time signature, which, by default, we assume is 4/4.</p>
+<p>A time signature is important for the global musical structure of a musical piece and for quantization. Different time signatures will change the way the notes are rounded to the closest steps since it makes the number of steps change.</p>
+<p>You can always get the time signature by using <kbd>sequence.time_signatures</kbd> on a <kbd>NoteSequence</kbd> instance. This returns a list in Protobuf, on which you can use the <kbd>add</kbd> method, which adds and returns a new <kbd>TimeSignature</kbd> element.</p>
+<p>Magenta supports any time signature, but all of the models in Magenta were trained in 4/4 time. To generate sequences in another time signature, we'll have to build a proper dataset, create a new configuration, and train the model. Refer to <a href="1ca56e24-b4d2-40de-b4cf-ae6bbb3c0eef.xhtml">Chapter 6</a>, <em>Data Preparation for Training</em>, and <a href="6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml">Chapter 7</a>, <em>Training Magenta Models</em>, for information on how to do that.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating polyphony with the Polyphony RNN and Performance RNN</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we've talked in depth about melodies, their representation, encoding, and configuration, we can talk about polyphony. We'll use two models, the Polyphony RNN and Performance RNN, to generate polyphonic music. We'll also look into the encoding of such a musical structure since it is different than monophonic encoding.</p>
+<p>Let's start by reminding ourselves that we've used a primer from Beethoven's <em>Fur Elise</em> composition in the last example. We'll now use the polyphonic version of it, which looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/43e96a60-efdf-4491-a206-d2d18b43ae20.png"/></p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>You can see that indeed the primer is polyphonic since multiple notes are being played at the same time. You should know that using a polyphonic primer in a monophonic model will result in an error. You can verify that by calling our <kbd>generate</kbd> method from the previous section using the following parameters:</p>
+<pre>generate(<br/>  <span>"basic_rnn.mag"</span>,<br/>  melody_rnn_sequence_generator,<br/>  <span>"basic_rnn"</span>,<br/>  <span>primer_filename</span>=<span>"<strong>Fur_Elisa_Beethoveen_Polyphonic</strong>.mid"</span>,<br/>  <span>total_length_steps</span>=<span>32</span>,<br/>  <span>temperature</span>=<span>0.9</span>)</pre>
+<p>You'll get the following error because there are too many extracted melodies:</p>
+<pre><strong>Traceback (most recent call last):</strong><br/><strong>  File "/home/Packt/hands-on-music-generation-with-magenta/Chapter03/01.py", line 263, in &lt;module&gt;</strong><br/><strong>    tf.app.run(app)</strong><br/><strong>  ...</strong><br/><strong>  File "/home/Packt/miniconda3/envs/magenta/lib/python3.5/site-packages/magenta/models/melody_rnn/melody_rnn_sequence_generator.py", line 91, in _generate</strong><br/><strong>    assert len(extracted_melodies) &lt;= 1</strong><br/><strong>AssertionError</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Differentiating conditioning and injection</h1>
+                </header>
+            
+            <article>
+                
+<p>Let's now take the code we've already written, our <kbd>generate</kbd> function, and add some content so that we can call it with the Polyphony RNN model:</p>
+<div class="packt_tip">You can follow this example in the <kbd>chapter_03_example_02.py</kbd> <span>file</span><span> </span>in the source code of this chapter. There are more comments and content in the source code, so you should go check it out.<br/>
+<br/>
+You can find the <kbd>generate</kbd> method in that file. We'll be making more versions of this method as we go. The primer for this example is located at <kbd>primers/Fur_Elisa_Beethoveen_Polyphonic.mid</kbd>.</div>
+<ol>
+<li>First, we'll add two new parameters that are specific to this model, <kbd>condition_on_primer</kbd> and <kbd>inject_primer_during_generation</kbd>. You can modify the generate method signature as follow:</li>
+</ol>
+<pre style="padding-left: 60px"><span>from magenta.music import DEFAULT_QUARTERS_PER_MINUTE<br/>from magenta.protobuf.music_pb2 import NoteSequence<br/><br/>def </span>generate(bundle_name: <span>str</span>,<br/>             sequence_generator,<br/>             generator_id: <span>str</span>,<br/>             qpm: <span>float </span>= DEFAULT_QUARTERS_PER_MINUTE,<br/>             primer_filename: <span>str </span>= <span>None</span>,<br/>             <strong>condition_on_primer</strong>: <span>bool </span>= <span>False</span>,<br/>             <strong>inject_primer_during_generation</strong>: <span>bool </span>= <span>False</span>,<br/>             total_length_steps: <span>int </span>= <span>64</span>,<br/>             temperature: <span>float </span>= <span>1.0</span>,<br/>             beam_size: <span>int </span>= <span>1</span>,<br/>             branch_factor: <span>int </span>= <span>1</span>,<br/>            steps_per_iteration: <span>int </span>= <span>1</span>) -&gt; NoteSequence:</pre>
+<ol start="2">
+<li>And then add the parameters to the generator options:</li>
+</ol>
+<pre style="padding-left: 60px">generator_options.args['<strong>condition_on_primer</strong>'].bool_value = (<br/>    condition_on_primer)<br/>generator_options.args['no_inject_primer_during_generation'].bool_value = (<br/>    not <strong>inject_primer_during_generation</strong>)</pre>
+<p style="padding-left: 60px">Be careful with <kbd>inject_primer_during_generation</kbd>; it is inverted in the arguments map.</p>
+<ol start="3">
+<li>We can now launch some generations:</li>
+</ol>
+<pre style="padding-left: 60px">generate(<br/>  <span>"polyphony_rnn.mag"</span>,<br/>  polyphony_sequence_generator,<br/>  <span>"polyphony"</span>,<br/>  <strong><span>condition_on_primer</span>=<span>True</span></strong>,<br/>  <strong><span>inject_primer_during_generation</span>=<span>False</span></strong>,<br/>  <span>temperature</span>=<span>0.9</span>,<br/>  <span>primer_filename</span>=<span>"Fur_Elisa_Beethoveen_Polyphonic.mid"</span>)<br/><br/>generate(<br/>  <span>"polyphony_rnn.mag"</span>,<br/>  polyphony_sequence_generator,<br/>  <span>"polyphony"</span>,<br/>  <strong><span>condition_on_primer</span>=<span>False</span></strong>,<br/>  <strong><span>inject_primer_during_generation</span>=<span>True</span></strong>,<br/>  <span>temperature</span>=<span>0.9</span>,<br/>  <span>primer_filename</span>=<span>"Fur_Elisa_Beethoveen_Polyphonic.mid"</span>)</pre>
+<p>What we've done here is activated only one of the new parameters at a time to see its impact on the generated sequence.</p>
+<p>The <kbd>condition_on_primer</kbd> <span>parameter</span><span> </span><span>is used to provide the primer sequence to the RNN before it begins its generation. This needs to be activated for the primer to be taken into account. It is useful to start a sequence with, on a certain key. You can see it in action in this generation:</span></p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a80698da-0a11-483c-a1d7-25740fd4c9cf.png"/></p>
+<p>Notice the generated sequence is in key.</p>
+<p>The <kbd>inject_primer_during_generation</kbd> <span>parameter</span><span> </span><span>will inject the primer in the generator's output, which means we'll basically have the full primer in the output. You can see it in action in this generation:</span></p>
+<p class="mce-root"/>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/c80bf417-4f53-40c1-b812-49889ed67c1c.png"/></p>
+<p>Notice the generated sequence has the full primer in it. You should try different values to see their impact on the generated sequence.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Explaining the polyphonic encoding</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we saw a generated polyphonic sequence, let's look at how this type of sequence gets generated. First, let's look at the <kbd>PolyphonyRnnModel</kbd> <span>model </span><span>in the module, </span><kbd>polyphony_model.py</kbd><span>. We first notice that the model doesn't define anything new, which means the generation's code is the same as the previous chapter, defined in the <em>Understanding the generation algorithm</em> </span><span>section</span><span>.</span></p>
+<p>What is different is the way the model encodes its one-hot vector using <kbd>PolyphonyOneHotEncoding</kbd>. Now, multiple notes can be played at the same time and a single note can spawn multiple steps.</p>
+<p class="mce-root"/>
+<p>In the Drums RNN encoding, multiples notes could be struck at the same time because it encoded a combination of multiple notes to a specific event, but it couldn't encode a note that spawned multiple steps since a note didn't have a specific marker for start and stop. The Melody RNN encoding is similar in that matter.</p>
+<p>Let's take the first four steps of our previously generated example to see how that polyphonic encoding works:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/14f1f639-b427-4978-a5ee-94d4eb57377b.png"/></p>
+<p>Here, we see 5 notes of pitches, <em>{69, 45, 52, 57, 60}</em>, over 4 steps, with the first note, 69, spanning two steps. The Polyphony RNN uses five different event classes to encode this. For the classes without pitch, used to represent the structure of the sequence, you have <kbd>START</kbd>, <kbd>END</kbd>, and <kbd>STEP_END</kbd>. For the classes with a pitch, used to represent a note, you have <kbd>NEW_NOTE</kbd> and <kbd>CONTINUED_NOTE</kbd>.</p>
+<p class="mce-root"/>
+<p>Let's try to encode our sequence:</p>
+<pre><strong>START</strong><br/>NEW_NOTE 69<br/>NEW_NOTE 45<br/><strong>STEP_END</strong><br/>CONTINUED_NOTE 69<br/>NEW_NOTE 52<br/><strong>STEP_END</strong><br/>NEW_NOTE 57<br/><strong>STEP_END</strong><br/>NEW_NOTE 60<br/><strong>STEP_END</strong><br/><strong>END</strong></pre>
+<p>What is interesting here is to notice the note continuation on the second step. Also, note endings are not explicitly specified; a note will end if, at <kbd>CONTINUED_NOTE</kbd>, the event is not present in the following step. This is different to the encoding presented in the next section.</p>
+<p>This sequence gets generated by multiple passes of an RNN generation. This is different than what we saw for a monophonic generation since, previously, it would take the RNN one step to generate one sequence step. Now, we need approximately 5 RNN steps to generate one sequence step. You can see that in the console output. For this example, we have the following:</p>
+<pre>[polyphony_sequence_generator.py:171] Need to generate 40 more steps <br/>for this sequence, will try asking <strong>for 200 RNN steps</strong></pre>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Performance music with the Performance RNN</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have a grip on the Polyphony RNN, we'll be looking into the Performance RNN, a powerful model with more options and pre-trained models than the Polyphony RNN. First, let's have a look at the different pre-trained bundles. Remember that a pre-trained bundle is associated with a specific configuration. This time, you can go see the different configurations in the <kbd>performance_model.py</kbd> module.</p>
+<p>In the Performance RNN, a different encoding than the Polyphony RNN is used, with new event classes such as <kbd>NOTE_ON</kbd>  and <kbd>NOTE_OFF</kbd>. That might sound familiar because this is also how MIDI encodes its information.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>Let's first look at a couple of configuration to start:</p>
+<ul>
+<li>The <kbd>performance</kbd> configuration supports expressive timing, where the notes won't fall exactly on steps beginning and end, giving it a more "human" feel or "groove" (we'll be also looking into groove in the following chapter, <em>Latent Space Interpolation with Music VAE</em>). An event class, <kbd>TIME_SHIFT</kbd>, is used to represent that, which defines an advance in time.</li>
+<li>The <kbd>performance_with_dynamics</kbd> configuration supports note velocity, where the notes aren't all played with the same force. An event class, <kbd>VELOCITY</kbd>, is used to represent that.</li>
+</ul>
+<p>Those two additions are important in generating expressive sequences that are closer to what a human player would do.</p>
+<p>Now, let's look at two more configurations:</p>
+<ul>
+<li>The <kbd>density_conditioned_performance_with_dynamics</kbd> configuration supports density conditioning, where the quantity of generated notes can be modified.<strong><br/></strong></li>
+<li>The <kbd>pitch_conditioned_performance_with_dynamics</kbd> configuration supports pitch conditioning, where the pitch distribution of the generated sequence can be controlled.</li>
+</ul>
+<p>These configurations do not change the encoding but control how the generation is executed.</p>
+<p>For the first configuration, we need to remember our previous example with the Polyphony RNN, where multiple RNN steps were needed to generate one sequence step. Changing the generation option, <kbd>notes_per_second</kbd>, will change the number of RNN steps for each sequence step, reducing or augmenting the generation density.</p>
+<p>For the second configuration, a histogram can be provided with the relative density of each pitch in an octave using the generator option, <kbd>pitch_class_histogram</kbd>.  The histogram is a list of 12 values (there are 12 notes per octave) with a value of frequency for each pitch, corresponding to <em>[C, C#, D, D#, E, F, F#, G, G#, A, A#, B]</em>. For an F Major scale, with F happening twice as much, you would have: <em>[1, 0, 1, 0, 1, 2, 0, 1, 0, 1, 0, 1]</em>.</p>
+<div class="packt_tip">You can see this example in action in the <kbd>chapter_03_example_03.py</kbd> <span>file</span> in the source code of this chapter. We won't be looking at the code here since it is similar to the previous two examples.</div>
+<p class="mce-root"/>
+<p>To learn expressive timing and dynamics, these models have been trained on real piano performances from the Yamaha e-Piano Competition (you can find them at <a href="http://www.piano-e-competition.com/midiinstructions.asp">www.piano-e-competition.com/midiinstructions.asp</a>).</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating expressive timing like a human</h1>
+                </header>
+            
+            <article>
+                
+<p>Here is an example of a generation with the Performance RNN, with the pre-trained model, <kbd>density_conditioned_performance_with_dynamics</kbd>, with a parameter of <kbd>notes_per_second=8</kbd>. We're showing only the generated part, which is four bars after the primer:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/3e75a3d8-12bc-454a-a514-cec205ac79d4.png"/></p>
+<p class="mce-root"/>
+<p>You will notice a couple of things here:</p>
+<ul>
+<li>First, the notes do not all have the same height. This is because we can ask Visual MIDI to scale the note height according to their velocity. The bigger the note, the louder it is. Remember, velocity in MIDI is from 0 to 127. For example, the first note of pitch 71 has a velocity of 77.</li>
+<li>Second, the notes do not fall directly on bar subdivisions—they start and end a bit off, just before or after the steps boundaries. This is possible because the model uses a <kbd>TIME_SHIFT</kbd> event and was trained on a dataset that was played by human players, which contained such a groove. This is very interesting and different than what we were previously doing: we are not generating sheet music anymore; we are generating a performance.</li>
+</ul>
+<p>Generating a quantized score or generating a groovy performance, both have their specific usage, so you'll need to decide which suits best your goals. Because of the performance nature of the generated sequence, opening the file in music notation software such as MuseScore might look a bit messy.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we looked at generating melodies, using both monophonic and polyphonic models.</p>
+<p>We first started by looking at LSTM cells and their usage in RNNs to keep information for a long period of time, using forget, input, and output gates.</p>
+<p>Then, we generated melodies with the Melody RNN, using multiple pre-trained models such as basic, lookback, and attention. We saw that the basic model cannot learn repeating structure, because its input vector encoding do not contain such information. We then looked at the lookback encoding, where step position in bar and repeating structure are encoded into the input vector, making it possible for the model to learn such information. We finally saw the attention model, where the attention mechanism makes it possible to look at multiple previous steps, using an attention mask that gives a weight to each step.</p>
+<p>Finally, we generated polyphony using the Polyphony RNN and the Performance RNN. In the former model, we learned how polyphony can be encoded in a vector, using start and continue events. In the latter model, we learned another polyphony encoding, using note on and note off events, similar to what MIDI uses. In the Performance RNN, we also learned about expressive generation, both in terms of timing and velocity changes.</p>
+<p class="mce-root"/>
+<p>As we now know, expressive timing is what gives the music a human feel, where the notes do not fall on predefined times. This is what we sometimes call groove, and we'll be looking more into this subject in the next chapter, <em>Latent Space Interpolation with Music VAE</em>. We'll also be looking at score interpolation, which makes it possible to gradually transition from one score to another.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>What are the main problems RNN suffers from when learning, and what are the solutions brought by LSTMs?</li>
+<li>What is a simpler alternative to LSTM memory cells? What are their advantages and disadvantages?</li>
+<li>You want to configure the lookback encoder-decoder from the Melody RNN to learn structures with a 3/4 time signature. How big is the binary step counter? How are the lookback distances configured for 3 lookback distances?</li>
+<li>You have the resulting vector, <em>[0.10, 0.50, 0.00, 0.25],</em> from the applied attention mask of <em>[0.1, 0.5]</em>, with <em>n = 2</em>, and the previous step 1 of <em>[1, 0, 0, 0]</em> and step 2 of <em>[0, 1, 0, x].</em> What is the value of <em>x</em>?</li>
+<li>You have the following the Polyphony RNN encoding: <em>{ (START), (NEW_NOTE, 67), (NEW_NOTE, 64), (NEW_NOTE, 60), (STEP_END), (CONTINUED_NOTE, 67), (CONTINUED_NOTE, 64), (CONTINUED_NOTE, 60), (STEP_END), (CONTINUED_NOTE, 67), (CONTINUED_NOTE, 64), (CONTINUED_NOTE, 60), (STEP_END), (CONTINUED_NOTE, 67), (CONTINUED_NOTE, 64), (CONTINUED_NOTE, 60), (STEP_END), (END) }</em>. What is being played?</li>
+<li>What event would be used to end a note of pitch 56 in the Polyphony RNN encoding? And in the Performance RNN?</li>
+<li>What are two components of a generated score that would give them a more human fell? What model and arguments would you use to achieve that?</li>
+<li>When using the <kbd>notes_per_seconds</kbd> parameter in the <kbd>density_conditioned_performance_with_dynamics</kbd> model, what is the impact on the generation algorithm?</li>
+</ol>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><strong>Learning Long-Term Dependencies with Gradient Descent is Difficult</strong>: A paper (1994) describing the difficulties of RNN to learn long-term dependencies in practice (<a href="http://ai.dinfo.unifi.it/paolo//ps/tnn-94-gradient.pdf">ai.dinfo.unifi.it/paolo//ps/tnn-94-gradient.pdf</a>)</li>
+<li><strong>Long Short-Term Memory</strong>: An original paper (1997) on LSTM (<a href="http://www.bioinf.jku.at/publications/older/2604.pdf">www.bioinf.jku.at/publications/older/2604.pdf</a>)</li>
+<li><strong>Understanding LSTM Networks</strong>: An excellent article explaining in detail LSTM memory cells, which contains more information than this chapter (<a href="https://colah.github.io/posts/2015-08-Understanding-LSTMs/">colah.github.io/posts/2015-08-Understanding-LSTMs/</a>)</li>
+<li><strong>Illustrated Guide to LSTM's and GRU's: A step by step explanation</strong>: an excellent in-depth article about LSTM and GRU (<a href="https://towardsdatascience.com/illustrated-guide-to-lstms-and-gru-s-a-step-by-step-explanation-44e9eb85bf21">towardsdatascience.com/illustrated-guide-to-lstms-and-gru-s-a-step-by-step-explanation-44e9eb85bf21</a>)</li>
+<li><strong>Understanding LSTM and its diagrams</strong>: Another excellent article on LSTMs (<a href="https://medium.com/mlreview/understanding-lstm-and-its-diagrams-37e2f46f1714#.swstv6z61">medium.com/mlreview/understanding-lstm-and-its-diagrams-37e2f46f1714#.swstv6z61</a>)</li>
+<li><strong>Generating Long-Term Structure in Songs and Stories</strong>: An excellent blog post from Magenta's developers looking into the lookback and attention models of the Melody RNN (<a href="https://magenta.tensorflow.org/2016/07/15/lookback-rnn-attention-rnn/">magenta.tensorflow.org/2016/07/15/lookback-rnn-attention-rnn/</a>)</li>
+<li><strong>Attention Is All You Need</strong>: A paper (2017) on the usage and performance of the attention mechanism (<a href="https://arxiv.org/abs/1706.03762">arxiv.org/abs/1706.03762</a>)</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

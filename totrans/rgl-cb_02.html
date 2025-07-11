@@ -1,0 +1,559 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer041">
+<h1 class="chapter-number" id="_idParaDest-35"><a id="_idTextAnchor034"/>2</h1>
+<h1 id="_idParaDest-36"><a id="_idTextAnchor035"/>Machine Learning Refresher</h1>
+<p><strong class="bold">Machine learning</strong> (<strong class="bold">ML</strong>) is much more than just models. It is about following a certain process and best practices. This chapter will provide a refresher on these: from loading data and model evaluation to model training and optimization, the main steps and methods will be <span class="No-Break">explained here.</span></p>
+<p>In this chapter, we are going to cover the following <span class="No-Break">main topics:</span></p>
+<ul>
+<li><span class="No-Break">Loading data</span></li>
+<li><span class="No-Break">Splitting data</span></li>
+<li>Preparing <span class="No-Break">quantitative data</span></li>
+<li>Preparing <span class="No-Break">qualitative data</span></li>
+<li>Training <span class="No-Break">a model</span></li>
+<li>Evaluating <span class="No-Break">a model</span></li>
+<li>Performing <span class="No-Break">hyperparameter optimization</span></li>
+</ul>
+<p>Even though the recipes in this chapter are independent from a methodological standpoint, they build upon each other and are meant to be <span class="No-Break">executed sequentially.</span></p>
+<h1 id="_idParaDest-37"><a id="_idTextAnchor036"/>Technical requirements</h1>
+<p>In this chapter, you will need to be able to run code to load datasets, prepare data, and train, optimize, and evaluate ML models. To do so, you will need the <span class="No-Break">following libraries:</span></p>
+<ul>
+<li><span class="No-Break"><strong class="bold">numpy</strong></span></li>
+<li><span class="No-Break"><strong class="bold">pandas</strong></span></li>
+<li><span class="No-Break"><strong class="bold">scikit-learn</strong></span></li>
+</ul>
+<p>They can be installed using <strong class="source-inline">pip</strong> with the following <span class="No-Break">command line:</span></p>
+<pre class="source-code">
+pip install numpy pandas scikit-learn</pre>
+<p class="callout-heading">Note</p>
+<p class="callout">In this book, some best practices such as using virtual environments won’t be explicitly mentioned. However, it is highly recommended that you use a virtual environment before installing any library using <strong class="source-inline">pip</strong> or any other <span class="No-Break">package manager.</span></p>
+<h1 id="_idParaDest-38"><a id="_idTextAnchor037"/>Loading data</h1>
+<p>The primary focus<a id="_idIndexMarker045"/> of this recipe is to load data from a CSV file. However, this is not the only thing that this recipe covers. Since the data is usually the first step in any ML project, this recipe is also a good opportunity to give a quick recap of the ML workflow, as well as the different types <span class="No-Break">of data.</span></p>
+<h2 id="_idParaDest-39"><a id="_idTextAnchor038"/>Getting ready</h2>
+<p>Before loading the data, we should keep in mind that an ML model follows a <span class="No-Break">two-step process:</span></p>
+<ol>
+<li>Train a model on a given dataset to create a <span class="No-Break">new model.</span></li>
+<li>Reuse the previously trained model to infer predictions on <span class="No-Break">new data.</span></li>
+</ol>
+<p>These two steps are summarized in the <span class="No-Break">following figure:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer026">
+<img alt="Figure 2.1 – A simple view of the two-step ML process" height="1052" src="image/B19629_02_01.jpg" width="1095"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.1 – A simple view of the two-step ML process</p>
+<p>Of course, in most cases, this <a id="_idIndexMarker046"/>is a rather simplistic view. A more detailed view can be seen in <span class="No-Break">Figure 2</span><span class="No-Break">.2:</span></p>
+<p class="IMG---Figure"> </p>
+<div>
+<div class="IMG---Figure" id="_idContainer027">
+<img alt="Figure 2.2 – A more complete view of the ML process" height="1794" src="image/B19629_02_02.jpg" width="779"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.2 – A more complete view of the ML process</p>
+<p>Let’s take a closer look <a id="_idIndexMarker047"/>at the training part of the ML process shown in <span class="No-Break"><em class="italic">Figure 2</em></span><span class="No-Break"><em class="italic">.2</em></span><span class="No-Break">:</span></p>
+<ol>
+<li>First, training data is queried from a data source (this can be a database, a data lake, an open dataset, and <span class="No-Break">so on).</span></li>
+<li>The data is preprocessed, such as via feature engineering, rescaling, and <span class="No-Break">so on.</span></li>
+<li>A model is trained and stored (on a data lake, locally, on the edge, and <span class="No-Break">so on).</span></li>
+<li>Optionally, the output of this model is post-processed – for example, via formatting, heuristics, business rules, <span class="No-Break">and more.</span></li>
+<li>Optionally again, this model (with or without postprocessing) is stored in a database for later reference or evaluation <span class="No-Break">if needed.</span></li>
+</ol>
+<p>Now, let’s take a look at the inference part of the <span class="No-Break">ML process:</span></p>
+<ol>
+<li>The data is queried from a data source (a database, an API query, and <span class="No-Break">so on).</span></li>
+<li>The data goes through the same preprocessing step as the <span class="No-Break">training data.</span></li>
+<li>The trained model is fetched if it doesn’t already <span class="No-Break">exist locally.</span></li>
+<li>The model is used to <span class="No-Break">infer output.</span></li>
+<li>Optionally, the output of the model is post-processed via the same post-processing step as the <span class="No-Break">training data.</span></li>
+<li>Optionally, the output is stored in a database for monitoring and <span class="No-Break">later reference.</span></li>
+</ol>
+<p>Even in this schema, many <a id="_idIndexMarker048"/>steps were not mentioned: splitting data for training purposes, using evaluation metrics, cross-validation, hyperparameter optimization, and others. This chapter will dive into the more training-specific steps and apply them to the very common but practical Titanic dataset, a binary classification problem. But first, we need to load <span class="No-Break">the data.</span></p>
+<p>To do so, you must<a id="_idIndexMarker049"/> download the <strong class="bold">Titanic dataset training set</strong> locally. This can be performed with the following <span class="No-Break">command line:</span></p>
+<pre class="source-code">
+wget https://github.com/PacktPublishing/The-Regularization-Cookbook/blob/main/chapter_02/train.csv</pre>
+<h2 id="_idParaDest-40"><a id="_idTextAnchor039"/>How to do it…</h2>
+<p>This recipe is about loading a CSV file and displaying a few lines of code so that we can have a first glance at what it <span class="No-Break">is about:</span></p>
+<ol>
+<li>The first step is to import the required libraries. Here, the only library we need <span class="No-Break">is pandas:</span><pre class="source-code">
+import pandas as pd</pre></li>
+<li>Now, we can load the data using the <strong class="source-inline">read_csv</strong> function provided by pandas. The first argument is the path to the file. Assuming the file is named <strong class="source-inline">train.csv</strong> and located in the current folder, we only have to provide <strong class="source-inline">train.csv</strong> as <span class="No-Break">an argument:</span><pre class="source-code">
+# Load the data as a DataFrame</pre><pre class="source-code">
+df = pd.read_csv('train.csv')</pre></li>
+</ol>
+<p>The returned object is a <strong class="source-inline">dataframe</strong> object, which provides many useful methods for <span class="No-Break">data processing.</span></p>
+<ol>
+<li value="3">Now, we can display<a id="_idIndexMarker050"/> the first five lines of the loaded file using the <strong class="source-inline">.</strong><span class="No-Break"><strong class="source-inline">head()</strong></span><span class="No-Break"> method:</span><pre class="source-code">
+# Display the first 5 rows of the dataset</pre><pre class="source-code">
+df.head()</pre></li>
+</ol>
+<p>This code will output <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+<strong class="bold">   PassengerId  Survived  Pclass  \</strong>
+<strong class="bold">0        1            0         3</strong>
+<strong class="bold">1        2            1         1</strong>
+<strong class="bold">2        3            1         3</strong>
+<strong class="bold">3        4            1         1</strong>
+<strong class="bold">4        5            0         3</strong>
+<strong class="bold">      Name                      Sex   Age     SibSp  \</strong>
+<strong class="bold">0   Braund, Mr. Owen Harris     male  22.0       1</strong>
+<strong class="bold">1  Cumings, Mrs. John Bradley (Florence Briggs Th...</strong>
+<strong class="bold">                               female  38.0        1</strong>
+<strong class="bold">2  Heikkinen, Miss. Laina  female  26.0        0</strong>
+<strong class="bold">3  Futrelle, Mrs. Jacques Heath (Lily May Peel)</strong>
+<strong class="bold">                            female  35.0        1</strong>
+<strong class="bold">4  Allen, Mr. William Henry     male  35.0        0</strong>
+<strong class="bold"> Parch      Ticket   Fare   Cabin        Embarked</strong>
+<strong class="bold">0  0         A/5   21171   7.2500   NaN           S</strong>
+<strong class="bold">1  0       PC 17599  71.2833   C85       C</strong>
+<strong class="bold">2  0      STON/O2. 3101282   7.9250   NaN       S</strong>
+<strong class="bold">3  0        113803  53.1000  C123           S</strong>
+<strong class="bold">4  0        373450   8.0500   NaN    S</strong></pre>
+<p>Here is a description of<a id="_idIndexMarker051"/> the data types in <span class="No-Break">each column:</span></p>
+<ul>
+<li><strong class="source-inline">PassengerId</strong> (qualitative): A unique, arbitrary ID for <span class="No-Break">each passenger.</span></li>
+<li><strong class="source-inline">Survived</strong> (qualitative): 1 for yes, 0 for no. This is our label, so this is a binary <span class="No-Break">classification problem.</span></li>
+<li><strong class="source-inline">Pclass</strong> (quantitative, discrete): The class, which is arguably quantitative. Is class 1 better than class 2? Most <span class="No-Break">likely yes.</span></li>
+<li><strong class="source-inline">Name</strong> (unstructured): The name and title of <span class="No-Break">the passenger.</span></li>
+<li><strong class="source-inline">Sex</strong> (qualitative): The registered sex of the passenger, either male <span class="No-Break">or female.</span></li>
+<li><strong class="source-inline">Age</strong> (quantitative, discrete): The age of <span class="No-Break">the passenger.</span></li>
+<li><strong class="source-inline">SibSp</strong> (quantitative, discrete): The number of siblings and spouses <span class="No-Break">on board.</span></li>
+<li><strong class="source-inline">Parch</strong> (quantitative, discrete): The number of parents and children <span class="No-Break">on board.</span></li>
+<li><strong class="source-inline">Ticket</strong> (unstructured): The <span class="No-Break">ticket reference.</span></li>
+<li><strong class="source-inline">Fare</strong> (quantitative, continuous): The <span class="No-Break">ticket price.</span></li>
+<li><strong class="source-inline">Cabin</strong> (unstructured): The cabin number, which is arguably unstructured. It can be seen as a qualitative feature with <span class="No-Break">high cardinality.</span></li>
+<li><strong class="source-inline">Embarked</strong> (qualitative): The <a id="_idIndexMarker052"/>embarked city, either Southampton (<strong class="source-inline">S</strong>), Cherbourg (<strong class="source-inline">C</strong>), or <span class="No-Break">Queenstown (</span><span class="No-Break"><strong class="source-inline">Q</strong></span><span class="No-Break">).</span></li>
+</ul>
+<h2 id="_idParaDest-41"><a id="_idTextAnchor040"/>There’s more…</h2>
+<p>Let’s talk about the different types of data that are available. Data is a very generic word and can describe many things. We are surrounded by data all the time. One way to specify data is <span class="No-Break">using opposites.</span></p>
+<p>Data can be <em class="italic">structured</em> <span class="No-Break">or </span><span class="No-Break"><em class="italic">unstructured</em></span><span class="No-Break">:</span></p>
+<ul>
+<li>Structured data comes in the form of tables, databases, Excel files, CSV files, and <span class="No-Break">JSON files.</span></li>
+<li>Unstructured data does not fit in a table: it can be text, sound, image, videos, and so on. Even if we tend to have tabular representation, this kind of data does not naturally fit in an <span class="No-Break">Excel table.</span></li>
+</ul>
+<p>Data can be <em class="italic">quantitative</em> <span class="No-Break">or </span><span class="No-Break"><em class="italic">qualitative</em></span><span class="No-Break">.</span></p>
+<p>Quantitative data is ordered. Here are <span class="No-Break">some examples:</span></p>
+<ul>
+<li>€100 is greater <span class="No-Break">than €10</span></li>
+<li>1.8 meters is taller than <span class="No-Break">1.6 meters</span></li>
+<li>18 years old is younger than 80 <span class="No-Break">years old</span></li>
+</ul>
+<p>Qualitative data has no intrinsic order, as <span class="No-Break">shown here:</span></p>
+<ul>
+<li>Blue is not intrinsically better <span class="No-Break">than red</span></li>
+<li>A dog is not intrinsically greater than <span class="No-Break">a cat</span></li>
+<li>A kitchen is not intrinsically more useful than <span class="No-Break">a bathroom</span></li>
+</ul>
+<p>These are not mutually exclusive. An object can have both quantitative and qualitative features, as can be seen in the case of the car in the <span class="No-Break">following figure:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer028">
+<img alt="Figure 2.3 – A single object depicted by both quantitative (left) and qualitative (right) features" height="789" src="image/B19629_02_03.jpg" width="1020"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.3 – A single object depicted by both quantitative (left) and qualitative (right) features</p>
+<p>Finally, data <a id="_idIndexMarker053"/>can be <em class="italic">continuous</em> <span class="No-Break">or </span><span class="No-Break"><em class="italic">discrete</em></span><span class="No-Break">.</span></p>
+<p>Some data is continuous, <span class="No-Break">as follows:</span></p>
+<ul>
+<li><span class="No-Break">A weight</span></li>
+<li><span class="No-Break">A volume</span></li>
+<li><span class="No-Break">A price</span></li>
+</ul>
+<p>On the other hand, some data <span class="No-Break">is discrete:</span></p>
+<ul>
+<li><span class="No-Break">A color</span></li>
+<li>A <span class="No-Break">football score</span></li>
+<li><span class="No-Break">A nationality</span></li>
+</ul>
+<p class="callout-heading">Note</p>
+<p class="callout">Discrete != <span class="No-Break">qualitative.</span></p>
+<p class="callout">For example, a football <a id="_idIndexMarker054"/>score is discrete, but there is an intrinsic order: 3 points is more <span class="No-Break">than 2.</span></p>
+<h2 id="_idParaDest-42"><a id="_idTextAnchor041"/>See also</h2>
+<p>The pandas <strong class="source-inline">read_csv</strong> function has a lot of flexibility as it can use other separators, handle headers, and<a id="_idIndexMarker055"/> much more. This is described in the official <span class="No-Break">documentation: </span><a href="https://pandas.pydata.org/docs/reference/api/pandas.read_csv.xhtml"><span class="No-Break">https://pandas.pydata.org/docs/reference/api/pandas.read_csv.xhtml</span></a><span class="No-Break">.</span></p>
+<p>The pandas library allows I/O operations that have different types of inputs. For more information, have a look at the official <span class="No-Break">documentation: </span><a href="https://pandas.pydata.org/docs/reference/io.xhtml"><span class="No-Break">https://pandas.pydata.org/docs/reference/io.xhtml</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-43"><a id="_idTextAnchor042"/>Splitting data</h1>
+<p>After loading data, splitting<a id="_idIndexMarker056"/> it is a crucial step. This recipe will explain why we need to split data, as well as how to <span class="No-Break">do it.</span></p>
+<h2 id="_idParaDest-44"><a id="_idTextAnchor043"/>Getting ready</h2>
+<p>Why do we need to split data? An ML model is quite like <span class="No-Break">a student.</span></p>
+<p>You provide a student with many lectures and exercises, with or without the answers. But more often than not, students are evaluated on a completely new problem. To make sure they fully understand the concepts and methods, they not only learn the exercises and solutions – they also understand the <span class="No-Break">underlying concepts.</span></p>
+<p>An ML model is no different: you train the model on training data and then evaluate it on test data. This way, you make sure the model fully understands the task and generalizes well to new, <span class="No-Break">unseen data.</span></p>
+<p>So, the dataset is usually split into <em class="italic">train</em> and <span class="No-Break"><em class="italic">test</em></span><span class="No-Break"> sets:</span></p>
+<ul>
+<li>The train set must be as large as possible to give as many samples as possible to <span class="No-Break">the model</span></li>
+<li>The test set must be large enough to be statistically significant in evaluating <span class="No-Break">the model</span></li>
+</ul>
+<p>Typical splits can be anywhere between 80% to 20% for rather small datasets (for example, hundreds of samples), and 99% to 1% for very large datasets (for example, millions of samples <span class="No-Break">and more).</span></p>
+<p>For this recipe and the others in this chapter, it is assumed that the code has been executed in the same notebook as the previous recipe since each recipe reuses the code from the <span class="No-Break">previous ones.</span></p>
+<h2 id="_idParaDest-45"><a id="_idTextAnchor044"/>How to do it…</h2>
+<p>Here are the steps<a id="_idIndexMarker057"/> to try out <span class="No-Break">this recipe:</span></p>
+<ol>
+<li>You can split the data rather easily with scikit-learn and the <span class="No-Break"><strong class="source-inline">train_test_split()</strong></span><span class="No-Break"> function:</span><pre class="source-code">
+# Import the train_test_split function</pre><pre class="source-code">
+from sklearn.model_selection import train_test_split</pre><pre class="source-code">
+# Split the data</pre><pre class="source-code">
+X_train, X_test, y_train, y_test = train_test_split(</pre><pre class="source-code">
+    df.drop(columns=['Survived']), df['Survived'],</pre><pre class="source-code">
+    test_size=0.2, stratify=df['Survived'],</pre><pre class="source-code">
+    random_state=0)</pre></li>
+</ol>
+<p>This function uses the following parameters <span class="No-Break">as input:</span></p>
+<ul>
+<li><strong class="source-inline">X</strong>: All columns but the <strong class="source-inline">'</strong><span class="No-Break"><strong class="source-inline">Survived'</strong></span><span class="No-Break"> label</span></li>
+<li><strong class="source-inline">y</strong>: The <strong class="source-inline">'Survived'</strong> <span class="No-Break">label column</span></li>
+<li><strong class="source-inline">test_size</strong>: This is <strong class="source-inline">0.2</strong>, which means the training size will <span class="No-Break">be 80%</span></li>
+<li><strong class="source-inline">stratify</strong>: This specifies the <strong class="source-inline">'Survived'</strong> column to ensure the same label balance is used in <span class="No-Break">both splits</span></li>
+<li><strong class="source-inline">random_state</strong>: <strong class="source-inline">0</strong> is any integer to <span class="No-Break">ensure reproducibility</span></li>
+</ul>
+<p>It returns the <span class="No-Break">following outputs:</span></p>
+<ul>
+<li><strong class="source-inline">X_train</strong>: The train split <span class="No-Break">of </span><span class="No-Break"><strong class="source-inline">X</strong></span></li>
+<li><strong class="source-inline">X_test</strong>: The test split <span class="No-Break">of </span><span class="No-Break"><strong class="source-inline">X</strong></span></li>
+<li><strong class="source-inline">y_train</strong>: The training split of <strong class="source-inline">y</strong>, associated <span class="No-Break">with </span><span class="No-Break"><strong class="source-inline">X_train</strong></span></li>
+<li><strong class="source-inline">y_test</strong>: The test split of <strong class="source-inline">y</strong>, associated <span class="No-Break">with </span><span class="No-Break"><strong class="source-inline">X_test</strong></span></li>
+</ul>
+<p class="callout-heading">Note</p>
+<p class="callout">The <strong class="source-inline">stratify</strong> option is not mandatory but can be critical to ensure a balanced split of any qualitative feature, not just the labels, as is the case with <span class="No-Break">imbalanced data.</span></p>
+<p>This split should be<a id="_idIndexMarker058"/> done as early as possible when performing data processing so that you avoid any potential data leakage. From now on, all the preprocessing will be computed on the train set, and only then applied to the test set, in agreement with <span class="No-Break"><em class="italic">Figure 2</em></span><span class="No-Break"><em class="italic">.2</em></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-46"><a id="_idTextAnchor045"/>See also</h2>
+<p>See the official documentation<a id="_idIndexMarker059"/> for the <strong class="source-inline">train_test_split</strong> <span class="No-Break">function: </span><a href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.xhtml"><span class="No-Break">https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.train_test_split.xhtml</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-47"><a id="_idTextAnchor046"/>Preparing quantitative data</h1>
+<p>Depending on the<a id="_idIndexMarker060"/> type of data, how the features must be prepared may differ. In this recipe, we’ll cover how to prepare quantitative data, including missing data imputation <span class="No-Break">and rescaling.</span></p>
+<h2 id="_idParaDest-48"><a id="_idTextAnchor047"/>Getting ready</h2>
+<p>In the Titanic dataset, as well as any other dataset, there may be missing data. There are several ways to deal with missing data. For example, you can drop a column or a row, or impute a value. There are many imputation techniques, some of which are more or less sophisticated. scikit-learn supplies several implementations of imputers, such as <strong class="source-inline">SimpleImputer</strong> <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">KNNImputer</strong></span><span class="No-Break">.</span></p>
+<p>As we will see in this recipe, using <strong class="source-inline">SimpleImputer</strong>, we can impute the missing quantitative data with the <span class="No-Break">mean value.</span></p>
+<p>Once the missing data has been handled, we can prepare the quantitative data by rescaling it so that all the data is at the <span class="No-Break">same scale.</span></p>
+<p>Several rescaling strategies exist, such as min-max scaling, robust scaling, standard scaling, <span class="No-Break">and others.</span></p>
+<p>In this recipe, we will <a id="_idIndexMarker061"/>use <strong class="bold">standard scaling</strong>. So, for each feature, we will subtract the mean value of this feature, and<a id="_idIndexMarker062"/> then divide it by the standard deviation of <span class="No-Break">that feature:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer029">
+<img alt="" height="105" src="image/Formula_02_001.jpg" width="362"/>
+</div>
+</div>
+<p>Fortunately, scikit-learn provides a fully working implementation <span class="No-Break">via </span><span class="No-Break"><strong class="source-inline">StandardScaler</strong></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-49"><a id="_idTextAnchor048"/>How to do it…</h2>
+<p>We will sequentially handle missing values and rescale the data in <span class="No-Break">this recipe:</span></p>
+<ol>
+<li>Import the required classes – <strong class="source-inline">SimpleImputer</strong> for missing data imputation and <strong class="source-inline">StandardScaler</strong> <span class="No-Break">for rescaling:</span><pre class="source-code">
+from sklearn.impute import SimpleImputer</pre><pre class="source-code">
+from sklearn.preprocessing import StandardScaler</pre></li>
+<li>Select the quantitative features we want to keep. Here, we will keep <strong class="source-inline">'Pclass'</strong>, <strong class="source-inline">'Age'</strong>, <strong class="source-inline">'Fare'</strong>, <strong class="source-inline">'SibSp'</strong>, and <strong class="source-inline">'Parch'</strong> and store these features in new variables for both the train and <span class="No-Break">test sets:</span><pre class="source-code">
+quanti_columns = ['Pclass', 'Age', 'Fare', 'SibSp', 'Parch']</pre><pre class="source-code">
+# Get the quantitative columns</pre><pre class="source-code">
+X_train_quanti = X_train[quanti_columns]</pre><pre class="source-code">
+X_test_quanti = X_test[quanti_columns]</pre></li>
+<li>Instantiate the simple imputer with a mean strategy. Here, the missing value of a feature will be replaced with the mean value of <span class="No-Break">that feature:</span><pre class="source-code">
+# Impute missing quantitative values with mean feature value</pre><pre class="source-code">
+quanti_imputer = SimpleImputer(strategy='mean')</pre></li>
+<li>Fit the imputer on<a id="_idIndexMarker063"/> the train set and apply it to the test set so that it avoids leakage in <span class="No-Break">the imputation:</span><pre class="source-code">
+# Fit and impute the training set</pre><pre class="source-code">
+X_train_quanti = quanti_imputer.fit_transform(X_train_quanti)</pre><pre class="source-code">
+# Just impute the test set</pre><pre class="source-code">
+X_test_quanti = quanti_imputer.transform(X_test_quanti)</pre></li>
+<li>Now that imputation has been performed, instantiate the <span class="No-Break"><strong class="source-inline">scaler</strong></span><span class="No-Break"> object:</span><pre class="source-code">
+# Instantiate the standard scaler</pre><pre class="source-code">
+scaler = StandardScaler()</pre></li>
+<li>Finally, fit and apply the standard scaler to the train set, and then apply it to the <span class="No-Break">test set:</span><pre class="source-code">
+# Fit and transform the training set</pre><pre class="source-code">
+X_train_quanti = scaler.fit_transform(X_train_quanti)</pre><pre class="source-code">
+# Just transform the test set</pre><pre class="source-code">
+X_test_quanti = scaler.transform(X_test_quanti)</pre></li>
+</ol>
+<p>We now have quantitative data with no missing values, fully rescaled, with no <span class="No-Break">data leakage.</span></p>
+<h2 id="_idParaDest-50"><a id="_idTextAnchor049"/>There’s more…</h2>
+<p>In this recipe, we used the simple imputer, assuming there was missing data. In practice, it is highly recommended that you look at the data first to check whether there are missing values, as well as how many. It is possible to look at the number of missing values per column with the following <span class="No-Break">code snippet:</span></p>
+<pre class="source-code">
+# Display the number of missing data for each column
+X_train[quanti_columns].isna().sum()</pre>
+<p>This will output <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+Pclass        0
+Age         146
+Fare           0
+SibSp         0
+Parch         0</pre>
+<p>Thanks to this, we <a id="_idIndexMarker064"/>know that the <strong class="source-inline">Age</strong> feature has <strong class="source-inline">146</strong> missing values, while the other features have no <span class="No-Break">missing data.</span></p>
+<h2 id="_idParaDest-51"><a id="_idTextAnchor050"/>See also</h2>
+<p>A few imputers are <a id="_idIndexMarker065"/>available in scikit-learn. The list is available <span class="No-Break">here: </span><a href="https://scikit-learn.org/stable/modules/classes.xhtml#module-sklearn.impute"><span class="No-Break">https://scikit-learn.org/stable/modules/classes.xhtml#module-sklearn.impute</span></a><span class="No-Break">.</span></p>
+<p>There are many ways to scale data, and you can find the methods that are available in scikit-learn <span class="No-Break">here: </span><a href="https://scikit-learn.org/stable/modules/classes.xhtml#module-sklearn.preprocessing"><span class="No-Break">https://scikit-learn.org/stable/modules/classes.xhtml#module-sklearn.preprocessing</span></a><span class="No-Break">.</span></p>
+<p>You might be interested <a id="_idIndexMarker066"/>in looking at this comparison of several scalers on some given <span class="No-Break">data: </span><a href="https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.xhtml#sphx-glr-auto-examples-preprocessing-plot-all-scaling-py"><span class="No-Break">https://scikit-learn.org/stable/auto_examples/preprocessing/plot_all_scaling.xhtml#sphx-glr-auto-examples-preprocessing-plot-all-scaling-py</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-52"><a id="_idTextAnchor051"/>Preparing qualitative data</h1>
+<p>In this recipe, we <a id="_idIndexMarker067"/>will prepare qualitative data, including missing value imputation <span class="No-Break">and encoding.</span></p>
+<h2 id="_idParaDest-53"><a id="_idTextAnchor052"/>Getting ready</h2>
+<p>Qualitative data requires different treatment from quantitative data. Imputing missing values with the mean value of a feature would make no sense (and would not work with non-numeric data): it makes more sense, for example, to use the most frequent value or the mode of a feature. The <strong class="source-inline">SimpleImputer</strong> class allows us to do <span class="No-Break">such things.</span></p>
+<p>The same goes for rescaling: it would make no sense to rescale qualitative data. Instead, it is more common to encode it. One of the most typical techniques is called <span class="No-Break"><strong class="bold">one-hot encoding</strong></span><span class="No-Break">.</span></p>
+<p>The idea is to transform each of the categories, over a total possible <em class="italic">N</em> categories, in a vector holding a 1 and N-1 zeros. In our example, the <strong class="source-inline">Embarked</strong> feature’s one-hot encoding would be <span class="No-Break">as follows:</span></p>
+<ul>
+<li><em class="italic">‘C’ = [1, </em><span class="No-Break"><em class="italic">0, 0]</em></span></li>
+<li><em class="italic">‘Q’ = [0, </em><span class="No-Break"><em class="italic">1, 0]</em></span></li>
+<li><em class="italic">‘S’ = [0, </em><span class="No-Break"><em class="italic">0, 1]</em></span></li>
+</ul>
+<p class="callout-heading">Note</p>
+<p class="callout">Having <em class="italic">N</em> columns for <em class="italic">N</em> categories is not necessarily optimal. What happens if, in the preceding example, we remove the first column? If the value is not <em class="italic">‘Q’ = [1, 0]</em> nor <em class="italic">‘S’ = [0, 1]</em>, then it must <em class="italic">be ‘C’ = [0, 0]</em>. There is no need to add one more column to have all the necessary information. This can be generalized to <em class="italic">N</em> categories only requiring <em class="italic">N</em>-1 columns to have all the information, which is why one-hot encoding functions usually allow you to drop <span class="No-Break">a column.</span></p>
+<p>The <strong class="source-inline">sklearn</strong> class’ <strong class="source-inline">OneHotEncoder</strong> allows us to do this. It also allows us to deal with unknown categories that may appear in the test set (or the production environment) with several strategies, such as an error, ignore, or infrequent class. Finally, it allows us to drop the first column <span class="No-Break">after encoding.</span></p>
+<h2 id="_idParaDest-54"><a id="_idTextAnchor053"/>How to do it…</h2>
+<p>Just like in the preceding recipe, we will handle any missing data and the features will be <span class="No-Break">one-hot encoded:</span></p>
+<ol>
+<li>Import the necessary classes – <strong class="source-inline">SimpleImputer</strong> for missing data imputation (already imported in the previous recipe) and <strong class="source-inline">OneHotEncoder</strong> for encoding. We also need to import <strong class="source-inline">numpy</strong> so that we can concatenate the qualitative and quantitative data that’s been prepared at the end of <span class="No-Break">this recipe:</span><pre class="source-code">
+import numpy as np</pre><pre class="source-code">
+from sklearn.impute import SimpleImputer</pre><pre class="source-code">
+from sklearn.preprocessing import OneHotEncoder</pre></li>
+<li>Select the qualitative features we want to keep: <strong class="source-inline">'Sex'</strong> and <strong class="source-inline">'Embarked'</strong>. Then, store these features in new variables for both the train and <span class="No-Break">test sets:</span><pre class="source-code">
+quali_columns = ['Sex', 'Embarked']</pre><pre class="source-code">
+# Get the quantitative columns</pre><pre class="source-code">
+X_train_quali = X_train[quali_columns]</pre><pre class="source-code">
+X_test_quali = X_test[quali_columns]</pre></li>
+<li>Instantiate <strong class="source-inline">SimpleImputer</strong> with <strong class="source-inline">most_frequent strategy</strong>. Any missing <a id="_idIndexMarker068"/>values will be replaced by the most <span class="No-Break">frequent ones:</span><pre class="source-code">
+# Impute missing qualitative values with most frequent feature value</pre><pre class="source-code">
+quali_imputer =SimpleImputer(strategy='most_frequent')</pre></li>
+<li>Fit and transform the imputer on the train set, and then transform the <span class="No-Break">test set:</span><pre class="source-code">
+# Fit and impute the training set</pre><pre class="source-code">
+X_train_quali = quali_imputer.fit_transform(X_train_quali)</pre><pre class="source-code">
+# Just impute the test set</pre><pre class="source-code">
+X_test_quali = quali_imputer.transform(X_test_quali)</pre></li>
+<li>Instantiate the encoder. Here, we will specify the <span class="No-Break">following parameters:</span><ul><li><strong class="source-inline">drop='first'</strong>: This will drop the first columns of <span class="No-Break">the encoding</span></li><li><strong class="source-inline">handle_unknown='ignore'</strong>: If a new value appears in the test set (or in production), it will be encoded <span class="No-Break">as zeros:</span><pre class="source-code">
+# Instantiate the encoder</pre><pre class="source-code">
+encoder=OneHotEncoder(drop='first', handle_unknown='ignore')</pre></li></ul></li>
+<li>Fit and <a id="_idIndexMarker069"/>transform the encoder on the training set, and then transform the test set using <span class="No-Break">this encoder:</span><pre class="source-code">
+# Fit and transform the training set</pre><pre class="source-code">
+X_train_quali = encoder.fit_transform(X_train_quali).toarray()</pre><pre class="source-code">
+# Just encode the test set</pre><pre class="source-code">
+X_test_quali = encoder.transform(X_test_quali).toarray()</pre></li>
+</ol>
+<p class="callout-heading">Note</p>
+<p class="callout">We need to use <strong class="source-inline">.toarray()</strong> out of the encoder because the array is a sparse matrix object by default and cannot be concatenated in that form with the <span class="No-Break">other features.</span></p>
+<ol>
+<li value="7">With that, all the data has been prepared – both quantitative and qualitative (considering this recipe and the previous one). It is now possible to concatenate this data before training <span class="No-Break">a model:</span><pre class="source-code">
+# Concatenate the data back together</pre><pre class="source-code">
+X_train = np.concatenate([X_train_quanti,</pre><pre class="source-code">
+    X_train_quali], axis=1)</pre><pre class="source-code">
+X_test = np.concatenate([X_test_quanti, X_test_quali], axis=1)</pre></li>
+</ol>
+<h2 id="_idParaDest-55"><a id="_idTextAnchor054"/>There’s more…</h2>
+<p>It is possible to save the data as a pickle file, either to share it or save it and avoid having to prepare it again. The following code will allow us to <span class="No-Break">do this:</span></p>
+<pre class="source-code">
+import pickle
+pickle.dump((X_train, X_test, y_train, y_test),
+    open('prepared_titanic.pkl', 'wb'))</pre>
+<p>We now have<a id="_idIndexMarker070"/> fully prepared data that can be used to train <span class="No-Break">ML models.</span></p>
+<p class="callout-heading">Note</p>
+<p class="callout">Several steps have been omitted or simplified here for more clarity. Data may need more preparation, such as more thorough missing value imputation, outlier and duplicate detection (and perhaps removal), feature engineering, and so on. It is assumed that you already have some sense of those aspects and are encouraged to read other materials about this topic <span class="No-Break">if required.</span></p>
+<h2 id="_idParaDest-56"><a id="_idTextAnchor055"/>See also</h2>
+<p>This more general documentation about missing data imputation is worth looking <span class="No-Break">at: </span><a href="https://scikit-learn.org/stable/modules/impute.xhtml"><span class="No-Break">https://scikit-learn.org/stable/modules/impute.xhtml</span></a><span class="No-Break">.</span></p>
+<p>Finally, this more general documentation about data preprocessing can be very <span class="No-Break">useful: </span><a href="https://scikit-learn.org/stable/modules/preprocessing.xhtml"><span class="No-Break">https://scikit-learn.org/stable/modules/preprocessing.xhtml</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-57"><a id="_idTextAnchor056"/>Training a model</h1>
+<p>Once data has been fully cleaned and prepared, it is fairly easy to train a model thanks to scikit-learn. In this <a id="_idIndexMarker071"/>recipe, before training a logistic regression model on the Titanic dataset, we will quickly recap the ML paradigm and the different types of ML we <span class="No-Break">can use.</span></p>
+<h2 id="_idParaDest-58"><a id="_idTextAnchor057"/>Getting ready</h2>
+<p>If you were asked how to differentiate a car from a truck, you may be tempted to provide a list of rules, such as the number of wheels, size, weight, and so on. By doing so, you would be able to provide a set of explicit rules that would allow anyone to identify a car and a truck as different types <span class="No-Break">of vehicles.</span></p>
+<p>Traditional programming is not so different. While developing algorithms, programmers often build explicit rules, which allow them to map from data input (for example, a vehicle) to answers (for example, a car). We can summarize this paradigm as <em class="italic">data + rules = </em><span class="No-Break"><em class="italic">answers</em></span><span class="No-Break">.</span></p>
+<p>If we were to train an ML model to discriminate cars from trucks, we would use another strategy: we would feed an ML algorithm with many pieces of data and their associated answers, expecting the model to learn to correct rules by itself. This is a different approach that can be summarized as <em class="italic">data + answers = rules</em>. This paradigm difference is summarized in <span class="No-Break"><em class="italic">Figure 2</em></span><em class="italic">.4</em>. As little as it might look to ML practitioners, it changes everything in terms <span class="No-Break">of regularization:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer030">
+<img alt="Figure 2.4 – Comparing traditional programming with ML algorithms" height="478" src="image/B19629_02_04.jpg" width="1148"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.4 – Comparing traditional programming with ML algorithms</p>
+<p>Regularizing traditional algorithms is conceptually straightforward. For example, what if the rules for defining a truck overlap with the bus definition? If so, we can add the fact that buses have lots <span class="No-Break">of windows.</span></p>
+<p>Regularization in ML is intrinsically implicit. What if the model in this case does not discriminate between buses <span class="No-Break">and trucks?</span></p>
+<ul>
+<li>Should we add <span class="No-Break">more data?</span></li>
+<li>Is the model complex enough to capture such <span class="No-Break">a difference?</span></li>
+<li>Is it underfitting <span class="No-Break">or overfitting?</span></li>
+</ul>
+<p>This fundamental<a id="_idIndexMarker072"/> property of ML makes <span class="No-Break">regularization complex.</span></p>
+<p>ML can be applied to many tasks. Anyone who uses ML knows there is not just one type of <span class="No-Break">ML model.</span></p>
+<p>Arguably, most ML models fall into three <span class="No-Break">main categories:</span></p>
+<ul>
+<li><span class="No-Break"><strong class="bold">Supervised learning</strong></span></li>
+<li><span class="No-Break"><strong class="bold">Unsupervised learning</strong></span></li>
+<li><span class="No-Break"><strong class="bold">Reinforcement learning</strong></span></li>
+</ul>
+<p>As is usually the case for categories, the landscape is more complex, with sub-categories and methods overlapping several categories. But this is beyond the scope of <span class="No-Break">this book.</span></p>
+<p>This book will focus on regularization for supervised learning. In supervised learning, the problem is usually quite easy to specify: we have input features, <em class="italic">X</em> (for example, apartment surface), and labels, <em class="italic">y</em> (for example, apartment price). The goal is to train a model so that it’s robust enough to predict <em class="italic">y</em>, <span class="No-Break">given </span><span class="No-Break"><em class="italic">X</em></span><span class="No-Break">.</span></p>
+<p>The two major types of ML are classification <span class="No-Break">and regression:</span></p>
+<ul>
+<li><strong class="bold">Classification</strong>: The<a id="_idIndexMarker073"/> labels are made of qualitative data. For example, the task is predicting between two or more classes such as car, bus, <span class="No-Break">and truck.</span></li>
+<li><strong class="bold">Regression</strong>: The labels are<a id="_idIndexMarker074"/> made of quantitative data. For example, the task is predicting an actual value, such as an <span class="No-Break">apartment price.</span></li>
+</ul>
+<p>Again, the line can be blurry; some tasks can be solved with classification while the labels are quantitative <a id="_idIndexMarker075"/>data, while others tasks can be both classification and regression ones. See <span class="No-Break"><em class="italic">Figure 2</em></span><span class="No-Break"><em class="italic">.5</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer031">
+<img alt="Figure 2.5 – Regularization versus classification" height="742" src="image/B19629_02_05.jpg" width="1650"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.5 – Regularization versus classification</p>
+<h2 id="_idParaDest-59"><a id="_idTextAnchor058"/>How to do it…</h2>
+<p>Assuming we want to train a logistic regression model (which will be explained properly in the next chapter), the scikit-learn library provides the <strong class="source-inline">LogisticRegression</strong> class, along with the <strong class="source-inline">fit()</strong> and <strong class="source-inline">predict()</strong> methods. Let’s learn how to <span class="No-Break">use it:</span></p>
+<ol>
+<li>Import the <span class="No-Break"><strong class="source-inline">LogisticRegression</strong></span><span class="No-Break"> class:</span><pre class="source-code">
+from sklearn.linear_model import LogisticRegression</pre></li>
+<li>Instantiate a <span class="No-Break"><strong class="source-inline">LogisticRegression</strong></span><span class="No-Break"> object:</span><pre class="source-code">
+# Instantiate the model</pre><pre class="source-code">
+lr = LogisticRegression()</pre></li>
+<li>Fit the model on the <span class="No-Break">train set:</span><pre class="source-code">
+# Fit on the training data</pre><pre class="source-code">
+lr.fit(X_train, y_train)</pre></li>
+<li>Optionally, compute <a id="_idIndexMarker076"/>predictions by using that model on the <span class="No-Break">test set:</span><pre class="source-code">
+# Compute and store predictions on the test data</pre><pre class="source-code">
+y_pred = lr.predict(X_test)</pre></li>
+</ol>
+<h2 id="_idParaDest-60"><a id="_idTextAnchor059"/>See also</h2>
+<p>Even though more details will be provided in the next chapter, you might be interested in looking at the<a id="_idIndexMarker077"/> documentation of the <strong class="source-inline">LogisticRegression</strong> <span class="No-Break">class: </span><a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.xhtml"><span class="No-Break">https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.xhtml</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-61"><a id="_idTextAnchor060"/>Evaluating a model</h1>
+<p>Once the model has<a id="_idIndexMarker078"/> been trained, it is important to evaluate it. In this recipe, we will provide a few insights about a few typical metrics for both classification and regression, before evaluating our model on the <span class="No-Break">test set.</span></p>
+<h2 id="_idParaDest-62"><a id="_idTextAnchor061"/>Getting ready</h2>
+<p>Many evaluation metrics exist. If we think about predicting a binary classification and take a step back, there are only <span class="No-Break">four cases:</span></p>
+<ul>
+<li><strong class="bold">False positive</strong> (<strong class="bold">FP</strong>): Positive<a id="_idIndexMarker079"/> prediction, negative <span class="No-Break">ground truth</span></li>
+<li><strong class="bold">True positive</strong> (<strong class="bold">TP</strong>): Positive prediction, positive <span class="No-Break">ground truth</span></li>
+<li><strong class="bold">True negative</strong> (<strong class="bold">TN</strong>): Negative prediction, negative <span class="No-Break">ground truth</span></li>
+<li><strong class="bold">False negative</strong> (<strong class="bold">FN</strong>): Negative prediction, positive <span class="No-Break">ground truth:</span></li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer032">
+<img alt="Figure 2.6 – Representation of false positive, true positive, true negative, and false negative" height="482" src="image/B19629_02_06.jpg" width="797"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.6 – Representation of false positive, true positive, true negative, and false negative</p>
+<p>Based on this, we can <a id="_idIndexMarker080"/>define a wide range of <span class="No-Break">evaluation metrics.</span></p>
+<p>One of the most common metrics is accuracy, which is the ratio of good predictions. The definition of accuracy is <span class="No-Break">as follows:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer033">
+<img alt="" height="95" src="image/Formula_02_002.jpg" width="622"/>
+</div>
+</div>
+<p class="callout-heading">Note</p>
+<p class="callout">Although very common, the accuracy may be misleading, especially for imbalanced labels. For example, let’s assume an extreme case where 99% of Titanic passengers survived, and we have a model that predicts that every passenger survived. Our model would have a 99% accuracy but would be wrong for 100% of passengers who did <span class="No-Break">not survive.</span></p>
+<p>There are several other very common metrics, such as precision, recall, and the <span class="No-Break">F1 score.</span></p>
+<p>Precision is most suited when you’re trying to maximize the true positives and minimize the false positives – for <a id="_idIndexMarker081"/>example, making sure you detect only <span class="No-Break">surviving passengers:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer034">
+<img alt="" height="95" src="image/Formula_02_003.jpg" width="394"/>
+</div>
+</div>
+<p>Recall is most suited when you’re trying to maximize the true positives and minimize the false negatives – for example, making sure you don’t miss any <span class="No-Break">surviving passengers:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer035">
+<img alt="" height="96" src="image/Formula_02_004.jpg" width="345"/>
+</div>
+</div>
+<p>The F1 score is just a combination of the precision and recall metrics as a <span class="No-Break">harmonic mean:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer036">
+<img alt="" height="96" src="image/Formula_02_005.jpg" width="665"/>
+</div>
+</div>
+<p>Another useful<a id="_idIndexMarker082"/> classification evaluation metric is the <strong class="bold">Receiver Operating Characteristic Area Under Curve</strong> (<strong class="bold">ROC </strong><span class="No-Break"><strong class="bold">AUC</strong></span><span class="No-Break">) score.</span></p>
+<p>All these metrics behave similarly: when there are values between 0 and 1, the higher the value, the better the model. Some are also more robust to imbalanced labels, especially the F1 score and <span class="No-Break">ROC AUC.</span></p>
+<p>For regression tasks, the most used <a id="_idIndexMarker083"/>metrics are the <strong class="bold">mean squared error</strong> (<strong class="bold">MSE</strong>) and the <span class="No-Break">R2 score.</span></p>
+<p>The MSE is the averaged <a id="_idIndexMarker084"/>square difference between the predictions and the <span class="No-Break">ground truth:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer037">
+<img alt="" height="138" src="image/Formula_02_006.jpg" width="430"/>
+</div>
+</div>
+<p>Here, <em class="italic">m</em> is the number of samples, <em class="italic">ŷ</em> is the predictions, and <em class="italic">y</em> is the <span class="No-Break">ground truth:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer038">
+<img alt="Figure 2.7 – Visualization of the errors for a regression task" height="557" src="image/B19629_02_07.jpg" width="1227"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.7 – Visualization of the errors for a regression task</p>
+<p>In terms of the R2 score, it is<a id="_idIndexMarker085"/> a metric that can be negative and is defined <span class="No-Break">as follows:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer039">
+<img alt="" height="114" src="image/Formula_02_007.jpg" width="455"/>
+</div>
+</div>
+<p class="callout-heading">Note</p>
+<p class="callout">While the R2 score is a typical evaluation metric (the closer to 1, the better), the MSE is more typical of a loss function (the closer to 0, <span class="No-Break">the better).</span></p>
+<h2 id="_idParaDest-63"><a id="_idTextAnchor062"/>How to do it…</h2>
+<p>Assuming our chosen evaluation metric here is accuracy, a very simple way to evaluate our model is to use the <span class="No-Break"><strong class="source-inline">accuracy_score()</strong></span><span class="No-Break"> function:</span></p>
+<pre class="source-code">
+from sklearn.metrics import accuracy_score
+# Compute the accuracy on test of our model
+print('accuracy on test set:', accuracy_score(y_pred,
+    y_test))</pre>
+<p>This outputs <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+accuracy on test set: 0.7877094972067039</pre>
+<p>Here, the <strong class="source-inline">accuracy_score()</strong> function provides an accuracy of 78.77%, meaning about 79% of our <a id="_idIndexMarker086"/>model’s predictions <span class="No-Break">are right.</span></p>
+<h2 id="_idParaDest-64"><a id="_idTextAnchor063"/>See also</h2>
+<p>Here is a list of the available metrics in <span class="No-Break">scikit-learn: </span><a href="https://scikit-learn.org/stable/modules/classes.xhtml#module-sklearn.metrics"><span class="No-Break">https://scikit-learn.org/stable/modules/classes.xhtml#module-sklearn.metrics</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-65"><a id="_idTextAnchor064"/>Performing hyperparameter optimization</h1>
+<p>In this recipe, we<a id="_idIndexMarker087"/> will explain what hyperparameter <a id="_idIndexMarker088"/>optimization is and some related concepts: the definition of a <strong class="bold">hyperparameter</strong>, <strong class="bold">cross-validation</strong>, and various <strong class="bold">hyperparameter optimization methods</strong>. We will then perform a grid search to optimize the hyperparameters of the logistic regression task on the <span class="No-Break">Titanic dataset.</span></p>
+<h2 id="_idParaDest-66"><a id="_idTextAnchor065"/>Getting ready</h2>
+<p>Most of the time, in ML, we do not simply train a model on the training set and evaluate it against the <span class="No-Break">test set.</span></p>
+<p>This is because, like most other algorithms, ML algorithms can be fine-tuned. This fine-tuning process allows us to optimize hyperparameters to achieve the best possible results. This sometimes acts as leverage so that we can regularize <span class="No-Break">a model.</span></p>
+<p class="callout-heading">Note</p>
+<p class="callout">In ML, hyperparameters can be tuned by humans, unlike parameters, which are learned through the model training process, and thus can’t <span class="No-Break">be tuned.</span></p>
+<p>To properly optimize hyperparameters, a third split has to be introduced: the <span class="No-Break">validation set.</span></p>
+<p>This means there are now <span class="No-Break">three splits:</span></p>
+<ul>
+<li><strong class="bold">The training set</strong>: Where the model <span class="No-Break">is trained</span></li>
+<li><strong class="bold">The validation set</strong>: Where the hyperparameters <span class="No-Break">are optimized</span></li>
+<li><strong class="bold">The test set</strong>: Where the model <span class="No-Break">is evaluated</span></li>
+</ul>
+<p>You could create such a set by <a id="_idIndexMarker089"/>splitting <strong class="source-inline">X_train</strong> into <strong class="source-inline">X_train</strong> and <strong class="source-inline">X_valid</strong> with the <strong class="source-inline">train_test_split()</strong> function <span class="No-Break">from scikit-learn.</span></p>
+<p>But in practice, most people just use cross-validation and do not bother creating this validation set. The k-fold cross-validation method allows us to make <em class="italic">k</em> splits out of the training set and divide it, as presented in <span class="No-Break"><em class="italic">Figure 2</em></span><span class="No-Break"><em class="italic">.8</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer040">
+<img alt="Figure 2.8 – Typical split between training, validation, and test sets, without cross-validation (top) and with cross-validation (bottom)" height="748" src="image/B19629_02_08.jpg" width="1516"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 2.8 – Typical split between training, validation, and test sets, without cross-validation (top) and with cross-validation (bottom)</p>
+<p>In doing so, not just one model is trained, but <em class="italic">k</em>, for a given set of hyperparameters. The performances are averaged over those <em class="italic">k</em> models, based on a chosen metric (for example, accuracy, MSE, and <span class="No-Break">so on).</span></p>
+<p>Several sets of<a id="_idIndexMarker090"/> hyperparameters can then be tested, and the one that shows the best performance is selected. After selecting the best hyperparameter set, the model is trained one more time on the entire train set to maximize the data for <span class="No-Break">training purposes.</span></p>
+<p>Finally, you can implement several strategies to optimize the hyperparameters, <span class="No-Break">as follows:</span></p>
+<ul>
+<li><strong class="bold">Grid search</strong>: Test <a id="_idIndexMarker091"/>all combinations of the provided values <span class="No-Break">of hyperparameters</span></li>
+<li><strong class="bold">Random search</strong>: Randomly search combinations <span class="No-Break">of hyperparameters</span></li>
+<li><strong class="bold">Bayesian search</strong>: Perform<a id="_idIndexMarker092"/> Bayesian optimization on <span class="No-Break">the hyperparameters</span></li>
+</ul>
+<h2 id="_idParaDest-67"><a id="_idTextAnchor066"/>How to do it…</h2>
+<p>While being rather complicated to explain conceptually, hyperparameter optimization with cross-validation is super easy to implement. In this recipe, we’ll assume that we want to optimize a logistic regression model to predict whether a passenger would <span class="No-Break">have survived:</span></p>
+<ol>
+<li>First, we need to import the <strong class="source-inline">GridSearchCV</strong> class <span class="No-Break">from </span><span class="No-Break"><strong class="source-inline">sklearn.model_selection</strong></span><span class="No-Break">.</span></li>
+<li>We would like to test the following hyperparameter values for <strong class="source-inline">C</strong>: <strong class="source-inline">[0.01, 0.03, 0.1]</strong>. We must define a parameter grid with the hyperparameter as the key and the list of values to test as <span class="No-Break">the value.</span></li>
+</ol>
+<p>The <strong class="source-inline">C</strong> hyperparameter is the inverse of the penalization strength: the higher <strong class="source-inline">C</strong> is, the lower the<a id="_idIndexMarker093"/> regularization. See the next chapter for <span class="No-Break">more details:</span></p>
+<pre class="source-code">
+# Define the hyperparameters we want to test
+param_grid = { 'C': [0.01, 0.03, 0.1] }</pre>
+<ol>
+<li value="3">Finally, let’s assume we want to optimize our model on accuracy, with five cross-validation folds. To do this, we will instantiate the <strong class="source-inline">GridSearchCV</strong> object and provide the <span class="No-Break">following arguments:</span><ul><li>The model to optimize, which is a <span class="No-Break"><strong class="source-inline">LogisticRegression</strong></span><span class="No-Break"> instance</span></li><li>The parameter grid, <strong class="source-inline">param_grid</strong>, which we <span class="No-Break">defined previously</span></li><li>The scoring on which to optimize – that <span class="No-Break">is, </span><span class="No-Break"><strong class="source-inline">accuracy</strong></span></li><li>The number of cross-validation folds, which has been set to <span class="No-Break"><strong class="source-inline">5</strong></span><span class="No-Break"> here</span></li></ul></li>
+<li>We must also set <strong class="source-inline">return_train_score</strong> to <strong class="source-inline">True</strong> to get some useful information we can <span class="No-Break">use later:</span><pre class="source-code">
+# Instantiate the grid search object</pre><pre class="source-code">
+grid = GridSearchCV(</pre><pre class="source-code">
+    LogisticRegression(),</pre><pre class="source-code">
+    param_grid,</pre><pre class="source-code">
+    scoring='accuracy',</pre><pre class="source-code">
+    cv=5,</pre><pre class="source-code">
+    return_train_score=True</pre><pre class="source-code">
+)</pre></li>
+<li>Finally, all we have to do is train this object on the train set. This will automatically<a id="_idIndexMarker094"/> make all the computations and store <span class="No-Break">the results:</span><pre class="source-code">
+# Fit and wait</pre><pre class="source-code">
+grid.fit(X_train, y_train)</pre><pre class="source-code">
+GridSearchCV(cv=5, estimator=LogisticRegression(),</pre><pre class="source-code">
+    param_grid={'C': [0.01, 0.03, 0.1]},</pre><pre class="source-code">
+    return_train_score=True, scoring='accuracy')</pre></li>
+</ol>
+<p class="callout-heading">Note</p>
+<p class="callout">Depending on the input dataset and the number of tested hyperparameters, the fit may take <span class="No-Break">some time.</span></p>
+<p>Once the fit has been completed, you can get a lot of useful information, such as <span class="No-Break">the following:</span></p>
+<ul>
+<li>The hyperparameter set via the <strong class="source-inline">.</strong><span class="No-Break"><strong class="source-inline">best_params</strong></span><span class="No-Break"> attribute</span></li>
+<li>The best accuracy score via the <strong class="source-inline">.</strong><span class="No-Break"><strong class="source-inline">best_score</strong></span><span class="No-Break"> attribute</span></li>
+<li>The cross-validation results via the <strong class="source-inline">.</strong><span class="No-Break"><strong class="source-inline">cv_results</strong></span><span class="No-Break"> attribute</span></li>
+</ul>
+<ol>
+<li value="6">Finally, you can infer the model that was trained with optimized hyperparameters using the <strong class="source-inline">.</strong><span class="No-Break"><strong class="source-inline">predict()</strong></span><span class="No-Break"> method:</span><pre class="source-code">
+y_pred = grid.predict(X_test)</pre></li>
+<li>Optionally, you can evaluate the chosen model with the <span class="No-Break">accuracy score:</span><pre class="source-code">
+print('Hyperparameter optimized accuracy:',</pre><pre class="source-code">
+    accuracy_score(y_pred, y_test))</pre></li>
+</ol>
+<p>This provides the <span class="No-Break">following output:</span></p>
+<pre class="source-code">
+<strong class="bold">Hyperparameter optimized accuracy: 0.781229050279329</strong></pre>
+<p>Thanks to the tools provided by scikit-learn, it is fairly easy to have a well-optimized model and evaluate it against several metrics. In the next recipe, we’ll learn how to diagnose bias and <a id="_idIndexMarker095"/>variance based on such <span class="No-Break">an evaluation.</span></p>
+<p><span class="No-Break">See also</span></p>
+<p>The documentation for <strong class="source-inline">GridSearchCV</strong> can be found <span class="No-Break">at </span><a href="https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.xhtml"><span class="No-Break">https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.GridSearchCV.xhtml</span></a><span class="No-Break">.</span></p>
+</div>
+</div></body></html>

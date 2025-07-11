@@ -1,0 +1,704 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer266">
+<h1 class="chapter-number" id="_idParaDest-227"><a id="_idTextAnchor227"/>9</h1>
+<h1 id="_idParaDest-228"><a id="_idTextAnchor228"/>Advanced Regularization in Natural Language Processing</h1>
+<p>A full book could be written about regularization in <strong class="bold">natural language processing</strong> (<strong class="bold">NLP</strong>). NLP is a wide field that consists of many topics, ranging from simple classification such as review ranking to complex models and solutions such as ChatGPT. This chapter will merely scratch the surface of what can reasonably be done with simple NLP solutions such <span class="No-Break">as classification.</span></p>
+<p>In this chapter, we will cover the <span class="No-Break">following recipes:</span></p>
+<ul>
+<li>Regularization using a <span class="No-Break">word2vec embedding</span></li>
+<li>Data augmentation <span class="No-Break">using word2vec</span></li>
+<li>Zero-shot inference with <span class="No-Break">pre-trained models</span></li>
+<li>Regularization with <span class="No-Break">BERT embeddings</span></li>
+<li>Data augmentation <span class="No-Break">using GPT-3</span></li>
+</ul>
+<p>By the end of this chapter, you will be able to take advantage of advanced methods for NLP tasks such as word embeddings and transformers, as well as be able to use data augmentation to generate synthetic <span class="No-Break">training data.</span></p>
+<h1 id="_idParaDest-229"><a id="_idTextAnchor229"/>Technical requirements</h1>
+<p>In this chapter, we will use various NLP solutions and tools, so we will require the <span class="No-Break">following libraries:</span></p>
+<ul>
+<li><span class="No-Break">NumPy</span></li>
+<li><span class="No-Break">pandas</span></li>
+<li><span class="No-Break">scikit-learn</span></li>
+<li><span class="No-Break">Matplotlib</span></li>
+<li><span class="No-Break">Gensim</span></li>
+<li><span class="No-Break">NLTK</span></li>
+<li><span class="No-Break">PyTorch</span></li>
+<li><span class="No-Break">Transformers</span></li>
+<li><span class="No-Break">OpenAI</span></li>
+</ul>
+<h1 id="_idParaDest-230"><a id="_idTextAnchor230"/>Regularization using a word2vec embedding</h1>
+<p>In this<a id="_idIndexMarker515"/> recipe, we will use a pre-trained word2vec <a id="_idIndexMarker516"/>embedding to improve the results of a task thanks to transfer learning. We will compare the results to the initial <em class="italic">Training a GRU</em> recipe from <a href="B19629_08.xhtml#_idTextAnchor206"><span class="No-Break"><em class="italic">Chapter 8</em></span></a>, on the IMDb dataset for <span class="No-Break">review classification.</span></p>
+<h2 id="_idParaDest-231"><a id="_idTextAnchor231"/>Getting ready</h2>
+<p>A word2vec is a rather old type of word embedding in the NLP landscape and has been widely used in many NLP tasks. While recent techniques are sometimes more powerful, the word2vec approach remains efficient <span class="No-Break">and cost-effective.</span></p>
+<p>Without getting into the details of word2vec, a commonly used model is a 300-dimensional embedding; each word in the vocabulary is embedded into a vector of <span class="No-Break">300 values.</span></p>
+<p>word2vec is usually trained on a large corpus of texts. There are two main approaches for training a word2vec that can be roughly described <span class="No-Break">as follows:</span></p>
+<ul>
+<li><strong class="bold">Continuous bag of words</strong> (<strong class="bold">CBOW</strong>): Uses <a id="_idIndexMarker517"/>the context of surrounding words in a sentence to predict a <span class="No-Break">missing word</span></li>
+<li><strong class="bold">skip-gram</strong>: Uses a word<a id="_idIndexMarker518"/> to predict its <span class="No-Break">surrounding context</span></li>
+</ul>
+<p>An example of these two approaches is proposed in <span class="No-Break"><em class="italic">Figure 9</em></span><span class="No-Break"><em class="italic">.1</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer261">
+<img alt="Figure 9.1 – An example of training data for both the CBOW (left) and skip-gram (right) methods" height="1049" src="image/B19629_09_01.jpg" width="1260"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.1 – An example of training data for both the CBOW (left) and skip-gram (right) methods</p>
+<p class="callout-heading">Note</p>
+<p class="callout">In practice, CBOW is usually easier to train, while skip-gram may have better performance for <span class="No-Break">rarer words.</span></p>
+<p>The goal is not <a id="_idIndexMarker519"/>to <a id="_idIndexMarker520"/>train our own word2vec, but simply to reuse a trained one and take advantage of transfer learning to get a performance boost in our predictions. In this recipe, instead of training our own embedding before feeding the <strong class="bold">gated recurrent unit</strong> (<strong class="bold">GRU</strong>), we <a id="_idIndexMarker521"/>will simply reuse a pre-trained word2vec embedding, and then only train our GRU on top of <span class="No-Break">these embeddings.</span></p>
+<p>For that, we will again work on the IMDb dataset classification task: a dataset containing texts of movie reviews as inputs and associated binary labels, positive or negative. The dataset for this can be downloaded with the <span class="No-Break">Kaggle API:</span></p>
+<pre class="source-code">
+kaggle datasets download -d lakshmi25npathi/imdb-dataset-of-50k-moviereviews --unzip</pre>
+<p>The following command will install the <span class="No-Break">required libraries:</span></p>
+<pre class="source-code">
+pip install pandas numpy scikit-learn matplotlib torch gensim nltk</pre>
+<h2 id="_idParaDest-232"><a id="_idTextAnchor232"/>How to do it…</h2>
+<p>In this recipe, we will train a GRU for binary classification on the IMDb review dataset. Compared to the original recipe, the main difference is in <span class="No-Break"><em class="italic">step 5</em></span><span class="No-Break">:</span></p>
+<ol>
+<li>Import the following <span class="No-Break">necessary libraries:</span><ul><li><strong class="source-inline">torch</strong> and some related modules and classes for the <span class="No-Break">neural network</span></li><li><strong class="source-inline">train_test_split</strong> and <strong class="source-inline">LabelEncoder</strong> from <strong class="source-inline">scikit-learn</strong> <span class="No-Break">for preprocessing</span></li><li><strong class="source-inline">AutoTokenizer</strong> from <strong class="source-inline">transformers</strong> to tokenize <span class="No-Break">the reviews</span></li><li><strong class="source-inline">pandas</strong> to load <span class="No-Break">the dataset</span></li><li><strong class="source-inline">numpy</strong> for <span class="No-Break">data manipulation</span></li><li><strong class="source-inline">matplotlib</strong> <span class="No-Break">for visualization</span></li><li><strong class="source-inline">gensim</strong> for the word2vec embedding and <strong class="source-inline">nltk</strong> for <span class="No-Break">work tokenization</span></li></ul></li>
+</ol>
+<p>If you haven’t <a id="_idIndexMarker522"/>done <a id="_idIndexMarker523"/>so yet, you will need to add the <strong class="source-inline">nltk.download('punkt')</strong> line to download some required utility instances, as <span class="No-Break">shown here:</span></p>
+<pre class="source-code">
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+import gensim.downloader
+import nltk
+# If running for the first time nltk.download('punkt')</pre>
+<ol>
+<li value="2">Load the pre-trained word2vec model, which contains a 300-dimension embedding. The model is about 1.6 GB and may take some time to download, depending on your <span class="No-Break">available bandwidth:</span><pre class="source-code">
+# Will take a while the first time, need to download about 1.6GB of the model</pre><pre class="source-code">
+word2vec_model = gensim.downloader.load('</pre><pre class="source-code">
+    word2vec-google-news-300')</pre></li>
+<li>Load the data from the CSV file <span class="No-Break">with </span><span class="No-Break"><strong class="source-inline">pandas</strong></span><span class="No-Break">:</span><pre class="source-code">
+# Load data data = pd.read_csv('IMDB Dataset.csv')</pre></li>
+<li>Split the data into train and test sets using the <strong class="source-inline">train_test_split</strong> function, with a test size of 20% and a specified random state <span class="No-Break">for reproducibility:</span><pre class="source-code">
+# Split data into train and test sets train_data, </pre><pre class="source-code">
+    test_data = train_test_split(data, test_size=0.2,</pre><pre class="source-code">
+        random_state=0)</pre></li>
+<li>Implement<a id="_idIndexMarker524"/> the<a id="_idIndexMarker525"/> dataset’s <strong class="source-inline">TextClassificationDataset</strong> class, which handles the data. This is where the word2vec embedding <span class="No-Break">is computed:</span><pre class="source-code">
+# Define dataset class</pre><pre class="source-code">
+class TextClassificationDataset(Dataset):</pre><pre class="source-code">
+    def __init__(self, data, word2vec_model,</pre><pre class="source-code">
+        max_words):</pre><pre class="source-code">
+        self.data = data</pre><pre class="source-code">
+        self.word2vec_model = word2vec_model</pre><pre class="source-code">
+        self.max_words = max_words</pre><pre class="source-code">
+        self.embeddings = data['review'].apply(</pre><pre class="source-code">
+            self.embed)</pre><pre class="source-code">
+        le = LabelEncoder()</pre><pre class="source-code">
+        self.labels = torch.tensor(le.fit_transform(</pre><pre class="source-code">
+            data['sentiment']).astype(np.float32))</pre><pre class="source-code">
+    def __len__(self):</pre><pre class="source-code">
+        return len(self.data)</pre><pre class="source-code">
+    def __getitem__(self, index):</pre><pre class="source-code">
+        return self.embeddings.iloc[index],</pre><pre class="source-code">
+            self.labels[index]</pre><pre class="source-code">
+    def embed(self, text):</pre><pre class="source-code">
+        tokens = nltk.word_tokenize(text)</pre><pre class="source-code">
+        return self.tokens_to_embeddings(tokens)</pre><pre class="source-code">
+    def tokens_to_embeddings(self, tokens):</pre><pre class="source-code">
+        embeddings = []</pre><pre class="source-code">
+        for i, token in enumerate(tokens):</pre><pre class="source-code">
+            if i &gt;= self.max_words:</pre><pre class="source-code">
+                break</pre><pre class="source-code">
+            if token not in self.word2vec_model:</pre><pre class="source-code">
+                continue</pre><pre class="source-code">
+            embeddings.append(</pre><pre class="source-code">
+                self.word2vec_model[token])</pre><pre class="source-code">
+        while len(embeddings) &lt; self.max_words:</pre><pre class="source-code">
+            embeddings.append(np.zeros((300, )))</pre><pre class="source-code">
+        return np.array(embeddings, dtype=np.float32)</pre></li>
+</ol>
+<p>At instantiation, each input movie is converted into an embedding in two ways with the <span class="No-Break"><strong class="source-inline">embed</strong></span><span class="No-Break"> method:</span></p>
+<ul>
+<li>Each movie review is tokenized with a word tokenizer (basically splitting sentences <span class="No-Break">into words).</span></li>
+<li>Then, a vector of <strong class="source-inline">max_words</strong> length is computed, containing the word2vec embeddings of <strong class="source-inline">max_words</strong> first words in the review. If the review is shorter than <strong class="source-inline">max_words</strong> words, the vector is filled with <span class="No-Break">zero padding.</span></li>
+</ul>
+<ol>
+<li value="6">Then, we must instantiate the <strong class="source-inline">TextClassificationDataset</strong> objects for the train and test sets, as well as the related data loaders. The maximum number of words is set to <strong class="source-inline">64</strong>, as is the <span class="No-Break">batch size:</span><pre class="source-code">
+batch_size = 64 max_words = 64</pre><pre class="source-code">
+# Initialize datasets and dataloaders</pre><pre class="source-code">
+Train_dataset = TextClassificationDataset(train_data,</pre><pre class="source-code">
+    word2vec_model, max_words)</pre><pre class="source-code">
+test_dataset = TextClassificationDataset(test_data,</pre><pre class="source-code">
+    word2vec_model, max_words)</pre><pre class="source-code">
+train_dataloader = DataLoader(train_dataset,</pre><pre class="source-code">
+    batch_size=batch_size, shuffle=True)</pre><pre class="source-code">
+test_dataloader = DataLoader(test_dataset,</pre><pre class="source-code">
+    batch_size=batch_size, shuffle=True)</pre></li>
+<li>Then, we <a id="_idIndexMarker526"/>must<a id="_idIndexMarker527"/> implement the GRU classifier model. Since the embedding was computed at the data loading step, this model is directly computing a three-layer GRU, followed by a fully connected layer with a sigmoid <span class="No-Break">activation function:</span><pre class="source-code">
+# Define RNN model</pre><pre class="source-code">
+class GRUClassifier(nn.Module):</pre><pre class="source-code">
+    def __init__(self, embedding_dim, hidden_size,</pre><pre class="source-code">
+        output_size, num_layers=3):</pre><pre class="source-code">
+            super(GRUClassifier, self).__init__()</pre><pre class="source-code">
+            self.hidden_size = hidden_size</pre><pre class="source-code">
+            self.num_layers = num_layers</pre><pre class="source-code">
+            self.gru = nn.GRU(</pre><pre class="source-code">
+                input_size=embedding_dim,</pre><pre class="source-code">
+                hidden_size=hidden_size,</pre><pre class="source-code">
+                num_layers=num_layers,</pre><pre class="source-code">
+                batch_first=True)</pre><pre class="source-code">
+        self.fc = nn.Linear(hidden_size, output_size)</pre><pre class="source-code">
+    def forward(self, inputs):</pre><pre class="source-code">
+        batch_size = inputs.size(0)</pre><pre class="source-code">
+        zero_hidden = torch.zeros(self.num_layers,</pre><pre class="source-code">
+            batch_size, self.hidden_size).to(device)</pre><pre class="source-code">
+        output, hidden = self.gru(inputs, zero_hidden)</pre><pre class="source-code">
+        output = torch.sigmoid(self.fc(output[:, -1]))</pre><pre class="source-code">
+        return output</pre></li>
+<li>Next, we must instantiate the GRU model. The embedding dimension, defined by the word2vec model, is <strong class="source-inline">300</strong>. We have chosen a hidden dimension of <strong class="source-inline">32</strong> so that each GRU layer is made up of <span class="No-Break">32 units:</span><pre class="source-code">
+embedding_dim = 300</pre><pre class="source-code">
+hidden_dim = 32</pre><pre class="source-code">
+output_size = 1</pre><pre class="source-code">
+# Optionally, set the device to GPU if you have one device = torch.device(</pre><pre class="source-code">
+    'cuda' if torch.cuda.is_available() else 'cpu')</pre><pre class="source-code">
+model = GRUClassifier(</pre><pre class="source-code">
+    embedding_dim=ebedding_dim,</pre><pre class="source-code">
+    hidden_siz=hidden_dim,</pre><pre class="source-code">
+    output_size=output_size, ).to(device)</pre></li>
+<li>Then, we<a id="_idIndexMarker528"/> must <a id="_idIndexMarker529"/>instantiate the optimizer as an <strong class="source-inline">Adam</strong> optimizer with a learning rate of <strong class="source-inline">0.001</strong>; the loss is defined as the binary cross-entropy loss since this is a binary <span class="No-Break">classification task:</span><pre class="source-code">
+optimizer = optim.Adam(model.parameters(), lr=0.001)</pre><pre class="source-code">
+criterion = nn.BCELoss()</pre></li>
+<li>Train the model for <strong class="source-inline">20</strong> epochs using the <strong class="source-inline">train_model</strong> function and store the loss and accuracy for both the train and test sets at each epoch. The implementation of the <strong class="source-inline">train_model</strong> function can be found in this book’s GitHub repository <span class="No-Break">at </span><a href="https://github.com/PacktPublishing/The-Regularization-Cookbook/blob/main/chapter_09/chapter_09.ipynb"><span class="No-Break">https://github.com/PacktPublishing/The-Regularization-Cookbook/blob/main/chapter_09/chapter_09.ipynb</span></a><span class="No-Break">:</span><pre class="source-code">
+train_losses, test_losses, train_accuracy, </pre><pre class="source-code">
+test_accuracy = train_model(</pre><pre class="source-code">
+    model, train_dataloader, test_dataloader,</pre><pre class="source-code">
+    criterion, optimizer, device, epochs=20)</pre></li>
+</ol>
+<p>Here is the typical output after <span class="No-Break">20 epochs:</span></p>
+<pre class="source-code">
+<strong class="bold">[epoch 20] Training: loss=0.207 accuracy=0.917 |  Test: loss=0.533 accuracy=0.790</strong></pre>
+<ol>
+<li value="11">Plot the BCE loss for the train and <span class="No-Break">test sets:</span><pre class="source-code">
+plt.plot(train_losses, label='train')</pre><pre class="source-code">
+plt.plot(testlosse, label=''test'')</pre><pre class="source-code">
+plt.xlabel('epoch') plt.ylabel('loss (BCE)')</pre><pre class="source-code">
+plt.legend() plt.show()</pre></li>
+</ol>
+<p>Here is the plot <span class="No-Break">for it:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer262">
+<img alt="Figure 9.2 – Binary cross-entropy loss as a function of the epoch" height="413" src="image/B19629_09_02.jpg" width="552"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.2 – Binary cross-entropy loss as a function of the epoch</p>
+<p>As we can<a id="_idIndexMarker530"/> see, while <a id="_idIndexMarker531"/>the train loss keeps decreasing over the 20 epochs, the test loss soon reaches a minimum at around 5 epochs, to then increase, <span class="No-Break">indicating overfitting.</span></p>
+<ol>
+<li value="12">Plot the accuracy for the train and <span class="No-Break">test sets:</span><pre class="source-code">
+plt.plot(train_accuracy, label='train')</pre><pre class="source-code">
+plt.plot(testaccurcy, label=''test'')</pre><pre class="source-code">
+plt.xlabel('epoch') plt.ylabel('Accuracy')</pre><pre class="source-code">
+plt.legend() plt.show()</pre></li>
+</ol>
+<p>Here is the plot <span class="No-Break">for this:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer263">
+<img alt="Figure 9.3 – Accuracy as a function of the epoch" height="413" src="image/B19629_09_03.jpg" width="551"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.3 – Accuracy as a function of the epoch</p>
+<p>As expected with <a id="_idIndexMarker532"/>the<a id="_idIndexMarker533"/> loss, the accuracy keeps increasing for the train set. For the test set, it reaches a maximum value of about 81% (against 77% without word2vec embedding, as shown in the previous chapter). Word2vec embedding allowed us to improve the results slightly, though the results may improve much more if we adjust the other <span class="No-Break">hyperparameters accordingly.</span></p>
+<h2 id="_idParaDest-233"><a id="_idTextAnchor233"/>There’s more…</h2>
+<p>While we used the embeddings as an array in this recipe, they can be used differently; for example, we can use an average of all the embeddings in a sentence or other <span class="No-Break">statistical information.</span></p>
+<p>Also, while <a id="_idIndexMarker534"/>word2vec works well enough in many<a id="_idIndexMarker535"/> cases here, a few embeddings can be derived with a more specialized approach, such as doc2vec, which is sometimes more powerful for documents and <span class="No-Break">longer texts.</span></p>
+<h2 id="_idParaDest-234"><a id="_idTextAnchor234"/>See also</h2>
+<p>The Wikipedia article about word2vec is a valuable resource as it specifies many relevant <span class="No-Break">publications: </span><a href="https://en.wikipedia.org/wiki/Word2vec#cite_note-:1-3"><span class="No-Break">https://en.wikipedia.org/wiki/Word2vec#cite_note-:1-3</span></a><span class="No-Break">.</span></p>
+<p>This documentation from Google is also <span class="No-Break">useful: </span><a href="https://code.google.com/archive/p/word2vec/"><span class="No-Break">https://code.google.com/archive/p/word2vec/</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-235"><a id="_idTextAnchor235"/>Data augmentation using word2vec</h1>
+<p>One way to <a id="_idIndexMarker536"/>regularize a model and get better <a id="_idIndexMarker537"/>performance is to have more data. Collecting data is not always easy or possible, but synthetic data can be an affordable way to improve performance. We’ll do this in <span class="No-Break">this recipe.</span></p>
+<h2 id="_idParaDest-236"><a id="_idTextAnchor236"/>Getting ready</h2>
+<p>Using word2vec embeddings, you can generate new, synthetic data that has a close semantic meaning. By doing this, it is fairly easy for a given word to get the most similar words in a <span class="No-Break">given vocabulary.</span></p>
+<p>In this recipe, using word2vec and a few parameters, we’ll see how we can generate new sentences with a close semantic meaning. We will only apply it to a given sentence as an example and propose how to integrate it into a full <span class="No-Break">training pipeline.</span></p>
+<p>The only required libraries are <strong class="source-inline">numpy</strong> and <strong class="source-inline">gensim</strong>, both of which can be installed with <strong class="source-inline">pip install </strong><span class="No-Break"><strong class="source-inline">numpy gensim</strong></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-237"><a id="_idTextAnchor237"/>How to do it…</h2>
+<p>Here are the steps to complete <span class="No-Break">this recipe:</span></p>
+<ol>
+<li>The first step is to import the necessary libraries – <strong class="source-inline">numpy</strong> for random calls and <strong class="source-inline">gensim</strong> for word2vec <span class="No-Break">model loading:</span><pre class="source-code">
+import numpy as np</pre><pre class="source-code">
+import gensim.downloader</pre></li>
+<li>Load a pre-trained word2vec model. This may take some time if the model hasn’t been downloaded and stored in a local cache already. Also, this is a rather large model, so it may take some time to load <span class="No-Break">in memory:</span><pre class="source-code">
+# Load the Word2Vec model</pre><pre class="source-code">
+word2vec_model = gensim.downloader.load(</pre><pre class="source-code">
+    'word2vec-google-news-300')</pre></li>
+<li>Implement<a id="_idIndexMarker538"/> the <strong class="source-inline">replace_words_with_similar</strong> function so that you can randomly replace <strong class="source-inline">word</strong> with <a id="_idIndexMarker539"/>another semantically <span class="No-Break">close word:</span><pre class="source-code">
+def replace_words_with_similar(text, model,</pre><pre class="source-code">
+    sim_threshold: float = 0.5,</pre><pre class="source-code">
+    probability: float = 0.5,</pre><pre class="source-code">
+    top_similar: int = 3,</pre><pre class="source-code">
+    stop_words: list[str] = []):</pre><pre class="source-code">
+    # Split in words</pre><pre class="source-code">
+    words = text.split()</pre><pre class="source-code">
+    # Create an empty list of the output words</pre><pre class="source-code">
+    new_words = []</pre><pre class="source-code">
+    # Loop over the words</pre><pre class="source-code">
+    for word in words:</pre><pre class="source-code">
+        added = False</pre><pre class="source-code">
+        # If the word is in the vocab, not in stop words, and above probability, then...</pre><pre class="source-code">
+        if word in model and word not in stop_words and np.random.uniform(0, 1) &gt; probability:</pre><pre class="source-code">
+            # Get the top_similar most similar words</pre><pre class="source-code">
+            similar_words = model.most_similar(word,</pre><pre class="source-code">
+                topn=top_similar)</pre><pre class="source-code">
+            # Randomly pick one of those words</pre><pre class="source-code">
+            idx = np.random.randint(len(similar_words))</pre><pre class="source-code">
+            # Get the similar word and similarity score</pre><pre class="source-code">
+            sim_word, sim_score = similar_words[idx]</pre><pre class="source-code">
+            # If the similary score is above threshold, add the word</pre><pre class="source-code">
+            if sim_score &gt; sim_threshold:</pre><pre class="source-code">
+                new_words.append(sim_word)</pre><pre class="source-code">
+                added = True</pre><pre class="source-code">
+        if not added:</pre><pre class="source-code">
+            # If no similar word is added, add the original word</pre><pre class="source-code">
+            new_words.append(word)</pre><pre class="source-code">
+    # Return the list as a string</pre><pre class="source-code">
+    return ' '.join(new_words)</pre></li>
+</ol>
+<p>Hopefully, the comments are self-explanatory, but here is what this <span class="No-Break">function does:</span></p>
+<ul>
+<li>It splits the input text into words by using a simple split (a word tokenizer can be used <span class="No-Break">as well)</span></li>
+<li>For each word, it checks for <span class="No-Break">the following:</span><ul><li>If the word is in the <span class="No-Break">word2vec vocabulary</span></li><li>If the word is not in a list of stop words (to <span class="No-Break">be defined)</span></li><li>If a random probability is above the threshold probability (to draw <span class="No-Break">random words)</span></li></ul></li>
+<li>If a word <a id="_idIndexMarker540"/>fulfills <a id="_idIndexMarker541"/>the previous checks, the following <span class="No-Break">is computed:</span><ul><li><strong class="source-inline">top_similar</strong> most <span class="No-Break">similar words</span></li><li>One of those words is <span class="No-Break">picked randomly</span></li><li>If the similarity score of this word is above a given threshold, add it to the <span class="No-Break">output sentence</span></li></ul></li>
+<li>If no updated word has been added, just add the original word so that the overall sentence <span class="No-Break">remains logical</span></li>
+</ul>
+<p>The parameters are <span class="No-Break">as follows:</span></p>
+<ul>
+<li><strong class="source-inline">sim_threshold</strong>: The <span class="No-Break">similarity threshold</span></li>
+<li><strong class="source-inline">probability</strong>: The probability for a word to be replaced with a <span class="No-Break">similar word</span></li>
+<li><strong class="source-inline">top_similar</strong>: The number of similar words to compute for a <span class="No-Break">given word</span></li>
+<li><strong class="source-inline">stop_words</strong>: A list of words not to be replaced in case some words are specifically important or have <span class="No-Break">several meanings</span></li>
+</ul>
+<ol>
+<li value="4">Apply the <strong class="source-inline">replace_words_with_similar</strong> function we just implemented to a <span class="No-Break">given sentence:</span><pre class="source-code">
+original_text = "The quick brown fox jumps over the lazy dog"</pre><pre class="source-code">
+generated_text = replace_words_with_similar(</pre><pre class="source-code">
+    original_text, word2vec_model, top_words=['the'])</pre><pre class="source-code">
+print(""Original text: {}"".format(original_text))</pre><pre class="source-code">
+print("New text: {}".format(generated_text))</pre></li>
+</ol>
+<p>The code output is as follows. It allows us to change a few words while keeping the <span class="No-Break">overall meaning:</span></p>
+<pre class="source-code">
+<strong class="bold">Original text: The quick brown fox jumps over the lazy dog</strong> <strong class="bold">New text: This quick brown squirrel jumps Over the lazy puppy</strong></pre>
+<p>Thanks to this <a id="_idIndexMarker542"/>data <a id="_idIndexMarker543"/>augmentation technique, it is possible to generate more diverse data so that we can make the models more robust <span class="No-Break">and regularized.</span></p>
+<h2 id="_idParaDest-238"><a id="_idTextAnchor238"/>There’s more…</h2>
+<p>One way to add such a data generation function to a classification task would be to add it at the data-loading step. This would generate synthetic data on-the-fly and could allow us to regularize the model. It could be added to the dataset class, as <span class="No-Break">shown here:</span></p>
+<pre class="source-code">
+class TextClassificationDatasetGeneration(Dataset):
+    def __init__(self, data, max_length):
+        self.data = data
+        self.max_length = max_length
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            'bert-base-uncased')
+        self.tokens = self.tokenizer(
+            data['review'].to_list(), padding=True,
+            truncation=True, max_length=max_length,
+            return_tensors='pt')['input_ids']
+        le = LabelEncoder()
+        self.labels = torch.tensor(le.fit_transform(
+            data['sentiment']).astype(np.float32))
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        # Generate a new text
+        text = replace_words_with_similar(
+            self.data['review'].iloc[index])
+        # Tokenize it
+        tokens = self.tokenizer(text, padding=True,
+            truncation=True, max_length=self.max_length,
+            return_tensors='pt')['input_ids']
+        return self.tokens[index], self.labels[index]</pre>
+<h2 id="_idParaDest-239"><a id="_idTextAnchor239"/>See also</h2>
+<p>Documentation about the <strong class="source-inline">most_similar</strong> function of <a id="_idIndexMarker544"/>the word2vec model can be found <span class="No-Break">at </span><a href="https://tedboy.github.io/nlps/generated/generated/gensim.models.Word2Vec.most_similar.xhtml"><span class="No-Break">https://tedboy.github.io/nlps/generated/generated/gensim.models.Word2Vec.most_similar.xhtml</span></a><span class="No-Break">.</span></p>
+<h1 id="_idParaDest-240"><a id="_idTextAnchor240"/>Zero-shot inference with pre-trained models</h1>
+<p>The NLP field<a id="_idIndexMarker545"/> has faced many major <a id="_idIndexMarker546"/>advances in the last few years, which means that many pre-trained, efficient models can be reused. These pre-trained, freely available models allow us to approach some NLP tasks with zero-shot inference since we can reuse those models. We’ll try this approach in <span class="No-Break">this recipe.</span></p>
+<p class="callout-heading">Note</p>
+<p class="callout">We sometimes use zero-shot inference (or zero-shot learning) and few-shot learning. Zero-shot learning means being able to perform a task without any training for this specific task; few-shot learning means performing a task while training only on a <span class="No-Break">few samples.</span></p>
+<p>Zero-shot inference is the act of reusing pre-trained models without doing any fine-tuning. There are many very powerful, free-to-use models available that can do just as well as a trained model of our own. Since the available models are trained on huge datasets with massive computational power, it is sometimes hard to compete with an in-house model that’s been trained on much less data and with less <span class="No-Break">computational power.</span></p>
+<p class="callout-heading">Note</p>
+<p class="callout">That being said, sometimes, training on small, well-curated, task-specific data can do wonders and provide much better performance. It’s all a matter <span class="No-Break">of context.</span></p>
+<p>Also, we sometimes have data without labels, so supervised learning is not a possibility. In such cases, labeling a small subsample of the data ourselves and evaluating a zero-shot approach against this data can <span class="No-Break">be useful.</span></p>
+<h2 id="_idParaDest-241"><a id="_idTextAnchor241"/>Getting ready</h2>
+<p>In this recipe, we will reuse a pre-trained model on the Tweets dataset and classify tweets as negative, neutral, or positive. Since no training is needed, we will directly evaluate the model on the test set so that it can be compared with the results we obtained with a simple RNN in the <em class="italic">Training an RNN</em> recipe from <a href="B19629_08.xhtml#_idTextAnchor206"><span class="No-Break"><em class="italic">Chapter 8</em></span></a><span class="No-Break">.</span></p>
+<p>To do so, we need to download the dataset locally. It can be downloaded with the Kaggle API and then unzipped with the <span class="No-Break">following command</span></p>
+<pre class="source-code">
+kaggle datasets download -d crowdflower/twitter-airline-sentiment --unzip</pre>
+<p>The libraries that <a id="_idIndexMarker547"/>are <a id="_idIndexMarker548"/>required to run this recipe can be installed with the <span class="No-Break">following command:</span></p>
+<pre class="source-code">
+pip install pandas scikit-learn transformers</pre>
+<h2 id="_idParaDest-242"><a id="_idTextAnchor242"/>How to do it…</h2>
+<p>Here are the steps to perform <span class="No-Break">this recipe:</span></p>
+<ol>
+<li>Import the following necessary functions <span class="No-Break">and models:</span><ul><li><strong class="source-inline">numpy</strong> for <span class="No-Break">data manipulation</span></li><li><strong class="source-inline">pandas</strong> for loading <span class="No-Break">the data</span></li><li><strong class="source-inline">train_test_split</strong> from <strong class="source-inline">scikit-learn</strong> to split <span class="No-Break">the dataset</span></li><li><strong class="source-inline">accuracy_score</strong> from <strong class="source-inline">scikit-learn</strong> to compute the <span class="No-Break">accuracy score</span></li><li><strong class="source-inline">pipeline</strong> from <strong class="source-inline">transformers</strong> for instantiating the <span class="No-Break">zero-shot classifier</span></li></ul></li>
+</ol>
+<p>Here is the code <span class="No-Break">for this:</span></p>
+<pre class="source-code">
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+from transformers import pipeline</pre>
+<ol>
+<li value="2">Load the dataset. In our case, the only columns of interest are <strong class="source-inline">text</strong> for the features and <strong class="source-inline">airline_sentiment</strong> for <span class="No-Break">the labels:</span><pre class="source-code">
+# Load dat</pre><pre class="source-code">
+Data = pd.read_csv(''Tweets.csv'')</pre><pre class="source-code">
+data[['airline_sentiment', 'text']].head()</pre></li>
+</ol>
+<p>Here is the output of <span class="No-Break">this code:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer264">
+<img alt="Figure 9.4 – First five rows of the dataset for the considered columns" height="186" src="image/B19629_09_04.jpg" width="467"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.4 – First five rows of the dataset for the considered columns</p>
+<ol>
+<li value="3">Split the data into <a id="_idIndexMarker549"/>train <a id="_idIndexMarker550"/>and test sets, with the same parameters as in the <em class="italic">Regularization using a word2vec embedding</em> recipe so that the results can be compared: <strong class="source-inline">test_size</strong> set to <strong class="source-inline">0.2</strong> and <strong class="source-inline">random_state</strong> set to <strong class="source-inline">0</strong>. Since there is no training, we will only use the <span class="No-Break">test set:</span><pre class="source-code">
+# Split data into train and test sets</pre><pre class="source-code">
+Train_data, test_data = train_test_split(data,</pre><pre class="source-code">
+    test_size=0.2, random_state=0)</pre></li>
+<li>Instantiate the classifier using a <strong class="source-inline">transformers</strong> pipeline with the <span class="No-Break">following parameters:</span><ul><li><strong class="source-inline">task="zero-shot-classification"</strong>: This will instantiate a zero-shot <span class="No-Break">classification pipeline</span></li><li><strong class="source-inline">model="facebook/bart-large-mnli"</strong>: This will specify the model to be used for <span class="No-Break">this pipeline</span></li></ul></li>
+</ol>
+<p>Here is the code <span class="No-Break">for this:</span></p>
+<pre class="source-code">
+# Taking a long time first time for downloading odel...
+Classifier = pipeline(task=""zero-shot-classification"",
+    model="facebook/bart-large-mnli")</pre>
+<p class="callout-heading">Note</p>
+<p class="callout">When this is first called, it may download several files and the model itself, and it may take <span class="No-Break">some time.</span></p>
+<ol>
+<li value="5">Store the<a id="_idIndexMarker551"/> candidate<a id="_idIndexMarker552"/> labels in an array. These candidate labels are needed for <span class="No-Break">zero-shot classification:</span><pre class="source-code">
+candidate_labels = data['airline_sentiment'].unique()</pre></li>
+<li>Compute the predictions on the test set and store them in <span class="No-Break">an array:</span><pre class="source-code">
+# Create an empty list to store the predictions</pre><pre class="source-code">
+preds = [] # Loop over the data</pre><pre class="source-code">
+for i in range(len(test_data)):</pre><pre class="source-code">
+    # Compute the classifier results</pre><pre class="source-code">
+    res = classifier(</pre><pre class="source-code">
+        test_data['text'].iloc[i],</pre><pre class="source-code">
+        candidate_labels=candidate_labels,</pre><pre class="source-code">
+    )</pre><pre class="source-code">
+    # Apply softmax to the results to get the predicted class</pre><pre class="source-code">
+    pred = np.array(res['scores']).argmax()</pre><pre class="source-code">
+    labels = res['labels']</pre><pre class="source-code">
+    # Store the results in the list</pre><pre class="source-code">
+    preds.append(labels[pred])</pre></li>
+</ol>
+<p>Refer to the <em class="italic">There’s more…</em> section for a few details about what the classifier does, as well as <span class="No-Break">its outputs.</span></p>
+<ol>
+<li value="7">Compute the accuracy score of <span class="No-Break">the predictions:</span><pre class="source-code">
+print(accuracy_score(test_data['airline_sentiment'], preds))</pre></li>
+</ol>
+<p>The computed accuracy score is <span class="No-Break">as follows:</span></p>
+<pre class="source-code">
+<strong class="bold">0.7452725250278087</strong></pre>
+<p>We got an accuracy score of 74.5%, which is equivalent to the results we had after training a simple RNN in the <em class="italic">Training an RNN</em> recipe from <a href="B19629_08.xhtml#_idTextAnchor206"><span class="No-Break"><em class="italic">Chapter 8</em></span></a>. Without any training costs and large, labeled datasets, we can get the same performance thanks to this<a id="_idIndexMarker553"/> <span class="No-Break">zero-shot</span><span class="No-Break"><a id="_idIndexMarker554"/></span><span class="No-Break"> classification.</span></p>
+<p class="callout-heading">Note</p>
+<p class="callout">Zero-shot learning comes with a cost since pre-trained language models are usually rather large and may require large computational power to run <span class="No-Break">at scale.</span></p>
+<h2 id="_idParaDest-243"><a id="_idTextAnchor243"/>There’s more…</h2>
+<p>Let’s look at an example of the input and output of <strong class="source-inline">classifier</strong> to get a better understanding of what <span class="No-Break">it does:</span></p>
+<pre class="source-code">
+res = classifier(
+    'I love to learn about regularization',
+    candidate_labels=['positive', 'negative', 'neutral'], )
+print(res)</pre>
+<p>The output of this code is <span class="No-Break">as follows:</span></p>
+<pre class="source-code">
+{'sequence': 'I love to learn about regularization',  'labels': ['positive', 'neutral', 'negative'],  'scores': [0.6277033686637878, 0.27620458602905273, 0.09609206020832062]}</pre>
+<p>Here’s what we <span class="No-Break">can see:</span></p>
+<ul>
+<li>An input sentence: <strong class="source-inline">I love to learn </strong><span class="No-Break"><strong class="source-inline">about regularization</strong></span></li>
+<li>Candidate labels: <strong class="source-inline">positive</strong>, <strong class="source-inline">negative</strong>, <span class="No-Break">and </span><span class="No-Break"><strong class="source-inline">neutral</strong></span></li>
+</ul>
+<p>The result is a dictionary with the following <span class="No-Break">key values:</span></p>
+<ul>
+<li><strong class="source-inline">'sequence'</strong>: The <span class="No-Break">input sequence</span></li>
+<li><strong class="source-inline">'labels'</strong>: The input <span class="No-Break">candidate labels</span></li>
+<li><strong class="source-inline">'scores'</strong>: A list of scores, one for each label, sorted in <span class="No-Break">decreasing order</span></li>
+</ul>
+<p class="callout-heading">Note</p>
+<p class="callout">Since the scores are always sorted in decreasing order, the labels may have a <span class="No-Break">different order.</span></p>
+<p>In the end, the predicted class can be computed with the following code, which will retrieve the <strong class="source-inline">argmax</strong> values of the scores and the <span class="No-Break">associated label:</span></p>
+<pre class="source-code">
+res['labels'][np.array(res['scores']).argmax()]</pre>
+<p>In our<a id="_idIndexMarker555"/> case, that <a id="_idIndexMarker556"/>would <span class="No-Break">output </span><span class="No-Break"><strong class="source-inline">positive</strong></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-244"><a id="_idTextAnchor244"/>See also</h2>
+<ul>
+<li>The model card <a id="_idIndexMarker557"/>of the bart-large-mnli <span class="No-Break">model: </span><a href="https://huggingface.co/facebook/bart-large-mnli"><span class="No-Break">https://huggingface.co/facebook/bart-large-mnli</span></a></li>
+<li>A tutorial from <a id="_idIndexMarker558"/>Hugging Face about zero-shot <span class="No-Break">classification: </span><a href="https://huggingface.co/course/chapter1/3?fw=pt#zero-shot-classification"><span class="No-Break">https://huggingface.co/course/chapter1/3?fw=pt#zero-shot-classification</span></a></li>
+<li>The documentation about the <strong class="source-inline">transformers</strong> pipelines, which allows us to do much more than zero-shot <span class="No-Break">classification: </span><a href="https://huggingface.co/docs/transformers/main_classes/pipelines"><span class="No-Break">https://huggingface.co/docs/transformers/main_classes/pipelines</span></a></li>
+</ul>
+<h1 id="_idParaDest-245"><a id="_idTextAnchor245"/>Regularization with BERT embeddings</h1>
+<p>Similar to how <a id="_idIndexMarker559"/>we used a pre-trained word2vec <a id="_idIndexMarker560"/>model to compute the embeddings, it is possible to use the embeddings of a pre-trained BERT model, a <span class="No-Break">transformer-based model.</span></p>
+<p>In this recipe, after quickly explaining the BERT model, we will train a model using <span class="No-Break">BERT embeddings.</span></p>
+<p><strong class="bold">BERT</strong> stands for <strong class="bold">Bidirectional Encoder Representation from Transformers</strong> and is a <a id="_idIndexMarker561"/>model that was proposed by Google in 2018. It was first deployed in late 2019 in Google Search for English queries, as well as for many other languages. The BERT model has been proven effective in several NLP tasks, including text classification <span class="No-Break">and question-answering.</span></p>
+<p>Before quickly explaining what BERT is, let’s take a<a id="_idIndexMarker562"/> step back and look <a id="_idIndexMarker563"/>at what <strong class="bold">attention mechanisms</strong> and <span class="No-Break"><strong class="bold">transformers</strong></span><span class="No-Break"> are.</span></p>
+<p>Attention mechanisms are widely used in NLP, and more and more in other fields such as computer vision, since their introduction in 2017. The high-level idea of an attention mechanism is to compute a weight for each input token concerning other tokens in the given sequence. Compared to RNNs, which process inputs as sequences, the attention mechanism considers the whole sequence at once. This allows attention-based models to handle long-range dependencies in sequences more efficiently since the attention mechanism can be considered agnostic to the <span class="No-Break">sequence length.</span></p>
+<p>Transformers are a type of neural network based on self-attention. They usually start with an embedding, as well as an absolute positional encoding that attention layers are trained on. Those <a id="_idIndexMarker564"/>layers usually use multi-head attention<a id="_idIndexMarker565"/> to capture various aspects of the input sequence. For more details, you can read the original paper, <em class="italic">Attention Is All You Need</em> (refer to the <em class="italic">See also</em> section for <span class="No-Break">the paper).</span></p>
+<p class="callout-heading">Note</p>
+<p class="callout">Since BERT uses absolute positional encodings, you are advised to use padding on the right, if any padding <span class="No-Break">is used.</span></p>
+<p>The BERT model was built on top of <strong class="source-inline">transformers</strong> and is made of 12 transformer-based encoding layers for the base model (24 layers for the large model), for about 110 million parameters. More interestingly, it was pre-trained in an unsupervised fashion, using <span class="No-Break">two methods:</span></p>
+<ul>
+<li><strong class="bold">Masked language</strong>: 15% of the tokens in a sequence are randomly masked, and the model is trained to predict the <span class="No-Break">masked tokens</span></li>
+<li><strong class="bold">Next sentence prediction</strong>: Given two sentences, the model is trained to predict whether they are consecutive in a <span class="No-Break">given text</span></li>
+</ul>
+<p>This pre-training approach is summarized in the following diagram, which was extracted from the BERT <a id="_idIndexMarker566"/>paper <a id="_idIndexMarker567"/>called <em class="italic">BERT: Pre-training of Deep Bidirectional Transformers for </em><span class="No-Break"><em class="italic">Language Understanding</em></span><span class="No-Break">:</span></p>
+<div>
+<div class="IMG---Figure" id="_idContainer265">
+<img alt="Figure 9.5 – BERT pre-training diagram proposed in the original article, BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding" height="1183" src="image/B19629_09_05.jpg" width="1390"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.5 – BERT pre-training diagram proposed in the original article, BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding</p>
+<p class="callout-heading">Note</p>
+<p class="callout">While word2vec embedding is context-free (no matter the context, a word embedding remains the same), BERT gives a different embedding for a given word, depending on its surroundings. This makes sense since a given word may have a different meaning in two sentences (for example, apple or Apple can be either a fruit or a company, depending on <span class="No-Break">the context).</span></p>
+<h2 id="_idParaDest-246"><a id="_idTextAnchor246"/>Getting ready</h2>
+<p>For this recipe, we will reuse the Tweets dataset, which can be downloaded and then unzipped locally with the following <span class="No-Break">command line:</span></p>
+<pre class="source-code">
+kaggle datasets download -d crowdflower/twitter-airline-sentiment --unzip</pre>
+<p>The necessary libraries can be installed with <strong class="source-inline">pip install torch scikit-learn </strong><span class="No-Break"><strong class="source-inline">transformers pandas</strong></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-247"><a id="_idTextAnchor247"/>How to do it…</h2>
+<p>In this<a id="_idIndexMarker568"/> recipe, we <a id="_idIndexMarker569"/>will train a simple logistic regression on top of pre-trained <span class="No-Break">BERT embeddings:</span></p>
+<ol>
+<li>Make the <span class="No-Break">required imports:</span><ul><li><strong class="source-inline">torch</strong> for device management if you have <span class="No-Break">a GPU</span></li><li>The <strong class="source-inline">train_test_split</strong> method and the <strong class="source-inline">LogisticRegression</strong> class <span class="No-Break">from </span><span class="No-Break"><strong class="source-inline">scikit-learn</strong></span></li><li>The related <strong class="source-inline">BERT</strong> classes <span class="No-Break">from </span><span class="No-Break"><strong class="source-inline">transformers</strong></span></li><li><strong class="source-inline">pandas</strong> for <span class="No-Break">data loading</span></li></ul></li>
+</ol>
+<p>Here is the code <span class="No-Break">for this:</span></p>
+<pre class="source-code">
+import torch
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from transformers import BertConfig, BertModel, BertTokenizer import pandas as pd</pre>
+<ol>
+<li value="2">Load the dataset <span class="No-Break">with </span><span class="No-Break"><strong class="source-inline">pandas</strong></span><span class="No-Break">:</span><pre class="source-code">
+# Load data data = pd.read_csv('Tweets.csv')</pre></li>
+<li>Split the dataset into train and test sets, keeping the same parameters as in the <em class="italic">Zero-shot inference</em> recipe with pre-trained models,  so that we can compare their <span class="No-Break">performance later:</span><pre class="source-code">
+# Split data into train and test sets train_data, </pre><pre class="source-code">
+    test_data = train_test_split(data, test_size=0.2,</pre><pre class="source-code">
+        random_state=0)</pre></li>
+<li>Instantiate the tokenizer and the BERT model. Instantiating the model is a <span class="No-Break">multi-step process:</span><ol><li>First, instantiate the model’s configuration with the <span class="No-Break"><strong class="source-inline">BertConfig</strong></span><span class="No-Break"> class.</span></li><li>Then, instantiate <strong class="source-inline">BertModel</strong> with <span class="No-Break">random weights.</span></li><li>Load the<a id="_idIndexMarker570"/> weights<a id="_idIndexMarker571"/> of the pre-trained model (this will display a warning since not all the weights will have <span class="No-Break">been loaded).</span></li><li>Load the model on the GPU, if any, and set the model to <span class="No-Break"><strong class="source-inline">eval</strong></span><span class="No-Break"> mode.</span></li></ol></li>
+</ol>
+<p>Here is the code <span class="No-Break">for this:</span></p>
+<pre class="source-code">
+# Instantiate the tokenizer
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+# Initializing a BERT configuration
+configuration = BertConfig()
+# Initializing a BERT model with random weights
+bert = BertModel(configuration)
+# Loading pre-trained weights
+bert = bert.from_pretrained('bert-base-uncased')
+# Load the model on the GPU
+if any device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu")
+bert.to(device)
+# Set the model to eval mode
+bert.eval()</pre>
+<p>You may get some warning messages since some layers have no <span class="No-Break">pre-trained weights.</span></p>
+<ol>
+<li value="5">Compute the embeddings for the train and test sets. This is a <span class="No-Break">two-step process:</span><ol><li>Compute the tokens with the tokenizer (and optionally load the tokens on the GPU, <span class="No-Break">if any).</span></li><li>Then, compute <span class="No-Break">the embeddings.</span></li></ol></li>
+</ol>
+<p>For more details about the inputs and outputs of the BERT model, check out the <em class="italic">There’s more…</em> subsection <a id="_idIndexMarker572"/>of <span class="No-Break">this </span><span class="No-Break"><a id="_idIndexMarker573"/></span><span class="No-Break">recipe.</span></p>
+<p>Here is the code <span class="No-Break">for this:</span></p>
+<pre class="source-code">
+max_length = 24
+# Compute the embeddings for the train set 
+train_tokens = tokenizer(
+    train_data['text'].values.tolist(),
+    add_special_tokens=True,
+    padding='max_length',
+    truncation=True,
+    max_length=max_length,
+    return_tensors='pt')
+    train_tokens = {k: v.to(device) for k,
+        v in train_tokens.items()}
+with torch.no_gad():
+    train_embeddings = bert(
+        **train_tokens)..pooler_output
+# Compute the embeddings for the test set
+test_tokens = tokenizer(
+    test_data['text'].values.tolist(),
+    add_special_tokens=True, padding='max_length',
+    truncation=True, max_length=max_length,
+    return_tensors='pt')
+test_tokens = {k: v.to(device) for k,
+    v in test_tokens.items()}
+with torch.no_grad():
+    test_embeddings = bert(
+        **test_tokens).pooler_output</pre>
+<ol>
+<li value="6">Then, instantiate and train a logistic regression model. It may require more iterations than the default model allows. Here, it has been set <span class="No-Break">to </span><span class="No-Break"><strong class="source-inline">10,000</strong></span><span class="No-Break">:</span><pre class="source-code">
+lr = LogisticRegression(C=0.5, max_iter=10000)</pre><pre class="source-code">
+lr.fit(train_embeddings.cpu(),</pre><pre class="source-code">
+    train_data['airline_sentiment'])</pre></li>
+<li>Finally, print the accuracy on the train and <span class="No-Break">test sets:</span><pre class="source-code">
+print('train accuracy:',</pre><pre class="source-code">
+    lr.score(train_embeddings.cpu(),</pre><pre class="source-code">
+    train_data['airline_sentiment']))</pre><pre class="source-code">
+print('test accuracy:',</pre><pre class="source-code">
+    lr.score(test_embeddings.cpu(),</pre><pre class="source-code">
+    test_data['airline_sentiment']))</pre></li>
+</ol>
+<p>You should have output results similar to <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+<strong class="bold">train accuracy: 0.8035348360655737 test accuracy: 0.7882513661202186</strong></pre>
+<p>We get a final result of about 79% accuracy on the test set and 80% on the train set. As a comparison, using <a id="_idIndexMarker574"/>zero-shot inference and a simple <a id="_idIndexMarker575"/>RNN on this same dataset both provided <span class="No-Break">74% accuracy.</span></p>
+<h2 id="_idParaDest-248"><a id="_idTextAnchor248"/>There’s more…</h2>
+<p>To get a better understanding of what the tokenizer computes and what the BERT model outputs, let’s have a look at <span class="No-Break">an example.</span></p>
+<p>First, let’s apply the tokenizer to <span class="No-Break">a sentence:</span></p>
+<pre class="source-code">
+tokens = tokenizer('What is a tokenizer?', add_special_tokens=True,
+    padding='max_length', truncation=True, max_length=max_length,
+    return_tensors='pt')
+print(tokens)</pre>
+<p>This outputs <span class="No-Break">the following:</span></p>
+<pre class="source-code">
+{'input_ids': tensor([[  101,  2054,  2003,  1037, 19204, 
+17629,  1029,  2023,  2003,  1037,           2204,  3160,  1012,
+   102,     0,     0,     0,     0,     0,     0,              0,
+     0,     0,     0]]), 'token_type_ids': tensor([[0, 0, 0, 
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])}</pre>
+<p>As we can see, the tokenizer returns <span class="No-Break">three outputs:</span></p>
+<ul>
+<li><strong class="source-inline">input_ids</strong>: This is the index of tokens in <span class="No-Break">the vocabulary.</span></li>
+<li><strong class="source-inline">token_type_ids</strong>: The sentence number. This is only useful for paired sentences, as in the original training <span class="No-Break">of BERT.</span></li>
+<li><strong class="source-inline">attention_mask</strong>: This is where the model will focus. As we can see, it’s only been set to <strong class="source-inline">1</strong> for actual tokens, and then to <strong class="source-inline">0</strong> <span class="No-Break">for padding.</span></li>
+</ul>
+<p>These three lists are fed to the BERT model so that it can compute its output. The output is made up of the following <span class="No-Break">two tensors:</span></p>
+<ul>
+<li><strong class="source-inline">last_hidden_state</strong>: The values of the last hidden state, whose shape is <strong class="source-inline">[batch_size, </strong><span class="No-Break"><strong class="source-inline">max_length, 768]</strong></span></li>
+<li><strong class="source-inline">pooler_output</strong>: The pooled values of the outputs over the sequence steps, whose shape is <strong class="source-inline">[</strong><span class="No-Break"><strong class="source-inline">batch_size, 768]</strong></span></li>
+</ul>
+<p>Many other types of embeddings exist and can be more or less powerful, depending on the task at hand. For example, OpenAI also proposes embeddings that can be made available using an API. For example, the following code allows us to have embeddings for a <span class="No-Break">given sentence:</span></p>
+<pre class="source-code">
+import openai
+# Give your
+openai.api_key = 'xx-xxx'
+# Query the API
+input_text = 'This is a test sentence'
+model = 'text-embedding-ada-002'
+embeddings = openai.Embedding.create(input = [input_text],
+    model=model)['data'][0]['embedding']</pre>
+<p>This would return a 1,536-dimensional embedding for the given sentence that could then be used<a id="_idIndexMarker576"/> for <a id="_idIndexMarker577"/>classification or <span class="No-Break">other tasks.</span></p>
+<p>Of course, to use these embeddings, you would need to do <span class="No-Break">the following:</span></p>
+<ul>
+<li>Install the <strong class="source-inline">openai</strong> library with <strong class="source-inline">pip </strong><span class="No-Break"><strong class="source-inline">install openai</strong></span></li>
+<li>Create an API key on the <span class="No-Break">OpenAI website</span></li>
+<li>Provide a working <span class="No-Break">payment method</span></li>
+</ul>
+<h2 id="_idParaDest-249"><a id="_idTextAnchor249"/>See also</h2>
+<ul>
+<li>The paper introducing <a id="_idIndexMarker578"/>transformers, <em class="italic">Attention is all you </em><span class="No-Break"><em class="italic">need</em></span><span class="No-Break">: </span><a href="https://arxiv.org/abs/1706.03762"><span class="No-Break">https://arxiv.org/abs/1706.03762</span></a></li>
+<li>The BERT<a id="_idIndexMarker579"/> model <span class="No-Break">card: </span><a href="https://huggingface.co/bert-base-uncased"><span class="No-Break">https://huggingface.co/bert-base-uncased</span></a></li>
+<li>The BERT <a id="_idIndexMarker580"/><span class="No-Break">paper: </span><a href="https://arxiv.org/abs/1810.04805"><span class="No-Break">https://arxiv.org/abs/1810.04805</span></a></li>
+<li>For more information about the OpenAI embeddings, here is the official <span class="No-Break">documentation: </span><a href="https://platform.openai.com/docs/guides/embeddings/use-cases"><span class="No-Break">https://platform.openai.com/docs/guides/embeddings/use-cases</span></a></li>
+</ul>
+<h1 id="_idParaDest-250"><a id="_idTextAnchor250"/>Data augmentation using GPT-3</h1>
+<p>Generative models <a id="_idIndexMarker581"/>are becoming more and more powerful, especially<a id="_idIndexMarker582"/> in NLP. Using these to generate new, synthetic data sometimes allows us to significantly improve the results we get and regularize models. We’ll learn how to do this in <span class="No-Break">this recipe.</span></p>
+<h2 id="_idParaDest-251"><a id="_idTextAnchor251"/>Getting ready</h2>
+<p>While models such as BERT are effective at tasks such as text classification, they usually do not perform very well when it comes to <span class="No-Break">text generation.</span></p>
+<p>Other types of models, such<a id="_idIndexMarker583"/> as <strong class="bold">generative pre-trained transformer</strong> (<strong class="bold">GPT</strong>) models, can be quite impressive at generating new data. In this recipe, we will use the OpenAI API and GPT-3.5 to generate synthetic yet realistic data. Having more data is key to having more regularization in our models, and data generation is one way to collect <span class="No-Break">more data.</span></p>
+<p>For this recipe, you will need to install the OpenAI library with <strong class="source-inline">pip </strong><span class="No-Break"><strong class="source-inline">install openai</strong></span><span class="No-Break">.</span></p>
+<p>Also, since the API we will use is not free, it is necessary to create an OpenAI account with a generated API key and a working <span class="No-Break">payment method.</span></p>
+<p class="callout-heading">Creating an API key</p>
+<p class="callout">You can easily create an API key in your profile by accessing the <strong class="bold">API </strong><span class="No-Break"><strong class="bold">keys</strong></span><span class="No-Break"> section.</span></p>
+<p>In the <em class="italic">There’s more…</em> section, we will provide a free alternative – that is, using GPT-2 to generate new data – but it will have less realistic results. For that to work, you must have Hugging Face’s <strong class="source-inline">transformers</strong> library, which you can install with <strong class="source-inline">pip </strong><span class="No-Break"><strong class="source-inline">install transformers</strong></span><span class="No-Break">.</span></p>
+<h2 id="_idParaDest-252"><a id="_idTextAnchor252"/>How to do it…</h2>
+<p>In this recipe, we will simply query GPT-3.5 to generate a few positive and negative movie reviews so that we have more data to train a movie review classification model. Of course, this<a id="_idIndexMarker584"/> can<a id="_idIndexMarker585"/> be derived from any classification task, as well as many other <span class="No-Break">NLP tasks:</span></p>
+<ol>
+<li>Import the <strong class="source-inline">openai</strong> library, <span class="No-Break">as follows:</span><pre class="source-code">
+import openai</pre></li>
+<li>Provide your OpenAI <span class="No-Break">API key:</span><pre class="source-code">
+openai.api_key = 'xxxxx'</pre></li>
+</ol>
+<p class="callout-heading">Note</p>
+<p class="callout">This is just a code example – never share your API key on public repositories. Use alternatives such as environment <span class="No-Break">variables instead.</span></p>
+<ol>
+<li value="3">Generate three positive examples using the <span class="No-Break"><strong class="source-inline">ChatCompletion</strong></span><span class="No-Break"> API:</span><pre class="source-code">
+positive_examples = openai.ChatCompletion.create(</pre><pre class="source-code">
+    model="gpt-3.5-turbo",</pre><pre class="source-code">
+    messages=[</pre><pre class="source-code">
+        {"role": "system", </pre><pre class="source-code">
+            "content": "You watched a movie you loved."},</pre><pre class="source-code">
+        {"role": "user", "content": "Write a short,</pre><pre class="source-code">
+            100-words review about this movie"},</pre><pre class="source-code">
+    ],</pre><pre class="source-code">
+    max_tokens=128,</pre><pre class="source-code">
+    temperature=0.5,</pre><pre class="source-code">
+    n=3, )</pre></li>
+</ol>
+<p>There are several <span class="No-Break">parameters here:</span></p>
+<ul>
+<li><strong class="source-inline">model</strong>: <strong class="source-inline">gpt-3.5-turbo</strong>, which performs well and is cost-efficient. It is based <span class="No-Break">on GPT-3.5.</span></li>
+<li><strong class="source-inline">messages</strong>: There can be three types <span class="No-Break">of messages:</span><ul><li><strong class="source-inline">system</strong>: A formatting message, followed by alternating user and <span class="No-Break">assistant messages</span></li><li><strong class="source-inline">user</strong>: A <span class="No-Break">user message</span></li><li><strong class="source-inline">assistant</strong>: An assistant message; we won’t <span class="No-Break">use this</span></li></ul></li>
+<li><strong class="source-inline">max_tokens</strong>: The maximum number of tokens in <span class="No-Break">the output.</span></li>
+<li><strong class="source-inline">temperature</strong>: This is usually between 0 and 2. A larger value means <span class="No-Break">more randomness.</span></li>
+<li><strong class="source-inline">n</strong>: The number of <span class="No-Break">desired outputs.</span></li>
+</ul>
+<ol>
+<li value="4">Now, we<a id="_idIndexMarker586"/> can <a id="_idIndexMarker587"/>display the <span class="No-Break">output-generated sentences:</span><pre class="source-code">
+for i in range(len(positive_examples['choices'])):</pre><pre class="source-code">
+    print(f'\n\nGenerated sentence {i+1}: \n')</pre><pre class="source-code">
+    print(positive_examples['choices'][i]['message']['content'])</pre><pre class="source-code">
+The following is the output of the three positive reviews generated by GPT-3.5:</pre><pre class="source-code">
+<strong class="bold">Generated sentence 1:   I recently watched the movie "Inception" and was blown away by its intricate plot and stunning visuals. The film follows a team of skilled thieves who enter people's dreams to steal their secrets. The concept of dream-sharing is fascinating and the execution of the idea is flawless. The cast, led by Leonardo DiCaprio, delivers outstanding performances that add depth to the characters. The action scenes are thrilling and the special effects are mind-bending. The film's score by Hans Zimmer is also noteworthy, adding to the overall immersive experience. "Inception" is a masterpiece that will leave you pondering its themes long after the credits roll.   Generated sentence 2:   I recently watched the movie "The Shawshank Redemption" and absolutely loved it. The story follows the life of a man named Andy Dufresne, who is wrongfully convicted of murder and sent to Shawshank prison. The movie beautifully portrays the struggles and hardships faced by prisoners, and the importance of hope and friendship in such a harsh environment. The acting by Tim Robbins and Morgan Freeman is outstanding, and the plot twists keep you engaged throughout the movie. Overall, "The Shawshank Redemption" is a must-watch for anyone who loves a good drama and a heartwarming story about the power of the human spirit.   Generated sentence 3:   I recently watched the movie "Parasite" and it blew me away. The story revolves around a poor family who slowly infiltrates the lives of a wealthy family, but things take a dark turn. The movie is a masterclass in storytelling, with each scene building tension and adding layers to the plot. The acting is superb, with standout performances from the entire cast. The cinematography is also stunning, with each shot expertly crafted to enhance the mood and atmosphere of the film. "Parasite" is a must-watch for anyone who loves a good thriller with a twist.</strong></pre></li>
+<li>Similarly, let’s<a id="_idIndexMarker588"/> generat<a id="_idIndexMarker589"/>e and display three negative examples of <span class="No-Break">movie reviews:</span><pre class="source-code">
+# Generate the generated examples</pre><pre class="source-code">
+ngative_examples = openai.ChatCompletion.create(</pre><pre class="source-code">
+    model="gpt-3.5-turbo",</pre><pre class="source-code">
+    messages=[</pre><pre class="source-code">
+        {"role": "system",</pre><pre class="source-code">
+         "content": "You watched a movie you hated."},</pre><pre class="source-code">
+        {"role": "user",</pre><pre class="source-code">
+         "content": "Write a short,</pre><pre class="source-code">
+            100-wordsreview about this movie"},</pre><pre class="source-code">
+    ],</pre><pre class="source-code">
+    max_tokens=128,</pre><pre class="source-code">
+    temperature=0.5,</pre><pre class="source-code">
+    n=3, )</pre><pre class="source-code">
+# Display the generated examples</pre><pre class="source-code">
+for i in range(len(</pre><pre class="source-code">
+    negative_examples['choices'])):</pre><pre class="source-code">
+    print(f'\n\nGenerated sentence {i+1}: \n')</pre><pre class="source-code">
+    print(negative_examples[</pre><pre class="source-code">
+        'choices'][i]['message']['content'])</pre></li>
+</ol>
+<p>The following code shows the three reviews that <span class="No-Break">were generated:</span></p>
+<pre class="source-code">
+<strong class="bold">Generated sentence 1:   I recently watched a movie that left me feeling disappointed and frustrated. The plot was weak and predictable, and the characters were one-dimensional and unrelatable. The acting was subpar, with wooden performances and lackluster chemistry between the cast. The special effects were underwhelming and failed to add any excitement or visual interest to the film. Overall, I found myself checking the time and counting down the minutes until the end. I wouldn't recommend this movie to anyone looking for a compelling and engaging cinematic experience.   Generated sentence 2:</strong>   <strong class="bold">I recently watched a movie that left me feeling disappointed and underwhelmed. The plot was predictable and lacked any real depth or complexity. The characters were one-dimensional and unrelatable, making it hard to invest in their stories. The pacing was slow and dragged on unnecessarily, making the already dull plot even more tedious to sit through. The acting was subpar, with even the most talented actors failing to bring any life to their roles. Overall, I found this movie to be a complete waste of time and would not recommend it to anyone looking for an engaging and entertaining film experience.   Generated sentence 3:   I recently watched a movie that I absolutely hated - "The Roommate". The plot was predictable and the acting was subpar at best. The characters were one-dimensional and lacked any depth or development throughout the film. The dialogue was cringe-worthy and the attempts at suspense fell flat. Overall, I found the movie to be a waste of time and would not recommend it to anyone. If you're looking for a thrilling and well-crafted thriller, "The Roommate" is definitely not the movie for you.</strong></pre>
+<p>The generated<a id="_idIndexMarker590"/> examples<a id="_idIndexMarker591"/> are well written and probably good enough to be written by a human. Also, it would be possible to generate more neutral, more random, longer, or shorter examples if needed, which is <span class="No-Break">quite convenient.</span></p>
+<h2 id="_idParaDest-253"><a id="_idTextAnchor253"/>There’s more…</h2>
+<p>Alternatively, it is possible to use the GPT-2 model for free, even though the results are less realistic. Let’s learn how to <span class="No-Break">do this.</span></p>
+<p>First, let’s instantiate a text generation pipeline based <span class="No-Break">on GPT-2:</span></p>
+<pre class="source-code">
+# Import the pipeline from transformers
+from transformers import pipeline
+# Instantiate a text-generation based on GPT-2 model
+Generator = pipeline(''text-generation'', model=''gpt2'')
+#generator = pipeline('text2text-generation')#,
+# model = 'facebook/mbart-large-50')</pre>
+<p>This generates some text. The behavior is not the same, and it only handles text completion, so you must propose the beginning of a piece of text for the model to complete <span class="No-Break">it automatically:</span></p>
+<pre class="source-code">
+# Generate the positive examples
+positive_example = generator(
+    "I loved everything about this movie, ",
+    max_length = 512,
+    num_return_sequences=3, )
+# Display the generated examples
+for i in range(len(positive_example)):
+    print(f'\n\nGenerated sentence {i+1}: \n')
+    print(positive_example[i]['generated_text'])</pre>
+<p>This outputs the<a id="_idIndexMarker592"/> following<a id="_idIndexMarker593"/> <span class="No-Break">three reviews:</span></p>
+<pre class="source-code">
+Generated sentence 1:   I loved everything about this movie,  the movie itself was great and I didn't want to stop after the first movie because I was so happy for it. But I did like the first movie and I loved the second one and so much of what I did with it and other things with how I handled the other films. What were your thoughts as fans? After the opening credits, I kept thinking, "This will be my big, special moment, I can't do this alone". I've watched the original 2 episodes, they do have a big difference in the ending. But really, it's just my dream to put in movies you love, and I'm always looking over every minute on how good they were and looking forward. I think because everyone is talking about it, and so much of the movie is just it of my dream, the movie that I am to get this, the movie that I want to watch or maybe I'm doing my dreams. Also, it's more to a big than your dream. I think if I get enough reviews, people will start to see it. There will even be a few who will see it in the summer. I know I did it in a way when I was in high school. I never read the reviews again because I'm not a gamer and I never read the reviews because I love that. But by watching the movies, I feel that I am better than that. So, my dream is going to be to give up on the game I started out with in high school and focus on the movies I like. Not just the one I played, but the one you all enjoy watching! I really hope you guys give it more attention and like for this one, just keep going or stay up for the next movie for when all the things you said can be true. Thanks in advance, and happy movie watching!   Generated sentence 2:   I loved everything about this movie,  It was a surprise to see. I want to say thank to the cast of the film, but don't call me the original star. I love that I have to keep myself on top of the world in other things. (laughs) I was excited about the ending and I was thinking about how much fun it would be to watch that ending. At the end of the day it was all for me. The movie was a shock to watch. It was all about the fact that he and her father can all die. It was so exciting. Says a fan, "I've been waiting for this movie since childhood, and this is the first time I've seen it."   Generated sentence 3:   I loved everything about this movie,  so I made the only mistake I have ever made because for once it felt like this movie was happening. It's always exciting to see a feature that gives the fans something to feel. It's a truly beautiful world in which life isn't a game; life is a process. But it's fun to be forced to watch something that tells you some great things about our environment, even when only one person actually is there, who cares about it. This film was not just another film, it was a true movie. And while I'm still looking forward to seeing more amazing, unique movies from the history of cinema, I can guarantee you that there's more we'll be hearing about from our friends at AMC and others who care about our history, the history of film making, and the history of art-design in general...</pre>
+<p>As we can<a id="_idIndexMarker594"/> see, the<a id="_idIndexMarker595"/> results are less interesting and realistic than with GPT-3, but they can still be useful if we apply some <span class="No-Break">manual filtering.</span></p>
+<h2 id="_idParaDest-254"><a id="_idTextAnchor254"/>See also</h2>
+<ul>
+<li>Chat completion<a id="_idIndexMarker596"/> documentation from <span class="No-Break">OpenAI: </span><a href="https://platform.openai.com/docs/guides/chat"><span class="No-Break">https://platform.openai.com/docs/guides/chat</span></a></li>
+<li>Text <a id="_idIndexMarker597"/>completion documentation from <span class="No-Break">OpenAI: </span><a href="https://platform.openai.com/docs/guides/completion"><span class="No-Break">https://platform.openai.com/docs/guides/completion</span></a></li>
+<li>Text generation <a id="_idIndexMarker598"/>documentation from <span class="No-Break">HuggingFace: </span><a href="https://huggingface.co/tasks/text-generation"><span class="No-Break">https://huggingface.co/tasks/text-generation</span></a></li>
+<li>GPT-2 model<a id="_idIndexMarker599"/> <span class="No-Break">card: </span><a href="https://huggingface.co/gpt2"><span class="No-Break">https://huggingface.co/gpt2</span></a></li>
+</ul>
+</div>
+</div></body></html>

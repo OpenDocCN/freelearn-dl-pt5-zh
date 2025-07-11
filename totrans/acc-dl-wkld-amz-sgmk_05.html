@@ -1,0 +1,505 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer031">
+<h1 class="chapter-number" id="_idParaDest-86"><a id="_idTextAnchor083"/>5</h1>
+<h1 id="_idParaDest-87"><a id="_idTextAnchor084"/>Considering Hardware for Deep Learning Training</h1>
+<p>Training a large <strong class="bold">deep learning</strong> (<strong class="bold">DL</strong>) model is typically a lengthy and data- and resource-hungry process. Considering an extreme case of the GPT-3 NLP model, it took approximately 34 days to train it from scratch using 1,024 NVIDIA A100 GPUs. While it’s unlikely that you will have to train such a large model from scratch, even fine-tuning large DL models on your custom data can take days or even weeks.</p>
+<p>Choosing a compute instance type for your specific model is a crucial step that will impact the cost and duration of training. AWS provides a wide spectrum of compute instances for various workload profiles. In this chapter, we will consider the price-performance characteristics of the most suitable instances for DL models, as well as scenarios where you should use one over the other for optimal performance.</p>
+<p>Training large models also requires scaling training jobs across multiple GPU devices and compute instances, a <a id="_idIndexMarker368"/>process known as distributed training. At a high level, the distributed training process has two phases: the computation phase and the communication phase. During the communication phase, individual devices and nodes exchange individual updates and compute average weight updates. The amount of data that’s exchanged is determined by your model size multiplied by its characteristics, such as precision. For large models, it’s frequently the case that bottlenecks in your training process will be network throughput and not computations on individual devices. So, as part of the hardware considerations, we will discuss network throughput requirements and the available options, such as AWS <strong class="bold">Elastic Fabric Adapter</strong> (<strong class="bold">EFA</strong>), to address potential bottlenecks in the communication phase of your training job.</p>
+<p>Another way to make your training process more efficient is to optimize your model for the hardware platform in question. When training DL models using frameworks such as TensorFlow and PyTorch, we rely on these frameworks to convert model Python code into instructions to be run on accelerators.  However, these computational instructions are generic and do not utilize the specifics of your training loop and model architecture. SageMaker Training Compiler provides a set of capabilities for optimizing your model for specific accelerator devices, thus increasing the training speed and reducing the memory footprint.</p>
+<p>In this chapter, we will cover the following topics:</p>
+<ul>
+<li>Selecting optimal compute instances</li>
+<li>Improving network throughput with EFA</li>
+<li>Compiling models for GPU devices with Training Compiler</li>
+</ul>
+<p>After reading this chapter, you will be able to select an efficient hardware configuration for your training jobs with optimal price/performance characteristics and perform further optimizations.</p>
+<h1 id="_idParaDest-88"><a id="_idTextAnchor085"/>Technical requirements</h1>
+<p>To follow along with the codes in the chapter, you will need the following:</p>
+<ul>
+<li>An AWS account and IAM user with permission to manage Amazon SageMaker resources</li>
+<li>Have a SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker compatible environment established</li>
+</ul>
+<h1 id="_idParaDest-89"><a id="_idTextAnchor086"/>Selecting optimal compute instances</h1>
+<p>Amazon SageMaker<a id="_idIndexMarker369"/> provides developers with a wide selection of compute instances organized into <strong class="bold">instance families</strong>. Each instance family has a set of instance <a id="_idIndexMarker370"/>configurations known as <em class="italic">instance types</em>.</p>
+<p>The following list highlights the instance families that are available on SageMaker:</p>
+<ul>
+<li><strong class="bold">ML.M</strong> is a family of standard <a id="_idIndexMarker371"/>instances that provides a balanced CPU and memory resource configuration. The more CPU cores you have, the more memory that will be available. This instance family doesn’t come with a GPU device.</li>
+<li><strong class="bold">ML.C</strong> is a family of<a id="_idIndexMarker372"/> compute-optimized instance designed for compute-bound applications such as data processing or certain <strong class="bold">machine learning</strong> (<strong class="bold">ML</strong>) algorithms (for instance, support vector machines). This family can be also used for ML inference. It doesn’t come with GPU devices.</li>
+<li><strong class="bold">ML.G</strong> is a family<a id="_idIndexMarker373"/> based on NVIDIA GPU devices and is primarily used for DL inference workloads. It can be also used for smaller training jobs and other compute-intense workloads.</li>
+<li><strong class="bold">ML.P</strong> is a family that <a id="_idIndexMarker374"/>comes with NVIDIA GPU devices and is designed specifically for heavy-duty DL training jobs.</li>
+</ul>
+<p>So far, we’ve only discussed<a id="_idIndexMarker375"/> general-purpose instance families that can run any compute operations in principle. In addition to that, there are specialized compute instances (known in the industry as <strong class="bold">application-specific integrated circuits</strong> or <strong class="bold">ASIC</strong>) designed <a id="_idIndexMarker376"/>specifically for DL workloads. At the time of writing, there are several types of ASIC instance families available on SageMaker or as EC2 instances:</p>
+<ul>
+<li><strong class="bold">Inferentia</strong> instances.</li>
+<li><strong class="bold">Tranium</strong> instances, which are only available on EC2 at the time of writing.</li>
+<li><strong class="bold">DL1</strong> instances, which are only available on EC2 at the time of writing. However, SageMaker support has already been announced.</li>
+</ul>
+<p>While CPU-based families can be used to run some ML training, it’s rarely a good choice for DL model training. Now, let’s review the available GPU and ASIC instances in detail.</p>
+<h2 id="_idParaDest-90"><a id="_idTextAnchor087"/>Reviewing specialized DL hardware</h2>
+<p>In this chapter, we will <a id="_idIndexMarker377"/>focus on two types of hardware used for intensive DL training workloads – GPUs and ASICs – and discuss what makes them suitable for DL training, their characteristics, and their use cases.</p>
+<p>If we look at the overall trends in ML and DL, we can observe that the industry is going from more general-purpose compute to more specialized devices.</p>
+<p>Initial ML and DL models are trained using CPU devices since CPUs allow you to run almost any type of compute operation. A CPU is also a latency-optimized device when executing a single small compute operation. However, most DL models need to run massive compute operations in parallel (for instance, when multiplying matrices). So, the CPU spends a lot of time executing atomic operations one by one.</p>
+<p>GPU devices are designed to solve a different class of problems – running large operations in parallel. You can say that the GPU is a throughput-optimized device as it runs many operations in <a id="_idIndexMarker378"/>parallel. Since DL models include large amounts of matrix computations that can be efficiently parallelized, GPUs are significantly more efficient than CPUs. </p>
+<p>Advances in GPUs have made a whole new array of DL model architectures possible. For instance, the ground-breaking AlexNet model was trained on the ImageNet dataset in 2012 using GPU devices. The research team implemented convolution and matrix operations to run specifically on a GPU and, thus, achieved a considerable speedup at training time.</p>
+<p>To simplify the usage of GPU devices for ML workloads, hardware vendors provide specialized libraries for GPU development. For example, NVIDIA created the CUDA platform – a set of libraries alongside a runtime to execute general-purpose computations on GPU devices. The CuBLAS library (part of CUDA) comes with a wide range of compute operations (such as matrix operations). You can also develop your own operations using the CUTLASS component. This is especially handy for new model architectures. Optimizing compute operations on CUDA also improves training performance.</p>
+<p>Recently, a new approach for DL hardware design became popular: ASIC. This is a device designed to do a limited set<a id="_idIndexMarker379"/> of operations but perform these operations extremely efficiently. Google’s <strong class="bold">Tensor Processor Unit</strong> (<strong class="bold">TPU</strong>) is an example of an ASIC designed for DL workloads. AWS is also actively working on specialized hardware devices for DL workloads. So far, AWS has launched Inferentia (2018) for inference and Tranium (2021) and DL1 instances (2022) based on Gaudi accelerators for training. Note that the Tranium and DL1 accelerators are only available as EC2 instances at the time of writing. We expect them to be available on SageMaker in the future.</p>
+<p>As a result of ASIC’s high specialization, it’s always a good idea to confirm that a specific DL framework or model architecture is supported by a given ASIC device. Usually, you need to convert your model code into ASIC’s instructions. This is usually done automatically by provided compilers. In the case of AWS ASICs, you need to compile your model using the open source Neuron SDK (<a href="https://aws.amazon.com/machine-learning/neuron/">https://aws.amazon.com/machine-learning/neuron/</a>).</p>
+<p>When compiling your model, Neuron SDK provides several optimizations, such as batching operations together. It uses ahead-of-time compilation, so the dimensions of the input data batches should be defined as part of the model configuration ahead of time, though note that<a id="_idIndexMarker380"/> Neuron SDK also supports a set of defined operators. If your model has unsupported operators (for instance, a custom control flow operation), you will not be able to compile your model at all. Neuron SDK supports the TensorFlow, PyTorch, and MXNet frameworks.</p>
+<p>In many cases, choosing an optimal ASIC or GPU device depends on your specific model and training hyperparameters. You can use<a id="_idIndexMarker381"/> the industry-standard benchmark known as MLPerf (<a href="https://mlcommons.org/en/training-normal-11/">https://mlcommons.org/en/training-normal-11/</a>) for guidance. Leading GPU and ASIC vendors submit the performance details of their hardware accelerators once they’ve been trained on eight popular DL models. As of December 2021, the NVIDIA A100 GPU demonstrated superior performance on all models among commercially available hardware accelerators. Google’s TPUv4 ASIC accelerator improved benchmarks on six models, though at the time of submission, TPUv4 was not commercially available.</p>
+<h2 id="_idParaDest-91"><a id="_idTextAnchor088"/>Choosing optimal instance types</h2>
+<p>Your choice of instance family <a id="_idIndexMarker382"/>and specific instance type is always driven by your use case requirements. Importantly, you may utilize several instance types and families within the same use case. For instance, you may want to start experimenting with single GPU training while getting your hyperparameters right and performing overall model debugging. Then, you can gradually scale your training to a larger number of nodes or move the training job to an instance type with a more performant accelerator.</p>
+<p>You must consider some of the following criteria when selecting an optimal instance type:</p>
+<ul>
+<li><strong class="bold">Model architecture and its size</strong>: This <a id="_idIndexMarker383"/>defines the memory requirements for storing the model on a GPU accelerator.</li>
+<li><strong class="bold">Desired training mode</strong>: Here, you must choose whether you want to train the model on a single GPU, multi-GPU, or multi-GPU multi-node.</li>
+<li><strong class="bold">Business priorities</strong>: Here, you must choose whether you want to train your model as fast as possible or as cheap as possible or find an acceptable cost-performance balance.</li>
+</ul>
+<p>It’s important to keep the<a id="_idIndexMarker384"/> following characteristics of instance types in mind when choosing the right one for your particular case:</p>
+<ul>
+<li><strong class="bold">Accelerator architecture</strong>: This influences the performance of computations. For instance, the newest NVIDIA A100 chip delivers ~2.5x performance improvement over the previous generation V100 chip.</li>
+<li><strong class="bold">vCPU cores available</strong>: These will be used in operations such as data loading and processing.</li>
+<li><strong class="bold">Intra- and inter-GPU network throughput</strong>: This defines how quickly data (gradients) can be exchanged between training devices when running multi-GPU and/or multi-node training jobs.</li>
+<li>The price of using the chosen instance type.</li>
+</ul>
+<p>In the following subsections, we will outline several typical use cases, ordered from the small and most cost-efficient to the largest and most performant.</p>
+<h3>The G5 family – cost-efficient training for small and medium models</h3>
+<p>When experimenting with training small <a id="_idIndexMarker385"/>or medium-sized DL models, you may consider G5 instances as cost-efficient yet powerful. They come with up to<a id="_idIndexMarker386"/> eight <strong class="bold">NVIDIA A10G</strong> accelerators, up to 100 Gbps network bandwidth, and up to 192 vCPUs. The following table shows the specifications for the G5 family:</p>
+<table class="No-Table-Style _idGenTablePara-1" id="table001-1">
+<colgroup>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+</colgroup>
+<tbody>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p> </p>
+</td>
+<td class="No-Table-Style">
+<p>Instance Size</p>
+</td>
+<td class="No-Table-Style">
+<p>GPU</p>
+</td>
+<td class="No-Table-Style">
+<p>GPU Memory (GiB)</p>
+</td>
+<td class="No-Table-Style">
+<p>vCPUs</p>
+</td>
+<td class="No-Table-Style">
+<p>Memory (GiB)</p>
+</td>
+<td class="No-Table-Style">
+<p>Network Bandwidth (Gbps)</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style" rowspan="5">
+<p>Single-GPU VMs</p>
+</td>
+<td class="No-Table-Style">
+<p>g5.xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>1</p>
+</td>
+<td class="No-Table-Style">
+<p>24</p>
+</td>
+<td class="No-Table-Style">
+<p>4</p>
+</td>
+<td class="No-Table-Style">
+<p>16</p>
+</td>
+<td class="No-Table-Style">
+<p>Up to 10</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>g5.2xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>1</p>
+</td>
+<td class="No-Table-Style">
+<p>24</p>
+</td>
+<td class="No-Table-Style">
+<p>8</p>
+</td>
+<td class="No-Table-Style">
+<p>32</p>
+</td>
+<td class="No-Table-Style">
+<p>Up to 10</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>g5.4xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>1</p>
+</td>
+<td class="No-Table-Style">
+<p>24</p>
+</td>
+<td class="No-Table-Style">
+<p>16</p>
+</td>
+<td class="No-Table-Style">
+<p>64</p>
+</td>
+<td class="No-Table-Style">
+<p>Up to 25</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>g5.8xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>1</p>
+</td>
+<td class="No-Table-Style">
+<p>24</p>
+</td>
+<td class="No-Table-Style">
+<p>32</p>
+</td>
+<td class="No-Table-Style">
+<p>128</p>
+</td>
+<td class="No-Table-Style">
+<p>25</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>g5.16xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>1</p>
+</td>
+<td class="No-Table-Style">
+<p>24</p>
+</td>
+<td class="No-Table-Style">
+<p>64</p>
+</td>
+<td class="No-Table-Style">
+<p>256</p>
+</td>
+<td class="No-Table-Style">
+<p>25</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style" rowspan="3">
+<p>Multi-GPU VMs</p>
+</td>
+<td class="No-Table-Style">
+<p>g5.12xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>4</p>
+</td>
+<td class="No-Table-Style">
+<p>96</p>
+</td>
+<td class="No-Table-Style">
+<p>48</p>
+</td>
+<td class="No-Table-Style">
+<p>192</p>
+</td>
+<td class="No-Table-Style">
+<p>40</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>g5.24xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>4</p>
+</td>
+<td class="No-Table-Style">
+<p>96</p>
+</td>
+<td class="No-Table-Style">
+<p>96</p>
+</td>
+<td class="No-Table-Style">
+<p>384</p>
+</td>
+<td class="No-Table-Style">
+<p>50</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>g5.48xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>8</p>
+</td>
+<td class="No-Table-Style">
+<p>192</p>
+</td>
+<td class="No-Table-Style">
+<p>192</p>
+</td>
+<td class="No-Table-Style">
+<p>768</p>
+</td>
+<td class="No-Table-Style">
+<p>100</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 5.1 – G5 family specification</p>
+<p>If you are looking to <a id="_idIndexMarker387"/>run a model on a single GPU device, you should choose a single-GPU VM, depending on other system requirements (network, RAM, vCPUs, and so on). If you would like to run several experiments simultaneously (each using a different GPU device), you should choose a multi-GPU VM. Note that in the case of multi-GPU VMs, individual GPU devices are not connected using a high-speed <strong class="bold">NVLink interconnect</strong>. So, if you<a id="_idIndexMarker388"/> are looking to run multi-GPU distributed training, the P3 family with NVLink will be more appropriate.</p>
+<p>Alternatively, you can also consider the previous generation of G4 instances, which has a lower hourly price (up to 50% of the G5 rate for certain instances). However, according to AWS internal benchmarks, G5 has <a id="_idIndexMarker389"/>up to a 40% better price-performance ratio than G4.</p>
+<h3>The P3 family – high-performance and cost-efficient training </h3>
+<p>The P3 family offers high performance and <a id="_idIndexMarker390"/>cost efficiency for large-scale models. It comes<a id="_idIndexMarker391"/> with up to eight <strong class="bold">NVIDIA V100</strong> accelerators and unlike the G5 family, it supports the highly efficient NVLink GPU interconnect:</p>
+<table class="No-Table-Style _idGenTablePara-1" id="table002">
+<colgroup>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+<col/>
+</colgroup>
+<tbody>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>Instance Size</p>
+</td>
+<td class="No-Table-Style">
+<p>GPUs – Tesla V100</p>
+</td>
+<td class="No-Table-Style">
+<p>GPU Peer-to-Peer</p>
+</td>
+<td class="No-Table-Style">
+<p>GPU Memory (GB)</p>
+</td>
+<td class="No-Table-Style">
+<p>vCPUs</p>
+</td>
+<td class="No-Table-Style">
+<p>Memory (GB)</p>
+</td>
+<td class="No-Table-Style">
+<p>Network Bandwidth</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>p3.2xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>1</p>
+</td>
+<td class="No-Table-Style">
+<p>N/A</p>
+</td>
+<td class="No-Table-Style">
+<p>16</p>
+</td>
+<td class="No-Table-Style">
+<p>8</p>
+</td>
+<td class="No-Table-Style">
+<p>61</p>
+</td>
+<td class="No-Table-Style">
+<p>Up to 10 Gbps</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>p3.8xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>4</p>
+</td>
+<td class="No-Table-Style">
+<p>NVLink</p>
+</td>
+<td class="No-Table-Style">
+<p>64</p>
+</td>
+<td class="No-Table-Style">
+<p>32</p>
+</td>
+<td class="No-Table-Style">
+<p>244</p>
+</td>
+<td class="No-Table-Style">
+<p>10 Gbps</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>p3.16xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>8</p>
+</td>
+<td class="No-Table-Style">
+<p>NVLink</p>
+</td>
+<td class="No-Table-Style">
+<p>128</p>
+</td>
+<td class="No-Table-Style">
+<p>64</p>
+</td>
+<td class="No-Table-Style">
+<p>488</p>
+</td>
+<td class="No-Table-Style">
+<p>25 Gbps</p>
+</td>
+</tr>
+<tr class="No-Table-Style">
+<td class="No-Table-Style">
+<p>p3dn.24xlarge</p>
+</td>
+<td class="No-Table-Style">
+<p>8</p>
+</td>
+<td class="No-Table-Style">
+<p>NVLink</p>
+</td>
+<td class="No-Table-Style">
+<p>256</p>
+</td>
+<td class="No-Table-Style">
+<p>96</p>
+</td>
+<td class="No-Table-Style">
+<p>768</p>
+</td>
+<td class="No-Table-Style">
+<p>100 Gbps</p>
+</td>
+</tr>
+</tbody>
+</table>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 5.2 – P3 family specification</p>
+<p>The <strong class="source-inline">p3.2xlarge</strong> instance is a good choice for running single-GPU training of complex DL models (assuming you can fit them into memory). If your model doesn’t fit into a single-GPU device, you may choose <strong class="source-inline">p3.8xlarge</strong> or <strong class="source-inline">p3.16xlarge</strong>, which are multi-node instances. In this case, you will store parts of your model in several GPUs. NVLink interconnect provides high-speed data exchange between GPUs during forward and backward passes.</p>
+<p>Another application area for <strong class="source-inline">p3.8xlarge</strong> and <strong class="source-inline">p3.16xlarge</strong> is running multi-GPU data parallel training jobs. In this use case, you load the copy of your DL model into each GPU device but use different batches of data to train. NVLink interconnect ensures high-speed gradient exchange and computations at the end of each training iteration between GPU nodes.</p>
+<p>The most <a id="_idIndexMarker392"/>powerful instance, <strong class="source-inline">p3dn.24xlarge</strong>, comes with an EFA network device, which provides low latency and consistence communication between nodes. This makes <strong class="source-inline">p3dn.24xlarge</strong> instances a great choice for large-scale multi-GPU multi-mode training jobs, especially if your training job is network constrained.</p>
+<h3>The P4 family – highest performance for training</h3>
+<p>The P4 family is based on <a id="_idIndexMarker393"/>NVIDIA A100 GPU accelerators, which beats the MLPerf benchmark among any commercially available accelerators as of December 2021. The P4 family has a single instance, <strong class="source-inline">p4d.24xlarge</strong>, which comes with eight A100 GPU devices, 96 vCPUs, and 1,152 GBs of RAM. </p>
+<p>These characteristics make the <strong class="source-inline">p4d.24xlarge</strong> instance ideal for training large SOTA DL models using distributed training approaches. However, when training large models, the amount of data that needs to be exchanged between devices in your training cluster might be higher than your inter-GPU and inter-node network bandwidth, which may lead to slowing your overall training speed and the underutilization of expensive GPU resources. AWS provides several networking capabilities for the <strong class="source-inline">p4d.24xlarge</strong> instance to mitigate this issue:</p>
+<ul>
+<li>Up to 600 GB/s bidirectional bandwidth between GPUs in the same node using NVLink</li>
+<li>Up to 400 GB/s bandwidth between<a id="_idIndexMarker394"/> GPUs on different nodes using <strong class="bold">GPUDirect RDMA</strong> over EFA</li>
+</ul>
+<p>Additionally, <strong class="source-inline">p4d.24xlarge</strong> supports a wide spectrum of precision point types: FP64, FP32, FP16, INT8, BF16, and TF32. If your framework and model support has mixed precision, you may be able to achieve better performance with minimal compromise in terms of model accuracy.</p>
+<p>Naturally, <strong class="source-inline">p4d.24xlarge</strong> is more<a id="_idIndexMarker395"/> expensive than other instances. However, the price difference between the second-most expensive instance, <strong class="source-inline">p3dn.24xlarge</strong>, is only around ~5%. Given its superior performance, P4 can deliver up to 60% lower costs for training and over 2.5x better DL performance according to internal AWS benchmarks. This makes <strong class="source-inline">p4d.24xlarge</strong> not only the most performant instance for DL training but also the most cost-efficient for large SOTA DL models. You can find detailed performance benchmarks for the P4d instance family in the following article: <a href="https://aws.amazon.com/blogs/compute/amazon-ec2-p4d-instances-deep-dive/">https://aws.amazon.com/blogs/compute/amazon-ec2-p4d-instances-deep-dive/</a>.</p>
+<h1 id="_idParaDest-92"><a id="_idTextAnchor089"/>Improving network throughput with EFA</h1>
+<p>When training large DL models, you<a id="_idIndexMarker396"/> need to break your large training task into smaller tasks and distribute them across multiple compute devices. Distributed training includes the following key steps:</p>
+<ol>
+<li>Each device in the training cluster does the following:<ol><li>Reads a unique minibatch from the global data batch</li><li>Runs a minibatch through the model and computes loss</li><li>Computes the gradients to minimize loss</li></ol></li>
+<li>Each device communicates gradients to its peers. Average gradients are computed.</li>
+<li>Each device updates the model according to the averaged gradients.</li>
+</ol>
+<p>To measure the efficiency of distributed training, we can use the scaling factor, which is defined as follows:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer027">
+<img alt="" height="85" src="image/B17519_05_001.jpg" width="352"/>
+</div>
+</div>
+<p>Here, <em class="italic">T</em> is the throughput of a single device, <em class="italic">n</em> is the number of devices in the training cluster, and <em class="italic">nT</em> is the achieved overall throughput of your training cluster. While ideal scaling is rarely achievable (meaning adding more resources proportionally reduces the training time), in many recent benchmarks, it was shown that scaling efficiency as high as 90% is achievable with careful application, hardware, and network optimizations.</p>
+<p>To profile your training job <a id="_idIndexMarker397"/>for performance bottlenecks, it’s important to measure the performance of each step. It was shown that in many instances, the communication phase (<em class="italic">s</em><em class="italic">tep 2</em>) is a global bottleneck in the training process (for an example, see <em class="italic">Is Network the Bottleneck of Distributed Training?</em> At <a href="https://arxiv.org/pdf/2006.10103.pdf">https://arxiv.org/pdf/2006.10103.pdf</a>). In this section, we will focus on understanding how to optimize the communication phase.</p>
+<p>Several factors define the amount of data that’s sent and received on each node:</p>
+<ul>
+<li>First, there’s the communication algorithm, which defines how training devices exchange gradient updates with each other. At the time of writing, the most popular <a id="_idIndexMarker398"/>approach is called Ring-AllReduce. This algorithm allows you to efficiently communicate gradient updates between each training device. Each of the <em class="italic">N</em> nodes communicates with two of its peers <img alt="" height="30" src="image/B17519_05_002.png" width="147"/> times. The overall amount of information that’s sent in a single iteration by each training device is <img alt="" height="70" src="image/B17519_05_003.png" width="306"/> for large <em class="italic">N</em>, where <em class="italic">D</em> is the size of the gradient updates. This can be seen in the following diagram:</li>
+</ul>
+<div>
+<div class="IMG---Figure" id="_idContainer030">
+<img alt="Figure 5.3 – Ring-AllReduce communication algorithm " height="526" src="image/B17519_05_03.jpg" width="1341"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 5.3 – Ring-AllReduce communication algorithm</p>
+<ul>
+<li>Second, there’s the size of the model and its precision (<em class="italic">D</em> in the preceding formula).</li>
+</ul>
+<p>For instance, if we <a id="_idIndexMarker399"/>use the Ring-AllReduce algorithm to train the BERT model (which contains approximately 340 million parameters) with half-precision, each training device will send and receive approximately 650 MB of data during a single iteration. Communication needs to happen quickly. The slowdown of an individual device will cause an overall slowdown in the training process.</p>
+<h2 id="_idParaDest-93"><a id="_idTextAnchor090"/>Introducing EFA</h2>
+<p>Amazon EFA is a network <a id="_idIndexMarker400"/>device that provides lower and more consistent latency than traditional TCP transport. EFA was designed specifically for high-performance and ML use cases where inter-instance communication is critical for distributed jobs.</p>
+<p>EFA provides the following benefits:</p>
+<ul>
+<li>OS bypass functionally, which <a id="_idIndexMarker401"/>allows DL applications to communicate directly with the network interface hardware to provide low latency and reliable transport functionality.</li>
+<li>Support for high-performance message protocols such as <strong class="bold">MPI</strong> and <strong class="bold">NCCL</strong>. For DL use cases, we are specifically interested in the NVIDIA NCCL library, which provides high-performance communication routines for GPU devices.</li>
+</ul>
+<p>Using EFA allows you to significantly increase training job performance. According to AWS benchmarks, using EFA allows you to train BERT 130% faster on 32 instances of <strong class="source-inline">ml.p4dl.24xlarge</strong> compared to<a id="_idIndexMarker402"/> the default <strong class="bold">Elastic Network Adapter</strong> (<strong class="bold">ENA</strong>).</p>
+<p>There is no additional cost to <a id="_idIndexMarker403"/>using EFA on SageMaker. EFA is available for the <strong class="source-inline">ml.p3dn.24xlarge</strong>, <strong class="source-inline">ml.p4d.24xlarge</strong>, and <strong class="source-inline">ml.c5n.18xlarge</strong> SageMaker instances.</p>
+<h2 id="_idParaDest-94"><a id="_idTextAnchor091"/>Using EFA with custom training containers</h2>
+<p>SageMaker provides seamless integration with EFA devices. If you are using TensorFlow or PyTorch DL containers <a id="_idIndexMarker404"/>with supported training instances, EFA will be enabled automatically. </p>
+<p>If you choose to use a custom<a id="_idIndexMarker405"/> container, you will need to install the necessary EFA packages, as well as the MPI and NCCL libraries, in that container. The following steps show how to do it in your Dockerfile:</p>
+<ol>
+<li value="1">First, you must define the versions of the MPI, NCCL, EFA, and OFI libraries you will be using, as follows:<p class="source-code">ARG OPEN_MPI_PATH=/opt/amazon/openmpi/</p><p class="source-code">ENV NCCL_VERSION=2.7.8</p><p class="source-code">ENV EFA_VERSION=1.11.2</p><p class="source-code">ENV BRANCH_OFI=1.1.1</p></li>
+<li>Then, you must download and execute the EFA driver installer:<p class="source-code">RUN cd $HOME \</p><p class="source-code">  &amp;&amp; curl -O https://s3-us-west-2.amazonaws.com/aws-efa-installer/aws-efa-installer-${EFA_VERSION}.tar.gz \</p><p class="source-code">  &amp;&amp; tar -xf aws-efa-installer-${EFA_VERSION}.tar.gz \</p><p class="source-code">  &amp;&amp; cd aws-efa-installer \</p><p class="source-code">  &amp;&amp; ./efa_installer.sh -y --skip-kmod -g \</p><p class="source-code">ENV PATH="$OPEN_MPI_PATH/bin:$PATH"</p><p class="source-code">ENV LD_LIBRARY_PATH="$OPEN_MPI_PATH/lib/:$LD_LIBRARY_PATH"</p></li>
+<li>Now, you must clone <a id="_idIndexMarker406"/>and build the NCCL library from the public NVIDIA repository:<p class="source-code">RUN cd <strong class="source-inline">$HOME</strong> \</p><p class="source-code">  &amp;&amp; git clone https://github.com/NVIDIA/nccl.git -b v<strong class="source-inline">${NCCL_VERSION}</strong>-1 \</p><p class="source-code">  &amp;&amp; cd nccl \</p><p class="source-code">  &amp;&amp; make -j64 src.build BUILDDIR=/usr/local</p></li>
+<li>Next, you must <a id="_idIndexMarker407"/>install the AWS OFI NCCL plugin, which allows you to use the EFA networking module with NCCL applications:<p class="source-code">RUN apt-get update &amp;&amp; apt-get install -y autoconf</p><p class="source-code">RUN cd <strong class="source-inline">$HOME</strong> \</p><p class="source-code">  &amp;&amp; git clone https://github.com/aws/aws-ofi-nccl.git -b v<strong class="source-inline">${BRANCH_OFI}</strong> \</p><p class="source-code">  &amp;&amp; cd aws-ofi-nccl \</p><p class="source-code">  &amp;&amp; ./autogen.sh \</p><p class="source-code">  &amp;&amp; ./configure --with-libfabric=/opt/amazon/efa \</p><p class="source-code">       --with-mpi=/opt/amazon/openmpi \</p><p class="source-code">       --with-cuda=/usr/local/cuda \</p><p class="source-code">       --with-nccl=/usr/local --prefix=/usr/local \</p><p class="source-code">  &amp;&amp; make &amp;&amp; make install</p></li>
+<li>Finally, you must install NCCL tests and execute them to check the correctness and performance of NCCL operations:<p class="source-code">RUN cd <strong class="source-inline">$HOME</strong> \</p><p class="source-code">  &amp;&amp; git clone https://github.com/NVIDIA/nccl-tests \</p><p class="source-code">  &amp;&amp; cd nccl-tests \</p><p class="source-code">  &amp;&amp; make MPI=1 MPI_HOME=/opt/amazon/openmpi CUDA_HOME=/usr/local/cuda NCCL_HOME=/usr/local</p></li>
+</ol>
+<p>In this section, we discussed the network between devices in distributed training and its implications for overall training efficiency. Since the network frequently becomes a global bottleneck for your training, we shared an intuition on how you can size your network bandwidth <a id="_idIndexMarker408"/>based on your <a id="_idIndexMarker409"/>cluster configuration and model parameters. Then, we reviewed the EFA network device from AWS, which improves network bandwidth and efficiency. Since EFA comes at no additional cost or any drawbacks for users, it’s advisable to use it when possible.</p>
+<h1 id="_idParaDest-95"><a id="_idTextAnchor092"/>Compiling models for GPU devices with Training Compiler</h1>
+<p>SageMaker Training Compiler is a <a id="_idIndexMarker410"/>capability that allows you to automatically optimize NLP DL models to run on GPU instances. For supported model architectures and frameworks, no code changes are required in your training scripts. You will only need to enable Training Compiler in your SageMaker training job configuration. Training Compiler can both reduce training speed time and memory requirements without this having any impact on model accuracy. For instance, according to AWS benchmarks, the training time and cost for the RoBERTa-based model are reduced by 30% when using Training Compiler.</p>
+<p>Let’s review how SageMaker Training Compiler works under the hood and how to use it in training jobs.</p>
+<h2 id="_idParaDest-96"><a id="_idTextAnchor093"/>Introducing the XLA optimization library</h2>
+<p><strong class="bold">Accelerated Linear Algebra</strong> (<strong class="bold">XLA</strong>) is a domain-specific compiler that accelerates model training and execution with little to no <a id="_idIndexMarker411"/>changes in model code. At the time of writing, XLA is supported for the TensorFlow and PyTorch frameworks. SageMaker Training<a id="_idIndexMarker412"/> Compiler abstracts interactions with the XLA library and uses them to optimize training jobs running on SageMaker. SageMaker Training Compiler supports both single-GPU and distributed training jobs.</p>
+<p>When you’re training your model without XLA, all operations are executed individually. Let’s say your model has two sequential operations: matrix multiplication and matrix addition. Without XLA, your framework execution engine will send these two operations (known as <em class="italic">kernels</em>) one by one to the GPU device. When<a id="_idIndexMarker413"/> running with XLA, it will compile two operations into a single kernel launch by fusing the addition and multiplication operations. Fused operations must be executed entirely on GPU registers and only joined results should be streamed to end users. Removing redundant memory operations is one of the key optimization features of the XLA compiler.</p>
+<p>Another notable difference between the XLA compiler and others is that unlike your regular CUDA operations, which are executed<a id="_idIndexMarker414"/> immediately (known as <em class="italic">eager</em> execution), XLA tensors operations are “lazy.” First, the XLA compiler constructs the graph of fused operations and keeps tensors as placeholders in this execution graph. Only when the results of operations are needed will the compute operations be performed. By deferring execution, XLA finds opportunities to fuse operations in your model’s computational graph.</p>
+<h2 id="_idParaDest-97"><a id="_idTextAnchor094"/>Using SageMaker Training Compiler</h2>
+<p>SageMaker Training Compiler is<a id="_idIndexMarker415"/> tested on a wide range of NLP models, as well as on popular CV models for image classification and object detection for both PyTorch and TensorFlow implementations. As we expect this list to grow over time, please consult the following page for the latest set of supported models: <a href="https://docs.aws.amazon.com/sagemaker/latest/dg/training-compiler-support.xhtml">https://docs.aws.amazon.com/sagemaker/latest/dg/training-compiler-support.xhtml</a>. This page also provides suggested training and model configurations, such as instance type, precision (mixed or not), and batch size.  </p>
+<p>SageMaker Training Compiler can also be used for models that have not been officially tested. When using Training Compiler with untested models, keep the following in mind:</p>
+<ul>
+<li>You may need to modify your training script, such as by setting a proper XLA device, using XLA-compatible optimizers, data loaders, and XLA training loop semantics.</li>
+<li>You may need to do a hyperparameter search (specifically, batch size and learning rate) to find the optimal configuration for your training job. This is because SageMaker Training Compiler changes the memory footprint of your model. </li>
+<li>Training Compiler is only available for a subset of SageMaker Deep Learning Containers. Refer to the following page for the latest containers with Training Compiler support: <a href="https://github.com/aws/deep-learning-containers/blob/master/available_images.md">https://github.com/aws/deep-learning-containers/blob/master/available_images.md</a>.</li>
+</ul>
+<p>When benchmarking the results of your custom models with and without Training Compiler enabled, keep in mind that it takes some time for SageMaker to compile your model, which adds to the overall training time. Hence, it may not be practical to use Training Compiler for short-running training jobs (such as fine-tuning a task on a small dataset). Also, it’s important to get your batch size right. Typically, you can expect Training Compiler to reduce the <a id="_idIndexMarker416"/>memory print of your model so that you can increase the maximum batch size. With increased batch size, you will need to scale your learning rate proportionally. Please note that the memory requirements for a given model may not always be reduced. In this case, you won’t be able to increase your batch size. Using Training Compiler for untested models requires experimentation to achieve optimal results.</p>
+<h2 id="_idParaDest-98"><a id="_idTextAnchor095"/>Using Training Compiler</h2>
+<p>To use Training Compiler for<a id="_idIndexMarker417"/> one of the tested models, you will need to enable it explicitly as part of your training job configuration. Follow these steps:</p>
+<ol>
+<li value="1">Start by importing the <strong class="source-inline">TrainingCompilerConfig</strong> object. Note that it’s available in PythonSDK &gt; 2.7.x:<p class="source-code">from sagemaker.huggingface import HuggingFace, TrainingCompilerConfig</p></li>
+</ol>
+<p>The <strong class="source-inline">TrainingCompilerConfig</strong> object supports the following arguments:</p>
+<ul>
+<li><strong class="source-inline">enabled</strong> (<strong class="source-inline">bool</strong>): Optional. This is a switch that enables SageMaker Training Compiler. The default is <strong class="source-inline">True</strong>.</li>
+<li><strong class="source-inline">debug</strong> (<strong class="source-inline">bool</strong>): Optional. This specifies whether detailed logs for debugging are dumped. This comes with a potential performance slowdown. The default is <strong class="source-inline">False</strong>.</li>
+</ul>
+<ol>
+<li value="2">Next, you need to <a id="_idIndexMarker418"/>configure the necessary hyperparameters for SageMaker Training Compiler:<p class="source-code">hyperparameters = {</p><p class="source-code">    "epochs": 5,</p><p class="source-code">    "train_batch_size": 24,</p><p class="source-code">    "model_name": "bert-base-cased",</p><p class="source-code">}</p><p class="source-code"># Scale the learning rate by batch size, as original LR was using batch size of 32</p><p class="source-code">hyperparameters["learning_rate"] = float("5e-5") / 32 * hyperparameters["train_batch_size"]</p></li>
+<li>Next, you must configure the <strong class="source-inline">HuggingFace</strong> training job, as you did previously, with the only exception that you must explicitly pass <strong class="source-inline">TrainingCompilerObject</strong> in the default <strong class="source-inline">enabled</strong> state as part of the training configuration:<p class="source-code">sm_training_compiler_estimator = HuggingFace(</p><p class="source-code">    entry_point="train.py",</p><p class="source-code">    instance_type="ml.p3.2xlarge",</p><p class="source-code">    instance_count=1,</p><p class="source-code">    role=role,</p><p class="source-code">    py_version="py38",</p><p class="source-code">    transformers_version="4.11.0",</p><p class="source-code">    pytorch_version="1.9.0",</p><p class="source-code">    compiler_config=TrainingCompilerConfig(),</p><p class="source-code">    hyperparameters=hyperparameters,</p><p class="source-code">    disable_profiler=True,</p><p class="source-code">    debugger_hook_config=False,</p><p class="source-code">)</p></li>
+</ol>
+<p class="callout-heading">Note</p>
+<p class="callout">It’s recommended that you disable the SageMaker Profile and SageMaker Debugger capabilities for the optimal performance of Training Compiler. Note the appropriate settings in our training job.</p>
+<p>Once the training job has started, you must ensure that the model was compiled. For this, you should expect to see the following message in the training job logs, which indicates that Training <a id="_idIndexMarker419"/>Compiler worked as expected:</p>
+<pre class="source-code">
+Found configuration for Training Compiler
+Configuring SM Training Compiler...</pre>
+<p>Now, let’s summarize this chapter.</p>
+<h1 id="_idParaDest-99"><a id="_idTextAnchor096"/>Summary</h1>
+<p>In this chapter, we focused on the hardware aspects of engineering DL distributed training. We reviewed the available SageMaker compute instances and focused on instance families with GPU devices. After that, we discussed different DL use cases and how to select optimal compute instances for them. Then, we reviewed the network requirements for distributed training and learned how Amazon EFA can help you avoid network bottlenecks when running large-scale training jobs. We also reviewed how models can be optimized to run on GPU devices using SageMaker Training Compiler and gained practical experience in using this feature.</p>
+<p>In the next chapter, <a href="B17519_06.xhtml#_idTextAnchor097"><em class="italic">Chapter 6</em></a>, <em class="italic">Engineering Distributed Training</em>, we will continue this discussion of distributed training. We will focus on how to select the most appropriate type of distributed training for your use case, DL framework, and model architecture and then develop practical experience in these areas. </p>
+</div>
+</div></body></html>

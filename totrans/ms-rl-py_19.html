@@ -1,0 +1,375 @@
+<html><head></head><body>
+		<div id="_idContainer1698">
+			<h1 id="_idParaDest-303"><em class="italic"><a id="_idTextAnchor329"/>Chapter 15</em>: Supply Chain Management</h1>
+			<p>Effective supply chain management is a challenge for many businesses, yet it is key to their profitability and competitiveness. The difficulty in this area comes from a complex set of dynamics affecting supply and demand, the business constraints around handling these dynamics, and a level of great uncertainty throughout. <strong class="bold">Reinforcement learning</strong> (<strong class="bold">RL</strong>) provides us with a key set of capabilities to address such sequential decision-making problems.</p>
+			<p>In this chapter, we focus in particular on two important problems: inventory and routing optimization. For the former, we go into the details of creating the environment, understanding the variance in the environment, and hyperparameter tuning to effectively solve it using RL. For the latter, we describe a realistic vehicle-routing problem of a gig driver working to deliver online meal orders. We then proceed to show why conventional neural networks are limiting while solving problems of varying sizes, and how pointer networks can overcome this.</p>
+			<p>This is going to be a fun journey. We will cover the following topics in this chapter:</p>
+			<ul>
+				<li>Optimizing inventory procurement decisions</li>
+				<li>Modeling routing problems</li>
+			</ul>
+			<h1 id="_idParaDest-304"><a id="_idTextAnchor330"/>Optimizing inventory procurement decisions</h1>
+			<p>One <a id="_idIndexMarker1291"/>of the most important decisions that almost all manufacturers, distributors, and retailers need to make all the time is how much inventory to carry to reliably satisfy customer demand while minimizing the costs. Effective inventory management is key to the profitability and survival of most companies, especially given the razor-thin margins and increased customer expectations in today's competitive landscape. In this section, we use RL to address this challenge and optimize inventory procurement decisions.</p>
+			<h2 id="_idParaDest-305"><a id="_idTextAnchor331"/>The need for inventory and the trade-offs in its management</h2>
+			<p>When you walk<a id="_idIndexMarker1292"/> into a supermarket, you see items stacked on top of <a id="_idIndexMarker1293"/>each other. There are probably more of those items in the depot of the supermarket, more still at the warehouse of the distributors, and even more at the sites of the manufacturers. If you think about it, there are those huge piles of products just sitting somewhere, waiting to be demanded by customers at some future time. If that sounds like a waste of resources, it largely is. On the other hand, companies have to carry some level of inventory, because of the following:</p>
+			<ul>
+				<li>The future is uncertain. Customer demand, manufacturing capacity, transportation schedules, and raw material availability are all subject to unfolding in unplanned ways at some point.</li>
+				<li>It is impossible to operate in a perfect just-in-time manner, and manufacture and deliver an item to customers right at the moment they demand it.</li>
+			</ul>
+			<p>Since carrying inventory is mostly unavoidable, the question is then how much. Answering it involves a tricky tradeoff:</p>
+			<ul>
+				<li>Minimizing the chance of being unable to fulfill customer demand that loses profit, and more importantly, loyalty that will be hard to gain back. </li>
+				<li>Minimizing the inventory, as it has costs in terms of capital, labor, time, material, maintenance, and warehouse rent, and can lead to spoiled or obsolete items and organizational overhead.</li>
+			</ul>
+			<p>So, how would you handle it? Would you make your customer satisfaction an absolute priority or prefer to keep your inventory under control? Well, this balancing act requires careful planning and the use of advanced methods, which not all companies have the means to do. As a result, most prefer to be "on the safe side" and carry more inventory than they need to, which helps to hide the lack of planning and associated issues. This phenomenon is commonly illustrated as a "sea of inventory" as in <em class="italic">Figure 15.1</em>:</p>
+			<div>
+				<div id="_idContainer1640" class="IMG---Figure">
+					<img src="image/B14160_15_1.jpg" alt="Figure 15.1 – A sea of inventory hides many problems&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor332"/></p>
+			<p class="figure-caption">Figure 15.1 – A sea of inventory hides many problems</p>
+			<p>This is where RL could come to the rescue and optimize your inventory decisions in the face of uncertainty. Next, we start building our solution by discussing the components of an inventory optimization problem.</p>
+			<h2 id="_idParaDest-306"><a id="_idTextAnchor333"/>Components of an inventory optimization problem</h2>
+			<p>There are <a id="_idIndexMarker1294"/>multiple factors that affect the dynamics of an inventory flow and what the best replenishment policy will look like for a given item:</p>
+			<ul>
+				<li>The<strong class="bold"> price</strong> of the item at which it is sold is a key factor.</li>
+				<li>The<strong class="bold"> cost of purchase</strong> of the item is another key factor, which, together with the price, determines how much gross profit the business makes per item. This in turn affects how costly it is to lose a unit of customer demand.</li>
+				<li>The<strong class="bold"> inventory holding cost</strong> is the sum of all costs associated with carrying a single unit of inventory over a single time step (a day, week, or month, and so on). This includes things such as storage rent, the cost of capital, and any maintenance costs.</li>
+				<li><strong class="bold">Loss of customer goodwill</strong> is the monetary cost associated with customer dissatisfaction due to a single unit of lost demand. After all, this reduces customer loyalty and affects future sales. Although dissatisfaction is usually a qualitative measure, businesses need to estimate the monetary equivalent of it to be able to use it in decision-making.</li>
+				<li><strong class="bold">Customer demand</strong> for the item in a single time step is one of the main factors affecting the decision.</li>
+				<li><strong class="bold">Vendor lead time</strong> (<strong class="bold">VLT</strong>) is the<a id="_idIndexMarker1295"/> lag between the placement of an order with a vendor till its arrival in the inventory. Not surprisingly, VLT is a key factor affecting when to place an order for some anticipated demand.</li>
+				<li><strong class="bold">Capacity</strong> limitations, such as how many items can be ordered in a single batch, along with the firm's storage capacity, will restrict the actions that the agent can take.</li>
+			</ul>
+			<p>These are the main factors that we will consider in our setting here. In addition, we will focus on the following:</p>
+			<ul>
+				<li>Single item scenario</li>
+				<li>Stochastic customer demand with a Poisson distribution, which will have a deterministic and fixed mean over a given episode</li>
+				<li>Deterministic factors other than demand</li>
+			</ul>
+			<p>This makes our case tractable while maintaining sufficient complexity.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">In a real-life setting, most dynamics involve uncertainties. For example, there could be defects in the arrived inventory; the price could change with how obsolete an item becomes; there could be a loss in the existing inventory due to weather; there could be items that need to be returned. Estimating the characteristics of all these factors and creating a simulation model of the process is a real challenge, placing a barrier in front of the adaptation of RL as a tool for such problems.</p>
+			<p>What we have described is a complex optimization problem, for which there is no tractable optimal solution. However, the single-step version of it, called the <strong class="bold">newsvendor problem</strong>, is well studied and widely used. It is a great simplification to develop an intuition about the problem, and it will also help us obtain a near-optimal benchmark for the multi-step case. Let's look into it.</p>
+			<h2 id="_idParaDest-307"><a id="_idTextAnchor334"/>Single-step inventory optimization – the newsvendor problem</h2>
+			<p>When an<a id="_idIndexMarker1296"/> inventory optimization problem involves the following:</p>
+			<ul>
+				<li>A single time step (so no VLT; deterministic arrival of inventory)</li>
+				<li>A single item</li>
+				<li>A known price, cost of purchase, and cost of unsold inventory</li>
+				<li>A known (and conveniently Gaussian) demand distribution</li>
+			</ul>
+			<p>Then the problem is called the<a id="_idIndexMarker1297"/> newsvendor problem, for which we can obtain a closed-form solution. It describes a newspaper vendor who aims to plan how many copies to purchase for the day, at a unit cost <img src="image/Formula_15_001.png" alt=""/>, to sell at a unit price <img src="image/Formula_15_002.png" alt=""/>, and return the unsold copies at the end of the day at a unit price <img src="image/Formula_15_003.png" alt=""/>. We then define the following quantities:</p>
+			<ul>
+				<li>The cost of underage, <img src="image/Formula_15_004.png" alt=""/>, is the profit lost due to a single unit of missed demand: <img src="image/Formula_15_005.png" alt=""/>.</li>
+				<li>The cost of overage, <img src="image/Formula_15_006.png" alt=""/>, is the cost of an unsold unit: <img src="image/Formula_15_007.png" alt=""/>.</li>
+			</ul>
+			<p>To find the optimal ordering quantity, we then calculate a critical ratio, <img src="image/Formula_15_008.png" alt=""/>, as follows:</p>
+			<div>
+				<div id="_idContainer1649" class="IMG---Figure">
+					<img src="image/Formula_15_009.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, let's unpack how this critical ratio changes with respect to the costs of underage and overage:</p>
+			<ul>
+				<li>As <img src="image/Formula_15_010.png" alt=""/> gets higher, <img src="image/Formula_15_011.png" alt=""/> increases. Higher <img src="image/Formula_15_012.png" alt=""/> and <img src="image/Formula_15_013.png" alt=""/> means it is costlier to miss customer demand. This suggests being more aggressive in replenishing the inventory to avoid leaving <a id="_idIndexMarker1298"/>money on the table.</li>
+				<li>As <img src="image/Formula_15_014.png" alt=""/> gets higher, <img src="image/Formula_15_015.png" alt=""/> decreases, and this means it is costlier to have unsold inventory. This <a id="_idIndexMarker1299"/>suggests that we should be conservative in how much we carry.</li>
+			</ul>
+			<p>It turns out that <img src="image/Formula_15_016.png" alt=""/> gives us what percentage of the demand scenarios should be covered to optimize the expected profit at the end of the day. In other words, let's say the demand has a<a id="_idIndexMarker1300"/> probability distribution function <img src="image/Formula_15_017.png" alt=""/>, and a <strong class="bold">cumulative distribution function</strong> (<strong class="bold">CDF</strong>) <img src="image/Formula_15_018.png" alt=""/>. The optimal order size is given by <img src="image/Formula_15_019.png" alt=""/>, where <img src="image/Formula_15_020.png" alt=""/> is the inverse of the CDF.</p>
+			<p>Let's experiment with this in an example.</p>
+			<h3>Newsvendor example</h3>
+			<p>Assume that the<a id="_idIndexMarker1301"/> price of an expensive item is <img src="image/Formula_15_021.png" alt=""/>, which is sourced at <img src="image/Formula_15_022.png" alt=""/>. The item cannot be returned to the supplier if unsold, and it becomes waste. So, we have <img src="image/Formula_15_023.png" alt=""/>. In this case, the cost of underage is <img src="image/Formula_15_024.png" alt=""/>, and the cost of overage is <img src="image/Formula_15_025.png" alt=""/>, which give us a critical ratio <img src="image/Formula_15_026.png" alt=""/> This suggests that the order size has an 80% chance of covering the demand. Assuming that the demand has a normal distribution with a mean of 20 items and a standard deviation of 5 items, the optimal order size is around 24 items.</p>
+			<p>You can calculate and plot the optimal order size using the <strong class="source-inline">calc_n_plot_critical_ratio</strong> function defined in the <strong class="source-inline">Newsvendor plots.ipynb</strong> file: </p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter15/Newsvendor plots.ipynb</p>
+			<p class="source-code">calc_n_plot_critical_ratio(p=2000, c=400, r=0, mean=20, std=5)</p>
+			<p>And you should see the output as follows:</p>
+			<p class="source-code"><strong class="bold">Cost of underage is 1600</strong></p>
+			<p class="source-code"><strong class="bold">Cost of overage is 400</strong></p>
+			<p class="source-code"><strong class="bold">Critical ratio is 0.8</strong></p>
+			<p class="source-code"><strong class="bold">Optimal order qty is 24.20810616786457</strong></p>
+			<p><em class="italic">Figure 15.2</em> illustrates the<a id="_idIndexMarker1302"/> probability distribution of the demand, the CDF, and the value the critical ratio corresponds to for this problem:</p>
+			<div>
+				<div id="_idContainer1667" class="IMG---Figure">
+					<img src="image/B14160_15_2.jpg" alt="Figure 15.2 – Optimal order size for the example newsvendor problem&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.2 – Optimal order size for the <a id="_idTextAnchor335"/>example newsvendor problem</p>
+			<p>This was to give you an intuition into what the solution looks like for a single-step inventory optimization problem. Now, a multi-step problem involves a bunch of other complexities, which we described in the previous section. For example, the inventory arrives with a lag, and the leftover inventory is carried to the next step with a holding cost incurred. Well, this is sequential decision-making under uncertainty, which is the forte of RL. So, let's use it.</p>
+			<h2 id="_idParaDest-308"><a id="_idTextAnchor336"/>Simulating multi-step inventory dynamics</h2>
+			<p>In this section, we <a id="_idIndexMarker1303"/>create a simulation environment for the multi-step inventory optimization problem we described.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The rest of this chapter closely follows the problems and environments defined in <em class="italic">Balaji et al., 2019</em>, for which the code is available at <a href="https://github.com/awslabs/or-rl-benchmarks">https://github.com/awslabs/or-rl-benchmarks</a>. We suggest you read the paper for more details on RL approaches to classical stochastic optimization problems.</p>
+			<p>Before we start describing the environment, let's discuss several considerations:</p>
+			<ul>
+				<li>We would like to create a policy not for a specific product-demand scenario, but a broad range of scenarios. Therefore, for each episode, we randomly<a id="_idIndexMarker1304"/> generate the environment parameters, as you will see. </li>
+				<li>This randomization increases the variance in the gradient estimates, which makes learning more challenging compared to static scenarios.</li>
+			</ul>
+			<p>With this, let's go into the details of the environment.</p>
+			<h3>Event calendar</h3>
+			<p>In order to <a id="_idIndexMarker1305"/>correctly apply the step function for the environment, we need to understand when each event takes place. Let's take a look:</p>
+			<ol>
+				<li>At the beginning of each day, the inventory replenishment order is placed. Based on the lead time, we record this as "in-transit" inventory.</li>
+				<li>Next, the items scheduled for the current day arrive. If the lead time is zero, what is ordered at the beginning of the day arrives right away. If the lead time is one day, yesterday's order arrives, and so on.</li>
+				<li>After the shipment is received, the demand materializes throughout the day. If there is not enough inventory to meet the demand, the actual sales will be lower than the demand, and there will be a loss of customer goodwill.</li>
+				<li>At the<a id="_idIndexMarker1306"/> end of the day, we deduct the sold items (not the total demand) from the inventory and update the state accordingly.</li>
+				<li>Lastly, if the lead time is nonzero, we update the in-transit inventory (that is, we shift the inventory set to arrive on t + 2 to t + 1).</li>
+			</ol>
+			<p>Now, let's code what we have described.</p>
+			<h3>Coding the environment</h3>
+			<p>You can find the complete code for the <a id="_idIndexMarker1307"/>environment in our GitHub repo at <a href="https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python/blob/master/Chapter15/inventory_env.py">https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python/blob/master/Chapter15/inventory_env.py</a>.</p>
+			<p>Here, we only describe some of the critical parts of the environment:</p>
+			<ol>
+				<li value="1">As mentioned earlier, each episode will sample certain environment parameters to be able to obtain a policy that can work across a broad set of price, demand, and other scenarios. We set the maximum values for those parameters, from which we will later generate episode-specific parameters:<p class="source-code">class InventoryEnv(gym.Env):</p><p class="source-code">    def __init__(self, config={}):</p><p class="source-code">        self.l = config.get("lead time", 5)</p><p class="source-code">        self.storage_capacity = 4000</p><p class="source-code">        self.order_limit = 1000</p><p class="source-code">        self.step_count = 0</p><p class="source-code">        self.max_steps = 40</p><p class="source-code">        self.max_value = 100.0</p><p class="source-code">        self.max_holding_cost = 5.0</p><p class="source-code">        self.max_loss_goodwill = 10.0</p><p class="source-code">        self.max_mean = 200</p><p>We use a 5-day lead time, which will be important to determine the observation space (which can be considered equivalent to state space for this problem, so we use the terms interchangeably).</p></li>
+				<li>The price, cost, holding cost, loss of goodwill, and expected demand are part of the <a id="_idIndexMarker1308"/>state space, which we assume is also visible to the agent. In addition, we need to keep track of the on-hand inventory, along with the in-transit inventory if the lead-time is nonzero:<p class="source-code">        self.inv_dim = max(1, self.l)</p><p class="source-code">        space_low = self.inv_dim * [0]</p><p class="source-code">        space_high = self.inv_dim * [self.storage_capacity]</p><p class="source-code">        space_low += 5 * [0]</p><p class="source-code">        space_high += [</p><p class="source-code">            self.max_value,</p><p class="source-code">            self.max_value,</p><p class="source-code">            self.max_holding_cost,</p><p class="source-code">            self.max_loss_goodwill,</p><p class="source-code">            self.max_mean,</p><p class="source-code">        ]</p><p class="source-code">        self.observation_space = spaces.Box(</p><p class="source-code">            low=np.array(space_low), </p><p class="source-code">            high=np.array(space_high), </p><p class="source-code">            dtype=np.float32</p><p class="source-code">        )</p><p>Note that for a lead time of 5, we have one dimension for the on-hand inventory and four dimensions (from <img src="image/Formula_15_027.png" alt=""/> to <img src="image/Formula_15_028.png" alt=""/>) for the in-transit inventory. As you will see, by adding the in-transit inventory to the state at the end of the step calculation, we can avoid keeping track of the in-transit inventory that <a id="_idIndexMarker1309"/>will arrive at <img src="image/Formula_15_029.png" alt=""/> (in more general terms, we don't need <img src="image/Formula_15_030.png" alt=""/>, <img src="image/Formula_15_031.png" alt=""/> being the lead time).</p></li>
+				<li>We normalize the action to be between <img src="image/Formula_15_032.png" alt=""/>, where 1 means ordering at the order limit:<p class="source-code">        self.action_space = spaces.Box(</p><p class="source-code">            low=np.array([0]), </p><p class="source-code">            high=np.array([1]), </p><p class="source-code">            dtype=np.float32</p><p class="source-code">        )</p></li>
+				<li>One of the very important steps is to normalize the observations. Normally, the agent may not know the bounds of the observations to normalize them. Here, we<a id="_idIndexMarker1310"/> assume that the agent has that information, so we conveniently do it within the environment class:<p class="source-code">    def _normalize_obs(self):</p><p class="source-code">        obs = np.array(self.state)</p><p class="source-code">        obs[:self.inv_dim] = obs[:self.inv_dim] / self.order_limit</p><p class="source-code">        obs[self.inv_dim] = obs[self.inv_dim] / self.max_value</p><p class="source-code">        obs[self.inv_dim + 1] = obs[self.inv_dim + 1] / self.max_value</p><p class="source-code">        obs[self.inv_dim + 2] = obs[self.inv_dim + 2] / self.max_holding_cost</p><p class="source-code">        obs[self.inv_dim + 3] = obs[self.inv_dim + 3] / self.max_loss_goodwill</p><p class="source-code">        obs[self.inv_dim + 4] = obs[self.inv_dim + 4] / self.max_mean</p><p class="source-code">        return obs</p></li>
+				<li>The episode-specific environment parameters are generated within the <strong class="source-inline">reset</strong> function:<p class="source-code">    def reset(self):</p><p class="source-code">        self.step_count = 0</p><p class="source-code">        price = np.random.rand() * self.max_value</p><p class="source-code">        cost = np.random.rand() * price</p><p class="source-code">        holding_cost = np.random.rand() * min(cost, self.max_holding_cost)</p><p class="source-code">        loss_goodwill = np.random.rand() * self.max_loss_goodwill</p><p class="source-code">        mean_demand = np.random.rand() * self.max_mean</p><p class="source-code">        self.state = np.zeros(self.inv_dim + 5)</p><p class="source-code">        self.state[self.inv_dim] = price</p><p class="source-code">        self.state[self.inv_dim + 1] = cost</p><p class="source-code">        self.state[self.inv_dim + 2] = holding_cost</p><p class="source-code">        self.state[self.inv_dim + 3] = loss_goodwill</p><p class="source-code">        self.state[self.inv_dim + 4] = mean_demand</p><p class="source-code">        return self._normalize_obs()</p></li>
+				<li>And we <a id="_idIndexMarker1311"/>implement the <strong class="source-inline">step</strong> function as we described in the previous section. First, we parse the initial state and received action:<p class="source-code">    def step(self, action):</p><p class="source-code">        beginning_inv_state, p, c, h, k, mu = \</p><p class="source-code">            self.break_state()</p><p class="source-code">        action = np.clip(action[0], 0, 1)</p><p class="source-code">        action = int(action * self.order_limit)</p><p class="source-code">        done = False</p></li>
+				<li>Then, we determine how much we can buy while observing the capacity, add what is bought to the inventory if there is no lead time, and sample the demand:<p class="source-code">        available_capacity = self.storage_capacity \</p><p class="source-code">                             - np.sum(beginning_inv_state)</p><p class="source-code">        assert available_capacity &gt;= 0</p><p class="source-code">        buys = min(action, available_capacity)</p><p class="source-code">        # If lead time is zero, immediately</p><p class="source-code">        # increase the inventory</p><p class="source-code">        if self.l == 0:</p><p class="source-code">            self.state[0] += buys</p><p class="source-code">        on_hand = self.state[0]</p><p class="source-code">        demand_realization = np.random.poisson(mu)</p></li>
+				<li>The<a id="_idIndexMarker1312"/> reward will be the revenue, from which we subtract the purchase cost, the inventory holding cost, and the cost of lost customer goodwill:<p class="source-code">        # Compute Reward</p><p class="source-code">        sales = min(on_hand,</p><p class="source-code">                    demand_realization)</p><p class="source-code">        sales_revenue = p * sales</p><p class="source-code">        overage = on_hand - sales</p><p class="source-code">        underage = max(0, demand_realization</p><p class="source-code">                          - on_hand)</p><p class="source-code">        purchase_cost = c * buys</p><p class="source-code">        holding = overage * h</p><p class="source-code">        penalty_lost_sale = k * underage</p><p class="source-code">        reward = sales_revenue \</p><p class="source-code">                 - purchase_cost \</p><p class="source-code">                 - holding \</p><p class="source-code">                 - penalty_lost_sale</p></li>
+				<li>Lastly, we <a id="_idIndexMarker1313"/>update the inventory levels by shifting the in-transit inventory by a day, adding what is bought at the beginning of the day to the in-transit inventory if the VLT is nonzero:<p class="source-code">        # Day is over. Update the inventory</p><p class="source-code">        # levels for the beginning of the next day</p><p class="source-code">        # In-transit inventory levels shift to left</p><p class="source-code">        self.state[0] = 0</p><p class="source-code">        if self.inv_dim &gt; 1:</p><p class="source-code">            self.state[: self.inv_dim - 1] \</p><p class="source-code">                = self.state[1: self.inv_dim]</p><p class="source-code">        self.state[0] += overage</p><p class="source-code">        # Add the recently bought inventory</p><p class="source-code">        # if the lead time is positive</p><p class="source-code">        if self.l &gt; 0:</p><p class="source-code">            self.state[self.l - 1] = buys</p><p class="source-code">        self.step_count += 1</p><p class="source-code">        if self.step_count &gt;= self.max_steps:</p><p class="source-code">            done = True</p></li>
+				<li>At the end, we return the normalized observations and scaled reward to the agent:<p class="source-code">        # Normalize the reward</p><p class="source-code">        reward = reward / 10000</p><p class="source-code">        info = {</p><p class="source-code">            "demand realization": demand_realization,</p><p class="source-code">            "sales": sales,</p><p class="source-code">            "underage": underage,</p><p class="source-code">            "overage": overage,</p><p class="source-code">        }</p><p class="source-code">        return self._normalize_obs(), reward, done, info</p></li>
+			</ol>
+			<p>Take your <a id="_idIndexMarker1314"/>time to understand how the inventory dynamics are reflected in the step function. Once you are ready, let's move to developing a benchmark policy.</p>
+			<h2 id="_idParaDest-309"><a id="_idTextAnchor337"/>Developing a near-optimal benchmark policy</h2>
+			<p>An exact<a id="_idIndexMarker1315"/> solution to this problem is not available. Yet, a near-optimal approximation is obtained similar to the newsvendor policy, with two modifications:</p>
+			<ul>
+				<li>The aggregate demand over <img src="image/Formula_15_033.png" alt=""/>  time steps is taken into account, instead of a single step.</li>
+				<li>We also add the loss of goodwill to the cost of underage in addition to the per-unit profit.</li>
+			</ul>
+			<p>The reason this is still approximate is that the formula treats multiple steps as a single step and aggregates the demand and supply, meaning that it assumes the demand arrived in a step, and can be backlogged and satisfied in one of the subsequent steps over the <img src="image/Formula_15_034.png" alt=""/> step horizon. Still, this gives us a near-optimal solution.</p>
+			<p>Here is how we can code this benchmark policy:</p>
+			<p class="source-code">def get_action_from_benchmark_policy(env):</p>
+			<p class="source-code">    inv_state, p, c, h, k, mu = env.break_state()</p>
+			<p class="source-code">    cost_of_overage = h</p>
+			<p class="source-code">    cost_of_underage = p - c + k</p>
+			<p class="source-code">    critical_ratio = np.clip(</p>
+			<p class="source-code">        0, 1, cost_of_underage</p>
+			<p class="source-code">              / (cost_of_underage + cost_of_overage)</p>
+			<p class="source-code">    )</p>
+			<p class="source-code">    horizon_target = int(poisson.ppf(critical_ratio,</p>
+			<p class="source-code">                         (len(inv_state) + 1) * mu))</p>
+			<p class="source-code">    deficit = max(0, horizon_target - np.sum(inv_state))</p>
+			<p class="source-code">    buy_action = min(deficit, env.order_limit)</p>
+			<p class="source-code">    return [buy_action / env.order_limit]</p>
+			<p>Notice that <a id="_idIndexMarker1316"/>after we calculate the critical ratio, we do the following:</p>
+			<ul>
+				<li>We find the optimal aggregate supply for <img src="image/Formula_15_035.png" alt=""/> steps.</li>
+				<li>Then, we subtract the on-hand inventory and in-transit inventory for the next <img src="image/Formula_15_036.png" alt=""/> time steps.</li>
+				<li>Finally, we<a id="_idIndexMarker1317"/> place the order to cover this deficit, capped by the limit on a single order.</li>
+			</ul>
+			<p>Next, let's look into how we can train an RL agent to solve this problem and how the RL solution compares to this benchmark.</p>
+			<h2 id="_idParaDest-310"><a id="_idTextAnchor338"/>A reinforcement learning solution for inventory management</h2>
+			<p>There are <a id="_idIndexMarker1318"/>several factors to take into account while solving this problem:</p>
+			<ul>
+				<li>Due to the randomizations in the environment, there is a high variance in the rewards across episodes.</li>
+				<li>This requires us to use higher-than-normal batch and minibatch sizes to better estimate the gradients and have more stable updates to the neural network's weights.</li>
+				<li>Selecting the winning model is also a problem in the presence of high variance. This is because if the number of test/evaluation episodes are not large enough, there is a chance of declaring a policy as the best just because we happen to evaluate it in a few lucky configurations.</li>
+			</ul>
+			<p>To handle these challenges, we can adapt the following strategy:</p>
+			<ol>
+				<li value="1">Do limited hyperparameter tuning with a limited computation budget to identify a set of good hyperparameters.</li>
+				<li>Train the model with one or two of the best sets of hyperparameters. Save the best models along the way.</li>
+				<li>When you observe that the trend of the reward curve is dominated by the noise, increase the batch and minibatch sizes for finer estimation of the gradients and denoising the model performance metrics. Again, save the best model.</li>
+				<li>Depending on your compute budget, repeat this multiple times and pick the winning model.</li>
+			</ol>
+			<p>So, let's implement these steps in Ray/RLlib to obtain our policy.</p>
+			<h3>Initial hyperparameter sweep</h3>
+			<p>We use Ray's Tune library to do <a id="_idIndexMarker1319"/>the initial hyperparameter tuning. There are two functions we will utilize:</p>
+			<ul>
+				<li><strong class="source-inline">tune.grid_search()</strong> does a grid search over the specified set of values. </li>
+				<li><strong class="source-inline">tune.choice()</strong> does a random search within the specified set.</li>
+			</ul>
+			<p>For each trial, we also specify the stopping criteria. In our case, we would like to run a trial for a million time steps.</p>
+			<p>Here is the code for an example search: </p>
+			<p class="source-code">import ray</p>
+			<p class="source-code">from ray import tune</p>
+			<p class="source-code">from inventory_env import InventoryEnv</p>
+			<p class="source-code">ray.init()</p>
+			<p class="source-code">tune.run(</p>
+			<p class="source-code">    "PPO",</p>
+			<p class="source-code">    stop={"timesteps_total": 1e6},</p>
+			<p class="source-code">    num_samples=5,</p>
+			<p class="source-code">    config={</p>
+			<p class="source-code">        "env": InventoryEnv,</p>
+			<p class="source-code">        "rollout_fragment_length": 40,</p>
+			<p class="source-code">        "num_gpus": 1,</p>
+			<p class="source-code">        "num_workers": 50,</p>
+			<p class="source-code">        "lr": tune.grid_search([0.01, 0.001, 0.0001, 0.00001]),</p>
+			<p class="source-code">        "use_gae": tune.choice([True, False]),</p>
+			<p class="source-code">        "train_batch_size": tune.choice([5000, 10000, 20000, 40000]),</p>
+			<p class="source-code">        "sgd_minibatch_size": tune.choice([128, 1024, 4096, 8192]),</p>
+			<p class="source-code">        "num_sgd_iter": tune.choice([5, 10, 30]),</p>
+			<p class="source-code">        "vf_loss_coeff": tune.choice([0.1, 1, 10]),</p>
+			<p class="source-code">        "vf_share_layers": tune.choice([True, False]),</p>
+			<p class="source-code">        "entropy_coeff": tune.choice([0, 0.1, 1]),</p>
+			<p class="source-code">        "clip_param": tune.choice([0.05, 0.1, 0.3, 0.5]),</p>
+			<p class="source-code">        "vf_clip_param": tune.choice([1, 5, 10]),</p>
+			<p class="source-code">        "grad_clip": tune.choice([None, 0.01, 0.1, 1]),</p>
+			<p class="source-code">        "kl_target": tune.choice([0.005, 0.01, 0.05]),</p>
+			<p class="source-code">        "eager": False,</p>
+			<p class="source-code">    },</p>
+			<p class="source-code">)</p>
+			<p>To calculate the<a id="_idIndexMarker1320"/> total tuning budget, we do the following:</p>
+			<ul>
+				<li>Take the cross-product of all grid searches, since each possible combination has to be tried by definition.</li>
+				<li>Multiply that cross-product with <strong class="source-inline">num_samples</strong>. That gives the total number of trials that will take place. With the preceding code, we will have 20 trials.</li>
+				<li>During each trial, each <strong class="source-inline">choice</strong> function will select a parameter uniformly, at random, from the corresponding set.</li>
+				<li>A given trial stops when the stopping criteria have been satisfied.</li>
+			</ul>
+			<p>Whey you execute this, you will see the search progressing. It will look like <em class="italic">Figure 15.3</em>:</p>
+			<div>
+				<div id="_idContainer1678" class="IMG---Figure">
+					<img src="image/B14160_15_3.jpg" alt="Figure 15.3 – Hyperparameter tuning with Ray's Tune&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Fi<a id="_idTextAnchor339"/>gure 15.3 – Hyperparameter tuning with Ray's Tune</p>
+			<p>Some trials will <a id="_idIndexMarker1321"/>error out unless you are deliberate about the hyperparameter combinations that will form to prevent numerical issues. You can then select the best performing combinations for further training, as illustrated in <em class="italic">Figure 15.4</em>:</p>
+			<div>
+				<div id="_idContainer1679" class="IMG---Figure">
+					<img src="image/B14160_15_4.jpg" alt="Figure 15.4 – A sample performance of a good set of hyperparameters obtained in the search&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Fi<a id="_idTextAnchor340"/>gure 15.4 – A sample performance of a good set of hyperparameters obtained in the search</p>
+			<p>Next, let's now do the extensive training.</p>
+			<h3>Extensive training of the model</h3>
+			<p>We now kick off <a id="_idIndexMarker1322"/>a long training run using the selected hyperparameter set (or with multiple sets – in my case, the winning set in the previous exercise did not perform well, but the second set did):</p>
+			<p class="SC---Heading" lang="en-US" xml:lang="en-US">Chapter15/train_inv_policy.py</p>
+			<p class="source-code">import numpy as np</p>
+			<p class="source-code">import ray</p>
+			<p class="source-code">from ray.tune.logger import pretty_print</p>
+			<p class="source-code">from ray.rllib.agents.ppo.ppo import DEFAULT_CONFIG</p>
+			<p class="source-code">from ray.rllib.agents.ppo.ppo import PPOTrainer</p>
+			<p class="source-code">from inventory_env import InventoryEnv</p>
+			<p class="source-code">config = DEFAULT_CONFIG.copy()</p>
+			<p class="source-code">config["env"] = InventoryEnv</p>
+			<p class="source-code">config["num_gpus"] = 1</p>
+			<p class="source-code">config["num_workers"] = 50</p>
+			<p class="source-code">config["clip_param"] = 0.3</p>
+			<p class="source-code">config["entropy_coeff"] = 0</p>
+			<p class="source-code">config["grad_clip"] = None</p>
+			<p class="source-code">config["kl_target"] = 0.005</p>
+			<p class="source-code">config["lr"] = 0.001</p>
+			<p class="source-code">config["num_sgd_iter"] = 5</p>
+			<p class="source-code">config["sgd_minibatch_size"] = 8192</p>
+			<p class="source-code">config["train_batch_size"] = 20000</p>
+			<p class="source-code">config["use_gae"] = True</p>
+			<p class="source-code">config["vf_clip_param"] = 10</p>
+			<p class="source-code">config["vf_loss_coeff"] = 1</p>
+			<p class="source-code">config["vf_share_layers"] = False</p>
+			<p>Once you set the<a id="_idIndexMarker1323"/> hyperparameters, you can kick off the training:</p>
+			<p class="source-code">ray.init()</p>
+			<p class="source-code">trainer = PPOTrainer(config=config, env=InventoryEnv)</p>
+			<p class="source-code">best_mean_reward = np.NINF</p>
+			<p class="source-code">while True:</p>
+			<p class="source-code">    result = trainer.train()</p>
+			<p class="source-code">    print(pretty_print(result))</p>
+			<p class="source-code">    mean_reward = result.get("episode_reward_mean", np.NINF)</p>
+			<p class="source-code">    if mean_reward &gt; best_mean_reward:</p>
+			<p class="source-code">        checkpoint = trainer.save()</p>
+			<p class="source-code">        print("checkpoint saved at", checkpoint)</p>
+			<p class="source-code">        best_mean_reward = mean_reward</p>
+			<p>One thing to note here is the size of the batch and minibatch: normally, the PPO default in RLlib is <strong class="source-inline">"train_batch_size": 4000</strong> and <strong class="source-inline">"sgd_minibatch_size": 128</strong>. However, learning suffers with such small batches, given the variance in the environment and rewards. So, the tuning model picked higher batch and minibatch sizes.</p>
+			<p>Now for the training. At this point, you can develop a logic to adjust various hyperparameters based on the training progress. For simplicity, we will manually observe the <a id="_idIndexMarker1324"/>progress and then stop when the learning stalls or destabilizes. After that point, we can further train with increased batch sizes to obtain better gradient estimates in the final stages, such as <strong class="source-inline">"train_batch_size": 200000</strong> and <strong class="source-inline">"sgd_minibatch_size": 32768</strong>. This is what such a training process looks like:</p>
+			<div>
+				<div id="_idContainer1680" class="IMG---Figure">
+					<img src="image/B14160_15_5.jpg" alt="Figure 15.5 – Training started with a batch size of 20k and continued with a batch &#13;&#10;size of 200k to reduce the noise&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.5 – Training started with a batch size of 20k and continued with a batch size of 200k to reduce the noise</p>
+			<p>The fine-tuning with a higher batch size helps us denoise the rewards and identify truly high-performing models. We can then compare the benchmark and RL solutions. After 2,000 test episodes, the benchmark performance looks as follows:</p>
+			<p class="source-code"><strong class="bold">Average daily reward over 2000 test episodes: 0.15966589703658918. </strong></p>
+			<p class="source-code"><strong class="bold">Average total epsisode reward: 6.386635881463566</strong></p>
+			<p>And we can see the RL model performance here:</p>
+			<p class="source-code"><strong class="bold">Average daily reward over 2000 test episodes: 0.14262437792900876. </strong></p>
+			<p class="source-code"><strong class="bold">Average total epsisode reward: 5.70497511716035</strong></p>
+			<p>Our RL <a id="_idIndexMarker1325"/>model's performance is within 10% of the near-optimal benchmark solution. We can decrease the gap with further trials and training, but in the presence of such noise, it is a challenging and time-consuming undertaking. Note that <em class="italic">Balaji et al., 2019</em> report metrics that slightly improve the benchmarks, so it is doable.</p>
+			<p>With this, we conclude our discussion on this problem. Great work! We have taken a realistic and noisy supply-chain problem from its initial form, modeled it using RL, and solved it via PPO on RLlib!</p>
+			<p>Next, we describe two additional supply chain problems that can be solved via RL. Due to space limitations, we won't be able to solve them here, but refer you to <a href="https://github.com/awslabs/or-rl-benchmarks/">https://github.com/awslabs/or-rl-benchmarks/</a> for more.</p>
+			<p>So, let's discuss how you can model and solve a routing optimization problem using RL.</p>
+			<h1 id="_idParaDest-311"><a id="_idTextAnchor341"/>Modeling routing problems</h1>
+			<p>Routing problems are <a id="_idIndexMarker1326"/>among the most challenging and well studied problems in combinatorial optimization. In fact, there are quite a few researchers who have dedicated their entire careers to this area. Recently, RL approaches to routing problems have emerged as an alternative to the traditional operations research methods. We start with a rather sophisticated routing problem, which is about the pick-up and delivery of online meal orders. The RL modeling of this problem, on the other hand, will not be that complex. We will later extend our discussion to more advanced RL models in line with the recent literature in this area. </p>
+			<h2 id="_idParaDest-312"><a id="_idTextAnchor342"/>Pick-up and delivery of online meal orders</h2>
+			<p>Consider a gig driver (our agent) who works for an online platform, similar to Uber Eats or Grubhub, to pick up<a id="_idIndexMarker1327"/> orders from restaurants and deliver to customers. The goal of the driver is to collect as many tips as possible by delivering many expensive orders. Here are some more details about this environment:</p>
+			<ul>
+				<li>There are multiple restaurants in the city, which are the pick-up locations for the orders.</li>
+				<li>Orders associated with one of these restaurants dynamically arrive on the delivery company's app.</li>
+				<li>The driver has to accept an order to be able to pick it up and deliver.</li>
+				<li>If an accepted order is not delivered within a certain time limit since the order creation, a high penalty is incurred. </li>
+				<li>If an open order is not accepted by the driver, it disappears after a while, which implies that it is taken by competitive drivers.</li>
+				<li>The driver can accept as many orders as they want but can physically carry only a limited number of picked-up orders.</li>
+				<li>Different parts of the city generate orders at different rates and different sizes. For example, one region could be generating frequent and expensive orders, making it attractive for the driver.</li>
+				<li>Traveling unnecessary distances results in costs of time, fuel, and opportunity to the driver.</li>
+			</ul>
+			<p>Given this environment, at each time step, the driver takes one of the following actions:</p>
+			<ul>
+				<li>Accept <a id="_idIndexMarker1328"/>one of the open orders.</li>
+				<li>Move one step toward a restaurant associated with a particular order (for pick-up).</li>
+				<li>Move one step toward a customer location (for delivery).</li>
+				<li>Wait and do nothing.</li>
+				<li>Move one step toward one of the restaurants (not to pick up an existing order but with the hope that a good, expensive order could be placed soon from that restaurant).</li>
+			</ul>
+			<p>The agent observes the following state to make their decision:</p>
+			<ul>
+				<li>The coordinates of the driver, the restaurants, and the customers</li>
+				<li>The driver used and available capacity</li>
+				<li>Order statuses (open, accepted, picked up, and inactive/delivered/not created)</li>
+				<li>Order-restaurant associations</li>
+				<li>The time elapsed since order creation</li>
+				<li>The reward (tip) associated with each order</li>
+			</ul>
+			<p>For more information, this environment is available at <a href="https://github.com/awslabs/or-rl-benchmarks/blob/master/Vehicle%20Routing%20Problem/src/vrp_environment.py">https://github.com/awslabs/or-rl-benchmarks/blob/master/Vehicle%20Routing%20Problem/src/vrp_environment.py</a>.</p>
+			<p><em class="italic">Balaji et al., 2019</em> show that the RL solution to this problem outperforms a <strong class="bold">mixed-integer</strong> <strong class="bold">programming</strong> (<strong class="bold">MIP</strong>)-based approach. This is a rather surprising result, since MIP models can find the optimal solution in theory. The reason the MIP solution is outperformed in this case is as follows:</p>
+			<ul>
+				<li>It solves a myopic problem for an existing situation while the RL agent learns to anticipate future events and plan accordingly.</li>
+				<li>It uses a limited budget, as MIP solutions can take a really long time. RL inference, on the other hand, happens almost instantaneously once a policy is trained.</li>
+			</ul>
+			<p>The <a id="_idIndexMarker1329"/>reported RL performance for such a complex problem is quite encouraging. On the other hand, the way we modeled the problem has limitations since it relies on a fixed state and action space size. In other words, if the state and action space are designed to handle a maximum of <em class="italic">N</em> number of orders/restaurants, the trained agent cannot be used for larger problems. On the other hand, MIP models can take any size of input (although large problems can take a really long time to solve).</p>
+			<p>Recent research in the field of deep learning has provided us with pointer networks to handle dynamic-size combinatorial optimization problems. Let's look into this next.</p>
+			<h2 id="_idParaDest-313"><a id="_idTextAnchor343"/>Pointer networks for dynamic combinatorial optimization</h2>
+			<p>A pointer<a id="_idIndexMarker1330"/> network uses a content-based attention mechanism to point to one of its inputs, where <a id="_idIndexMarker1331"/>the number of inputs can be anything. To explain this better, consider a traveling salesperson problem where the goal is to visit all the nodes located on a 2D plane, exactly once, and come back to the initial node at the end, and do so at the minimum total distance. A sample problem and its solution is illustrated in <em class="italic">Figure 15<a id="_idTextAnchor344"/>.6</em>:</p>
+			<div>
+				<div id="_idContainer1681" class="IMG---Figure">
+					<img src="image/B14160_15_6.jpg" alt="Figure 15.6 – Solution to a traveling salesperson problem &#13;&#10;(source: https://en.wikipedia.org/wiki/Travelling_salesman_problem)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.6 – Solution to a traveling salesperson problem (source: <a href="https://en.wikipedia.org/wiki/Travelling_salesman_problem">https://en.wikipedia.org/wiki/Travelling_salesman_problem</a>)</p>
+			<p>Each node in this problem is represented by its <img src="image/Formula_15_037.png" alt=""/> coordinates. A pointer network has the following attributes: </p>
+			<ul>
+				<li>Uses a <a id="_idIndexMarker1332"/>recurrent neural network to obtain an embedding <img src="image/Formula_15_038.png" alt=""/> from <img src="image/Formula_15_039.png" alt=""/> of an<a id="_idIndexMarker1333"/> input node <img src="image/Formula_15_040.png" alt=""/> in the encoder, and similarly <img src="image/Formula_15_041.png" alt=""/> in the decoder at the <img src="image/Formula_15_042.png" alt=""/> step of the decoding.</li>
+				<li>Calculates attention on the input node <img src="image/Formula_15_043.png" alt=""/> while decoding the <img src="image/Formula_15_044.png" alt=""/> step as follows: </li>
+			</ul>
+			<div>
+				<div id="_idContainer1690" class="IMG---Figure">
+					<img src="image/Formula_15_045.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer1691" class="IMG---Figure">
+					<img src="image/Formula_15_046.jpg" alt=""/>
+				</div>
+			</div>
+			<p>where <img src="image/Formula_15_047.png" alt=""/> and <img src="image/Formula_15_048.png" alt=""/> are learnable parameters.</p>
+			<ul>
+				<li>The <a id="_idIndexMarker1334"/>input node <img src="image/Formula_15_049.png" alt=""/> with the highest<a id="_idIndexMarker1335"/> attention <img src="image/Formula_15_050.png" alt=""/> becomes the <img src="image/Formula_15_051.png" alt=""/> node to visit on the route.</li>
+			</ul>
+			<p>This attention approach is completely flexible and can point to a particular input node without any assumptions on the total number of input nodes. This mechanism is illustrated in <em class="italic">Figure 15.7</em>:</p>
+			<div>
+				<div id="_idContainer1697" class="IMG---Figure">
+					<img src="image/B14160_15_7.jpg" alt="Figure 15.7 – A pointer network (source: Vinyals et al., 2017)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 15.7 – A poi<a id="_idTextAnchor345"/>nter network (source: Vinyals et al., 2017)</p>
+			<p>Later <a id="_idIndexMarker1336"/>work (<em class="italic">Nazari et al., 2018</em>) adapted pointer networks for use inside a policy-based RL model and obtained very promising results in fairly complex problems compared to open source routing optimizers. The details of pointer networks and how they are<a id="_idIndexMarker1337"/> used in the context of RL deserves further space and discussion, which we defer to the papers we cite at the end of the chapter.</p>
+			<p>With that, we conclude our discussion on RL applications for supply chain problems. Let's summarize what we have covered to close the chapter.</p>
+			<h1 id="_idParaDest-314"><a id="_idTextAnchor346"/>Summary</h1>
+			<p>In this chapter, we covered two important classes of problems in supply chain management: inventory optimization and vehicle routing. These are both very complex problems, and RL has recently emerged as a competitive tool to address them. In this chapter, for the former problem, we provided you with a detailed discussion on how to create the environment and solve the corresponding RL problem. The challenge in this problem was the high variance across episodes, which we mitigated through a careful hyperparameter tuning procedure. For the latter problem, we described a realistic case of a gig driver who delivers meal orders that dynamically arrive from customers. We discussed how the model can be made more flexible to work with varying node sizes via pointer networks. </p>
+			<p>In the next chapter, we will discuss yet another exciting set of applications around personalization, marketing, and finance. See you there! </p>
+			<h1 id="_idParaDest-315"><a id="_idTextAnchor347"/>References</h1>
+			<ul>
+				<li><em class="italic">ORL: Reinforcement Learning Benchmarks for Online Stochastic Optimization Problems</em>, Balaji, Bharathan, et al. (2019): <a href="http://arxiv.org/abs/1911.10641">http://arxiv.org/abs/1911.10641</a></li>
+				<li><em class="italic">Pointer Networks</em>, Vinyals, Oriol, et al. (2017): <a href="http://arxiv.org/abs/1506.03134">http://arxiv.org/abs/1506.03134</a></li>
+				<li><em class="italic">Reinforcement Learning for Solving the Vehicle Routing Problem</em>, Nazari, M, et al. (2018): <a href="http://arxiv.org/abs/1802.04240">http://arxiv.org/abs/1802.04240</a></li>
+			</ul>
+		</div>
+	</body></html>

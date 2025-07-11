@@ -1,0 +1,1003 @@
+<html><head></head><body>
+		<div id="_idContainer947">
+			<p><a id="_idTextAnchor124"/></p>
+			<h1 id="_idParaDest-124"><em class="italic"><a id="_idTextAnchor125"/>Chapter 6</em>: Deep Q-Learning at Scale</h1>
+			<p>In the previous chapter, we covered <strong class="bold">dynamic programming</strong> (<strong class="bold">DP</strong>) methods to solve <strong class="bold">Markov decision processes</strong> (<strong class="bold">MDPs</strong>), and then mentioned that they suffer from two important limitations: DP firstly assumes complete knowledge of the environment's reward and transition dynamics, and secondly uses tabular representations of state and actions, which is not scalable as the number of possible state-action combinations is too big in many realistic applications. We addressed the former by introducing the <strong class="bold">Monte Carlo </strong>(<strong class="bold">MC</strong>) and <strong class="bold">temporal difference</strong> (<strong class="bold">TD</strong>) methods, which learn from their interactions with the environment (often in simulation) without needing to know the environment dynamics. On the other hand, the latter is yet to be addressed, and this is where deep learning comes in. <strong class="bold">Deep reinforcement learning</strong> (<strong class="bold">deep RL or DRL</strong>) is about utilizing neural networks' representational power to learn policies for a wide variety of situations.</p>
+			<p>As great as it sounds, though, it is quite tricky to make function approximators work well in the context of <strong class="bold">reinforcement learning</strong> (<strong class="bold">RL</strong>) since many of the theoretical guarantees that we had in tabular Q-learning are lost. Therefore, the story of deep Q-learning, to a great extent, is about the tricks that make neural networks work well for RL. This chapter takes you on a tour of what fails with function approximators and how to address these failures. </p>
+			<p>Once we make neural networks get along with RL, we then face another challenge: the great hunger for data in deep RL that is even more severe than that of supervised learning. This requires us to develop highly scalable deep RL algorithms, which we will also do in this chapter for deep Q-learning using the modern Ray library. Finally, we will introduce you to RLlib, a production-grade RL library based on Ray. So, the focus throughout the chapter will be to deepen your understanding of the connections between various deep Q-learning approaches, what works, and why; and rather than implementing every single algorithm in Python, you will use Ray and RLlib to build and use scalable methods.</p>
+			<p>This will be an exciting journey, so let's dive in! Specifically, here is what this chapter covers:</p>
+			<ul>
+				<li>From tabular Q-learning to deep Q-learning</li>
+				<li>Deep Q-networks</li>
+				<li>Extensions to DQN – Rainbow</li>
+				<li>Distributed deep Q-learning</li>
+				<li>Implementing scalable deep Q-learning algorithms using Ray</li>
+				<li>Using RLlib for production-grade deep RL</li>
+			</ul>
+			<h1 id="_idParaDest-125"><a id="_idTextAnchor126"/>From tabular Q-learning to deep Q-learning</h1>
+			<p>When we covered <a id="_idIndexMarker508"/>the tabular Q-learning method in <a href="B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106"><em class="italic">Chapter 5</em></a>, <em class="italic">Solving the Reinforcement Learning Problem</em>, it should have been obvious that we cannot really extend those methods to most real-life scenarios. Think about an RL problem that uses images as input. A <img src="image/Formula_06_001.png" alt=""/> image with three 8-bit color channels would lead to <img src="image/Formula_06_002.png" alt=""/> possible images, a number that your calculator won't be able to calculate. For this very reason, we need to use function approximators to represent the value function. Given their success in supervised and unsupervised learning, neural networks/deep learning emerges as the clear choice here. On the other hand, as we mentioned in the introduction, the theoretical guarantees of tabular Q-learning fall apart when function approximators come in. This section introduces two deep<a id="_idIndexMarker509"/> Q-learning algorithms, <strong class="bold">neural-fitted Q-iteration</strong> (<strong class="bold">NFQ</strong>) and online Q-learning, and then discusses what does not go so well with them. With that, we will have set the stage for the modern deep Q-learning methods that we will discuss in the following sections.</p>
+			<h2 id="_idParaDest-126"><a id="_idTextAnchor127"/>Neural-fitted Q-iteration</h2>
+			<p>The NFQ algorithm <a id="_idIndexMarker510"/>aims to fit a neural network that represents the action values, the Q-function, to target Q-values sampled from the environment and bootstrapped by the previously available Q-values (Riedmiller, 2015). Let's first go into how NFQ works, then discuss some practical considerations of NFQ and its limitations.</p>
+			<h3>The algorithm</h3>
+			<p>Recall that in<a id="_idIndexMarker511"/> tabular Q-learning, action values are learned from samples collected from the environment, which are <img src="image/Formula_06_003.png" alt=""/> tuples, by repeatedly applying the following update rule:</p>
+			<div>
+				<div id="_idContainer657" class="IMG---Figure">
+					<img src="image/Formula_06_004.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_06_005.png" alt=""/> represents an estimate of the action values of the optimal policy, <img src="image/Formula_06_006.png" alt=""/> (and note that we started using a capital <img src="image/Formula_06_005.png" alt=""/>, which is the convention in the deep RL literature). The goal is to update the existing estimate, <img src="image/Formula_06_008.png" alt=""/>, toward a "target" value, <img src="image/Formula_06_009.png" alt=""/>, by applying the sampled Bellman optimality operator to the <img src="image/Formula_06_010.png" alt=""/> sample. NFQ has a similar logic with the following differences:</p>
+			<ul>
+				<li>Q-values are represented by a neural network parameterized by <img src="image/Formula_06_011.png" alt=""/>, instead of a table, which we denote by <img src="image/Formula_06_012.png" alt=""/>.</li>
+				<li>Instead of updating Q-values with each sample incrementally, NFQ collects a batch of samples from the environment and fits the neural network to the target values at once.</li>
+				<li>There are multiple rounds of calculating the target values and fitting the parameters to be able to obtain new target values with the latest Q function.</li>
+			</ul>
+			<p>After this overall description, here is the NFQ algorithm in detail:</p>
+			<ol>
+				<li>Initialize <img src="image/Formula_06_013.png" alt=""/> and a policy, <img src="image/Formula_05_035.png" alt=""/>.</li>
+				<li>Collect a <a id="_idIndexMarker512"/>set of <img src="image/Formula_06_015.png" alt=""/> samples, <img src="image/Formula_06_016.png" alt=""/>, using the <img src="image/Formula_05_046.png" alt=""/> policy.</li>
+				<li>Apply the sampled Bellman optimality operator to obtain the target values, <img src="image/Formula_06_018.png" alt=""/>, to all samples, <img src="image/Formula_06_019.png" alt=""/>, but if <img src="image/Formula_06_020.png" alt=""/> is a terminal state, set <img src="image/Formula_06_021.png" alt=""/>.</li>
+				<li>Obtain <img src="image/Formula_06_022.png" alt=""/> by minimizing the gap between <img src="image/Formula_06_023.png" alt=""/> and the target values. More formally,<p> <img src="image/Formula_06_024.png" alt=""/>, where <img src="image/Formula_06_025.png" alt=""/> is a loss function, such as squared error, <img src="image/Formula_06_026.png" alt=""/>. </p></li>
+				<li>Update <img src="image/Formula_05_035.png" alt=""/> with respect to the new <img src="image/Formula_06_028.png" alt=""/> value.</li>
+			</ol>
+			<p>There are numerous improvements that can be done on fitted Q-iteration, but that is not our focus <a id="_idIndexMarker513"/>here. Instead, next, we will mention a couple of essential considerations when implementing the algorithm.</p>
+			<h3>Practical considerations for fitted Q-iteration</h3>
+			<p>To make fitted <a id="_idIndexMarker514"/>Q-iteration work in practice, there are several important points to pay attention to, which we have noted here:</p>
+			<ul>
+				<li>The <img src="image/Formula_05_221.png" alt=""/> policy should be a soft policy, allowing enough exploration of different state-action pairs during sample collection, such as an <img src="image/Formula_06_030.png" alt=""/>-greedy policy. The rate of exploration, therefore, is a hyperparameter.</li>
+				<li>Setting <img src="image/Formula_06_031.png" alt=""/> too large could be problematic as some states can only be reached after sticking with a good policy (once it starts to improve) for a number of steps. An example is that in a video game, later levels are reached only after finishing the earlier steps successfully, which a highly random policy is unlikely to achieve.</li>
+				<li>When the target values are obtained, chances are these values use inaccurate estimates for the action values because we bootstrap with inaccurate <img src="image/Formula_06_032.png" alt=""/> values. Therefore, we need to repeat <em class="italic">steps 2</em> and <em class="italic">3</em> <img src="image/Formula_06_033.png" alt=""/> times to hopefully obtain more accurate target values in the next round. This gives us another hyperparameter, <img src="image/Formula_06_034.png" alt=""/>.</li>
+				<li>The policy that we initially used to collect samples is probably not good enough to lead the <a id="_idIndexMarker515"/>agent to some parts of the state space, similar to the case with high <img src="image/Formula_05_272.png" alt=""/>. Therefore, it is usually a good idea to collect more samples after updating the policy, add them to the sample set, and repeat the procedure. </li>
+				<li>Note that this is an off-policy algorithm, so the samples could come from the chosen policy or somewhere else, such as an existing non-RL controller deployed in the environment.</li>
+			</ul>
+			<p>Even with these improvements, in practice, it may be difficult to solve MDPs using NFQ. Let's look into the whys in the next section.</p>
+			<h3>Challenges with fitted Q-iteration</h3>
+			<p>Although there <a id="_idIndexMarker516"/>are some successful applications with fitted Q-iteration, it suffers from several major drawbacks:</p>
+			<ul>
+				<li>It requires learning <img src="image/Formula_06_036.png" alt=""/> from scratch every time we repeat <em class="italic">step 3</em> using the target batch at hand. In other words, <em class="italic">step 3</em> involves an <img src="image/Formula_06_037.png" alt=""/> operator, as opposed to a gradual update of <img src="image/Formula_06_036.png" alt=""/> with new data like we have in gradient descent. In some applications, RL models are trained over billions of samples. Training a neural network over billions of samples again and again with updated target values is impractical.</li>
+				<li>SARSA and Q-learning-like methods have convergence guarantees in the tabular case. However, these theoretical guarantees are lost when function approximations<a id="_idIndexMarker517"/> are used.</li>
+				<li>Using function approximations with Q-learning, an off-policy method using bootstrapping, is especially <a id="_idIndexMarker518"/>unstable, which is called <strong class="bold">the deadly triad</strong>.</li>
+			</ul>
+			<p>Before going into how to address these, let's dive into the latter two points in a bit more detail. Now, this will involve a bit of theory, which if you understand it is going to help you gain a deeper intuition about the challenges of deep RL. On the other hand, if you don't want to know the theory, feel free to skip ahead to the <em class="italic">Online Q-learning</em> section.</p>
+			<h4>Convergence issues with function approximators</h4>
+			<p>To explain<a id="_idIndexMarker519"/> why the convergence guarantees with Q-learning are lost when function <a id="_idIndexMarker520"/>approximators are used, let's remember why tabular Q-learning converges in the first place:</p>
+			<ul>
+				<li>The definition of <img src="image/Formula_06_039.png" alt=""/> is the expected discounted return if we deviate from policy <img src="image/Formula_05_046.png" alt=""/> only once at the beginning while in state <img src="image/Formula_06_041.png" alt=""/> by choosing action <img src="image/Formula_05_059.png" alt=""/>, but then follow the policy for the rest of the horizon:</li>
+			</ul>
+			<div>
+				<div id="_idContainer696" class="IMG---Figure">
+					<img src="image/Formula_06_043.jpg" alt=""/>
+				</div>
+			</div>
+			<ul>
+				<li>The Bellman optimality operator, denoted by <img src="image/Formula_06_044.png" alt=""/> takes an action-value function of <img src="image/Formula_06_045.png" alt=""/>, <img src="image/Formula_06_046.png" alt=""/>, and <img src="image/Formula_06_047.png" alt=""/>, and maps to the following quantity:</li>
+			</ul>
+			<div>
+				<div id="_idContainer701" class="IMG---Figure">
+					<img src="image/Formula_06_048.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Note the use of <img src="image/Formula_06_049.png" alt=""/> inside the expectation, rather than following some other<a id="_idIndexMarker521"/> policy, <img src="image/Formula_05_035.png" alt=""/>. <img src="image/Formula_06_051.png" alt=""/> is <a id="_idIndexMarker522"/>an operator, a function, <em class="italic">different from the definition of the action-value function</em>.</p>
+			<ul>
+				<li>If, and only if, the action-value function is optimal, <img src="image/Formula_06_052.png" alt=""/> maps <img src="image/Formula_06_053.png" alt=""/> back to <img src="image/Formula_06_054.png" alt=""/> for all instances of <img src="image/Formula_06_055.png" alt=""/> and <img src="image/Formula_05_059.png" alt=""/>: </li>
+			</ul>
+			<div>
+				<div id="_idContainer710" class="IMG---Figure">
+					<img src="image/Formula_06_057.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer711" class="IMG---Figure">
+					<img src="image/Formula_06_058.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption"> </p>
+			<p>More formally, the unique fixed point of operator <img src="image/Formula_06_059.png" alt=""/> is the optimal <img src="image/Formula_06_060.png" alt=""/>, denoted by <img src="image/Formula_06_061.png" alt=""/>. This is what the Bellman optimality equation is about.</p>
+			<ul>
+				<li><img src="image/Formula_06_062.png" alt=""/> is a <strong class="bold">contraction</strong>, which <a id="_idIndexMarker523"/>means that every time we apply<a id="_idIndexMarker524"/> it to any two different action-value functions, such as <img src="image/Formula_06_054.png" alt=""/> and <img src="image/Formula_06_064.png" alt=""/> vectors, whose entries are some action-value estimates for all instances of <img src="image/Formula_05_010.png" alt=""/> and <img src="image/Formula_05_059.png" alt=""/>, they get close to each other. This is with respect to the <img src="image/Formula_06_067.png" alt=""/> norm, which is the maximum of the absolute differences between the <img src="image/Formula_06_068.png" alt=""/> tuples of <img src="image/Formula_06_069.png" alt=""/> and <img src="image/Formula_06_070.png" alt=""/>: <img src="image/Formula_06_071.png" alt=""/> Here, <img src="image/Formula_06_072.png" alt=""/>.<p>If we pick one of these action-value vectors to be the optimal one, we obtain the following relation: </p></li>
+			</ul>
+			<div>
+				<div id="_idContainer726" class="IMG---Figure">
+					<img src="image/Formula_06_073.jpg" alt=""/>
+				</div>
+			</div>
+			<p>This means that we can get closer and closer to <img src="image/Formula_06_074.png" alt=""/> by starting with some arbitrary <img src="image/Formula_06_075.png" alt=""/> value, repeatedly applying the Bellman operator, and updating the <img src="image/Formula_06_076.png" alt=""/> values.</p>
+			<ul>
+				<li>With<a id="_idIndexMarker525"/> these, <img src="image/Formula_06_077.png" alt=""/> turns <a id="_idIndexMarker526"/>into an update rule to obtain <img src="image/Formula_06_078.png" alt=""/> from an arbitrary <img src="image/Formula_06_079.png" alt=""/> value, very similar to how the value iteration method works.</li>
+			</ul>
+			<p>Now, notice that fitting a neural network to a batch of sampled targets does not actually guarantee to make the action-value estimates closer to the optimal value for <em class="italic">each</em> <img src="image/Formula_06_080.png" alt=""/> tuple, because the fitting operation does not care about the individual errors – nor does it necessarily have the ability to do so because it assumes a certain structure in the action-value function due to parametrization – but it minimizes the average error. As a result, we lose the contraction property of the Bellman operation with respect to the <img src="image/Formula_06_081.png" alt=""/> norm. Instead, NFQ fits <img src="image/Formula_06_082.png" alt=""/> to the target values with respect to an <img src="image/Formula_06_083.png" alt=""/> norm, which does not have the same convergence properties.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">For a detailed and more visual explanation of why the value function theory fails with function approximations, check out Professor Sergey Levine's lecture at <a href="https://youtu.be/doR5bMe-Wic?t=3957">https://youtu.be/doR5bMe-Wic?t=3957</a>, which also inspired this section. The entire course is available online, and it is a great resource for you to go deeper into the theory of RL. </p>
+			<p>With<a id="_idIndexMarker527"/> that, let's<a id="_idIndexMarker528"/> now look into the famous deadly triad, which gives another perspective into why it is problematic to use function approximators with bootstrapping in off-policy algorithms such as Q-learning.</p>
+			<h4>The deadly triad</h4>
+			<p>Sutton and Barto coined<a id="_idIndexMarker529"/> the<a id="_idIndexMarker530"/> term <strong class="bold">the deadly triad</strong>, which suggests that an RL algorithm is likely to diverge if it involves using all of the following:</p>
+			<ul>
+				<li>Function approximators</li>
+				<li>Bootstrapping</li>
+				<li>Off-policy sample collection</li>
+			</ul>
+			<p>They provided this simple example to explain the problem. Consider a part of an MDP that consists of two states, left and right. There is only one action on the left, which is to go right with a reward of 0. The observation in the left state is 1, and it is 2 in the right state. A simple linear function approximator is used to represent the action values with one parameter, <img src="image/Formula_06_084.png" alt=""/>. This is represented in the following figure:</p>
+			<div>
+				<div id="_idContainer738" class="IMG---Figure">
+					<img src="image/B14160_06_1.jpg" alt="Figure 6.1 – A diverging MDP fragment (source: Sutton &amp; Barto, 2018)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.1 – A diverging MDP fragment (source: Sutton &amp; Barto, 2018)</p>
+			<p>Now, imagine that <a id="_idIndexMarker531"/>a behavior policy only samples from the state on the left. Also, imagine that<a id="_idIndexMarker532"/> the initial value of <img src="image/Formula_06_085.png" alt=""/> is 10 and <img src="image/Formula_06_086.png" alt=""/>. The TD error is then calculated as follows:</p>
+			<div>
+				<div id="_idContainer741" class="IMG---Figure">
+					<img src="image/Formula_06_087.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer742" class="IMG---Figure">
+					<img src="image/Formula_06_088.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer743" class="IMG---Figure">
+					<img src="image/Formula_06_089.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer744" class="IMG---Figure">
+					<img src="image/Formula_06_090.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, if the linear function approximation is updated with the only data on hand, the transition from left to right, say, using <img src="image/Formula_06_091.png" alt=""/>, then the new <img src="image/Formula_06_092.png" alt=""/> value becomes <img src="image/Formula_06_093.png" alt=""/> Note that this updates the action-value estimate of the right state as well. In the next round, the behavior policy again only samples from the left, and the new TD error becomes the following:</p>
+			<div>
+				<div id="_idContainer748" class="IMG---Figure">
+					<img src="image/Formula_06_094.jpg" alt=""/>
+				</div>
+			</div>
+			<p>It is even greater than the first TD error! You can see how this will diverge eventually. The problem occurs due to the following:</p>
+			<ul>
+				<li>This is an off-policy method and the behavior policy happens to visit only one part of the state-action space.</li>
+				<li>A function approximator is used, whose parameters are updated based on the limited sample<a id="_idIndexMarker533"/> we have, but the value estimates for the unvisited state actions also get<a id="_idIndexMarker534"/> updated with that.</li>
+				<li>We bootstrap and use the bad value estimates from the state actions we never actually visited to calculate the target values.</li>
+			</ul>
+			<p>This simple example illustrates how it can destabilize the RL methods when these three components come together. For other examples and a more detailed explanation of the topic, we recommend you read the related sections in Sutton &amp; Barto, 2018.</p>
+			<p>As we have only talked about the challenges, we will now finally start addressing them. Remember that NFQ required us to completely fit the entire neural network to the target values on hand and how we looked for a more gradual update. This is what online Q-learning gives us, which we will introduce next. On the other hand, online Q-learning introduces other<a id="_idIndexMarker535"/> challenges, which we will address with <strong class="bold">deep</strong> <strong class="bold">Q-networks</strong> (<strong class="bold">DQNs</strong>) in the following section.</p>
+			<h2 id="_idParaDest-127"><a id="_idTextAnchor128"/>Online Q-learning</h2>
+			<p>As we mentioned <a id="_idIndexMarker536"/>previously, one of the disadvantages of fitted Q-iteration is that it requires finding the <img src="image/Formula_06_095.png" alt=""/> value with each batch of samples, which is impractical when the problem is complex and requires a lot of data for training. Online Q-learning goes to the other extreme: it takes a gradient step to update <img src="image/Formula_06_096.png" alt=""/> after observing every single sample, <img src="image/Formula_06_097.png" alt=""/>. Next, let's go into the details of the online Q-learning algorithm.</p>
+			<h3>The algorithm</h3>
+			<p>The online <a id="_idIndexMarker537"/>Q-learning algorithm works as follows:</p>
+			<ol>
+				<li value="1"> Initialize <img src="image/Formula_06_098.png" alt=""/> and a policy, <img src="image/Formula_06_099.png" alt=""/>, then initialize the environment and observe <img src="image/Formula_06_100.png" alt=""/>.<p>For <img src="image/Formula_06_101.png" alt=""/> to <img src="image/Formula_06_102.png" alt=""/>, continue with the following steps.</p></li>
+				<li>Take some action, <img src="image/Formula_06_103.png" alt=""/>, using a policy, <img src="image/Formula_06_104.png" alt=""/>, given the state, <img src="image/Formula_06_105.png" alt=""/>, then observe <img src="image/Formula_06_106.png" alt=""/> and <img src="image/Formula_06_107.png" alt=""/>, which form the <img src="image/Formula_06_108.png" alt=""/> tuple.</li>
+				<li>Obtain the target value, <img src="image/Formula_06_109.png" alt=""/>, but if <img src="image/Formula_06_110.png" alt=""/> is a terminal state, set <img src="image/Formula_06_111.png" alt=""/>.</li>
+				<li>Take a gradient step to update <img src="image/Formula_06_112.png" alt=""/>, where <img src="image/Formula_06_113.png" alt=""/> is the step size. </li>
+				<li>Update the policy to <img src="image/Formula_06_114.png" alt=""/> with respect to the new <img src="image/Formula_06_115.png" alt=""/> value.<p><strong class="bold">End for</strong></p></li>
+			</ol>
+			<p>As you can see, the <a id="_idIndexMarker538"/>key difference compared to NFQ is to update the neural network parameters after each <img src="image/Formula_06_116.png" alt=""/> tuple is sampled from the environment. Here are some additional considerations about online Q-learning: </p>
+			<ul>
+				<li>Similar to the NFQ algorithm, we need a policy that continuously explores the state-action space. Again, this can be achieved by using an <img src="image/Formula_06_117.png" alt=""/>-greedy policy or another soft policy.</li>
+				<li>Also similar to fitted Q-iteration, the samples may come from a policy that is not relevant to what the Q-network is suggesting, as this is an off-policy method.</li>
+			</ul>
+			<p>Other than these, there can be numerous other improvements to the online Q-learning method. We will momentarily focus on DQNs, a breakthrough improvement over Q-learning, rather <a id="_idIndexMarker539"/>than discussing somewhat less important tweaks to online Q-learning. But before doing so, let's look into why it is difficult to train online Q-learning in its current form.</p>
+			<h3>Challenges with online Q-learning</h3>
+			<p>The online Q-learning<a id="_idIndexMarker540"/> algorithm suffers from the following issues:</p>
+			<ul>
+				<li><strong class="bold">The gradient estimates are noisy</strong>: Similar to the other gradient descent methods in machine learning, online Q-learning aims to estimate the gradient using samples. On the other hand, it uses a single sample while doing so, which results in noisy estimates that make it hard to optimize the loss function. Ideally, we should use a minibatch with more than one sample to estimate the gradient.</li>
+				<li><strong class="bold">The gradient step is not truly gradient descent</strong>: This is because <img src="image/Formula_06_118.png" alt=""/> includes <img src="image/Formula_06_119.png" alt=""/>, which we treat as a constant even though it is not. <img src="image/Formula_06_120.png" alt=""/> itself depends on <img src="image/Formula_06_011.png" alt=""/>, yet we ignore this fact by not taking its derivative with respect to <img src="image/Formula_06_122.png" alt=""/>.</li>
+				<li><strong class="bold">Target values are updated after each gradient step, which becomes a moving target that the network is trying to learn from</strong>: This is unlike supervised learning where the labels (of images, let's say) don't change based on what the model predicts, and it makes the learning very difficult.</li>
+				<li><strong class="bold">The samples are not independent and identically distributed (i.i.d.)</strong>: In fact, they are usually highly correlated since an MDP is a sequential decision setting, and what we observe next highly depends on the actions we have taken earlier. This is another deviation from the classical gradient descent, which breaks its convergence properties.</li>
+			</ul>
+			<p>Because of all these challenges, and what we mentioned in general in the NFQ section regarding the deadly triad, the online Q-learning algorithm is not quite a viable method to solve complex RL<a id="_idIndexMarker541"/> problems. This changed with the revolutionary work of DQNs, which addressed the latter two challenges we mentioned previously. In fact, it is with the DQN that we started talking about deep RL. So, without further ado, let's dive into discussing DQNs.</p>
+			<h1 id="_idParaDest-128"><a id="_idTextAnchor129"/>Deep Q-networks</h1>
+			<p>The DQN is a seminal<a id="_idIndexMarker542"/> work by Mnih et al. (2015) that made deep RL a viable approach to complex sequential control problems. The authors demonstrated that a single DQN architecture can achieve super-human-level performance in many Atari games without any feature engineering, which created a lot of excitement regarding the progress of AI. Let's look into what makes DQNs so effective compared to the algorithms we mentioned earlier.</p>
+			<h2 id="_idParaDest-129"><a id="_idTextAnchor130"/>Key concepts in DQNs</h2>
+			<p>The DQN modifies<a id="_idIndexMarker543"/> online Q-learning with two important concepts by using experience replay and a target network, which greatly stabilizes the learning. We will describe these concepts next.</p>
+			<h3>Experience replay</h3>
+			<p>As mentioned <a id="_idIndexMarker544"/>earlier, simply using the experience sampled sequentially from the environment leads to highly correlated gradient steps. The DQN, on the other hand, stores those experience tuples, <img src="image/Formula_06_123.png" alt=""/>, in a replay buffer (memory), an idea that was introduced back in 1993 (Lin, 1993). During learning, the samples are drawn from this buffer uniformly at random, which eliminates the correlations between the samples used to train the neural network and gives i.i.d.-like samples.</p>
+			<p>Another benefit of using experience replay over online Q-learning is that experience is reused rather than discarded, which reduces the amount of interaction necessary with the environment – an important benefit given the need for vast amounts of data in RL.</p>
+			<p>An interesting <a id="_idIndexMarker545"/>note about experience replay is that there is evidence that a similar process takes place in animal brains. Animals appear to replay their past experiences in their hippocampus, which contributes to their learning (McClelland, 1995).</p>
+			<h3>Target networks</h3>
+			<p>Another <a id="_idIndexMarker546"/>problem with using bootstrapping with function approximations is that it creates a moving target to learn from. This makes an already-challenging undertaking, such as training a neural network from noisy samples, a task that is destined for failure. A key insight presented by the authors is to create a copy of the neural network that is only used to generate the Q-value estimates used in sampled Bellman updates. Namely, the target value for sample <img src="image/Formula_06_124.png" alt=""/> is obtained as follows:</p>
+			<div>
+				<div id="_idContainer779" class="IMG---Figure">
+					<img src="image/Formula_06_125.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_06_126.png" alt=""/> is the parameter of a target network, which is updated every <img src="image/Formula_06_127.png" alt=""/> time steps by setting <img src="image/Formula_06_128.png" alt=""/>.</p>
+			<p>Creating a lag in updating the target network potentially makes its action-value estimations slightly stale compared to the original network. On the other hand, in return, the target values become stable, and the original network can be trained.</p>
+			<p>Before giving <a id="_idIndexMarker547"/>you the full DQN algorithm, let's also discuss the loss function it uses.</p>
+			<h3>The loss function</h3>
+			<p>With <a id="_idIndexMarker548"/>experience replay and the target network introduced, the DQN minimizes the following loss function:</p>
+			<div>
+				<div id="_idContainer783" class="IMG---Figure">
+					<img src="image/Formula_06_129.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_06_130.png" alt=""/> is the replay buffer, from which a minibatch of <img src="image/Formula_06_131.png" alt=""/> tuples are drawn uniformly at random to update the neural network. </p>
+			<p>Now, it's finally time to give the complete algorithm.</p>
+			<h2 id="_idParaDest-130"><a id="_idTextAnchor131"/>The DQN algorithm</h2>
+			<p>The DQN algorithm <a id="_idIndexMarker549"/>consists of the following steps:</p>
+			<ol>
+				<li value="1">Initialize <img src="image/Formula_06_132.png" alt=""/> and a replay buffer, <img src="image/Formula_06_133.png" alt=""/>, with a fixed capacity, <img src="image/Formula_06_134.png" alt=""/>. Set the target network parameters as <img src="image/Formula_06_135.png" alt=""/>. </li>
+				<li>Set the policy, <img src="image/Formula_05_035.png" alt=""/>, to be <img src="image/Formula_06_117.png" alt=""/>-greedy with respect to <img src="image/Formula_06_138.png" alt=""/>.</li>
+				<li>Given the state, <img src="image/Formula_05_165.png" alt=""/>, and the policy, <img src="image/Formula_05_011.png" alt=""/>, take an action, <img src="image/Formula_05_044.png" alt=""/>, and observe <img src="image/Formula_06_142.png" alt=""/> and <img src="image/Formula_06_143.png" alt=""/>. Add the transition, <img src="image/Formula_06_144.png" alt=""/>, to the replay buffer, <img src="image/Formula_06_145.png" alt=""/>. If <img src="image/Formula_06_146.png" alt=""/>, eject the oldest transition from the buffer.</li>
+				<li>If <img src="image/Formula_06_147.png" alt=""/>, uniformly sample a random minibatch of <img src="image/Formula_06_148.png" alt=""/> transitions from <img src="image/Formula_06_149.png" alt=""/>, else return to <em class="italic">step 2</em>.</li>
+				<li>Obtain the target values, <img src="image/Formula_06_150.png" alt=""/>, <img src="image/Formula_06_151.png" alt=""/> except if <img src="image/Formula_06_152.png" alt=""/> is a terminal state, set <img src="image/Formula_06_153.png" alt=""/>.</li>
+				<li>Take a gradient step to update <img src="image/Formula_06_154.png" alt=""/>, which is <img src="image/Formula_06_155.png" alt=""/>. Here,<p class="figure-caption"> </p><div id="_idContainer810" class="IMG---Figure"><img src="image/Formula_06_156.jpg" alt=""/></div></li>
+				<li>Every <img src="image/Formula_06_157.png" alt=""/> steps, update the target network parameters, <img src="image/Formula_06_158.png" alt=""/>.</li>
+				<li>Return<a id="_idIndexMarker550"/> to <em class="italic">step 1</em>.</li>
+			</ol>
+			<p>The DQN algorithm can be illustrated as in the diagram in <em class="italic">Figure 6.2</em>:</p>
+			<div>
+				<div id="_idContainer813" class="IMG---Figure">
+					<img src="image/B14160_06_2.jpg" alt="Figure 6.2 – DQN algorithm overview (source: Nair et al., 2015)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.2 – DQN algorithm overview (source: Nair et al., 2015)</p>
+			<p>After the seminal <a id="_idIndexMarker551"/>work on DQNs, there have been many extensions proposed to improve them in various papers. Hessel et al. (2018) combined some of the most important of those and called them Rainbow, which we will turn to next.</p>
+			<h1 id="_idParaDest-131"><a id="_idTextAnchor132"/>Extensions to the DQN – Rainbow</h1>
+			<p>The Rainbow<a id="_idIndexMarker552"/> improvements bring in a significant performance boost over the vanilla DQN and they have become standard in most Q-learning implementations. In this section, we will discuss what those improvements are, how they help, and what their relative importance is. At the end, we will talk about how the DQN and these extensions collectively overcome the deadly triad.</p>
+			<h2 id="_idParaDest-132"><a id="_idTextAnchor133"/>The extensions</h2>
+			<p>There are six extensions to the DQN included in the Rainbow algorithm. These are double Q-learning, prioritized <a id="_idIndexMarker553"/>replay, dueling networks, multi-step learning, distributional RL, and noisy nets. Let's start describing them, starting with double Q-learning.</p>
+			<h3>Double Q-learning</h3>
+			<p>One of the <a id="_idIndexMarker554"/>well-known issues in Q-learning <a id="_idIndexMarker555"/>is that the Q-value estimates we obtain during learning are higher than the true Q-values because of the maximization operation, <img src="image/Formula_06_159.png" alt=""/>. This phenomenon<a id="_idIndexMarker556"/> is called <strong class="bold">maximization bias</strong>, and the reason we run into it is that we do a maximization operation over noisy observations of the Q-values. As a result, we end up estimating not the maximum of the true values but the maximum of the possible observations.</p>
+			<p>For two simple illustrations of how this happens, consider the examples in <em class="italic">Figure 6.3</em>:</p>
+			<div>
+				<div id="_idContainer815" class="IMG---Figure">
+					<img src="image/B14160_06_3.jpg" alt="Figure 6.3 – Two examples of maximization bias&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.3 – Two examples of maximization bias</p>
+			<p><em class="italic">Figures 6.3 (a)</em> and <em class="italic">6.3 (b)</em> show the probability distributions of obtaining various Q-value estimates for the available actions for a given state, <img src="image/Formula_05_290.png" alt=""/>, where the vertical lines correspond to the true action values. In <em class="italic">(a)</em>, there are three available actions. After some round of sample collection, just by chance, the estimates we obtain happen to be <img src="image/Formula_06_161.png" alt=""/>. Not only is the best action incorrectly predicted as <img src="image/Formula_06_162.png" alt=""/>, but its action value is overestimated. In <em class="italic">(b)</em>, there are six available actions with the same probability distribution of Q-value estimates. Although their true action values are the same, when we take a random sample, an order will appear between them just by chance. Moreover, since we take the maximum of these noisy observations, chances are it will be above <a id="_idIndexMarker557"/>the true value and again <a id="_idIndexMarker558"/>the Q-value is overestimated.</p>
+			<p>Double Q-learning proposes a solution to the maximization bias by decoupling finding the maximizing action and obtaining an action-value estimate for it by using two separate action-value functions, <img src="image/Formula_06_163.png" alt=""/>and <img src="image/Formula_06_164.png" alt=""/>. More formally, we find the maximizing action using one of the functions:</p>
+			<div>
+				<div id="_idContainer821" class="IMG---Figure">
+					<img src="image/Formula_06_165.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Then, we obtain the action value using the other function as <img src="image/Formula_06_166.png" alt=""/>.</p>
+			<p>In tabular Q-learning, this requires the extra effort of maintaining two action-value functions. <img src="image/Formula_06_167.png" alt=""/> and <img src="image/Formula_06_168.png" alt=""/> are then swapped randomly in each step. On the other hand, the DQN already proposes maintaining a target network with <img src="image/Formula_06_169.png" alt=""/> parameters dedicated to providing action-value estimates for bootstrapping. Therefore, we implement double Q-learning on top of the DQN to obtain the action-value estimate for the maximizing action, as follows:</p>
+			<div>
+				<div id="_idContainer826" class="IMG---Figure">
+					<img src="image/Formula_06_170.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Then, the corresponding loss function for the state-action pair <img src="image/Formula_06_171.png" alt=""/> becomes the following:</p>
+			<div>
+				<div id="_idContainer828" class="IMG---Figure">
+					<img src="image/Formula_06_172.jpg" alt=""/>
+				</div>
+			</div>
+			<p>That's it! This<a id="_idIndexMarker559"/> is how double Q-learning<a id="_idIndexMarker560"/> works in the context of the DQN. Now, let's look into the next improvement, prioritized replay.</p>
+			<h3>Prioritized replay</h3>
+			<p>As we mentioned, the DQN algorithm suggests sampling the experiences from the replay buffer <a id="_idIndexMarker561"/>uniformly at random. On the other hand, it is natural to expect that some of the experiences will be more "interesting" than others, in the sense that there will be more to learn from them for the agent. This is especially the case in hard-exploration problems with sparse rewards, where there are a lot of uninteresting "failure" cases and only a few "successes" with non-zero rewards. Schaul et al. (2015) propose using the TD error to measure how "interesting" or "surprising" an experience is to the agent. The probability of sampling a particular experience from the replay buffer is then set to be proportional to the TD error. Namely, the probability of sampling an experience encountered at time <img src="image/Formula_06_173.png" alt=""/>, <img src="image/Formula_06_174.png" alt=""/>, has the following relationship with the TD error:</p>
+			<div>
+				<div id="_idContainer831" class="IMG---Figure">
+					<img src="image/Formula_06_175.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_06_176.png" alt=""/> is a hyperparameter controlling the shape of the distribution. Note that for  <img src="image/Formula_06_177.png" alt=""/>, this gives a uniform distribution over the experiences, while larger <img src="image/Formula_06_178.png" alt=""/> values put more and <a id="_idIndexMarker562"/>more weight on experiences with a large TD error.</p>
+			<h3>Dueling networks</h3>
+			<p>One of the<a id="_idIndexMarker563"/> common situations encountered in RL problems is that in some states, actions taken by the agent have little or no effect on the environment. As an example, consider the following: </p>
+			<ul>
+				<li>A robot moving in a grid world should avoid a "trap" state, from which the robot cannot escape through its actions. </li>
+				<li>Instead, the environment randomly transitions the robot out of this state with some low probability. </li>
+				<li>While in this state, the robot loses some reward points. </li>
+			</ul>
+			<p>In this situation, the algorithm needs to estimate the value of the trap state so that it knows it should avoid it. On the other hand, trying to estimate the individual action values is meaningless as it would just be chasing the noise. It turns out that this harms the DQN's effectiveness.</p>
+			<p>Dueling networks propose a solution to this issue through an architecture that simultaneously estimates the state value and the action <strong class="bold">advantages</strong> in parallel streams for a given state. The <strong class="bold">advantage value</strong> of an action in a given state, as is apparent from the term, is the additional expected cumulative reward that comes with choosing that action instead of what the policy in use, <img src="image/Formula_05_040.png" alt=""/>, suggests. It is formally defined as follows:</p>
+			<div>
+				<div id="_idContainer836" class="IMG---Figure">
+					<img src="image/Formula_06_180.jpg" alt=""/>
+				</div>
+			</div>
+			<p>So, choosing the action with the highest advantage is equivalent to choosing the action with the highest Q-value.</p>
+			<p>By obtaining the Q-values from the explicit representations of the state value and the action advantages, as represented in <em class="italic">Figure 6.4</em>, we enable the network to have a good representation of<a id="_idIndexMarker564"/> the state value without having to accurately estimate each action value for a given state:</p>
+			<div>
+				<div id="_idContainer837" class="IMG---Figure">
+					<img src="image/B14160_06_4.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.4 – (a) regular DQN and (b) dueling DQN (source: Wang et al., 2016)</p>
+			<p>At this point, you might expect that the action-value estimates are just obtained in this architecture using the formula we gave previously. It turns out that this vanilla implementation does not work well. This is because this architecture alone does not enforce the network to learn the state and action values in the corresponding branches, because they are supervised indirectly through their sum. For example, the sum would not change if you were to subtract 100 from the state value estimate and add 100 to all advantage estimates. To overcome this issue of "identifiability," we need to remember this: in Q-learning, the policy is to pick the action with the highest Q-value. Let's represent this best action with <img src="image/Formula_06_181.png" alt=""/>. Then, we have the following:</p>
+			<div>
+				<div id="_idContainer839" class="IMG---Figure">
+					<img src="image/Formula_06_182.jpg" alt=""/>
+				</div>
+			</div>
+			<p>This leads to <img src="image/Formula_06_183.png" alt=""/>. To enforce this, one way of obtaining the action-value estimates is to use the following equation:</p>
+			<div>
+				<div id="_idContainer841" class="IMG---Figure">
+					<img src="image/Formula_06_184.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_06_185.png" alt=""/>, and <img src="image/Formula_06_186.png" alt=""/> represent the common encoder, state value, and advantage streams; and <img src="image/Formula_06_187.png" alt=""/>. On the other hand, the authors use the following alternative, which leads <a id="_idIndexMarker565"/>to more stable training:</p>
+			<div>
+				<div id="_idContainer845" class="IMG---Figure">
+					<img src="image/Formula_06_188.jpg" alt=""/>
+				</div>
+			</div>
+			<p>With this architecture, the authors obtained state-of-the-art results at the time on the Atari benchmarks, proving the value of the approach. </p>
+			<p>Next, let's look into another important improvement over DQNs: multi-step learning.</p>
+			<h3>Multi-step learning</h3>
+			<p>In the previous <a id="_idIndexMarker566"/>chapter, we mentioned that a more accurate target value for a state-action pair can be obtained by using multi-step discounted rewards in the estimation obtained from the environment. In such cases, the Q-value estimates used in bootstrapping will be discounted more heavily, diminishing the impact of the inaccuracies of those estimates. Instead, more of the target value will come from the sampled rewards. More formally, the TD error in a multi-step setting becomes the following:</p>
+			<div>
+				<div id="_idContainer846" class="IMG---Figure">
+					<img src="image/Formula_06_189.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer847" class="IMG---Figure">
+					<img src="image/Formula_06_190.jpg" alt=""/>
+				</div>
+			</div>
+			<p>You can see that with increasing <img src="image/Formula_05_193.png" alt=""/>, the impact of the <img src="image/Formula_06_192.png" alt=""/> term diminishes since <img src="image/Formula_06_193.png" alt=""/>.</p>
+			<p>The next extension is distributional RL, one of the most important ideas in value-based learning.</p>
+			<h3>Distributional RL</h3>
+			<p>In a traditional <a id="_idIndexMarker567"/>Q-learning setting, the action-value function estimates the expected discounted<a id="_idIndexMarker568"/> return when action <img src="image/Formula_06_194.png" alt=""/> is taken in state <img src="image/Formula_05_045.png" alt=""/>, and then some target policy is followed. The distributional RL model proposed by Bellemare et al. (2017) instead learns a probability mass function over discrete support <img src="image/Formula_06_196.png" alt=""/> for state values. This <img src="image/Formula_06_197.png" alt=""/> is a vector with <img src="image/Formula_06_198.png" alt=""/> atoms, where <img src="image/Formula_06_199.png" alt=""/>, <img src="image/Formula_06_200.png" alt=""/>. The neural network architecture is then modified to estimate <img src="image/Formula_06_201.png" alt=""/> on each atom, <img src="image/Formula_06_202.png" alt=""/>. When distributional RL is used, the TD error can be calculated using <strong class="bold">Kullback-Leibler</strong> (<strong class="bold">KL</strong>) divergence between the current and target distributions.</p>
+			<p>To give an example <a id="_idIndexMarker569"/>here, let's say the state value in an environment for any state can range between <img src="image/Formula_06_203.png" alt=""/> and <img src="image/Formula_06_204.png" alt=""/>. We can discretize this range into 11 atoms, leading to <img src="image/Formula_06_205.png" alt=""/>. The value network then estimates, for a given <img src="image/Formula_06_206.png" alt=""/> value, what the probability is that its value is 0, 10, 20, and so on. It turns out that this granular representation of the value function leads to a significant performance boost in deep Q-learning. Of course, the additional complexity here is that <img src="image/Formula_06_207.png" alt=""/> and <img src="image/Formula_06_208.png" alt=""/> are <a id="_idIndexMarker570"/>additional hyperparameters<a id="_idIndexMarker571"/> to be tuned.</p>
+			<p>Finally, we will introduce the last extension, noisy nets.</p>
+			<h3>Noisy nets</h3>
+			<p>The exploration<a id="_idIndexMarker572"/> in regular Q-learning is<a id="_idIndexMarker573"/> controlled by <img src="image/Formula_06_031.png" alt=""/>, which is fixed across the state space. On the other hand, some states may require higher exploration than others. Noisy nets introduce noise to the linear layers of the action-value function, whose degree is learned during training. More formally, noisy nets locate the linear layer:</p>
+			<div>
+				<div id="_idContainer867" class="IMG---Figure">
+					<img src="image/Formula_06_210.jpg" alt=""/>
+				</div>
+			</div>
+			<p>And then they replace it with the following:</p>
+			<div>
+				<div id="_idContainer868" class="IMG---Figure">
+					<img src="image/Formula_06_211.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_06_212.png" alt=""/>, and <img src="image/Formula_06_213.png" alt=""/> are learned parameters, whereas <img src="image/Formula_06_214.png" alt=""/> and <img src="image/Formula_06_215.png" alt=""/> are random variables with fixed statistics, and <img src="image/Formula_06_216.png" alt=""/> denotes an element-wise product. With this setup, the exploration<a id="_idIndexMarker574"/> rate becomes part of the learning process, which is helpful especially in hard-exploration <a id="_idIndexMarker575"/>problems (Fortunato et al., 2017).</p>
+			<p>This concludes the discussion on extensions. Next, we will turn to discussing the results of the combination of these extensions.</p>
+			<h2 id="_idParaDest-133"><a id="_idTextAnchor134"/>The performance of the integrated agent</h2>
+			<p>The contribution<a id="_idIndexMarker576"/> of the Rainbow paper is that it combines all of the preceding improvements into a single agent. As a result, it obtained the state-of-the-art results on the famous Atari 2600 benchmarks back then, showing the importance of bringing these improvements together. Of course, a natural question that arises is whether each individual improvement contributed significantly to the outcome. The authors demonstrated<a id="_idIndexMarker577"/> results from some ablations to answer this, which we will discuss next.</p>
+			<h2 id="_idParaDest-134"><a id="_idTextAnchor135"/>How to choose which extensions to use – ablations to Rainbow</h2>
+			<p>The Rainbow paper<a id="_idIndexMarker578"/> arrives at the following findings in terms of the significance of the individual extensions:</p>
+			<ul>
+				<li>Prioritized replay and multi-step learning turned out to be the most important extensions contributing to the result. Taking these extensions out of the Rainbow architecture led to the highest decrease in performance, indicating their significance.</li>
+				<li>The distributional DQN was shown to be the next important extension, which became more apparent especially in the later stages of the training.</li>
+				<li>Removing noisy nets from the Rainbow agent led to decreases in performance, although its effect was not as significant as the other extensions mentioned previously.</li>
+				<li>Removing the dueling architecture and double Q-learning had no notable effect on the performance.</li>
+			</ul>
+			<p>Of course, the effects of each of these extensions depend on the problem at hand, and their inclusion becomes a hyperparameter. However, these results show that prioritized replay, multi-step learning, and the distributional DQN are important extensions to try while training an RL agent.</p>
+			<p>Before we close this section, let's revisit the discussion on the deadly triad and try to understand why it turns out to be less of a problem with all these improvements.</p>
+			<h2 id="_idParaDest-135"><a id="_idTextAnchor136"/>What happened to the deadly triad?</h2>
+			<p>The deadly triad <a id="_idIndexMarker579"/>hypothesizes that when off-policy algorithms are combined with function approximators and bootstrapping, training could diverge easily. On the other hand, the aforementioned work in deep Q-learning exhibits great success stories. So, how come we can achieve such results if the rationale behind the deadly triad is accurate?</p>
+			<p>Hasselt et al. looked into this question and found support for the following hypotheses:</p>
+			<ul>
+				<li>Unbounded divergence is uncommon when combining Q-learning and conventional deep RL function spaces. So, the fact that the divergence could happen does not mean that it will happen. The authors presented results concluding that this is not that much of a significant problem to begin with.</li>
+				<li>There is less divergence when bootstrapping on separate networks. The target networks introduced in the DQN work help with divergence.</li>
+				<li>There is less divergence when correcting for overestimation bias, meaning that the double DQN is mitigating divergence issues.</li>
+				<li>Longer multi-step returns will diverge less easily as it reduces the influence of bootstrapping.</li>
+				<li>Larger, more<a id="_idIndexMarker580"/> flexible networks will diverge less easily because their representation power is closer to the tabular representation than function approximators with less capacity.</li>
+				<li>Stronger prioritization of updates (high <img src="image/Formula_06_176.png" alt=""/>) will diverge more easily, which is bad. But then, the amount of update can be corrected via importance sampling and that helps to prevent divergence.</li>
+			</ul>
+			<p>These provide great insight into why the situation with deep Q-learning is not as bad as it seemed at the beginning. This is also apparent from the very exciting results that have been reported over the past few years, and deep Q-learning has emerged as a very promising solution approach to RL problems.</p>
+			<p>This concludes our discussion on the theory of deep Q-learning. Next, we will turn to a very important dimension in deep RL, which is its scalable implementation.</p>
+			<h1 id="_idParaDest-136"><a id="_idTextAnchor137"/>Distributed deep Q-learning</h1>
+			<p>Deep learning models<a id="_idIndexMarker581"/> are notorious for their hunger for data. When it comes to RL, the hunger for data is much greater, which mandates using parallelization in training RL models. The original DQN model is a single-threaded process. Despite its great success, it has limited scalability. In this section, we will present methods to parallelize deep Q-learning to many (possibly thousands) of processes.</p>
+			<p>The key insight behind distributed Q-learning is its off-policy nature, which virtually decouples the training from experience generation. In other words, the specific processes/policies that generate the experience do not matter to the training process (although there are caveats to this statement). Combined with the idea of using a replay buffer, this allows us to parallelize the experience generation and store the data in central or distributed replay buffers. In addition, we can parallelize how the data is sampled from these buffers and the action-value function is updated.</p>
+			<p>Let's dive into the details of distributed deep Q-learning.</p>
+			<h2 id="_idParaDest-137"><a id="_idTextAnchor138"/>Components of a distributed deep Q-learning architecture</h2>
+			<p>In this section, we <a id="_idIndexMarker582"/>will describe the main components of a distributed deep Q-learning architecture, and then we will look into specific implementations, following the structure introduced in Nair et al, (2015). </p>
+			<h3>Actors</h3>
+			<p><strong class="bold">Actors</strong> are <a id="_idIndexMarker583"/>processes<a id="_idIndexMarker584"/> that interact with a copy of the environment given a policy, take the actions given the state they are in, and observe the reward and the next state. If the task is to learn how to play chess, for example, each actor plays its own chess game and collects the experience. They are provided with a copy of the Q-network by a <strong class="bold">parameter server</strong>, as well as an exploration parameter, for them to obtain actions.</p>
+			<h3>Experience replay memory (buffer)</h3>
+			<p>When the <a id="_idIndexMarker585"/>actors collect experience tuples, they store them in the replay buffer(s). Depending on the implementation, there could be a global replay buffer or multiple local replay buffers, possibly one associated with each actor. When the replay buffer is a <a id="_idIndexMarker586"/>global one, the data can still be stored in a distributed fashion.</p>
+			<h3>Learners</h3>
+			<p>A <strong class="bold">learner</strong>'s job<a id="_idIndexMarker587"/> is to calculate <a id="_idIndexMarker588"/>the gradients that will update the Q-network in the parameter server. To do so, a learner carries a copy of the Q-network, samples a minibatch of experiences from the replay memory, and calculates the loss and the gradients before communicating them back to the parameter server.</p>
+			<h3>Parameter server</h3>
+			<p>The <strong class="bold">parameter server</strong> is where the main copy of the Q-network is stored and updated as the learning <a id="_idIndexMarker589"/>progresses. All processes periodically synchronize their version of the Q-network from<a id="_idIndexMarker590"/> this parameter server. Depending on the implementation, the parameter server could comprise multiple shards to allow storing large amounts of data and reduce communication load per shard.</p>
+			<p>After introducing this general structure, let's go into the details of the Gorila implementation – one of the early distributed deep Q-learning architectures.</p>
+			<h2 id="_idParaDest-138"><a id="_idTextAnchor139"/>Gorila – general RL architecture</h2>
+			<p>The Gorila architecture <a id="_idIndexMarker591"/>introduces a<a id="_idIndexMarker592"/> general framework to parallelize deep Q-learning using the components we described previously. A specific version of this architecture, which is implemented by the authors, bundles an actor, a learner, and a local replay buffer together for learning. Then, you can create many bundles for distributed learning. This architecture is described in the following figure:</p>
+			<div>
+				<div id="_idContainer875" class="IMG---Figure">
+					<img src="image/B14160_06_5.jpg" alt="Figure 6.5 – Gorila architecture&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.5 – Gorila architecture</p>
+			<p>Note that the<a id="_idIndexMarker593"/> exact flow will change slightly with<a id="_idIndexMarker594"/> the Rainbow improvements.</p>
+			<p>The details of the distributed deep Q-learning algorithm are as follows within a bundle: </p>
+			<ol>
+				<li value="1">Initialize a replay buffer, <img src="image/Formula_06_218.png" alt=""/>, with a fixed capacity, <img src="image/Formula_06_219.png" alt=""/>. Initialize the parameter server with some <img src="image/Formula_06_220.png" alt=""/>. Sync the action-value function and the target network with the parameters in the parameter server, <img src="image/Formula_06_221.png" alt=""/> and <img src="image/Formula_06_222.png" alt=""/>. <p>For <img src="image/Formula_06_223.png" alt=""/> <img src="image/Formula_06_224.png" alt=""/> to <img src="image/Formula_06_225.png" alt=""/> continue with the following steps.</p></li>
+				<li>Reset the environment to an initial state, <img src="image/Formula_06_226.png" alt=""/>. Sync <img src="image/Formula_06_227.png" alt=""/>.<p>For <img src="image/Formula_06_228.png" alt=""/> to <img src="image/Formula_06_229.png" alt=""/>, continue with the following steps.</p></li>
+				<li>Take an action, <img src="image/Formula_06_230.png" alt=""/>, according to an <img src="image/Formula_06_231.png" alt=""/>-greedy policy given <img src="image/Formula_06_232.png" alt=""/> and <img src="image/Formula_06_233.png" alt=""/>; observe <img src="image/Formula_06_234.png" alt=""/> and <img src="image/Formula_06_235.png" alt=""/>. Store the experience in the replay buffer, <img src="image/Formula_06_236.png" alt=""/>.</li>
+				<li>Sync <img src="image/Formula_06_237.png" alt=""/>; sample a random minibatch from <img src="image/Formula_06_238.png" alt=""/> and calculate the target values, <img src="image/Formula_06_239.png" alt=""/>.</li>
+				<li>Calculate the loss; compute the gradients and send them to the parameter server.</li>
+				<li>Every <img src="image/Formula_06_240.png" alt=""/> gradient<a id="_idIndexMarker595"/> updates in the <a id="_idIndexMarker596"/>parameter server; sync <img src="image/Formula_06_241.png" alt=""/>.</li>
+				<li>End for.</li>
+			</ol>
+			<p>Some of the details in the pseudo-code are omitted, such as how to calculate the target values. The original Gorila paper implements a vanilla DQN without the Rainbow improvements. However, you could modify it to use, let's say, <img src="image/Formula_05_193.png" alt=""/>-step learning. The details of the<a id="_idIndexMarker597"/> algorithm would then need to<a id="_idIndexMarker598"/> be filled in accordingly.</p>
+			<p>One of the drawbacks of the Gorila architecture is that it involves a lot of passing of the <img src="image/Formula_06_154.png" alt=""/> parameters between the parameter server, actors, and learners. Depending on the size of the network, this would mean a significant communication load. Next, we will look into how the Ape-X architecture improves Gorila.</p>
+			<h2 id="_idParaDest-139"><a id="_idTextAnchor140"/>Ape-X – distributed prioritized experience replay</h2>
+			<p>Horgan et al, (2018) introduced<a id="_idIndexMarker599"/> the <a id="_idIndexMarker600"/>Ape-X DQN architecture, which achieved some significant improvements over the DQN, Rainbow, and Gorila. Actually, the Ape-X architecture is a general framework that could be applied to learning algorithms other than the DQN. </p>
+			<h3>Key contributions of Ape-X</h3>
+			<p>Here are<a id="_idIndexMarker601"/> the key points in how Ape-X distributes RL training:</p>
+			<ul>
+				<li>Similar to Gorila, each actor collects experiences from its own instance of the environment.</li>
+				<li>Unlike Gorila, there is a single replay buffer in which all the experiences are collected.</li>
+				<li>Unlike Gorila, there is a single learner that samples from the replay buffer to update the central Q and target networks.</li>
+				<li>The Ape-X architecture completely decouples the learner from the actors, and they run at their own pace.</li>
+				<li>Unlike the regular prioritized experience replay, actors calculate the initial priorities before adding the experience tuples to the replay buffer, rather than setting them to a maximum value.</li>
+				<li>The Ape-X DQN <a id="_idIndexMarker602"/>adapts the double Q-learning and multi-step learning improvements, in their paper, although other Rainbow improvements can be integrated into the architecture.</li>
+				<li>Each actor is assigned different exploration rates, within the <img src="image/Formula_06_244.png" alt=""/> spectrum, where actors with low <img src="image/Formula_06_117.png" alt=""/> values exploit what has been learned about the environment, and actors with high <img src="image/Formula_05_291.png" alt=""/> values increase the diversity in the collected experience. </li>
+			</ul>
+			<p>The Ape-X DQN architecture is described in the following diagram:</p>
+			<div>
+				<div id="_idContainer905" class="IMG---Figure">
+					<img src="image/B14160_06_6.jpg" alt="Figure 6.6 – Ape-X architecture for the DQN&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.6 – Ape-X architecture for the DQN</p>
+			<p>Now, let's look<a id="_idIndexMarker603"/> into the details of the algorithms for the actor and the learners.</p>
+			<h3>The actor algorithm</h3>
+			<p>Here is<a id="_idIndexMarker604"/> the<a id="_idIndexMarker605"/> algorithm for the actor:</p>
+			<ol>
+				<li value="1">Initialize <img src="image/Formula_06_247.png" alt=""/>, <img src="image/Formula_06_248.png" alt=""/>, and <img src="image/Formula_06_249.png" alt=""/>.<p>For <img src="image/Formula_06_250.png" alt=""/> to <img src="image/Formula_06_251.png" alt=""/>, continue with the following steps.</p></li>
+				<li>Take an action, <img src="image/Formula_06_252.png" alt=""/>, obtained from <img src="image/Formula_06_253.png" alt=""/>), and observe <img src="image/Formula_06_254.png" alt=""/>.</li>
+				<li>Add the <img src="image/Formula_06_255.png" alt=""/> experience to a local buffer.<p>If the number of tuples in the local buffer exceeds a threshold, <img src="image/Formula_06_256.png" alt=""/>, continue with the following steps.</p></li>
+				<li>Obtain <img src="image/Formula_06_257.png" alt=""/> from the local buffer, a batch of multi-step transitions.</li>
+				<li>Calculate <img src="image/Formula_06_258.png" alt=""/> for <img src="image/Formula_06_259.png" alt=""/>, and initial priorities for the experience.</li>
+				<li>Send <img src="image/Formula_06_259.png" alt=""/> and <img src="image/Formula_06_261.png" alt=""/> to the central replay buffer.</li>
+				<li>End if</li>
+				<li>Sync the<a id="_idIndexMarker606"/> local <a id="_idIndexMarker607"/>network parameters every <img src="image/Formula_06_262.png" alt=""/> steps from the learner, <img src="image/Formula_06_263.png" alt=""/></li>
+				<li>End for</li>
+			</ol>
+			<p>One clarification with the preceding algorithm: don't confuse the local buffer with the replay buffer. It is just temporary storage to accumulate the experience before sending it to the replay buffer, and the learner does not interact with the local buffer. Also, the process that sends <a id="_idIndexMarker608"/>data to the replay buffer runs in the background and does not block the process <a id="_idIndexMarker609"/>that steps through the environment.</p>
+			<p>Now, let's look into the algorithm for the learner.</p>
+			<h3>The learner algorithm</h3>
+			<p>Here is <a id="_idIndexMarker610"/>how <a id="_idIndexMarker611"/>the learner works:</p>
+			<ol>
+				<li value="1">Initialize Q and the target network, <img src="image/Formula_06_264.png" alt=""/><p>For <img src="image/Formula_06_265.png" alt=""/> to <img src="image/Formula_06_266.png" alt=""/>, continue with the following steps.</p></li>
+				<li>Sample a batch of experiences, <img src="image/Formula_06_267.png" alt=""/>, where <img src="image/Formula_06_268.png" alt=""/> helps uniquely identify which experience is sampled.</li>
+				<li>Compute the gradients, <img src="image/Formula_06_269.png" alt=""/>, using <img src="image/Formula_06_270.png" alt=""/>, <img src="image/Formula_06_271.png" alt=""/> and <img src="image/Formula_06_272.png" alt=""/>; update the network parameters to <img src="image/Formula_06_273.png" alt=""/> with the gradients.</li>
+				<li>Compute the new priorities, <img src="image/Formula_06_274.png" alt=""/>, for <img src="image/Formula_06_275.png" alt=""/> and update the priorities in the replay buffer using the <img src="image/Formula_06_276.png" alt=""/> information.</li>
+				<li>Periodically remove old experiences from the replay buffer.</li>
+				<li>Periodically update the target network parameters.</li>
+				<li>End for</li>
+			</ol>
+			<p>If you look into<a id="_idIndexMarker612"/> the actor and learner algorithms, they are not that complicated. However, the <a id="_idIndexMarker613"/>key intuition of decoupling them brings significant performance gains.</p>
+			<p>Before we wrap up our discussion in this section, let's discuss some practical details of the Ape-X framework next.</p>
+			<h3>Practical considerations in implementing Ape-X DQN</h3>
+			<p>The Ape-X paper<a id="_idIndexMarker614"/> includes additional details about the implementation. Some key ones are as follows:</p>
+			<ul>
+				<li>The exploration rate for actors <img src="image/Formula_06_277.png" alt=""/> as <img src="image/Formula_06_278.png" alt=""/> with <img src="image/Formula_06_279.png" alt=""/> and <img src="image/Formula_06_280.png" alt=""/>, and these values are held constant during training.</li>
+				<li>There is a grace period to collect enough experiences before learning starts, which the authors set to 50,000 transitions for Atari environments.</li>
+				<li>The rewards and gradient norms are clipped to stabilize the learning.</li>
+			</ul>
+			<p>So, remember to pay attention to these details in your implementation.</p>
+			<p>This has been a long journey so far with all the theory and abstract discussions – and thanks for your patience! Now, it is finally time to dive into some practice. In the rest of the chapter, and the book, we will heavily rely on the Ray/RLlib libraries. So, let's get an introduction <a id="_idIndexMarker615"/>to Ray next, and then implement a distributed deep Q-learning agent.</p>
+			<h1 id="_idParaDest-140"><a id="_idTextAnchor141"/>Implementing scalable deep Q-learning algorithms using Ray</h1>
+			<p>In this section, we <a id="_idIndexMarker616"/>will implement<a id="_idIndexMarker617"/> a parallelized DQN variant using the Ray library. Ray is a powerful, general-purpose, yet simple framework for building and running distributed applications on a single machine as well as on large clusters. Ray has been built for applications that have heterogeneous computational needs in mind. This is exactly what modern deep RL algorithms require as they involve a mix of long- and short-running tasks, usage of GPU and CPU resources, and more. In fact, Ray itself has a powerful RL library that is called RLlib. Both Ray and RLlib have been increasingly adopted in academia and industry. </p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">For a comparison of Ray to other distributed backend frameworks, such as Spark and Dask, see <a href="https://bit.ly/2T44AzK">https://bit.ly/2T44AzK</a>. You will see that Ray is a very competitive alternative, even beating Python's own multiprocessing implementation in some benchmarks.</p>
+			<p>Writing a production-grade distributed application is a complex undertaking, which is not what we aim for here. For that, we will cover RLlib in the next section. On the other hand, implementing your own custom – albeit simple – deep RL algorithm is highly beneficial, if nothing else, for educational reasons. So, this exercise will help you with the following:</p>
+			<ul>
+				<li>Introduce you to Ray, which you can also use for tasks other than RL</li>
+				<li>Give you an idea about how to build your custom parallelized deep RL algorithm</li>
+				<li>Serve as a stepping stone if you would prefer to dive into the RLlib source code</li>
+			</ul>
+			<p>You can <a id="_idIndexMarker618"/>then build your own <a id="_idIndexMarker619"/>distributed deep RL ideas on top of this exercise if you would prefer to do so.</p>
+			<p>With that, let's dive in! </p>
+			<h2 id="_idParaDest-141"><a id="_idTextAnchor142"/>A primer on Ray</h2>
+			<p>We will start with<a id="_idIndexMarker620"/> an introduction to Ray before going into our exercise. This will be a rather brief tour to ensure continuity. For comprehensive documentation on how Ray works, we refer you to Ray's website.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The Ray and RLlib documentation is available at <a href="https://docs.ray.io/en/latest/index.html">https://docs.ray.io/en/latest/index.html</a>, which includes API references, examples, and tutorials. The source code is on GitHub at <a href="https://github.com/ray-project/ray">https://github.com/ray-project/ray</a>.</p>
+			<p>Next, let's discuss the main concepts in Ray.</p>
+			<h3>Main concepts in Ray</h3>
+			<p>Before we look into <a id="_idIndexMarker621"/>writing some Ray applications, we first need to discuss the main components it would involve. Ray enables your regular Python functions and classes to run on separate remote processes with a simple Python decorator, <strong class="source-inline">@ray.remote</strong>. During execution, Ray takes care of where these functions and classes will live and execute – be it in a process on your local machine or somewhere on the cluster if you have one. In more detail, here is what they are:</p>
+			<ul>
+				<li><strong class="bold">Remote functions (tasks)</strong> are <a id="_idIndexMarker622"/>like regular Python functions except they are executed asynchronously, in a distributed fashion. Once called, a remote function immediately returns an object ID, and a task is created to execute it on a worker process. Note that remote functions do not maintain a state between calls.</li>
+				<li><strong class="bold">Object IDs (futures)</strong> are references to remote Python objects, for example, an integer <a id="_idIndexMarker623"/>output of a remote function. Remote objects are stored in shared-memory object stores and can be accessed by remote functions and classes. Note that an object ID might refer to an object that will be available in the future, for example, once the execution of a remote function finishes.</li>
+				<li><strong class="bold">Remote classes (actors)</strong> are similar to regular Python classes, but they live on a worker <a id="_idIndexMarker624"/>process. Unlike remote functions, they are stateful, and their methods behave like remote functions, sharing the state in the remote class. As a side note, the "actor" term here is not to be confused with the distributed RL "actor" – although an RL actor can be implemented using a Ray actor.</li>
+			</ul>
+			<p>Next, let's look at how you can install Ray and use remote functions and classes.</p>
+			<h3>Installing and starting Ray</h3>
+			<p>Ray can be<a id="_idIndexMarker625"/> installed<a id="_idIndexMarker626"/> through a simple <strong class="source-inline">pip install -U ray</strong> command. To install it together with the RLlib library that we will use later, simply use <strong class="source-inline">pip install -U ray[rllib]</strong>.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">Note that Ray is supported on Linux and macOS. At the time of writing this book, its Windows distribution is still in beta.</p>
+			<p>Once installed, Ray needs to be initialized before creating any remote functions, objects, or classes:</p>
+			<p class="source-code">import ray</p>
+			<p class="source-code">ray.init()</p>
+			<p>Next, let's create a few simple remote functions. In doing so, we are going to use Ray's examples <a id="_idIndexMarker627"/>in their <a id="_idIndexMarker628"/>documentation.</p>
+			<h3>Using remote functions</h3>
+			<p>As mentioned <a id="_idIndexMarker629"/>earlier, Ray converts a regular Python function into a remote one with a simple decorator:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">def remote_function():</p>
+			<p class="source-code">    return 1</p>
+			<p>Once invoked, this function will execute a worker process. Therefore, invoking this function multiple times will create multiple worker processes for parallel execution. To do so, a remote function needs to be called with the  <strong class="source-inline">remote()</strong> addition:</p>
+			<p class="source-code">object_ids = []</p>
+			<p class="source-code">for _ in range(4):</p>
+			<p class="source-code">    y_id = remote_function.remote()    </p>
+			<p class="source-code">    object_ids.append(y_id)</p>
+			<p>Note that the function calls will not wait for each other to finish. However, once called, the function immediately returns an object ID. To retrieve the result of a function as a regular Python object using the object ID, we just use <strong class="source-inline">objects = ray.get(object_ids)</strong>. Note that this makes the process wait for the object to be available.</p>
+			<p>Object IDs can be passed to other remote functions or classes just like regular Python objects:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">def remote_chain_function(value):</p>
+			<p class="source-code">    return value + 1</p>
+			<p class="source-code">y1_id = remote_function.remote()</p>
+			<p class="source-code">chained_id = remote_chain_function.remote(y1_id)</p>
+			<p>There are several things to note here:</p>
+			<ul>
+				<li>This creates a dependency between the two tasks. The <strong class="source-inline">remote_chain_function</strong> call will wait for the output of the <strong class="source-inline">remote_function</strong> call.</li>
+				<li>Within <strong class="source-inline">remote_chain_function</strong>, we did not have to call <strong class="source-inline">ray.get(value)</strong>. Ray handles it, whether it is an object ID or an object that has been received.</li>
+				<li>If the two worker processes for these two tasks were on different machines, the output is copied from one machine to the other.</li>
+			</ul>
+			<p>This was a brief <a id="_idIndexMarker630"/>overview of the Ray remote functions. Next, we will look into remote objects.</p>
+			<h3>Using remote objects</h3>
+			<p>A regular Python <a id="_idIndexMarker631"/>object can be converted into a Ray remote object easily, as follows:</p>
+			<p class="source-code">y = 1</p>
+			<p class="source-code">object_id = ray.put(y)</p>
+			<p>This stores the object in the shared-memory object store. Note that remote objects are immutable, and their values cannot be changed after creation.</p>
+			<p>Finally, let's go over Ray remote classes.</p>
+			<h3>Using remote classes</h3>
+			<p>Using remote<a id="_idIndexMarker632"/> classes (actors) in Ray is very similar to using remote functions. An example of how to decorate a class with Ray's remote decorator is as follows:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">class Counter(object):</p>
+			<p class="source-code">    def __init__(self):</p>
+			<p class="source-code">        self.value = 0</p>
+			<p class="source-code">    def increment(self):</p>
+			<p class="source-code">        self.value += 1</p>
+			<p class="source-code">        return self.value</p>
+			<p>In order to initiate an object from this class, we use <strong class="source-inline">remote</strong> in addition to calling the class:</p>
+			<p class="source-code">a = Counter.remote()</p>
+			<p>Again, calling a method on this object requires using <strong class="source-inline">remote</strong>:</p>
+			<p class="source-code">obj_id = a.increment.remote()</p>
+			<p class="source-code">ray.get(obj_id) == 1</p>
+			<p>That's it! This <a id="_idIndexMarker633"/>brief overview of Ray lays the ground for us to move on to implementing a scalable DQN algorithm.</p>
+			<h2 id="_idParaDest-142"><a id="_idTextAnchor143"/>Ray implementation of a DQN variant</h2>
+			<p>In this section, we will <a id="_idIndexMarker634"/>implement a DQN variant using Ray, which will be similar to the Ape-X DQN structure, except we don't implement prioritized replay for simplicity. The code will have the following components:</p>
+			<ul>
+				<li><strong class="source-inline">train_apex_dqn.py</strong> is the main script that accepts the training configs and initializes the other components.</li>
+				<li><strong class="source-inline">actor.py</strong> includes the RL actor class that interacts with the environment and collects experiences.</li>
+				<li><strong class="source-inline">parameter_server.py</strong> includes a parameter server class that serves the optimized Q model weights to actors.</li>
+				<li><strong class="source-inline">replay.py</strong> includes the replay buffer class.</li>
+				<li><strong class="source-inline">learner.py</strong> includes a learner class that receives samples from the replay buffer, takes gradient steps, and pushes the new Q-network weights to the parameter server.</li>
+				<li><strong class="source-inline">models.py</strong> includes functions to create a feedforward neural network using TensorFlow/Keras.</li>
+			</ul>
+			<p>We then run this<a id="_idIndexMarker635"/> model on Gym's CartPole (v0) and see how it performs. Let's get started!</p>
+			<h3>The main script</h3>
+			<p>The initial step<a id="_idIndexMarker636"/> in the main script is to receive a set of configs to be used during training. This looks like the following:</p>
+			<p class="source-code">    max_samples = 500000</p>
+			<p class="source-code">    config = {"env": "CartPole-v0",</p>
+			<p class="source-code">              "num_workers": 50,</p>
+			<p class="source-code">              "eval_num_workers": 10,</p>
+			<p class="source-code">              "n_step": 3,</p>
+			<p class="source-code">              "max_eps": 0.5,</p>
+			<p class="source-code">              "train_batch_size": 512,</p>
+			<p class="source-code">              "gamma": 0.99,</p>
+			<p class="source-code">              "fcnet_hiddens": [256, 256],</p>
+			<p class="source-code">              "fcnet_activation": "tanh",</p>
+			<p class="source-code">              "lr": 0.0001,</p>
+			<p class="source-code">              "buffer_size": 1000000,</p>
+			<p class="source-code">              "learning_starts": 5000,</p>
+			<p class="source-code">              "timesteps_per_iteration": 10000,</p>
+			<p class="source-code">              "grad_clip": 10}</p>
+			<p>Let's look into some of the details of some of these configs:</p>
+			<ul>
+				<li><strong class="source-inline">env</strong> is the name of the Gym environment.</li>
+				<li><strong class="source-inline">num_workers</strong> is the number of training environments/agents that will be created to collect experiences. Note that each worker consumes a CPU on the computer, so you need to adjust it to your machine.</li>
+				<li><strong class="source-inline">eval_num_workers</strong> is the number of evaluation environments/agents that will be created to evaluate the policy at that point in training. Again, each worker consumes a CPU. Note that these agents have <img src="image/Formula_06_281.png" alt=""/> since we don't need them to explore the environment.</li>
+				<li><strong class="source-inline">n_step</strong> is the number of steps for multi-step learning.</li>
+				<li><strong class="source-inline">max_eps</strong> will set the maximum exploration rate, <img src="image/Formula_06_282.png" alt=""/>, in training agents, as we will assign each <a id="_idIndexMarker637"/>training agent a different exploration rate between <img src="image/Formula_06_283.png" alt=""/>.</li>
+				<li><strong class="source-inline">timesteps_per_iteration</strong> decides how frequently we run the evaluation; the number of steps for multi-step learning. Note that this is not how frequently we take a gradient step, as the learner will continuously sample and update the network parameters.</li>
+			</ul>
+			<p>With this config, we create the parameter server, replay buffer, and learner. We will go into the details of these classes momentarily. Note that since they are Ray actors, we use <strong class="source-inline">remote</strong> to initiate them:</p>
+			<p class="source-code">    ray.init()</p>
+			<p class="source-code">    parameter_server = ParameterServer.remote(config)</p>
+			<p class="source-code">    replay_buffer = ReplayBuffer.remote(config)</p>
+			<p class="source-code">    learner = Learner.remote(config, </p>
+			<p class="source-code">                             replay_buffer,</p>
+			<p class="source-code">                             parameter_server)</p>
+			<p>We mentioned that the learner is a process on its own that continuously samples from the replay buffer and updates the Q-network. We kick the learning off in the main script:</p>
+			<p class="source-code">learner.start_learning.remote()</p>
+			<p>Of course, this won't do anything alone since the actors are not collecting experiences yet. We next kick off the training actors and immediately let them start sampling from their<a id="_idIndexMarker638"/> environments:</p>
+			<p class="source-code">    for i in range(config["num_workers"]):</p>
+			<p class="source-code">        eps = config["max_eps"] * i / config["num_workers"]</p>
+			<p class="source-code">        actor = Actor.remote("train-" + str(i), </p>
+			<p class="source-code">                             replay_buffer, </p>
+			<p class="source-code">                             parameter_server, </p>
+			<p class="source-code">                             config, </p>
+			<p class="source-code">                             eps)</p>
+			<p class="source-code">        actor.sample.remote()</p>
+			<p>We also start the evaluation actors, but we don't want them to sample yet. That will happen as the learner updates the Q-network:</p>
+			<p class="source-code">    for i in range(config["eval_num_workers"]):</p>
+			<p class="source-code">        eps = 0</p>
+			<p class="source-code">        actor = Actor.remote("eval-" + str(i), </p>
+			<p class="source-code">                             replay_buffer, </p>
+			<p class="source-code">                             parameter_server, </p>
+			<p class="source-code">                             config, </p>
+			<p class="source-code">                             eps, </p>
+			<p class="source-code">                             True)</p>
+			<p>Finally, we have the main loop where we alternate between training and evaluation. As the evaluation <a id="_idIndexMarker639"/>results improve, we will save the best model up to that point in the training:</p>
+			<p class="source-code">    total_samples = 0</p>
+			<p class="source-code">    best_eval_mean_reward = np.NINF</p>
+			<p class="source-code">    eval_mean_rewards = []</p>
+			<p class="source-code">    while total_samples &lt; max_samples:</p>
+			<p class="source-code">        tsid = replay_buffer.get_total_env_samples.remote()</p>
+			<p class="source-code">        new_total_samples = ray.get(tsid)</p>
+			<p class="source-code">        if (new_total_samples - total_samples</p>
+			<p class="source-code">                &gt;= config["timesteps_per_iteration"]):</p>
+			<p class="source-code">            total_samples = new_total_samples</p>
+			<p class="source-code">            parameter_server.set_eval_weights.remote()</p>
+			<p class="source-code">            eval_sampling_ids = []</p>
+			<p class="source-code">            for eval_actor in eval_actor_ids:</p>
+			<p class="source-code">                sid = eval_actor.sample.remote()</p>
+			<p class="source-code">                eval_sampling_ids.append(sid)</p>
+			<p class="source-code">            eval_rewards = ray.get(eval_sampling_ids)</p>
+			<p class="source-code">            eval_mean_reward = np.mean(eval_rewards)</p>
+			<p class="source-code">            eval_mean_rewards.append(eval_mean_reward)</p>
+			<p class="source-code">            if eval_mean_reward &gt; best_eval_mean_reward:</p>
+			<p class="source-code">                best_eval_mean_reward = eval_mean_reward</p>
+			<p class="source-code">                parameter_server.save_eval_weights.remote()</p>
+			<p>Note that there is a bit more in the code that is not included here (such as saving the evaluation metrics to TensorBoard). Please see the full code for all the details.</p>
+			<p>Next, let's look into the details of the actor class.</p>
+			<h3>RL actor class</h3>
+			<p>The RL actor is<a id="_idIndexMarker640"/> responsible for collecting <a id="_idIndexMarker641"/>experiences from its environment given an exploratory policy. The rate of exploration is determined in the main script for each actor and it remains the same throughout the sampling. The actor class also stores the experiences locally before pushing it to the replay buffer to reduce the communication overhead. Also note that we differentiate between a training and evaluation actor since we run the sampling step for the evaluation actors only for a single episode. Finally, the actors periodically pull the latest Q-network weights to update their policies. </p>
+			<p>Here is how we initialize an actor:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">class Actor:</p>
+			<p class="source-code">    def __init__(self,</p>
+			<p class="source-code">                 actor_id,</p>
+			<p class="source-code">                 replay_buffer,</p>
+			<p class="source-code">                 parameter_server,</p>
+			<p class="source-code">                 config,</p>
+			<p class="source-code">                 eps,</p>
+			<p class="source-code">                 eval=False):</p>
+			<p class="source-code">        self.actor_id = actor_id</p>
+			<p class="source-code">        self.replay_buffer = replay_buffer</p>
+			<p class="source-code">        self.parameter_server = parameter_server</p>
+			<p class="source-code">        self.config = config</p>
+			<p class="source-code">        self.eps = eps</p>
+			<p class="source-code">        self.eval = eval</p>
+			<p class="source-code">        self.Q = get_Q_network(config)</p>
+			<p class="source-code">        self.env = gym.make(config["env"])</p>
+			<p class="source-code">        self.local_buffer = []</p>
+			<p class="source-code">        self.obs_shape = config["obs_shape"]</p>
+			<p class="source-code">        self.n_actions = config["n_actions"]</p>
+			<p class="source-code">        self.multi_step_n = config.get("n_step", 1)</p>
+			<p class="source-code">        self.q_update_freq = config.get("q_update_freq", 100)</p>
+			<p class="source-code">        self.send_experience_freq = \</p>
+			<p class="source-code">                    config.get("send_experience_freq", 100)</p>
+			<p class="source-code">        self.continue_sampling = True</p>
+			<p class="source-code">        self.cur_episodes = 0</p>
+			<p class="source-code">        self.cur_steps = 0</p>
+			<p>The actor uses<a id="_idIndexMarker642"/> the following method to<a id="_idIndexMarker643"/> update and sync its policies:</p>
+			<p class="source-code">    def update_q_network(self):</p>
+			<p class="source-code">        if self.eval:</p>
+			<p class="source-code">            pid = \</p>
+			<p class="source-code">              self.parameter_server.get_eval_weights.remote()</p>
+			<p class="source-code">        else:</p>
+			<p class="source-code">            pid = \</p>
+			<p class="source-code">              self.parameter_server.get_weights.remote()</p>
+			<p class="source-code">        new_weights = ray.get(pid)</p>
+			<p class="source-code">        if new_weights:</p>
+			<p class="source-code">            self.Q.set_weights(new_weights)</p>
+			<p>The reason why the evaluation weights are stored and pulled separately is that since the learner always learns, regardless of what is happening in the main loop, we need to take a snapshot of the Q-network for evaluation.</p>
+			<p>Now, we write the sampling loop for an actor. Let's start with initializing the variables that will be updated in the loop:</p>
+			<p class="source-code">    def sample(self):</p>
+			<p class="source-code">        self.update_q_network()</p>
+			<p class="source-code">        observation = self.env.reset()</p>
+			<p class="source-code">        episode_reward = 0</p>
+			<p class="source-code">        episode_length = 0</p>
+			<p class="source-code">        n_step_buffer = deque(maxlen=self.multi_step_n + 1)</p>
+			<p>The first thing<a id="_idIndexMarker644"/> to do in the loop is to <a id="_idIndexMarker645"/>get an action and take a step in the environment:</p>
+			<p class="source-code">        while self.continue_sampling:</p>
+			<p class="source-code">            action = self.get_action(observation)</p>
+			<p class="source-code">            next_observation, reward, \</p>
+			<p class="source-code">            done, info = self.env.step(action)</p>
+			<p>Our code supports multi-step learning. To implement that, the rolling trajectory is stored in a deque with a maximum length of <img src="image/Formula_06_284.png" alt=""/>. When the deque is at its full length, it indicates the trajectory is long enough to make an experience to be stored in the replay buffer: </p>
+			<p class="source-code">            n_step_buffer.append((observation, action,</p>
+			<p class="source-code">                                  reward, done))</p>
+			<p class="source-code">            if len(n_step_buffer) == self.multi_step_n + 1:</p>
+			<p class="source-code">                self.local_buffer.append(</p>
+			<p class="source-code">                    self.get_n_step_trans(n_step_buffer))</p>
+			<p>We remember the update the counters we have:</p>
+			<p class="source-code">            self.cur_steps += 1</p>
+			<p class="source-code">            episode_reward += reward</p>
+			<p class="source-code">            episode_length += 1</p>
+			<p>At the end of the episode, we reset the environment and the episode-specific counters. We also save the experience in the local buffer, regardless of its length. Also note that we break the sampling loop at the end of the episode if this is an evaluation rollout:</p>
+			<p class="source-code">            if done:</p>
+			<p class="source-code">                if self.eval:</p>
+			<p class="source-code">                    break</p>
+			<p class="source-code">                next_observation = self.env.reset()</p>
+			<p class="source-code">                if len(n_step_buffer) &gt; 1:</p>
+			<p class="source-code">                    self.local_buffer.append(</p>
+			<p class="source-code">                        self.get_n_step_trans(n_step_buffer))</p>
+			<p class="source-code">                self.cur_episodes += 1</p>
+			<p class="source-code">                episode_reward = 0</p>
+			<p class="source-code">                episode_length = 0</p>
+			<p>We periodically <a id="_idIndexMarker646"/>send the experience<a id="_idIndexMarker647"/> to the replay buffer, and also periodically update the network parameters:</p>
+			<p class="source-code">            observation = next_observation</p>
+			<p class="source-code">            if self.cur_steps % \</p>
+			<p class="source-code">                    self.send_experience_freq == 0 \</p>
+			<p class="source-code">                    and not self.eval:</p>
+			<p class="source-code">                self.send_experience_to_replay()</p>
+			<p class="source-code">            if self.cur_steps % \</p>
+			<p class="source-code">                    self.q_update_freq == 0 and not self.eval:</p>
+			<p class="source-code">                self.update_q_network()</p>
+			<p class="source-code">        return episode_reward</p>
+			<p>Next, let's look into the details of action sampling. The actions are selected <img src="image/Formula_06_282.png" alt=""/>-greedily, as follows:</p>
+			<p class="source-code">     def get_action(self, observation):</p>
+			<p class="source-code">        observation = observation.reshape((1, -1))</p>
+			<p class="source-code">        q_estimates = self.Q.predict(observation)[0]</p>
+			<p class="source-code">        if np.random.uniform() &lt;= self.eps:</p>
+			<p class="source-code">            action = np.random.randint(self.n_actions)</p>
+			<p class="source-code">        else:</p>
+			<p class="source-code">            action = np.argmax(q_estimates)</p>
+			<p class="source-code">        return action</p>
+			<p>The <a id="_idIndexMarker648"/>experience<a id="_idIndexMarker649"/> is extracted from the trajectory deque, as follows:</p>
+			<p class="source-code">    def get_n_step_trans(self, n_step_buffer):</p>
+			<p class="source-code">        gamma = self.config['gamma']</p>
+			<p class="source-code">        discounted_return = 0</p>
+			<p class="source-code">        cum_gamma = 1</p>
+			<p class="source-code">        for trans in list(n_step_buffer)[:-1]:</p>
+			<p class="source-code">            _, _, reward, _ = trans</p>
+			<p class="source-code">            discounted_return += cum_gamma * reward</p>
+			<p class="source-code">            cum_gamma *= gamma</p>
+			<p class="source-code">        observation, action, _, _ = n_step_buffer[0]</p>
+			<p class="source-code">        last_observation, _, _, done = n_step_buffer[-1]</p>
+			<p class="source-code">        experience = (observation, action, discounted_return,</p>
+			<p class="source-code">                      last_observation, done, cum_gamma)</p>
+			<p class="source-code">        return experience</p>
+			<p>Finally, the <a id="_idIndexMarker650"/>experience tuples that are stored<a id="_idIndexMarker651"/> locally are sent to the replay buffer, as follows:</p>
+			<p class="source-code">    def send_experience_to_replay(self):</p>
+			<p class="source-code">        rf = self.replay_buffer.add.remote(self.local_buffer)</p>
+			<p class="source-code">        ray.wait([rf])</p>
+			<p class="source-code">        self.local_buffer = []</p>
+			<p>That's all with the actor! Next, let's look into the parameter server.</p>
+			<h3>Parameter server class</h3>
+			<p>The parameter <a id="_idIndexMarker652"/>server is a simple<a id="_idIndexMarker653"/> structure that receives the updated parameters (weights) from the learner and serves them to actors. It consists of mostly setters and getters, and a save method. Again, remember that we periodically take a snapshot of the parameters and use them for evaluation. If the results beat the previous best results, the weights are saved:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">class ParameterServer:</p>
+			<p class="source-code">    def __init__(self, config):</p>
+			<p class="source-code">        self.weights = None</p>
+			<p class="source-code">        self.eval_weights = None</p>
+			<p class="source-code">        self.Q = get_Q_network(config)</p>
+			<p class="source-code">    def update_weights(self, new_parameters):</p>
+			<p class="source-code">        self.weights = new_parameters</p>
+			<p class="source-code">        return True</p>
+			<p class="source-code">    def get_weights(self):</p>
+			<p class="source-code">        return self.weights</p>
+			<p class="source-code">    def get_eval_weights(self):</p>
+			<p class="source-code">        return self.eval_weights</p>
+			<p class="source-code">    def set_eval_weights(self):</p>
+			<p class="source-code">        self.eval_weights = self.weights</p>
+			<p class="source-code">        return True</p>
+			<p class="source-code">    def save_eval_weights(self,</p>
+			<p class="source-code">                          filename=</p>
+			<p class="source-code">                          'checkpoints/model_checkpoint'):</p>
+			<p class="source-code">        self.Q.set_weights(self.eval_weights)</p>
+			<p class="source-code">        self.Q.save_weights(filename)</p>
+			<p class="source-code">        print("Saved.")</p>
+			<p>Note that the<a id="_idIndexMarker654"/> parameter server<a id="_idIndexMarker655"/> stores the actual Q-network structure just to be able to use TensorFlow's convenient save functionality. Other than that, only the weights of the neural network, not the full model, are passed between different processes to avoid unnecessary overhead and pickling issues.</p>
+			<p>Next, we will cover the replay buffer implementation.</p>
+			<h3>Replay buffer class</h3>
+			<p>As we mentioned <a id="_idIndexMarker656"/>previously, for <a id="_idIndexMarker657"/>simplicity, we implement a standard replay buffer (without prioritized sampling). As a result, the replay buffer receives experiences from actors and sends sampled ones to the learner. It also keeps track of how many total experience tuples it has received<a id="_idIndexMarker658"/> up to that point in the training:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">class ReplayBuffer:</p>
+			<p class="source-code">    def __init__(self, config):</p>
+			<p class="source-code">        self.replay_buffer_size = config["buffer_size"]</p>
+			<p class="source-code">        self.buffer = deque(maxlen=self.replay_buffer_size)</p>
+			<p class="source-code">        self.total_env_samples = 0</p>
+			<p class="source-code">    def add(self, experience_list):</p>
+			<p class="source-code">        experience_list = experience_list</p>
+			<p class="source-code">        for e in experience_list:</p>
+			<p class="source-code">            self.buffer.append(e)</p>
+			<p class="source-code">            self.total_env_samples += 1</p>
+			<p class="source-code">        return True</p>
+			<p class="source-code">    def sample(self, n):</p>
+			<p class="source-code">        if len(self.buffer) &gt; n:</p>
+			<p class="source-code">            sample_ix = np.random.randint(</p>
+			<p class="source-code">                len(self.buffer), size=n)</p>
+			<p class="source-code">            return [self.buffer[ix] for ix in sample_ix]</p>
+			<p class="source-code">    def get_total_env_samples(self):</p>
+			<p class="source-code">        return self.total_env_samples</p>
+			<h3>Model generation</h3>
+			<p>Since we are<a id="_idIndexMarker659"/> passing only the weights of<a id="_idIndexMarker660"/> the Q-network between processes, each relevant actor creates its own copy of the Q-network. The weights of these Q-networks are then set with what is received from the parameter server.</p>
+			<p>The Q-network is created using Keras, as follows:</p>
+			<p class="source-code">def get_Q_network(config):</p>
+			<p class="source-code">    obs_input = Input(shape=config["obs_shape"],</p>
+			<p class="source-code">                      name='Q_input')</p>
+			<p class="source-code">    x = Flatten()(obs_input)</p>
+			<p class="source-code">    for i, n_units in enumerate(config["fcnet_hiddens"]):</p>
+			<p class="source-code">        layer_name = 'Q_' + str(i + 1)</p>
+			<p class="source-code">        x = Dense(n_units,</p>
+			<p class="source-code">                  activation=config["fcnet_activation"],</p>
+			<p class="source-code">                  name=layer_name)(x)</p>
+			<p class="source-code">    q_estimate_output = Dense(config["n_actions"],</p>
+			<p class="source-code">                              activation='linear',</p>
+			<p class="source-code">                              name='Q_output')(x)</p>
+			<p class="source-code">    # Q Model</p>
+			<p class="source-code">    Q_model = Model(inputs=obs_input,</p>
+			<p class="source-code">                    outputs=q_estimate_output)</p>
+			<p class="source-code">    Q_model.summary()</p>
+			<p class="source-code">    Q_model.compile(optimizer=Adam(), loss='mse')</p>
+			<p class="source-code">    return Q_model</p>
+			<p>One important implementation detail here is that this Q-network is not what we want to train because, given a state, it predicts Q-values for all possible actions. On the other hand, a given experience tuple includes a target value only for one of these possible actions: the one that was selected in that tuple by the agent. Therefore, when we update the Q-network using that experience tuple, gradients should flow through only the selected action's output. The rest of the actions should be masked. We achieve that by using a masking input based on the selected action a custom layer on top of this Q-network that<a id="_idIndexMarker661"/> calculates the loss only for<a id="_idIndexMarker662"/> the selected action. That gives us a model that we can train.</p>
+			<p>Here is how we implement the masked loss:</p>
+			<p class="source-code">def masked_loss(args):</p>
+			<p class="source-code">    y_true, y_pred, mask = args</p>
+			<p class="source-code">    masked_pred = K.sum(mask * y_pred, axis=1, keepdims=True)</p>
+			<p class="source-code">    loss = K.square(y_true - masked_pred)</p>
+			<p class="source-code">    return K.mean(loss, axis=-1)</p>
+			<p>Then, the trainable model is obtained as follows:</p>
+			<p class="source-code">def get_trainable_model(config):</p>
+			<p class="source-code">    Q_model = get_Q_network(config)</p>
+			<p class="source-code">    obs_input = Q_model.get_layer("Q_input").output</p>
+			<p class="source-code">    q_estimate_output = Q_model.get_layer("Q_output").output</p>
+			<p class="source-code">    mask_input = Input(shape=(config["n_actions"],),</p>
+			<p class="source-code">                       name='Q_mask')</p>
+			<p class="source-code">    sampled_bellman_input = Input(shape=(1,),</p>
+			<p class="source-code">                                  name='Q_sampled')</p>
+			<p class="source-code">    # Trainable model</p>
+			<p class="source-code">    loss_output = Lambda(masked_loss,</p>
+			<p class="source-code">                         output_shape=(1,),</p>
+			<p class="source-code">                         name='Q_masked_out')\</p>
+			<p class="source-code">                        ([sampled_bellman_input,</p>
+			<p class="source-code">                          q_estimate_output,</p>
+			<p class="source-code">                          mask_input])</p>
+			<p class="source-code">    trainable_model = Model(inputs=[obs_input,</p>
+			<p class="source-code">                                    mask_input,</p>
+			<p class="source-code">                                    sampled_bellman_input],</p>
+			<p class="source-code">                            outputs=loss_output)</p>
+			<p class="source-code">    trainable_model.summary()</p>
+			<p class="source-code">    trainable_model.compile(optimizer=</p>
+			<p class="source-code">                            Adam(lr=config["lr"],</p>
+			<p class="source-code">                            clipvalue=config["grad_clip"]),</p>
+			<p class="source-code">                            loss=[lambda y_true,</p>
+			<p class="source-code">                                         y_pred: y_pred])</p>
+			<p class="source-code">    return Q_model, trainable_model</p>
+			<p>It is this trainable<a id="_idIndexMarker663"/> model that the learner <a id="_idIndexMarker664"/>will optimize. The compiled Q-network model will never be trained alone, and the optimizer and loss function we specify in it are just placeholders.</p>
+			<p>Finally, let's look into the learner next.</p>
+			<h3>The learner class</h3>
+			<p>The learner's<a id="_idIndexMarker665"/> main<a id="_idIndexMarker666"/> job is to receive a sample of experiences from the replay buffer, unpack them, and take gradient steps to optimize the Q-network. Here, we only include a part of the class initialization and the optimization step.</p>
+			<p>The class is initialized as follows:</p>
+			<p class="source-code">@ray.remote</p>
+			<p class="source-code">class Learner:</p>
+			<p class="source-code">    def __init__(self, config, replay_buffer, parameter_server):</p>
+			<p class="source-code">        self.config = config</p>
+			<p class="source-code">        self.replay_buffer = replay_buffer</p>
+			<p class="source-code">        self.parameter_server = parameter_server</p>
+			<p class="source-code">        self.Q, self.trainable = get_trainable_model(config)</p>
+			<p class="source-code">        self.target_network = clone_model(self.Q)</p>
+			<p>And now the <a id="_idIndexMarker667"/>optimization step. We start with sampling from the replay buffer and updating the<a id="_idIndexMarker668"/> counters we keep:</p>
+			<p class="source-code">    def optimize(self):</p>
+			<p class="source-code">        samples = ray.get(self.replay_buffer</p>
+			<p class="source-code">                          .sample.remote(self.train_batch_size))</p>
+			<p class="source-code">        if samples:</p>
+			<p class="source-code">            N = len(samples)</p>
+			<p class="source-code">            self.total_collected_samples += N</p>
+			<p class="source-code">            self.samples_since_last_update += N</p>
+			<p class="source-code">            ndim_obs = 1</p>
+			<p class="source-code">            for s in self.config["obs_shape"]:</p>
+			<p class="source-code">                if s:</p>
+			<p class="source-code">                    ndim_obs *= s</p>
+			<p>Then, we unpack the samples and reshape them:</p>
+			<p class="source-code">            n_actions = self.config["n_actions"]</p>
+			<p class="source-code">            obs = np.array([sample[0] for sample \</p>
+			<p class="source-code">                        in samples]).reshape((N, ndim_obs))</p>
+			<p class="source-code">            actions = np.array([sample[1] for sample \</p>
+			<p class="source-code">                        in samples]).reshape((N,))</p>
+			<p class="source-code">            rewards = np.array([sample[2] for sample \</p>
+			<p class="source-code">                        in samples]).reshape((N,))</p>
+			<p class="source-code">            last_obs = np.array([sample[3] for sample \</p>
+			<p class="source-code">                        in samples]).reshape((N, ndim_obs))</p>
+			<p class="source-code">            done_flags = np.array([sample[4] for sample \</p>
+			<p class="source-code">                        in samples]).reshape((N,))</p>
+			<p class="source-code">            gammas = np.array([sample[5] for sample \</p>
+			<p class="source-code">                        in samples]).reshape((N,))</p>
+			<p>We create the<a id="_idIndexMarker669"/> masks to only update the Q-value<a id="_idIndexMarker670"/> for the action selected in the experience tuple:</p>
+			<p class="source-code">            masks = np.zeros((N, n_actions))</p>
+			<p class="source-code">            masks[np.arange(N), actions] = 1</p>
+			<p class="source-code">            dummy_labels = np.zeros((N,))</p>
+			<p>In the main section, we first prepare the inputs to the trainable Q-network, and then call the <strong class="source-inline">fit</strong> function on it. In doing so, we use a double DQN:</p>
+			<p class="source-code">            # double DQN</p>
+			<p class="source-code">            maximizer_a = np.argmax(self.Q.predict(last_obs), axis=1)</p>
+			<p class="source-code">            target_network_estimates = self.target_network.predict(last_obs)</p>
+			<p class="source-code">            q_value_estimates = np.array([target_network_estimates[i,</p>
+			<p class="source-code">                                   maximizer_a[i]]</p>
+			<p class="source-code">                                   for i in range(N)]).reshape((N,))</p>
+			<p class="source-code">            sampled_bellman = rewards + gammas * \</p>
+			<p class="source-code">                              q_value_estimates * (1 - done_flags)</p>
+			<p class="source-code">            trainable_inputs = [obs, masks,</p>
+			<p class="source-code">                                sampled_bellman]</p>
+			<p class="source-code">            self.trainable.fit(trainable_inputs, dummy_labels, verbose=0)</p>
+			<p class="source-code">            self.send_weights()</p>
+			<p>Finally, we<a id="_idIndexMarker671"/> periodically update the target <a id="_idIndexMarker672"/>network:</p>
+			<p class="source-code">            if self.samples_since_last_update &gt; 500:</p>
+			<p class="source-code">                self.target_network.set_weights(self.Q.get_weights())</p>
+			<p class="source-code">                self.samples_since_last_update = 0</p>
+			<p class="source-code">            return True</p>
+			<p>For more details, see the full code in <strong class="source-inline">learner.py</strong>.</p>
+			<p>That's it! Let's look at how this architecture performs in the CartPole environment.</p>
+			<h3>Results</h3>
+			<p>You can kick off<a id="_idIndexMarker673"/> training by simply running the main script. There are a couple of things to note before running it:</p>
+			<ul>
+				<li>Don't forget to activate the Python environment in which Ray is installed. A virtual environment is highly recommended.</li>
+				<li>Set the total number of workers (for training and evaluation) to be less than the number of CPUs on your machine.</li>
+			</ul>
+			<p>With that, you can kick off the training as follows:</p>
+			<p class="source-code">python train_apex_dqn.py</p>
+			<p>The full code includes some additions that save the evaluation progress on TensorBoard. You can start TensorBoard within the same folder with scripts, as follows:</p>
+			<p class="source-code">tensorboard --logdir logs/scalars</p>
+			<p>Then, go to the default TensorBoard address at <strong class="source-inline">http://localhost:6006/</strong>. The evaluation graph <a id="_idIndexMarker674"/>from our experiment looks as follows:</p>
+			<div>
+				<div id="_idContainer945" class="IMG---Figure">
+					<img src="image/B14160_06_7.jpg" alt="Figure 6.7 – Distributed DQN evaluation results for CartPole v0&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.7 – Distributed DQN evaluation results for CartPole v0</p>
+			<p>You can see that after 150,000 iterations or so, the reward reaches the maximum of 200.</p>
+			<p>Great job! You have implemented a deep Q-learning algorithm that you can scale to many CPUs, even to many nodes on a cluster, using Ray! Feel free to improve this implementation, add further tricks, and incorporate your own ideas!</p>
+			<p>Let's close this chapter with how you can run a similar experiment in RLlib.</p>
+			<h1 id="_idParaDest-143"><a id="_idTextAnchor144"/>Using RLlib for production-grade deep RL</h1>
+			<p>As we <a id="_idIndexMarker675"/>mentioned at the beginning, one of the motivations<a id="_idIndexMarker676"/> of Ray's creators was to build an easy-to-use distributed computing framework that can handle complex and heterogenous applications such as deep RL. With that, they also created a widely used deep RL library based on Ray. Training a model similar to ours is very simple using RLlib. The main steps are as follows:</p>
+			<ol>
+				<li value="1">Import the default training configs for Ape-X DQN as well as the trainer.</li>
+				<li>Customize the training configs.</li>
+				<li>Train the trainer.</li>
+			</ol>
+			<p>That's it! The code necessary for that is very simple. All you need is the following:</p>
+			<p class="source-code">import pprint</p>
+			<p class="source-code">from ray import tune</p>
+			<p class="source-code">from ray.rllib.agents.dqn.apex import APEX_DEFAULT_CONFIG</p>
+			<p class="source-code">from ray.rllib.agents.dqn.apex import ApexTrainer</p>
+			<p class="source-code">if __name__ == '__main__':</p>
+			<p class="source-code">    config = APEX_DEFAULT_CONFIG.copy()</p>
+			<p class="source-code">    pp = pprint.PrettyPrinter(indent=4)</p>
+			<p class="source-code">    pp.pprint(config)</p>
+			<p class="source-code">    config['env'] = "CartPole-v0"</p>
+			<p class="source-code">    config['num_workers'] = 50</p>
+			<p class="source-code">    config['evaluation_num_workers'] = 10</p>
+			<p class="source-code">    config['evaluation_interval'] = 1</p>
+			<p class="source-code">    config['learning_starts'] = 5000</p>
+			<p class="source-code">    tune.run(ApexTrainer, config=config)</p>
+			<p>With that, your training should start. RLlib has great TensorBoard logging. Initialize TensorBoard by running the following:</p>
+			<p class="source-code">tensorboard --logdir=~/ray_results</p>
+			<p>The results from our training look like the following:</p>
+			<div>
+				<div id="_idContainer946" class="IMG---Figure">
+					<img src="image/B14160_06_8.jpg" alt="Figure 6.8 – RLlib evaluation results for CartPole v0&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 6.8 – RLlib evaluation results for CartPole v0</p>
+			<p>It turns out that <a id="_idIndexMarker677"/>our DQN implementation<a id="_idIndexMarker678"/> was very competitive! But now, with RLlib, you have access to many improvements from the RL literature. You can customize your training by changing the default configs. Please take a moment to go over the very long list of all the available options to you that we print in our code. It looks like the following:</p>
+			<p class="source-code">{   'adam_epsilon': 1e-08,</p>
+			<p class="source-code">    'batch_mode': 'truncate_episodes',</p>
+			<p class="source-code">    'beta_annealing_fraction': -1,</p>
+			<p class="source-code">    'buffer_size': 2000000,</p>
+			<p class="source-code">    'callbacks': &lt;class 'ray.rllib.agents.callbacks.DefaultCallbacks'&gt;,</p>
+			<p class="source-code">    'clip_actions': True,</p>
+			<p class="source-code">    'clip_rewards': None,</p>
+			<p class="source-code">    'collect_metrics_timeout': 180,</p>
+			<p class="source-code">    'compress_observations': False,</p>
+			<p class="source-code">    'custom_eval_function': None,</p>
+			<p class="source-code">    'custom_resources_per_worker': {},</p>
+			<p class="source-code">    'double_q': True,</p>
+			<p class="source-code">    'dueling': True,</p>
+			<p class="source-code">...</p>
+			<p>Again, the list is long. But this shows the power you have at your fingertips with RLlib! We will continue to<a id="_idIndexMarker679"/> use RLlib in the following chapters and go<a id="_idIndexMarker680"/> into more details.</p>
+			<p>Congratulations! You have done a great job and accomplished a lot in this chapter. What we have covered here alone gives you an incredible arsenal to solve many sequential decision-making problems. The next chapters will dive into even more advanced material in deep RL, and now you are ready to take them on!</p>
+			<h1 id="_idParaDest-144"><a id="_idTextAnchor145"/>Summary</h1>
+			<p>In this chapter, we have come a long way from using tabular Q-learning to implementing a modern, distributed deep Q-learning algorithm. Along the way, we covered the details of NFQ, online Q-learning, DQN with Rainbow improvements, Gorila, and Ape-X DQN algorithms. We also introduced you to Ray and RLlib, which are powerful distributed computing and deep RL frameworks.</p>
+			<p>In the next chapter, we will look into another class of deep Q-learning algorithms: policy-based methods. Those methods will allow us to directly learn random policies and use continuous actions.</p>
+			<h1 id="_idParaDest-145"><a id="_idTextAnchor146"/>References</h1>
+			<ul>
+				<li>Sutton, R. S. &amp; Barto, A. G. (2018). <em class="italic">Reinforcement Learning: An Introduction</em>. <em class="italic">The MIT Press</em>. URL: <a href="http://incompleteideas.net/book/the-book.html">http://incompleteideas.net/book/the-book.html</a></li>
+				<li>Mnih, V. et al. (2015). <em class="italic">Human-level control through deep reinforcement learning</em>. <em class="italic">Nature</em>, 518(7540), 529–533</li>
+				<li>Riedmiller, M. (2005) Neural Fitted Q Iteration – First Experiences with a Data Efficient Neural Reinforcement Learning Method. In: Gama, J., Camacho, R., Brazdil, P.B., Jorge, A.M., &amp; Torgo L. (eds) Machine Learning: ECML 2005. ECML 2005. <em class="italic">Lecture Notes in Computer Science</em>, vol. 3720. Springer, Berlin, Heidelberg</li>
+				<li>Lin, L. (1993). <em class="italic">Reinforcement learning for robots using neural networks</em>.</li>
+				<li>McClelland, J. L., McNaughton, B. L., &amp; O'Reilly, R. C. (1995). <em class="italic">Why there are complementary learning systems in the hippocampus and neocortex: Insights from the successes and failures of connectionist models of learning and memory</em>. Psychological Review, 102(3), 419–457</li>
+				<li>van Hasselt, H., Guez, A., &amp; Silver, D. (2016). <em class="italic">Deep reinforcement learning with double Q-learning</em>. In: Proc. of AAAI, 2094–2100</li>
+				<li>Schaul, T., Quan, J., Antonoglou, I., &amp; Silver, D. (2015). <em class="italic">Prioritized experience replay</em>. In: Proc. of ICLR</li>
+				<li>Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., &amp; de Freitas, N. (2016). <em class="italic">Dueling network architectures for deep reinforcement learning</em>. In: Proceedings of the 33rd International Conference on Machine Learning, 1995–2003</li>
+				<li>Sutton, R. S. (1988). <em class="italic">Learning to predict by the methods of temporal differences</em>. Machine learning 3(1), 9–44</li>
+				<li>Bellemare, M. G., Dabney, W., &amp; Munos, R. (2017). <em class="italic">A distributional perspective on reinforcement learning</em>. In: ICML</li>
+				<li>Fortunato, M., Azar, M. G., Piot, B., Menick, J., Osband, I., Graves, A., Mnih, V., Munos, R., Hassabis, D., Pietquin, O., Blundell, C., &amp; Legg, S. (2017). <em class="italic">Noisy networks for exploration</em>. URL: <a href="https://arxiv.org/abs/1706.10295">https://arxiv.org/abs/1706.10295</a></li>
+				<li>Hessel, M., Modayil, J., Hasselt, H.V., Schaul, T., Ostrovski, G., Dabney, W., Horgan, D., Piot, B., Azar, M.G., &amp; Silver, D. (2018). <em class="italic">Rainbow: Combining Improvements in Deep Reinforcement Learning</em>. URL: <a href="https://arxiv.org/abs/1710.02298">https://arxiv.org/abs/1710.02298</a></li>
+				<li>Hasselt, H.V., Doron, Y., Strub, F., Hessel, M., Sonnerat, N., &amp; Modayil, J. (2018). <em class="italic">Deep Reinforcement Learning and the Deadly Triad</em>. URL: <a href="https://arxiv.org/abs/1812.02648">https://arxiv.org/abs/1812.02648</a></li>
+				<li>Nair, A., Srinivasan, P., Blackwell, S., Alcicek, C., Fearon, R., Maria, A.D., Panneershelvam, V., Suleyman, M., Beattie, C., Petersen, S., Legg, S., Mnih, V., Kavukcuoglu, K., &amp; Silver, D. (2015). <em class="italic">Massively Parallel Methods for Deep Reinforcement Learning</em>. URL: <a href="https://arxiv.org/abs/1507.04296">https://arxiv.org/abs/1507.04296</a></li>
+				<li>Horgan, D., Quan, J., Budden, D., Barth-Maron, G., Hessel, M., Hasselt, H.V., &amp; Silver, D. (2018). <em class="italic">Distributed Prioritized Experience Replay</em>. URL: <a href="https://arxiv.org/abs/1803.00933">https://arxiv.org/abs/1803.00933</a></li>
+			</ul>
+		</div>
+	</body></html>

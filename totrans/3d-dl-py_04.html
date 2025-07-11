@@ -1,0 +1,164 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer070">
+<h1 class="chapter-number" id="_idParaDest-45" lang="en-GB"><a id="_idTextAnchor046"/>3</h1>
+<h1 id="_idParaDest-46" lang="en-GB"><a id="_idTextAnchor047"/>Fitting Deformable Mesh Models to Raw Point Clouds</h1>
+<p lang="en-GB">In this chapter, we are going to discuss a project for using deformable mesh models for fitting raw point cloud observations potentially coming from a raw depth camera sensing result. Raw point cloud observations from depth cameras are usually in the format of point clouds without any information on how these points are connected; that is, the point clouds don’t contain information about how surfaces can be formed from the points. This is contrary to a mesh, where the list of faces defined by the mesh shows us how the surfaces are. Such information on how points can be gathered into surfaces is important for downstream postprocessing, such as denoising and object detection. For example, if one point is isolated without any connection to any of the other points, then the point may likely be a false detection by the sensor.</p>
+<p lang="en-GB">Thus, reconstructing the surface information from point clouds is usually a standard step in 3D data processing pipelines. There exists a large body of prior-art literature on 3D surface reconstruction from points clouds, such as Poisson reconstruction. Using deformable mesh models for surface reconstruction is also among the frequently used methods. The method of fitting deformable mesh models for point clouds discussed in this chapter is a practical and simple baseline method.</p>
+<p lang="en-GB">The method presented in this chapter is based on PyTorch optimization. The method is another perfect demonstration of how optimization using PyTorch works. We will explain the optimization in reasonable detail, so that you can further improve your understanding of PyTorch optimization.</p>
+<p lang="en-GB">Loss functions are very important in most deep learning algorithms. Here, we will also discuss which loss functions we should use and the loss functions that have conventionally been contained in PyTorch3D. Luckily, many well-known loss functions have been implemented in many modern 3D deep learning frameworks and libraries, such as PyTorch3D. In this chapter, we are going to learn about many such loss functions.</p>
+<p lang="en-GB">In this chapter, we’re going to cover the following main topics:</p>
+<ul>
+<li lang="en-GB">Fitting meshes to point clouds – the problem</li>
+<li lang="en-GB">Formulating the mesh model fitting problem as an optimization problem</li>
+<li lang="en-GB">Loss functions for regularization</li>
+<li lang="en-GB">Implementing the mesh fitting with PyTorch3D</li>
+</ul>
+<h1 id="_idParaDest-47" lang="en-GB"><a id="_idTextAnchor048"/>Technical requirements</h1>
+<p lang="en-GB">To run the example code snippets in this book, you should ideally have a computer that has a GPU. However, running the code snippets with only CPUs is not impossible.</p>
+<p lang="en-GB">The recommended computer configuration includes the following:</p>
+<ul>
+<li lang="en-GB">A GPU, for example, the GTX series or RTX series, with at least 8 GB of memory</li>
+<li lang="en-GB">Python 3</li>
+<li lang="en-GB">The PyTorch and PyTorch3D libraries</li>
+</ul>
+<p lang="en-GB">The code snippets with this chapter can be found at <a href="https://github.com/PacktPublishing/3D-Deep-Learning-with-Python">https://github.com/PacktPublishing/3D-Deep-Learning-with-Python</a>.</p>
+<h1 id="_idParaDest-48" lang="en-GB"><a id="_idTextAnchor049"/>Fitting meshes to point clouds – the problem</h1>
+<p lang="en-GB">Real-world depth <a id="_idIndexMarker135"/>cameras, such as LiDAR, time-of-flight cameras, and stereo vision cameras, usually output either depth images or point clouds. For example, in the case of time-of-flight cameras, a modulated light ray is projected from the camera to the world, and the depth at each pixel is measured from the phase of the reflected light rays received at the pixel. Thus, at each pixel, we can usually get one depth measurement and one reflected light amplitude measurement. However, other than the sampled depth information, we usually do not have direct measurements of the surfaces. For example, we cannot measure the smoothness or norm of the surface directly.</p>
+<p lang="en-GB">Similarly, in the case <a id="_idIndexMarker136"/>of stereo vision cameras, at each time slot, the camera can take two RGB images from the camera pair at roughly the same time. The camera then estimates the depth by finding the pixel correspondences between the two images. The output is thus a depth estimation at each pixel. Again, the camera cannot give us any direct measurements of surfaces.</p>
+<p lang="en-GB">However, in many real-world applications, surface information is sought. For example, in robotic picking tasks, usually, we need to find regions on an object such that the robotic hands can grasp firmly. In such a scenario, it is usually desirable that the regions are large in size and reasonably flat.</p>
+<p lang="en-GB">There are many other scenarios in which we want to fit a (deformable) mesh model to a point cloud. For example, there are some machine vision applications where we have the mesh model for an industrial part and the point cloud measurement from the depth camera has an unknown orientation and pose. In this case, finding a fitting of the mesh model to the point cloud would recover the unknown object pose.</p>
+<p lang="en-GB">For another example, in human face tracking, sometimes, we want to fit a deformable face mesh model to point cloud measurements, such that we can recover the identity of the human being and/or facial expressions.</p>
+<p lang="en-GB">Loss functions are<a id="_idIndexMarker137"/> central concepts in almost all optimizations. Essentially, to fit a point cloud, we need to design a loss function, such that when the loss function is minimized, the mesh as the optimization variable fits to the point cloud.</p>
+<p lang="en-GB">Actually, selecting the right loss function is usually a critical design decision in many real-world projects. Different choices of loss function usually result in significantly different system performance. The requirements for a loss function usually include at least the following properties:</p>
+<ul>
+<li lang="en-GB">The loss <a id="_idIndexMarker138"/>function needs to have desirable numerical properties, such as smooth, convex, without the issue of vanishing gradients, and so on</li>
+<li lang="en-GB">The loss function (and its gradients) can be easily computed; for example, they can be efficiently computed on GPUs</li>
+<li lang="en-GB">The loss function is a good measurement of model fitting; that is, minimizing the loss function results in a satisfactory mesh model fitting for the input point clouds</li>
+</ul>
+<p lang="en-GB">Other than one <a id="_idIndexMarker139"/>primary loss function in such model fitting optimization problems, we usually also need to have other loss functions for regularizing the model fitting. For example, if we have some prior knowledge that the surfaces should be smooth, then we usually need to introduce an additional regularization loss function, such that not-smooth meshes would be penalized more.</p>
+<p lang="en-GB">An example of point cloud measurement using a pedestrian is shown in <em class="italic" lang="">Figure 3.1</em>. In the later sections of this chapter, we are going to discuss a deformable mesh-based approach for fitting a mesh model to point clouds. This point cloud is in the <strong class="source-inline" lang="">pedestrian.ply</strong> file, which can be downloaded from the book's GitHub page. The point cloud can be visualized by<a id="_idIndexMarker140"/> using the provided code snippet in <strong class="source-inline" lang="">vis_input.py</strong>.</p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US"><img alt="Figure 3.1: An example of a 3D point cloud as the output of a depth camera; note that the point density is relatively low " height="754" src="image/B18217_03_1.png" width="530"/></p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 3.1: An example of a 3D point cloud as the output of a depth camera; note that the point density is relatively low</p>
+<p lang="en-GB">We have discussed the problem of fitting a mesh to a point cloud. Now, let us talk about how to formulate an optimization problem.</p>
+<h1 id="_idParaDest-49" lang="en-GB"><a id="_idTextAnchor050"/>Formulating a deformable mesh fitting problem into an optimization problem</h1>
+<p lang="en-GB">In this section, we <a id="_idIndexMarker141"/>are <a id="_idIndexMarker142"/>going to talk about how to formulate the mesh fitting problem into an optimization problem. One key observation here is that object surfaces such as pedestrians can always be continuously deformed into a sphere. Thus, the approach we are going to take will start from the surface of a sphere and deform the surface to minimize a cost function.</p>
+<p lang="en-GB">The cost function <a id="_idIndexMarker143"/>should be chosen such that it is a good measurement of how similar the point cloud is to the mesh. Here, we choose the major cost function to be the Chamfer set distance. The Chamfer distance is defined between two sets of points as follows:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer065">
+<img alt="" height="141" src="image/B18217_03_f1.jpg" width="953"/>
+</div>
+</div>
+<p lang="en-GB">The Chamfer distance is <a id="_idIndexMarker144"/>symmetric and is a sum of two terms. In the first term, for each point <em class="italic" lang="">x</em> in the first point cloud, the closest point <em class="italic" lang="">y</em> in the other point cloud is found. For each such pair <em class="italic" lang="">x</em> and <em class="italic" lang="">y</em>, their distance is obtained and the distances for all the pairs are summed up. Similarly, in the second term, for each <em class="italic" lang="">y</em> in the second point cloud, one <em class="italic" lang="">x</em> is found and the distances between such <em class="italic" lang="">x</em> and <em class="italic" lang="">y </em>pairs are summed up.</p>
+<p lang="en-GB">Generally speaking, the Chamfer distance is the distance between two point clouds. If the two point clouds are identical, or very similar, then the Chamfer distance can be zero or very small. If the two point clouds are far away, then their Chamfer distance can be large.</p>
+<p lang="en-GB">In PyTorch3D, an implementation of Chamfer distance is provided in <strong class="source-inline" lang="">pytorch3d.loss.chamfer_distance</strong>. Not only the forward loss function calculation is provided, but we can also compute gradients for back-propagation easily using this implementation.</p>
+<p lang="en-GB">For fitting meshes to point clouds, we first randomly sample some points from a mesh model and then optimize the Chamfer distances between the sampled points from the mesh model and the input point cloud. The random sampling is achieved by <strong class="source-inline" lang="">pytorch3d.ops.sample_points_from_meshes</strong>. Again, we can compute the gradients for back-propagation from <strong class="source-inline" lang="">pytorch3d.ops.sample_points_from_meshes</strong>.</p>
+<p lang="en-GB">Now, we have a basic version of the optimization problem. However, we may still need some<a id="_idIndexMarker145"/> loss <a id="_idIndexMarker146"/>functions for the regularization of this problem. We will dive into these issues in the next section.</p>
+<h1 id="_idParaDest-50" lang="en-GB"><a id="_idTextAnchor051"/>Loss functions for regularization</h1>
+<p lang="en-GB">In the previous<a id="_idIndexMarker147"/> section, we successfully formulated the deformable mesh fitting problem into an optimization problem. However, the approach of directly optimizing this primary loss function can be problematic. The issues lie in that there may exist multiple mesh models that can be good fits to the same point cloud. These mesh models that are good fits may include some mesh models that are far away from smooth meshes.</p>
+<p lang="en-GB">On the other hand, we usually have prior knowledge about pedestrians. For example, the surfaces of pedestrians are usually smooth, the surface norms are smooth also. Thus, even if a non-smooth mesh is close to the input point cloud in terms of Chamfer distance, we know with a certain level of confidence that it is far away from the ground truth.</p>
+<p lang="en-GB">Machine learning literature has provided solutions for excluding such undesirable non-smooth solutions for several decades. The solution is <a id="_idIndexMarker148"/>called <strong class="bold" lang="">regularization</strong>. Essentially, the loss we want to optimize is chosen to be a sum of multiple loss functions. Certainly, the first term of the sum will be the primary Chamfer distance. The other terms are for penalizing surface non-smoothness and norm non-smoothness.</p>
+<p lang="en-GB">In the next several subsections, we are going to discuss several such loss functions, including the following:</p>
+<ul>
+<li lang="en-GB">Mesh Laplacian smoothing loss</li>
+<li lang="en-GB">Mesh normal consistency loss</li>
+<li lang="en-GB">Mesh edge loss</li>
+</ul>
+<h2 id="_idParaDest-51" lang="en-GB"><a id="_idTextAnchor052"/>Mesh Laplacian smoothing loss</h2>
+<p lang="en-GB">The mesh<a id="_idIndexMarker149"/> Laplacian is a discrete version of the well-known <a id="_idIndexMarker150"/>Laplace-Beltrami operator. One version (usually called uniform Laplacian) is as follows:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer066">
+<img alt="" height="116" src="image/B18217_03_f2.jpg" width="375"/>
+</div>
+</div>
+<p lang="en-GB">In the preceding definition, the Laplacian at the <em class="italic" lang="">i</em>-th vertex is just a sum of differences, where each difference is between the coordinates of the current vertex and those of a neighboring vertex.</p>
+<p lang="en-GB">The Laplacian is a <a id="_idIndexMarker151"/>measurement for smoothness. If the <em class="italic" lang="">i</em>-th vertex and its neighbors lie all within one plane, then the Laplacian should be zero. Here, we are using a uniform version of the Laplacian, where the contribution to the sum from each neighbor is equally weighted. There are more complicated versions of Laplacians, where the preceding contributions are weighted according to various schemes.</p>
+<p lang="en-GB">Essentially, including this loss function in the optimization would result in smoother solutions. One implementation for the mesh Laplacian smoothing loss (including multiple other versions than the uniform one) can be found at <strong class="source-inline" lang="">pytorch3d.loss.mesh_laplacian_smoothing</strong>. Again, gradient computations for back-propagation are enabled.</p>
+<h2 id="_idParaDest-52" lang="en-GB"><a id="_idTextAnchor053"/>Mesh normal consistency loss</h2>
+<p lang="en-GB">The mesh<a id="_idIndexMarker152"/> normal <a id="_idIndexMarker153"/>consistency loss is a loss function for penalizing the distances between adjacent normal vectors on the mesh. One implementation can be found at <strong class="source-inline" lang="">pytorch3d.loss.mesh_normal_consistency</strong>.</p>
+<h2 id="_idParaDest-53" lang="en-GB"><a id="_idTextAnchor054"/>Mesh edge loss</h2>
+<p lang="en-GB">Mesh edge <a id="_idIndexMarker154"/>loss is <a id="_idIndexMarker155"/>for penalizing long edges in meshes. For example, in the mesh model fitting problem we consider in this chapter, we want to eventually obtain a solution, such that the obtained mesh model fits the input point cloud uniformly. In other words, each local region of the point cloud is covered by small triangles of the mesh. Otherwise, the mesh model cannot capture the fine details of slowly varying surfaces, meaning the model may not be that accurate or trustworthy.</p>
+<p lang="en-GB">The aforementioned problem can be easily avoided by including the mesh edge loss in the objective function. The mesh edge loss is essentially a sum of all the edge lengths in the mesh. One implementation of the mesh edge loss can be found at <strong class="source-inline" lang="">pytorch3d.loss.mesh_edge_loss</strong>.</p>
+<p lang="en-GB">Now, we have<a id="_idIndexMarker156"/> covered <a id="_idIndexMarker157"/>all the concepts and mathematics for this mesh fitting problem. Next, let us dive into how the problem can be coded by using Python and PyTorch3D.</p>
+<h1 id="_idParaDest-54" lang="en-GB"><a id="_idTextAnchor055"/>Implementing the mesh fitting with PyTorch3D</h1>
+<p lang="en-GB">The input<a id="_idIndexMarker158"/> point cloud is contained in <strong class="source-inline" lang="">pedestrian.ply</strong>. The<a id="_idIndexMarker159"/> mesh can be visualized using the <strong class="source-inline" lang="">vis_input.py</strong> code snippet. The main code snippet for fitting a mesh model to the point cloud is contained in <strong class="source-inline" lang="">deform1.py</strong>:</p>
+<ol>
+<li lang="en-GB">We will start by importing the needed packages:<p class="source-code" lang="en-GB">import os</p><p class="source-code" lang="en-GB">import sys</p><p class="source-code" lang="en-GB">import torch</p><p class="source-code" lang="en-GB">from pytorch3d.io import load_ply, save_ply</p><p class="source-code" lang="en-GB">from pytorch3d.io import load_obj, save_obj</p><p class="source-code" lang="en-GB">from pytorch3d.structures import Meshes</p><p class="source-code" lang="en-GB">from pytorch3d.utils import ico_sphere</p><p class="source-code" lang="en-GB">from pytorch3d.ops import sample_points_from_meshes</p><p class="source-code" lang="en-GB">from pytorch3d.loss import (</p><p class="source-code" lang="en-GB">    chamfer_distance,</p><p class="source-code" lang="en-GB">    mesh_edge_loss,</p><p class="source-code" lang="en-GB">    mesh_laplacian_smoothing,</p><p class="source-code" lang="en-GB">    mesh_normal_consistency,</p><p class="source-code" lang="en-GB">)</p><p class="source-code" lang="en-GB">import numpy as np</p></li>
+<li lang="en-GB">We then declare a PyTorch device. If you have GPUs, then the device would be created to use GPUs. Otherwise, the device has to use CPUs:<p class="source-code" lang="en-GB">if torch.cuda.is_available():</p><p class="source-code" lang="en-GB">    device = torch.device("cuda:0")</p><p class="source-code" lang="en-GB">else:</p><p class="source-code" lang="en-GB">    device = torch.device("cpu")</p><p class="source-code" lang="en-GB">    print("WARNING: CPU only, this will be slow!")</p></li>
+<li lang="en-GB">We will<a id="_idIndexMarker160"/> load<a id="_idIndexMarker161"/> the point cloud from <strong class="source-inline" lang="">pedestrian.ply</strong>. Now, <strong class="source-inline" lang="">load_ply</strong> is a PyTorch3D function that loads the .<strong class="source-inline" lang="">ply</strong> file and outputs <strong class="source-inline" lang="">verts</strong> and <strong class="source-inline" lang="">faces</strong>. In this case, <strong class="source-inline" lang="">verts</strong> is a PyTorch tensor. <strong class="source-inline" lang="">faces</strong> is an empty PyTorch tensor because <strong class="source-inline" lang="">pedestrian.ply</strong> actually does not contain any faces. The <strong class="source-inline" lang="">to</strong> member function moves the tensors to the device; if the device uses GPUs, then <strong class="source-inline" lang="">verts</strong> and <strong class="source-inline" lang="">faces</strong> are transmitted to the GPU memories:<p class="source-code" lang="en-GB">verts, faces = load_ply("pedestrian.ply")</p><p class="source-code" lang="en-GB">verts = verts.to(device)</p><p class="source-code" lang="en-GB">faces = faces.to(device)</p></li>
+<li lang="en-GB">We then run some normalization and change the tensor shapes for later processing:<p class="source-code" lang="en-GB">center = verts.mean(0)</p><p class="source-code" lang="en-GB">verts = verts - center</p><p class="source-code" lang="en-GB">scale = max(verts.abs().max(0)[0])</p><p class="source-code" lang="en-GB">verts = verts / scale</p><p class="source-code" lang="en-GB">verts = verts[None, :, :]</p></li>
+<li lang="en-GB">In the next step, we create a mesh variable called <strong class="source-inline" lang="">src_mesh</strong> by using the <strong class="source-inline" lang="">ico_sphere</strong> PyTorch3D function. The <strong class="source-inline" lang="">ico_sphere</strong> function essentially creates a mesh representing roughly a sphere. This <strong class="source-inline" lang="">src_mesh</strong> will be our optimization variable; it will start as a sphere and then be optimized to fit the point cloud:<p class="source-code" lang="en-GB">src_mesh = ico_sphere(4, device)</p></li>
+<li lang="en-GB">In the next step, we want to define a <strong class="source-inline" lang="">deform_verts</strong> variable. <strong class="source-inline" lang="">deform_verts</strong> is a tensor of vertex displacements, where for each vertex in <strong class="source-inline" lang="">src_mesh</strong>, there is a vertex displacement of the three-dimensional vector. We are going to optimize <strong class="source-inline" lang="">deform_verts</strong> for finding the optimal deformable mesh:<p class="source-code" lang="en-GB">src_vert = src_mesh.verts_list()</p><p class="source-code" lang="en-GB">deform_verts = torch.full(src_vert[0].shape, 0.0, device=device, requires_grad=True)</p></li>
+<li lang="en-GB">We define <a id="_idIndexMarker162"/>an<a id="_idIndexMarker163"/> SGD optimizer with <strong class="source-inline" lang="">deform_verts</strong> as the optimization variable:<p class="source-code" lang="en-GB">optimizer = torch.optim.SGD([deform_verts], lr=1.0, momentum=0.9)</p></li>
+<li lang="en-GB">We define a batch of weights for different loss functions. As we have mentioned, we need multiple loss functions, including the primary one and the regularization loss functions. The final loss will be a weighted sum of the different loss functions. Here is where we define the weights:<p class="source-code" lang="en-GB">w_chamfer = 1.0</p><p class="source-code" lang="en-GB">w_edge = 1.0</p><p class="source-code" lang="en-GB">w_normal = 0.01</p><p class="source-code" lang="en-GB">w_laplacian = 0.1</p></li>
+<li lang="en-GB">We are then ready for going into the major optimization iterations. We are going to iterate 2,000 times for computing the loss function, computing the gradients, and going along the gradient descent directions. Each iteration starts with <strong class="source-inline" lang="">optimizer.zero_grad()</strong>, which will reset all the gradients, the <strong class="source-inline" lang="">loss</strong> variable is then computed, and the gradient back-propagation is then computed in <strong class="source-inline" lang="">loss.backward()</strong>; the going along the gradient descent direction is done in <strong class="source-inline" lang="">optimizer.step()</strong>.</li>
+</ol>
+<p lang="en-GB">For us to be able to compute the Chamfer distance, during each iteration, we randomly sample some points from the deformed mesh model by using a PyTorch3D function called <strong class="source-inline" lang="">sample_points_from_meshes</strong>. Note that the <strong class="source-inline" lang="">sample_points_from_meshes</strong> function supports gradient back-propagation computations.</p>
+<p lang="en-GB">We also use<a id="_idIndexMarker164"/> three<a id="_idIndexMarker165"/> other loss functions for regularization, <strong class="source-inline" lang="">mesh_edge_loss</strong>, <strong class="source-inline" lang="">mesh_normal_consistency</strong>, and <strong class="source-inline" lang="">mesh_laplacian_smooth</strong>. The final <strong class="source-inline" lang="">loss</strong> variable is actually the weighted sum of the four loss functions:</p>
+<p class="source-code" lang="en-GB">for i in range(0, 2000):</p>
+<p class="source-code" lang="en-GB">    print("i = ", i)</p>
+<p class="source-code" lang="en-GB">    optimizer.zero_grad()</p>
+<p class="source-code" lang="en-GB">    new_src_mesh = src_mesh.offset_verts(deform_verts)</p>
+<p class="source-code" lang="en-GB">    sample_trg = verts</p>
+<p class="source-code" lang="en-GB">    sample_src = sample_points_from_meshes(new_src_mesh, verts.shape[1])</p>
+<p class="source-code" lang="en-GB">    loss_chamfer, _ = chamfer_distance(sample_trg, sample_src)</p>
+<p class="source-code" lang="en-GB">    loss_edge = mesh_edge_loss(new_src_mesh)</p>
+<p class="source-code" lang="en-GB">    loss_normal = mesh_normal_consistency(new_src_mesh)</p>
+<p class="source-code" lang="en-GB">    loss_laplacian = mesh_laplacian_smoothing(new_src_mesh, method="uniform")</p>
+<p class="source-code" lang="en-GB">    loss = (</p>
+<p class="source-code" lang="en-GB">        loss_chamfer * w_chamfer</p>
+<p class="source-code" lang="en-GB">        + loss_edge * w_edge</p>
+<p class="source-code" lang="en-GB">        + loss_normal * w_normal</p>
+<p class="source-code" lang="en-GB">        + loss_laplacian * w_laplacian</p>
+<p class="source-code" lang="en-GB">    )</p>
+<p class="source-code" lang="en-GB">    loss.backward()</p>
+<p class="source-code" lang="en-GB">    optimizer.step()</p>
+<ol>
+<li lang="en-GB" value="10">We then extract <a id="_idIndexMarker166"/>the <a id="_idIndexMarker167"/>obtained vertices and faces from the <strong class="source-inline" lang="">new_src_mesh</strong> variable and then resume its original center location and scale:<p class="source-code" lang="en-GB">final_verts, final_faces = new_src_mesh.get_mesh_verts_faces(0)</p><p class="source-code" lang="en-GB">final_verts = final_verts * scale + center</p></li>
+<li lang="en-GB">Finally, the obtained mesh model is saved in the <strong class="source-inline" lang="">deform1.ply</strong> file:<p class="source-code" lang="en-GB">final_obj = os.path.join("./", "deform1.ply")</p><p class="source-code" lang="en-GB">save_ply(final_obj, final_verts, final_faces, ascii=True)</p></li>
+</ol>
+<div>
+<div class="IMG---Figure" id="_idContainer067">
+<img alt="Figure 3.2: Optimized deformed mesh model. Note that we have far more points than the original input point cloud " height="750" src="image/B18217_03_2.jpg" width="365"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 3.2: Optimized deformed mesh model. Note that we have far more points than the original input point cloud</p>
+<p lang="en-GB">The obtained mesh can be visualized on your screen by using <strong class="source-inline" lang="">vis1.py</strong>. One screenshot of the obtained mesh is shown in <em class="italic" lang="">Figure 3.2</em>. Note that compared to the original input point cloud, the <a id="_idIndexMarker168"/>optimized mesh model<a id="_idIndexMarker169"/> actually contains far more points (2,500 compared with 239). The obtained surfaces seem to be smoother than the original input points also.</p>
+<h2 id="_idParaDest-55" lang="en-GB"><a id="_idTextAnchor056"/>The experiment of not using any regularization loss functions</h2>
+<p lang="en-GB">What if we don't use any of these regularization loss functions? We run an experiment using the code in <strong class="source-inline" lang="">deform2.py</strong>. The only difference between the code snippet in <strong class="source-inline" lang="">deform2.py</strong> and the one in <strong class="source-inline" lang="">deform1.py</strong> is the following lines:</p>
+<pre class="source-code" lang="en-GB">w_chamfer = 1.0</pre>
+<pre class="source-code" lang="en-GB">w_edge = 0.0</pre>
+<pre class="source-code" lang="en-GB">w_normal = 0.00</pre>
+<pre class="source-code" lang="en-GB">w_laplacian = 0.0</pre>
+<p lang="en-GB">Note that all the weights have been set to zero, except the one for the Chamfer loss function. Essentially, we are not using any loss functions for regularization. The resulting mesh can be visualized on your screen by running <strong class="source-inline" lang="">vis2.py</strong>. A screenshot is shown in <em class="italic" lang="">Figure 3.3</em>:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer068">
+<img alt="Figure 3.3: Mesh obtained without using any loss functions for regularization " height="736" src="image/B18217_03_3.jpg" width="554"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 3.3: Mesh obtained without using any loss functions for regularization</p>
+<p lang="en-GB">Note that the<a id="_idIndexMarker170"/> obtained mesh in <em class="italic" lang="">Figure 3.3</em> is not smooth and is unlikely to be close to the actual ground-truth surfaces.</p>
+<h2 id="_idParaDest-56" lang="en-GB"><a id="_idTextAnchor057"/>The experiment of using only the mesh edge loss</h2>
+<p lang="en-GB">This time, we are <a id="_idIndexMarker171"/>going to use the following set<a id="_idIndexMarker172"/> of weights. The code snippet is in <strong class="source-inline" lang="">deform3.py</strong>:</p>
+<pre class="source-code" lang="en-GB">w_chamfer = 1.0</pre>
+<pre class="source-code" lang="en-GB">w_edge = 1.0</pre>
+<pre class="source-code" lang="en-GB">w_normal = 0.00</pre>
+<pre class="source-code" lang="en-GB">w_laplacian = 0.0</pre>
+<p lang="en-GB">The obtained mesh model is in <strong class="source-inline" lang="">deform3.ply</strong>. The mesh can be visualized on your screen by using <strong class="source-inline" lang="">vis3.py</strong>. A screenshot of the mesh is shown in <em class="italic" lang="">Figure 3.4</em>:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer069">
+<img alt="Figure 3.4: Obtained mesh using only the mesh_edge_loss regularization " height="749" src="image/B18217_03_4.jpg" width="383"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 3.4: Obtained mesh using only the mesh_edge_loss regularization</p>
+<p lang="en-GB">From <em class="italic" lang="">Figure 3.4</em>, we can observe that the obtained mesh is much smoother than the one in <em class="italic" lang="">Figure 3.3</em>. However, it seems that there are some rapid changes in the surface normal. Actually, you can try out other weights on your own to see how these loss functions<a id="_idIndexMarker173"/> affect <a id="_idIndexMarker174"/>the final outcomes.</p>
+<h1 id="_idParaDest-57" lang="en-GB"><a id="_idTextAnchor058"/>Summary</h1>
+<p lang="en-GB">In this chapter, we talked about an approach to fitting deformable mesh models to a point cloud. As we have discussed, obtaining meshes from point clouds is usually a standard step in many 3D computer vision pipelines. The fitting approach in this chapter can be used as a simple baseline approach in practice.</p>
+<p lang="en-GB">From this deformable mesh fitting approach, we learned how to use PyTorch optimization. We also learned about many loss functions and their PyTorch3D implementations, including Chamfer distances, mesh edge loss, mesh Laplacian smoothing loss, and mesh normal consistency loss.</p>
+<p lang="en-GB">We learned when these loss functions should be used and for what purposes. We saw several experiments for showing how the loss functions affect the final outcome. You are also encouraged to run your own experiments with different combinations of loss functions and weights.</p>
+<p lang="en-GB">In the next chapter, we will discuss a very exciting 3D deep learning technique called differentiable rendering. Actually, we will have several differentiable-rendering-related chapters in this book. The next chapter will be the first one of these chapters.</p>
+</div>
+<div>
+<div id="_idContainer071">
+</div>
+</div>
+</div></body></html>

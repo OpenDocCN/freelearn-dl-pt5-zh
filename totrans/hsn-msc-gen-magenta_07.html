@@ -1,0 +1,745 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Audio Generation with NSynth and GANSynth</h1>
+                </header>
+            
+            <article>
+                
+<p class="mce-root">In this chapter, we'll be looking into audio generation. We'll first provide an overview of WaveNet, an existing model for audio generation, especially efficient in text-to-speech applications. In Magenta, we'll use NSynth, a WaveNet autoencoder model, to generate small audio clips that can serve as instruments for a backing MIDI score. NSynth also enables audio transformations such as scaling, time stretching, and interpolation. We'll also use GANSynth, a faster approach based on <strong>Generative Adversarial Network</strong> (<strong>GAN</strong>).</p>
+<p class="mce-root">The following topics will be covered in this chapter:</p>
+<ul>
+<li class="mce-root">Learning about WaveNet and temporal structures for music</li>
+<li class="mce-root">Neural audio synthesis with NSynth</li>
+<li class="mce-root">Using GANSynth as a generative instrument</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we'll use the following tools:</p>
+<ul>
+<li>The <strong>command line</strong> or <strong>Bash</strong> to launch Magenta from the Terminal</li>
+<li><strong>Python</strong> and its libraries to write music generation code using Magenta</li>
+<li><strong>Magenta</strong> to generate audio clips</li>
+<li><strong>Audacity</strong> to edit audio clips<strong><br/></strong></li>
+<li>Any media player to listen to the generated WAV files</li>
+</ul>
+<p>In Magenta, we'll make the use of the <strong>NSynth</strong> and <strong>GANSynth</strong> models. We'll be explaining these models in depth, but if you feel like you need more information, the models' README in Magenta's source code (<a href="https://github.com/tensorflow/magenta/tree/master/magenta/models">github.com/tensorflow/magenta/tree/master/magenta/models</a>) is a good place to start. You can also take a look at Magenta's code, which is well documented. We also provide additional content in the <em>Further reading</em> section.</p>
+<p>The code for this chapter is in this book's GitHub repository in the <kbd>Chapter05</kbd> <span>folder</span>, located at <a href="https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter05">github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter05</a>. The examples and code snippets will suppose you are located in this chapter's folder. For this chapter, you should do <kbd>cd Chapter05</kbd> before you start.</p>
+<p>Check out the following video to see the Code in Action:<br/>
+<a href="http://bit.ly/37QgQsI">http://bit.ly/37QgQsI</a></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Learning about WaveNet and temporal structures for music</h1>
+                </header>
+            
+            <article>
+                
+<p>In the previous chapters, we've been generating symbolic content such as MIDI. In this chapter, we'll be looking at generating sub-symbolic content, such as <strong>raw audio</strong>. We'll be using the Waveform Audio File Format (WAVE or WAV, stored in a <kbd>.wav</kbd> file), a format containing uncompressed audio content, usable on pretty much every platform and device. See <a href="c5602f6c-c094-42f2-936f-98746cf04a49.xhtml">Chapter 1</a>, <em>Introduction on Magenta and Generative Art</em>, for more information on waveforms in general.</p>
+<p>Generating raw audio using neural nets is a rather recent feat, following the 2016 WaveNet paper, <em>A Generative Model For Raw Audio</em>. Other network architectures also perform well in audio generation, such as SampleRNN, also released in 2016 and used since to produce music tracks and albums (see databots for an example).</p>
+<p>As stated in <a href="b60deee5-c58f-45eb-88a2-23718802e580.xhtml">Chapter 2</a>, <em>Generating Drum Sequences with DrumsRNN</em>, convolutional architectures are rather rare in music generation, given their shortcomings in handling sequential data. WaveNet uses a stack of causal convolution layers to address these problems, somewhat analogous to recurrent layers.</p>
+<p>Modeling raw audio is hard—you have to handle 16,000 samples per second (at least) and keep track of the general structure at a bigger time scale. WaveNet's implementation is optimized to handle such data with the use of dilated convolution, where the convolution filter is applied over a large area by skipping input values with a certain step, enabling the network to preserve the input resolution throughout the network by using just a few layers. During training, the predictions can be made in parallel, while during generation, the predictions have to be made sequentially or <strong>sample by sample</strong>.</p>
+<p>The WaveNet architecture has been used with excellent performance in text-to-speech application and recently in music generation but is computationally very expensive. Magenta's NSynth model is a <strong>WaveNet autoregressive model</strong>, an approach used to attain consistent long-term structure. Let's have a look into NSynth and its importance in generating music.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Looking at NSynth and WaveNet autoencoders</h1>
+                </header>
+            
+            <article>
+                
+<p>The NSynth model can be seen as a neural synthesizer—instead of having a synthesizer where you can define envelopes and specify the oscillator wave, pitch, and velocity, you have a model that generates new, realistic, instrument sounds. NSynth is <strong>instrument-oriented</strong>, or note-oriented, meaning it can be used to generate single notes of a generated instrument.</p>
+<p>NSynth is a WaveNet-style autoencoder that learns the input data's temporal embedding. To understand the WaveNet Autoencoder (AE) network, you can refer to concepts explained in <a href="838da33e-26a9-4701-bfd3-5014dfff4146.xhtml">Chapter 4</a>, <em>Latent Space Interpolation with MusicVAE</em>, since both networks are AEs. You'll see here many of the concepts we've previously shown, such as encoding, latent space, and interpolation.</p>
+<p>Here is a simplified view of the WaveNet AE network:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/af142458-0126-4d26-a16a-906ee26021d0.png"/></p>
+<p>First, the encoder sees the whole input, which is the whole mono waveform (in the <kbd>.wav</kbd> format), and after 30 layers of computation, calculates an average pooling to create a temporal embedding (<strong><em>z</em></strong> in the diagram) of 16 dimensions for every 512 samples, which is a dimensionality reduction of 32 times. For example, a single audio input, with 16,000 samples (1 second of audio with a sample rate of 16,000), once encoded, will have a shape of 16 for the latent vector and 16,000/512 for the time (see the next section, <em>Encoding the WAV files</em>, for an example of this). Then, the WaveNet decoder will upsample the embedding to its original time resolution using a 1x1 convolution, trying to reproduce as closely as possible the input sound.</p>
+<div class="packt_tip">You can see WaveNet's implementation in the <kbd>Config</kbd> class of the <kbd>magenta.models.nsynth.wavenet.h512_bo16</kbd> module. The fastgen implementation used for the <kbd>synthesize</kbd> method is in the <kbd>FastGenerationConfig</kbd> class.</div>
+<p>The <em>z</em> representation, or latent vector, has similar properties to what we saw in <a href="838da33e-26a9-4701-bfd3-5014dfff4146.xhtml">Chapter 4</a>, <em>Latent Space Interpolation with MusicVAE—</em>similar sounds have similar <em>z</em> representations, and mixing or interpolation between two latent vectors is possible. This creates endless possibilities in terms of sound exploration. While traditional audio mixing revolves around the action of changing the volume of two audio clips to hear both at the same time, mixing two encodings together is about creating a sound that is a <strong>hybrid of two original sounds.</strong></p>
+<p>During this chapter, you'll get to listen to a lot of generated sounds, which we recommend you do instead of just looking at spectrograms. You'll probably notice that the sounds have a grainy or lo-fi texture. This is because the model works on mu-law encoded 8-bit 16 kHz sounds, which are of lower quality than what you typically listen to and is necessary for computational reasons.</p>
+<p>Due to its training, the model might sometimes fall short while reconstructing the audio, which leads to additional harmonics, approximations, or crazy sounds. While surprising, these results give an interesting twist to the generated audio.</p>
+<p>In this chapter, we'll be generating audio clips using NSynth, which we can then sequence using a previously generated MIDI sequence, for example. We'll listen to the sound of the interpolation between a cat sound and a bass sound by adding the encodings of both clips and synthesizing the result. We'll be generating a handful of sound combinations so we get a feel of what is possible in terms of audio interpolation.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Visualizing audio using a constant-Q transform spectrogram</h1>
+                </header>
+            
+            <article>
+                
+<p>Before we start, we'll introduce an audio visualization plot called the <strong>Constant-Q</strong> <strong>Transform</strong> (<strong>CQT</strong>) spectrogram. We provide more information about plotting audio signals and CQT in the last section, <em>Further reading</em>. In the previous chapters, we've been representing MIDI as a pianoroll plot, and the representations are simple and easy to understand. Audio, on the other hand, is hard to represent: two spectrograms looking almost the same might sound different.</p>
+<p>In <a href="c5602f6c-c094-42f2-936f-98746cf04a49.xhtml">Chapter 1</a>, <em>Introduction to Magenta and Generative Art</em>, in the <em>Representing music with a spectrogram</em> section, we've shown how a spectrogram is a plot of time and frequency. In this chapter, we'll be looking at a CQT spectrogram, which is a spectrogram displayed with the magnitude represented by the intensity and the instantaneous frequency by color. The colors represent the 16 different dimensions of the embeddings. The intensity of lines is proportional to the log magnitude of the power spectrum, and the colors are given by the derivative of the phase, making the phase visible as rainbow colors, hence the nickname "rainbowgrams" given by the Magenta team.</p>
+<p>For this section, we are providing four audio samples that we'll use for our example and show as a rainbowgram. As always, the figures are not a replacement for listening to the audio content. Those samples are shown in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/cf087c72-9faa-454a-860f-c3b9cf946c89.png"/></p>
+<p>In the screenshot, you can notice a couple of things. First, the flute and the bass plots have a pretty well-defined harmonic series. Second, the metal plot, however, is more confused since it is a metal plate being struck. You can clearly see the attack of the sound and the following noise spanning the whole frequency range.</p>
+<p>For our example, we'll be combining each pair of those sounds, for example, metal and cat, and cat and flute.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">The NSynth dataset</h1>
+                </header>
+            
+            <article>
+                
+<p>Before we start, we'll have a brief look at the NSynth dataset, which was used to train the NSynth model. It is available at <a href="https://magenta.tensorflow.org/datasets/nsynth">magenta.tensorflow.org/datasets/nsynth</a> and is a high-quality and large-scale dataset, an order of magnitude larger than other similar datasets. Even if it is difficult to use for training with NSynth, it is interesting to look at for its content: over 300,000 musical notes that are classified by source, family, and quality. It can also serve as content for producing audio clips.</p>
+<p>The audio clips are all 4 seconds long (the note was held for 3 seconds and given 1 second for the release) and represent a single note of different instruments. Each note has been recorded at every pitch of the standard MIDI piano range of 21 to 108 at five different velocities.</p>
+<p>Since the instruments are classified by source, which is the method of sound production (such as acoustic, electronic, or synthetic), the dataset can be split for training on a specific instrument source. For example, the pre-trained GANSynth model we are going to use, <kbd>acoustic_only</kbd>, is useful for generating a more classical type of sound because the instruments in the training set are varied. The instruments are also classified by family, such as piano and bass, and qualities such as bright, dark, and percussive.</p>
+<p>Interestingly, a dataset oriented on single notes like the NSynth dataset is really useful for producing neural audio synthesis of notes, which can in turn be sequenced with the other models in Magenta. In that sense, the NSynth model fits well in the Magenta ecosystem.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Neural audio synthesis with NSynth</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we'll be combining different audio clips together. We'll learn to encode the audio, optionally saving the resulting encodings on disk, mix (add) them, and then decode the added encodings to retrieve a sound clip.</p>
+<p>We'll be handling <span>1-second </span>audio clips only. There are two reasons for this: first, <strong>handling audio is costly</strong>, and second, we want to <strong>generate instrument notes</strong> in the form of short audio clips. The latter is interesting for us because we can then sequence the audio clips using MIDI generated by the models we've been using in the previous chapters. In that sense, you can view NSynth as a generative instrument, and the previous models, such as MusicVAE or Melody RNN, as a generative score (partition) composer. With both elements, we can generate full tracks, with audio and structure.</p>
+<p>To generate sound clips, we'll be using the <kbd>fastgen</kbd> module, an external contribution to Magenta, which now resides in NSynth's code, implementing optimizations for faster sound generation with an easy-to-use API.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Choosing the WaveNet model</h1>
+                </header>
+            
+            <article>
+                
+<p>Magenta provides two pre-trained NSynth models with included weights. We're going to be using the WaveNet pre-trained model. This model is very expensive to train, taking around 10 days on 32 K40 GPUs, so we won't be talking about training here.</p>
+<div class="packt_tip">You can follow this example in the <kbd>chapter_05_example_01.py</kbd> file <span>in the source code of this chapter. There are more comments and content in the source code, so you should go check it out.<br/></span>This chapter also contains audio clips in the <kbd>sounds</kbd> folders that you can use for this section.</div>
+<p>To download the pre-trained model, use the following method, which will download the model and extract it:</p>
+<pre><span>import os<br/></span><span>import tarfile<br/>import tensorflow as tf<br/>from six.moves import urllib<br/><br/>def </span>download_checkpoint(checkpoint_name: <span>str</span>,<br/>                        target_dir: <span>str </span>= <span>"checkpoints"</span>):<span><br/></span><span>  </span>tf.gfile.MakeDirs(target_dir)<br/>  checkpoint_target = os.path.join(target_dir, <span>f"</span><span>{</span>checkpoint_name<span>}</span><span>.tar"</span>)<br/>  <span>if not </span>os.path.exists(checkpoint_target):<br/>    response = urllib.request.urlopen(<br/>      <span>f"http://download.magenta.tensorflow.org/"<br/></span><span>      f"models/nsynth/</span><span>{</span>checkpoint_name<span>}</span><span>.tar"</span>)<br/>    data = response.read()<br/>    local_file = <span>open</span>(checkpoint_target, <span>'wb'</span>)<br/>    local_file.write(data)<br/>    local_file.close()<br/>    tar = tarfile.open(checkpoint_target)<br/>    tar.extractall(target_dir)<br/>    tar.close()</pre>
+<p>This code downloads the proper checkpoint and then extracts it to the destination directory. This is similar to <kbd>download_checkpoint</kbd>, which we've written in the previous chapter. Using the <kbd>wavenet-ckpt</kbd> checkpoint name, the resulting checkpoint will be usable via the <kbd>checkpoints/wavenet-ckpt/model.ckpt-200000</kbd> path.</p>
+<p>Note that this method might download rather big files (the pre-trained models in this chapter are big), so it will look as if the program is stuck for a while. It only means that the file is being downloaded (once only) locally.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Encoding the WAV files</h1>
+                </header>
+            
+            <article>
+                
+<p>First, we'll encode the WAV files using the <kbd>fastgen</kbd> library. Let's define the <kbd>encode</kbd> method and load the audio:</p>
+<pre><span>from typing import List<br/>import numpy as np<br/>from magenta.models.nsynth import utils<br/>from magenta.models.nsynth.wavenet import fastgen<br/><br/></span><span>def </span>encode(wav_filenames: List[<span>str</span>],<br/>           checkpoint: <span>str </span>= <span>"checkpoints/wavenet-ckpt/model.ckpt-200000"</span>,<br/>           sample_length: <span>int </span>= <span>16000</span>,<br/>           sample_rate: <span>int </span>= <span>16000</span>) -&gt; List[np.ndarray]:<span><br/></span>  <span># Loads the audio for each filenames<br/></span><span>  </span>audios = []<br/>  <span>for </span>wav_filename <span>in </span>wav_filenames:<br/>    audio = utils.<strong>load_audio</strong>(os.path.join(<span>"sounds"</span>, wav_filename),<br/>                             <span>sample_length</span>=sample_length,<br/>                             <span>sr</span>=sample_rate)<br/>    audios.append(audio)<br/><br/>  <span># Encodes the audio for each new wav<br/></span><span>  </span>audios = np.array(audios)<br/>  encodings = fastgen.<strong>encode</strong>(audios, checkpoint, sample_length)<br/><br/>  <span>return </span>encodings</pre>
+<p>In the preceding code, we first load the audio for each file in the <kbd>wav_filenames</kbd> parameter, using the <kbd>load_audio</kbd> method from the <kbd>magenta.models.nsynth.utils</kbd> module. To load the audio, two parameters are important, <kbd>sample_length</kbd> <span>and</span> <kbd>sample_rate</kbd><span>:</span></p>
+<ul>
+<li><span>The sample rate is set at <kbd>16000</kbd>, which is the sample rate used by the underlying model. Remember, the sample rate is the number of discrete samples for 1 second of audio.<br/></span></li>
+<li>The sample length can be calculated by multiplying the desired number of seconds by the sample rate. For our example, we'll be using audio clips of 1 second for a sample length of 16,000.</li>
+</ul>
+<p>We first convert the <kbd>audios</kbd> list into <kbd>ndarray</kbd> for the <kbd>encode</kbd> method, which has a shape of (4, 16000), because we have 4 samples of 16,000 samples each. The <kbd>encode</kbd> <span>method from</span> <kbd>magenta.models.nsynth.wavenet</kbd> <span>returns the encodings for the provided audio clips</span><span>. The returned</span> encodings has a shape of (4, 31,16), with a length of 4 representing the number of elements, 31 representing the time, and 16 representing the size of the latent vector, <em>z</em>.</p>
+<div class="packt_infobox">You might be wondering why we have a length of 31 for the time in <kbd>encodings</kbd>. Remember our model reduces every 512 samples to 16 (see the <em>Looking at NSynth and WaveNet autoencoders</em> section<span>), but our number of samples, 16,000, is not divisible by 512, so we end up with 31.25. </span>This also impacts the decoding, which will result in WAV files of 0.992 seconds long.</div>
+<p>Another important point here is that all the encodings are calculated at once in the same batch (the batch size is defined in the encode method by taking <kbd>audios.shape[0]</kbd><span>), which will be faster than doing them one by one.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Visualizing the encodings</h1>
+                </header>
+            
+            <article>
+                
+<p>The encodings can be visualized by plotting them, with the abscissa being the time and the ordinate being the encoded value. Each curve in the figure represents a z dimension, with 16 different colors. Here is a diagram for each of the encoded sounds of our example:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/9b853181-8f38-41df-accf-f90fe26b0688.png"/></p>
+<p>You can use the <kbd>save_encoding_plot</kbd> plot method in the <kbd>audio_utils.py</kbd> file from this chapter's code to produce the encodings plot.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Saving the encodings for later use</h1>
+                </header>
+            
+            <article>
+                
+<p>Saving and loading the encodings once they have been calculated is a good practice since it will speed up your program, even if the longer part of it is still the synthesizing.</p>
+<div class="packt_tip">You can find this code in the <kbd>audio_utils.py</kbd> file <span>in the source code of this chapter. There are more comments and content in the source code, so you should go check it out.</span></div>
+<p>To save the encodings, we're using NumPy <kbd>.npy</kbd> files as follows:</p>
+<pre><span>import os<br/>import </span>numpy <span>as </span>np<span><br/><br/>def </span>save_encoding(encodings: List[np.ndarray],<br/>                  filenames: List[<span>str</span>],<br/>                  output_dir: <span>str </span>= <span>"encodings"</span>) -&gt; <span>None</span>:<br/><span>  </span>os.makedirs(output_dir, <span>exist_ok</span>=<span>True</span>)<br/>  <span>for </span>encoding, filename <span>in </span><span>zip</span>(encodings, filenames):<br/>    filename = filename <span>if </span>filename.endswith(<span>".npy"</span>) <span>else </span>filename + <span>".npy"<br/></span><span>    </span>np.<strong>save</strong>(os.path.join(output_dir, filename), encoding)</pre>
+<p>You can see here we are using the <kbd>save</kbd> method from the <kbd>numpy</kbd> module. And we're retrieving the encodings from the files using the <kbd>load</kbd> method as follows:</p>
+<pre><span>def </span>load_encodings(filenames: List[<span>str</span>],<br/>                   input_dir: <span>str </span>= <span>"encodings"</span>) -&gt; List[np.ndarray]:<span><br/></span><span>  </span>encodings = []<br/>  <span>for </span>filename <span>in </span>filenames:<br/>    encoding = np.<strong>load</strong>(os.path.join(input_dir, filename))<br/>    encodings.append(encoding)<br/>  <span>return </span>encodings</pre>
+<p>We can then use the returned encodings instead of calling <kbd>fastgen.encode(...)</kbd>. Now that we have our encodings ready, we'll see how to mix them together.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Mixing encodings together by moving in the latent space</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have the encodings of our sound files, we can mix them. The term mixing is common in audio production and usually refers to superposing two sounds and adjusting their volume so that both can be heard properly. This is not what we are doing here; we are effectively <strong>adding</strong> the sounds together, resulting in a new sound that is more than their mere superposition.</p>
+<p>Let's define a <kbd>mix_encoding_pairs</kbd> method for that purpose:</p>
+<pre><span>def mix_encoding_pairs(encodings: List[np.ndarray],<br/>                       encodings_name: List[str]) \<br/>    -&gt; Tuple[np.ndarray, List[str]]:<br/></span><span>  </span>encodings_mix = []<br/>  encodings_mix_name = []<br/>  <span># Takes the pair of encodings two by two<br/></span><span>  </span><span>for </span>encoding1, encoding1_name <span>in </span><span>zip</span>(encodings, encodings_name):<br/>    <span>for </span>encoding2, encoding2_name <span>in </span><span>zip</span>(encodings, encodings_name):<br/>      if encoding1_name == encoding2_name:<br/>        <span>continue<br/></span><span>      </span><span># Adds the encodings together<br/></span><span>      </span>encoding_mix = <strong>encoding1 + encoding2 / </strong><span><strong>2.0</strong><br/></span><span>      </span>encodings_mix.append(encoding_mix)<br/>      # Merges the beginning of the track names<br/>      if "_" in encoding1_name and "_" in encoding2_name:<br/>        encoding_name = (f"{encoding1_name.split('_', 1)[0]}_"<br/>                         f"{encoding2_name.split('_', 1)[0]}")<br/>      else:<br/>        encoding_name = f"{encoding1_name}_{encoding2_name}"<br/>      encodings_mix_name.append(encoding_name)<br/>  <span>return </span>np.array(encodings_mix), encodings_mix_name</pre>
+<p>The important bit is <kbd>encoding1 + encoding2 / 2.0</kbd>, where we add the encodings together, producing a new encoding that we'll later synthesize. In the rest of the method, we iterate on the encodings two by two, producing a new encoded mix for each pair without computing the mix of a sample with itself, resulting in 12 elements in the method's return.</p>
+<p>We also keep the name prefix in the <kbd>&lt;encoding-prefix-1&gt;_&lt;encoding-prefix-2&gt;</kbd> <span>format </span>to better identify them when we save the WAV on disk (we're splitting using the <kbd>_</kbd> character because the samples from Freesound have them to split with the unique ID).</p>
+<p class="mce-root"/>
+<p>Finally, we return <kbd>ndarray</kbd> containing the mixed encodings as well a corresponding list of names for the encodings.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Synthesizing the mixed encodings to WAV</h1>
+                </header>
+            
+            <article>
+                
+<p>Finally, we'll now define the <kbd>synth</kbd> method that takes the encodings and turns them into sound:</p>
+<pre><span>def </span>synthesize(encodings_mix: np.ndarray,<br/>               encodings_mix_name: List[<span>str</span>],<br/>               checkpoint: <span>str </span>= <span>"checkpoints/wavenet-ckpt/model.ckpt-200000"</span>) \<br/>    -&gt; <span>None</span>:<span><br/></span><span>  </span>os.makedirs(os.path.join(<span>"output"</span>, <span>"nsynth"</span>), <span>exist_ok</span>=<span>True</span>)<br/>  encodings_mix_name = [os.path.join(<span>"output"</span>, <span>"nsynth"</span>,<br/>                                     encoding_mix_name + <span>".wav"</span>)<br/>                        <span>for </span>encoding_mix_name <span>in </span>encodings_mix_name]<br/>  fastgen.<strong>synthesize</strong>(encodings_mix,<br/>                     <span>checkpoint_path</span>=checkpoint,<br/>                     <span>save_paths</span>=encodings_mix_name)</pre>
+<p>Basically, all that method is doing is calling the <kbd>synthesize</kbd> method on the <kbd>magenta.models.nsynth.wavenet.fastgen</kbd> module. The <kbd>encodings_mix</kbd> shape is (12, 31, 16), where 12 is our <kbd>batch_size</kbd> (the number of final output audio clips), <kbd>31</kbd> is the time, and <kbd>16</kbd> is the dimensionality of the latent space.</p>
+<p>To understand what the <kbd>synthesize</kbd> method is doing, take a look at this excerpt:</p>
+<pre><span>for </span>sample_i <span>in </span><span>range</span>(<strong>total_length</strong>):<br/>  encoding_i = sample_i // hop_length<br/>  audio = <strong>generate_audio_sample</strong>(sess, net,<br/>                                audio, encodings[:, encoding_i, :])<br/>  audio_batch[:, sample_i] = audio[:, <span>0</span>]<br/>  <span>if </span>sample_i % <span>100 </span>== <span>0</span>:<br/>    tf.logging.info(<span>"Sample: %d" </span>% sample_i)<br/>  <span>if </span>sample_i % samples_per_save == <span>0 </span><span>and </span>save_paths:<br/>    save_batch(audio_batch, save_paths)</pre>
+<p>Here, <kbd>total_length</kbd> is 15,872, just short of our 16,000 sample length for a time of 1 second, because the length is calculated by multiplying the time (31) by the hop length (512). See the information box in the previous section, <em>Encoding the WAV files</em>, for more information. This will result <span>in</span> audio files that won't be exactly 1 second long.</p>
+<p class="mce-root"/>
+<p>The other thing to notice here is that the process <strong>generates one sample at a time</strong>. This might seem inefficient, and that's because it is: the model is really good at reconstructing audio, but also painfully slow. You can see here that the bulk of the operation is executed in a serial loop in Python, not in parallel on the GPU.</p>
+<p>In the following section, <em>Using GANSynth as a generative instrument</em>, we look at a similar, but faster, model.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Putting it all together</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have our three methods, <kbd>encode</kbd>, <kbd>mix</kbd>, and <kbd>synth</kbd>, we can call them to create new sounds and textures.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Preparing the audio clips</h1>
+                </header>
+            
+            <article>
+                
+<p>For this example, we provided some audio clips in the <kbd>sounds</kbd> folder that you can use. While we recommend you experiment with your own sound, you can test your method first with those and experiment with yours later.</p>
+<p>There are many places you can find audio clips from:</p>
+<ul>
+<li>Make your own! It is as easy as opening your mic and hitting a plate with a stick (see the following list for how to record with Audacity).</li>
+<li>The Freesound website, <a href="https://freesound.org/">freesound.org</a>, is an amazing community that's passionate about sharing audio clips. Freesound is a website for sharing copyright-free audio clips (most are under CC0 1.0 Universal (CC0 1.0) Public Domain Dedication).</li>
+<li>There's also the NSynth dataset, <a href="https://magenta.tensorflow.org/datasets/nsynth">magenta.tensorflow.org/datasets/nsynth</a>.</li>
+</ul>
+<p>You can use any sample you want, but we recommend keeping it short (1 or 2 seconds) since this is a time-consuming process.</p>
+<p>Whatever source you choose, having a simple digital audio editor and recording application software will help you a lot with cutting, normalizing, and handling your sounds. As stated in the introduction, Audacity is amazing open source cross-platform (Windows, Linux, and macOS) software for that purpose.</p>
+<p class="mce-root"/>
+<p>For example, if you downloaded your audio clips from Freesound, they might not all be the same length and volume, or they might be badly aligned. Audacity is easy to use for such tasks:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/316c1906-b98a-4f74-9a75-12751fe7931b.png"/></p>
+<p>In this screenshot, we see each line corresponds to an audio clip. All of them are cropped to 1 second, ready for our example. Here are some pointers for using Audacity proficiently:</p>
+<ul>
+<li>To <strong>record</strong> your own sounds, click first on the <strong>Click to Start Monitoring</strong> option. If you see red bars, you're good. Then, click on the red record button on the left.</li>
+<li>To <strong>cut</strong> your recording, use the <strong>Selection Tool</strong> (<em>F1</em>) at the top, select a part, and press the <em>Delete</em> key to remove that part. You can use the audio position at the bottom for a precise selection of 1 second, for example.</li>
+<li>To <strong>shift</strong> the content of the audio (move a sharp noise to the beginning of the clip, for example), use the <strong>Time Shift Tool</strong> (<em>F5</em>) at the top, select a part, and drag and drop the part you want to move.</li>
+<li>You will want your tracks to be in <strong>mono</strong> for this chapter (a single channel instead of two channels). If you see two wave lines for a single file, your audio is in stereo. On the left, click on the filename. In the dropdown menu, use <strong>Split stereo track</strong>, then remove the left or right track. You'll also need to put the track panning in the center between <strong>L</strong> and <strong>R</strong>.</li>
+<li><strong>Normalizing</strong> is the act of making something louder or quieter without modifying the content of the audio, which might be useful if you have a sample that doesn't have the proper volume. To do that, select the whole track and use <strong>Effect</strong> &gt; <strong>Normalize</strong>, then change the maximum amplitude to what you want.</li>
+<li>To <strong>export</strong> in WAV, using the <strong>File &gt; Export &gt; Export as WAV</strong> menu. You can use the <strong>Solo</strong> button on the left if you have multiple tracks because if you don't, they'll be mixed together.</li>
+</ul>
+<p>Now that we know how to produce our audio clips, let's write the code to use them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating new instruments</h1>
+                </header>
+            
+            <article>
+                
+<p>We are now ready to render audio clips by mixing the pairs of audio clips. This part is an expensive process, depending on the speed of your PC and whether you have a GPU or not; this might vary greatly. At the time of writing, a moderately powerful i7 laptop will take 20 minutes to compute all of the 12 samples, and a PC with an entry-level GPU such as an NVIDIA RTX 2060 will do it in 4 minutes.</p>
+<p>You can start by taking only two samples from <kbd>WAV_FILENAMES</kbd> if you find the generation takes too long. We'll see in a later section, <em>Using GANSynth as a generative instrument</em>, that there are faster alternatives.</p>
+<p>Finally, let's call our <kbd>encode</kbd>, <kbd>mix</kbd>, and <kbd>synth</kbd> methods:</p>
+<pre><span>WAV_FILENAMES = ["83249__zgump__bass-0205__crop.wav",<br/>                 "160045__jorickhoofd__metal-hit-with-metal-bar-resonance"<br/>                 "__crop.wav",<br/>                 "412017__skymary__cat-meow-short__crop.wav",<br/>                 "427567__maria-mannone__flute__crop.wav"]<br/><br/></span><span># Downloads and extracts the checkpoint to "checkpoints/wavenet-ckpt"<br/></span>download_checkpoint(<span>"wavenet-ckpt"</span>)<br/><br/><span># Encodes the wav files into 4 encodings (and saves them for later use)<br/></span>encodings = <strong>encode</strong>(WAV_FILENAMES)<br/><br/><span># Mix the 4 encodings pairs into 12 encodings<br/></span>encodings_mix, encodings_mix_name = <strong>mix_encoding_pairs</strong>(encodings,<br/>                                                       WAV_FILENAMES)<br/><br/><span># Synthesize the 12 encodings into wavs<br/></span><strong>synthesize</strong>(encodings_mix, encodings_mix_name)</pre>
+<p>If you decide to use your own sound, make sure they are in the <kbd>sounds</kbd> folder. Also, you can prefix the sound filenames with an identifier before an underscore character; the resulting clips will keep those identifier pairs.</p>
+<p>The resulting output will sit in the <kbd>output/nsynth</kbd> folder as WAV files; you should have one per unique input pair, so 12 WAV clips if you used 4 input clips. Go ahead and listen to them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Visualizing and listening to our results</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have our clips generated, we can also look at the rainbowgrams.</p>
+<div class="packt_tip">You can find the code for the spectrograms and rainbowgrams in the <kbd>audio_utils.py</kbd> file <span>in the source code of this chapter. There are more comments and content in the source code, so you should go check it out.</span></div>
+<p>To generate the rainbowgrams for all of the generated audio files for our example, let's call the <kbd>save_rainbowgram_plot</kbd> method:</p>
+<pre><span>import os<br/>import librosa<br/>import glob<br/>from audio_utils import save_rainbowgram_plot<br/><br/>for </span>path <span>in </span>glob.glob(<span>"output/nsynth/*.wav"</span>):<br/>  audio, _ = librosa.load(path, <span>16000</span>)<br/>  filename = os.path.basename(path)<br/>  output_dir = os.path.join(<span>"output"</span>, <span>"nsynth"</span>, <span>"plots"</span>)<br/>  <span>print</span>(<span>f"Writing rainbowgram for </span><span>{</span>path<span>}</span><span> in </span><span>{</span>output_dir<span>}</span><span>"</span>)<br/>  save_rainbowgram_plot(audio,<br/>                        <span>filename</span>=filename.replace(<span>".wav"</span>, <span>"_rainbowgram.png"</span>),<br/>                        <span>output_dir</span>=output_dir)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root">The preceding code outputs the following plots in <kbd>output/nsynth/plots</kbd>:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a94ef627-1121-47b8-98d8-6ccd8724a1e9.png"/></p>
+<p> </p>
+<p>There are some things to note about the generated audio files and their corresponding spectrograms:</p>
+<ul>
+<li>First, the three metal-generated sounds on the left are interesting because they show that the generated sound kept the note's envelope since the original metal sound had a strong attack. The generated audio sounds like something is struck, like the original, but now with better harmonics.</li>
+<li>Then, the three cat generated sounds are also interesting. In them, the cute cat meow becomes an otherworldly growl. Since the NSynth model was trained on instrument notes and the cat sound is so different, the model has to guess, which results in an interesting sound. Experiment with sounds outside the training dataset, such as percussion; it's interesting to see what the model comes up with.</li>
+<li>In some of the clips, such as the flute + bass clip, we can hear some clicks in the generated audio. This happens when the model samples an extreme value and then corrects itself.</li>
+</ul>
+<p>You should try and experiment with different sound combinations and durations. We've been using rather short samples to speed up the process, but you can use samples as long as you want. Just remember that the NSynth dataset contains only single notes that are 4 seconds long, meaning the generation of multiple consequent notes for longer samples will result in the model guessing the transition between them.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using NSynth generated samples as instrument notes</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have a bunch of generated samples from NSynth, we can sequence them using MIDI. The easiest way to do this is to use a <strong>Digital Audio Workstation</strong> (<strong>DAW</strong>). Since this requires writing specific code to make Magenta send MIDI to the DAW, we'll be dedicating a section on this topic in <a href="8018122a-b28e-44ff-8533-5061a0ad356b.xhtml">Chapter 9</a>, <em>Making Magenta Interact with Music Applications</em>. If you want to try that now, you can skip ahead and return here later.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using the command line</h1>
+                </header>
+            
+            <article>
+                
+<p>The command line is limited for NSynth, but you can still generate audio clips. If you haven't done already, you'll need to download and extract the checkpoint in the <kbd>checkpoints/wavenet-ckpt</kbd> <span>folder.</span> While in this chapter's code, use the following command to generate audio from the audio clips in the <kbd>sounds</kbd> folder (warning: this process takes a long time):</p>
+<pre>nsynth_generate --checkpoint_path="checkpoints/wavenet-ckpt/model.ckpt-200000" --source_path="sounds" --save_path="output/nsynth" --batch_size=4 --sample_length=16000</pre>
+<p>By using <kbd>batch_size=4</kbd> and <kbd>sample_length=16000</kbd>, you make sure that code runs as fast as possible. The resulting files will be in the <kbd>output/nsynth</kbd> folder, with names in the <kbd>gen_FILENAME.wav</kbd> <span>format, </span>where <kbd>FILENAME</kbd> is the source filename. You'll see a generated audio clip for each source sound, resulting in four audio clips.</p>
+<p>The generated clips were produced by encoding the audio and then synthesizing it. Compare them with the original audio: it will give you a feel of the NSynth sound.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">More of NSynth</h1>
+                </header>
+            
+            <article>
+                
+<p>There is more to NSynth than we've shown here, such as more advanced use of interpolation and mixing, time stretching, and more. NSynth has produced interesting projects, such as a mobile application (mSynth) and physical hardware (NSynth Super). Refer to the <em>Further reading</em> <span>section </span>for more information on NSynth.</p>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using GANSynth as a generative instrument</h1>
+                </header>
+            
+            <article>
+                
+<p>In the previous section, we used NSynth to generate new sound samples by combining existing sounds. You may have noticed that the audio synthesis process is very time-consuming. This is because autoregressive models, such as WaveNet, focus on a single audio sample, which makes the resulting reconstruction of the waveform really slow because it has to process them iteratively.</p>
+<p>GANSynth, on the other hand, uses upsampling convolutions, making the training and generation processing in parallel possible for the entire audio sample. This is a major advantage over autoregressive models such as NSynth since those algorithms tend to be I/O bound on GPU hardware.</p>
+<p>The results of GANSynth are impressive:</p>
+<ul>
+<li><strong>Training</strong> on the NSynth dataset converges in ~3-4 days on a single V100 GPU. For comparison, the NSynth WaveNet model converges in 10 days on 32 K40 GPUs.</li>
+<li><strong>Synthesizing</strong> a 4-second audio sample takes 20 milliseconds in GANSynth on a TitanX GPU. For comparison, the WaveNet baseline takes 1,077 seconds, which is 50,000 times slower.</li>
+</ul>
+<p>Another important implication of GANs is that the model has a spherical Gaussian prior, which is decoded to produce the entire sound, making the interpolations between two samples smoother and without additional artifacts, unlike WaveNet interpolation. This is because WaveNet autoencoders such as NSynth have limited scope when learning local latent codes that control generation on the scale of milliseconds.</p>
+<p>In this section, we'll be making use of GANSynth to generate a <span>30-second </span>audio clip by taking a MIDI file and playing it using random instruments sampled from the model's latent space. Each instrument will be played for a limited amount of time over the course of the audio track, for example, for 5 seconds each, blending between one another when the instrument changes happen.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Choosing the acoustic model</h1>
+                </header>
+            
+            <article>
+                
+<p>Magenta provides two pre-trained GANSynth models: <kbd>acoustic_only</kbd>, where the model was trained only on acoustic instruments, and  <kbd>all_instruments</kbd>, where the model was trained on the whole NSynth dataset (see the previous section, <em>The NSynth dataset</em>, for more information on the dataset).</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>We're going to use the <kbd>acoustic_only</kbd> dataset for our example since the resulting audio track of a Bach score will sound more natural in terms of instrument choices. If you want to produce a wider generation, use the <kbd>all_instruments</kbd> model.</p>
+<div class="packt_tip">You can follow this example in the <kbd>chapter_05_example_02.py</kbd> <span>file </span>in the source code of this chapter. There are more comments and content in the source code, so you should go check it out.<br/>
+<br/>
+This chapter also contains a MIDI clip in the <kbd>midi</kbd> folder that we'll use for this section.</div>
+<p>To download the model, use the following method, which will download the model and extract it:</p>
+<pre><span>def </span>download_checkpoint(checkpoint_name: <span>str</span>,<br/>                        target_dir: <span>str </span>= <span>"checkpoints"</span>):<span><br/></span><span>  </span>tf.gfile.MakeDirs(target_dir)<br/>  checkpoint_target = os.path.join(target_dir, <span>f"</span><span>{</span>checkpoint_name<span>}</span><span>.zip"</span>)<br/>  <span>if not </span>os.path.exists(checkpoint_target):<br/>    response = urllib.request.urlopen(<br/>      <span>f"https://storage.googleapis.com/magentadata/"<br/></span><span>      f"models/gansynth/</span><span>{</span>checkpoint_name<span>}</span><span>.zip"</span>)<br/>    data = response.read()<br/>    local_file = <span>open</span>(checkpoint_target, <span>'wb'</span>)<br/>    local_file.write(data)<br/>    local_file.close()<br/>    <span>with </span>zipfile.ZipFile(checkpoint_target, <span>'r'</span>) <span>as </span>zip:<br/>      zip.extractall(target_dir)</pre>
+<p>Using the <kbd>acoustic_only</kbd> checkpoint name, the resulting checkpoint will be usable using the <kbd>checkpoints/acoustic_only</kbd> path.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Getting the notes information</h1>
+                </header>
+            
+            <article>
+                
+<p>To start this example, we'll be loading a MIDI file that will serve as the backing score for the audio generation.</p>
+<p>First, we load the MIDI file using the <kbd>load_midi</kbd> method in the <kbd>magenta.models.gansynth.lib.generate_util</kbd> module:</p>
+<pre><span>import os<br/>from magenta.models.gansynth.lib.generate_util import load_midi<br/>from note_sequence_utils import save_plot<br/><br/>def </span>get_midi(midi_filename: <span>str </span>= <span>"cs1-1pre-short.mid"</span>) -&gt; <span>dict</span>:<span><br/></span><span>  </span>midi_path = os.path.join(<span>"midi"</span>, midi_filename)<br/>  _, notes = <strong>load_midi</strong>(midi_path)<br/>  <span>return </span>notes</pre>
+<p>We've provided a MIDI file in the <kbd>midi</kbd> folder, but you can also provide a MIDI file you like, for example, a generation from a previous chapter. The <kbd>load_midi</kbd> method then returns a dictionary of information about the notes in the MIDI file, such as a list of pitches, velocities, and start and end times.</p>
+<p>The provided <kbd>cs1-1pre-short.mid</kbd> file looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/a83f379a-bade-42e6-968f-ecc1ede516b4.png"/></p>
+<p>You can see the MIDI file is 28 seconds long (14 bars at 120 QPM) and contains two instruments.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Gradually sampling from the latent space</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we have the information about the MIDI file (in the <kbd>notes</kbd> variable), we can generate the audio from it.</p>
+<p>Let's define the <kbd>generate_audio</kbd> method:</p>
+<pre><span>from magenta.models.gansynth.lib import flags as lib_flags<br/>from magenta.models.gansynth.lib import model as lib_model<br/>from magenta.models.gansynth.lib.generate_util import combine_notes<br/>from magenta.models.gansynth.lib.generate_util import get_random_instruments<br/>from magenta.models.gansynth.lib.generate_util import get_z_notes<br/><br/>def </span>generate_audio(notes: <span>dict</span>,<br/>                   seconds_per_instrument: <span>int </span>= <span>5</span>,<br/>                   batch_size: <span>int </span>= <span>16</span>,<br/>                   checkpoint_dir: <span>str </span>= <span>"checkpoints/acoustic_only"</span>) \<br/>    -&gt; np.ndarray:<span><br/></span><span>  </span>flags = lib_flags.Flags({<span>"batch_size_schedule"</span>: [batch_size]})<br/>  model = lib_model.Model.load_from_path(checkpoint_dir, flags)<br/><br/>  <span># Distribute latent vectors linearly in time<br/></span><span>  </span>z_instruments, t_instruments = <strong>get_random_instruments</strong>(<br/>    model,<br/>    notes[<span>"end_times"</span>][-<span>1</span>],<br/>    <span>secs_per_instrument</span>=seconds_per_instrument)<br/><br/>  <span># Get latent vectors for each note<br/></span><span>  </span>z_notes = <strong>get_z_notes</strong>(notes[<span>"start_times"</span>], z_instruments, t_instruments)<br/><br/>  <span># Generate audio for each note</span><br/>  audio_notes = model.<strong>generate_samples_from_z</strong>(z_notes, notes[<span>"pitches"</span>])<br/><br/>  <span># Make a single audio clip<br/></span><span>  </span>audio_clip = <strong>combine_notes</strong>(audio_notes,<br/>                             notes[<span>"start_times"</span>],<br/>                             notes[<span>"end_times"</span>],<br/>                             notes[<span>"velocities"</span>])<br/><br/>  <span>return </span>audio_clip</pre>
+<p>This method has four important parts, which we'll explain in the following three subsections—getting the random instrument, getting the latent vectors, generating the samples from the latent vectors, then combining the notes into a full audio clip.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating random instruments</h1>
+                </header>
+            
+            <article>
+                
+<p>The <kbd>get_random_instruments</kbd> method from <kbd>magenta.models.gansynth.lib.generate_util</kbd> looks like this:</p>
+<pre><span>def </span>get_random_instruments(model, total_time, secs_per_instrument=<span>2.0</span>):<br/>  <span>"""Get random latent vectors evenly spaced in time."""<br/></span><span>  </span>n_instruments = <span>int</span>(total_time / secs_per_instrument)<br/>  z_instruments = model.<strong>generate_z</strong>(n_instruments)<br/>  t_instruments = np.linspace(-<span>.0001</span>, total_time, n_instruments)<br/>  <span>return </span>z_instruments, t_instruments</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p class="mceNonEditable"/>
+<p>Using a sample of 28 seconds with 5 seconds per instrument gives us <kbd>n_instruments</kbd> of <kbd>5</kbd>, then the latent vectors get initialized by the model's <kbd>generate_z</kbd> <span>method, </span>which is a sampling of the normal distribution:</p>
+<pre>np.random.normal(size=[n, self.config['latent_vector_size']])</pre>
+<p>This results in a <kbd>z_instruments</kbd> shape of (5, 256), 5 being the number of instruments and 256 the size of the latent vector. Finally, we take five steps of equal distance between the start and end time of the sequence in <kbd>t_instruments</kbd>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Getting the latent vectors</h1>
+                </header>
+            
+            <article>
+                
+<p>The <kbd>get_z_notes</kbd> method from <kbd>magenta.models.gansynth.lib.generate_util</kbd> looks like this:</p>
+<pre><span>def </span>get_z_notes(start_times, z_instruments, t_instruments):<br/>  <span>"""Get interpolated latent vectors for each note."""<br/></span><span>  </span>z_notes = []<br/>  <span>for </span>t <span>in </span>start_times:<br/>    idx = np.searchsorted(t_instruments, t, <span>side</span>=<span>'left'</span>) - <span>1<br/></span><span>    </span><strong>t_left</strong> = t_instruments[idx]<br/>    <strong>t_right</strong> = t_instruments[idx + <span>1</span>]<br/>    <strong>interp</strong> = (t - t_left) / (t_right - t_left)<br/>    z_notes.append(<strong>slerp</strong>(z_instruments[idx], z_instruments[idx + <span>1</span>], interp))<br/>  z_notes = np.vstack(z_notes)<br/>  <span>return </span>z_notes</pre>
+<p>This method takes each start note times and finds which instrument (previous instrument, <kbd>t_left</kbd>, and the next instrument, <kbd>t_right</kbd>) should be used for it. It then finds at what position the note is between the two instruments, in <kbd>interp</kbd>, to call the <kbd>slerp</kbd> method, which will find the proper latent vector that corresponds to the instrument between the two nearest vectors. This enables smooth transition from one instrument to the other.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Generating the samples from the encoding</h1>
+                </header>
+            
+            <article>
+                
+<p>We won't be looking into the details of the <kbd>generate_samples_from_z</kbd> method from <kbd>magenta.models.gansynth.lib.model</kbd>. We'll just use this code snippet to illustrate what we introduced in the <em>Using GANSynth as a generative instrument </em><span>section</span><span> about the model generating the audio clip as a whole:</span></p>
+<pre><span># Generate waves<br/></span>start_time = time.time()<br/>waves_list = []<br/><span>for </span>i <span>in </span><span>range</span>(num_batches):<br/>  start = i * <span>self</span>.batch_size<br/>  end = (i + <span>1</span>) * <span>self</span>.batch_size<br/><br/>  waves = <span>self</span>.<strong>sess.run</strong>(<span>self</span>.fake_waves_ph,<br/>                        <span>feed_dict</span>={<span>self</span>.labels_ph: <strong>labels[start:end]</strong>,<br/>                                   <span>self</span>.noises_ph: <strong>z[start:end]</strong>})<br/>  <span># Trim waves</span><span><br/></span><span> </span><span>for </span>wave <span>in </span>waves:<br/>    waves_list.append(wave[:max_audio_length, <span>0</span>])</pre>
+<p>For our example, this method will iterate 27 times to process all of the labels by chunks of 8 <kbd>labels</kbd> and <kbd>z</kbd> at the same time (our <kbd>batch_size</kbd> is 8). The bigger the batch size, the more waves it can generate in parallel. You can see that, contrary to NSynth, the audio samples are not generated one by one.</p>
+<p>Finally, once all of the audio chunks are generated, <kbd>combine_notes</kbd> from the <kbd>magenta.models.gansynth.lib.generate_util</kbd> module will generate the audio using the audio clip and the MIDI notes. Basically, what the method does is calculate an envelope for each MIDI note that will let the proper portion of the audio clip be heard when a note is triggered.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Putting it all together</h1>
+                </header>
+            
+            <article>
+                
+<p>Now that we've defined and explained the different parts of the code, let's call the corresponding method to generate the audio clip from the MIDI file using gradually interpolated instruments:</p>
+<pre><span># Downloads and extracts the checkpoint to "checkpoint/acoustic_only"<br/></span>download_checkpoint(<span>"acoustic_only"</span>)<br/><br/><span># Loads the midi file and get the notes dictionary<br/></span>notes = get_midi_notes()<br/><br/><span># Generates the audio clip from the notes dictionary<br/></span>audio_clip = generate_audio(notes)<br/><br/><span># Saves the audio plot and the audio file<br/></span>save_audio(audio_clip)</pre>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p class="mceNonEditable"/>
+<p>The generated rainbowgram looks like this:</p>
+<p class="CDPAlignCenter CDPAlign"><img src="assets/43de3426-6e39-4415-a519-21020de7f544.png"/></p>
+<p>The diagram doesn't tell us much about the sound, apart from seeing the progression of the notes in the whole audio clip. Go and listen to the generated clip. Multiple generations will introduce different instruments; make sure you test it multiple times and with multiple MIDI files to get a feel of the possibilities in terms of instrument generation.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Using the command line</h1>
+                </header>
+            
+            <article>
+                
+<p>The GANSynth command-line utility makes it possible to generate an audio clip from a MIDI file, like we've done with the Python code. If you haven't done already, you'll need to download and extract the checkpoint into the <kbd>checkpoints/wavenet-ckpt</kbd> <span>folder. </span>While in this chapter's code, use the following command and an audio clip from the MIDI file from the <kbd>midi</kbd> folder (warning: this process takes a long time):</p>
+<pre>gansynth_generate --ckpt_dir="checkpoints/acoustic_only" --output_dir="output/gansynth" --midi_file="midi/cs1-1pre-short.mid"</pre>
+<p>The resulting file will be in the <kbd>output/gansynth</kbd> folder and will be called <kbd>generated_clip.wav</kbd>. As in our example, the generated clip contains multiple instruments that are gradually blending together. You can use the <kbd>secs_per_instrument</kbd> parameter to change the time each instrument will play.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we looked at audio generation using two models, NSynth and GANSynth, and produced many audio clips by interpolating samples and generating new instruments. We started by explaining what WaveNet models <span>are </span>and why they are used in audio generation, particularly in text-to-speech applications. We also introduced WaveNet autoencoders, an encoder and decoder network capable of learning its own temporal embedding. We talked about audio visualization using the reduced dimension of the latent space in rainbowgrams.</p>
+<p>Then, we showed the NSynth dataset and the NSynth neural instrument. By showing an example of combining pairs of sounds, we learned how to mix two different encodings together in order to then synthesize the result into new sounds. Finally, we looked at the GANSynth model, a more performant model for audio generation. We showed the example of generating random instruments and smoothly interpolating between them.</p>
+<p>This chapter marks the end of the music generation content of this book—you can now generate a full song using MIDI as the backing score and neural instruments as the audio. During the course of the previous chapters, we've been using pre-trained models to show that the models in Magenta are ready to use and quite powerful.</p>
+<p>Nonetheless, there are many reasons to train your own models, as we'll see in the following chapters. In <a href="1ca56e24-b4d2-40de-b4cf-ae6bbb3c0eef.xhtml">Chapter 6</a>, <em>Data Preparation for Training</em>, we'll be looking into preparing datasets for specific genres of music and for specific instruments. In <a href="6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml">Chapter 7</a>, <em>Training Magenta Models</em>, we'll be using those datasets to train our own models that we can then use to generate new genres and instruments.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Questions</h1>
+                </header>
+            
+            <article>
+                
+<ol>
+<li>Why is generating audio hard?</li>
+<li>What makes the WaveNet autoencoder interesting?</li>
+<li>What are the different colors in a rainbowgram? How many are there?</li>
+<li>How would you timestretch an audio clip, slowing it down by 2 seconds, using NSynth?</li>
+<li>Why is GANSynth faster that NSynth?</li>
+<li>What code is required to sample 10 instruments from GANSynth latent space?</li>
+</ol>
+<p class="mce-root"/>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Further reading</h1>
+                </header>
+            
+            <article>
+                
+<ul>
+<li><strong>Audio Signals in Python:</strong> An article on plotting audio signals in Python, explaining how to create a CQT plot (<a href="http://myinspirationinformation.com/uncategorized/audio-signals-in-python/">myinspirationinformation.com/uncategorized/audio-signals-in-python/</a>)</li>
+<li><strong>Constant-Q transform toolbox for music processing:</strong> A paper (2010) on implementing CQTs for music (<a href="https://www.researchgate.net/publication/228523955_Constant-Q_transform_toolbox_for_music_processing">www.researchgate.net/publication/228523955_Constant-Q_transform_toolbox_for_music_processing</a>)</li>
+<li> <strong>WaveNet: A generative model for raw audio:</strong> A DeepMind article on WaveNet models for raw audio (<a href="https://deepmind.com/blog/article/wavenet-generative-model-raw-audio">deepmind.com/blog/article/wavenet-generative-model-raw-audio</a>)</li>
+<li><strong>WaveNet: A Generative Model for Raw Audio:</strong> A WaveNet paper (2016) (<a href="https://arxiv.org/abs/1609.03499">arxiv.org/abs/1609.03499</a>)</li>
+<li><strong>SampleRNN</strong>: An article explaining the differences between WaveNet and SampleRNN (<a href="http://deepsound.io/samplernn_first.html">deepsound.io/samplernn_first.html</a>)</li>
+<li><strong>NSynth: Neural Audio Synthesis:</strong> A Magenta article on the NSynth model (<a href="https://magenta.tensorflow.org/nsynth">magenta.tensorflow.org/nsynth</a>)</li>
+<li><strong>Making a Neural Synthesizer Instrument:</strong> More ideas on sound combinations and modifications (<a href="https://magenta.tensorflow.org/nsynth-instrument">magenta.tensorflow.org/nsynth-instrument</a>)</li>
+<li><strong>Generate your own sounds with NSynth:</strong> An article on fastgen and examples of timestretching and mixing (<a href="https://magenta.tensorflow.org/nsynth-fastgen">magenta.tensorflow.org/nsynth-fastgen</a>)</li>
+<li><strong>Neural Audio Synthesis of Musical Notes with WaveNet Autoencoders:</strong> An NSynth paper (2017) (<a href="https://arxiv.org/abs/1704.01279">arxiv.org/abs/1704.01279</a>)</li>
+<li><strong>GANSynth: Making music with GANs:</strong> Magenta article on GANSynth (<a href="https://magenta.tensorflow.org/gansynth">magenta.tensorflow.org/gansynth</a>)</li>
+<li><strong>GANSynth: Adversarial Neural Audio Synthesis:</strong> A GANSynth paper (2019) (<a href="https://openreview.net/forum?id=H1xQVn09FX">openreview.net/forum?id=H1xQVn09FX</a>)</li>
+<li><strong>Using NSynth to win the Outside Hacks Music Hackathon 2017:</strong> A Magenta article on mSynth (<a href="https://magenta.tensorflow.org/blog/2017/09/12/outside-hacks/">magenta.tensorflow.org/blog/2017/09/12/outside-hacks/</a>)</li>
+<li><strong>What is NSynth Super?:</strong> An article on NSynth Super, the NSynth hardware synthesizer (<a href="https://nsynthsuper.withgoogle.com/">nsynthsuper.withgoogle.com/</a>)</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

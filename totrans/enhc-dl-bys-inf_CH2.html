@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head>
+  <title>ch007.xhtml</title>
+  <link rel="stylesheet" type="text/css" href="../styles/stylesheet1.css"/>
+</head>
+<body epub:type="bodymatter">
+<section id="chapter-2-fundamentals-of-bayesian-inference" class="level1 chapterHead" data-number="7">
+<h1 class="chapterHead" data-number="7"><span class="titlemark">Chapter 2</span><br/>
+<span id="x1-250002"></span>Fundamentals of Bayesian Inference</h1>
+<p>Before we get into Bayesian inference with <strong>Deep Neural Networks</strong> (<strong>DNNs</strong>), we <span id="dx1-25001"></span>should take some time to understand the fundamentals. In this chapter, we’ll do just that: exploring the core concepts of Bayesian modeling, and taking a look at some of the popular methods used for Bayesian inference. By the end of this chapter, you should have a good understanding of why we use probabilistic modeling, and what kinds of properties we look for in well principled – or well conditioned – methods.</p>
+<p>This content will be covered in the following sections:</p>
+<ul>
+<li><p>Refreshing our knowledge of Bayesian modeling</p></li>
+<li><p>Bayesian inference via sampling</p></li>
+<li><p>Exploring the Gaussian processes</p></li>
+</ul>
+<p><span id="x1-25002r28"></span></p>
+<section id="refreshing-our-knowledge-of-bayesian-modeling" class="level2 sectionHead" data-number="7.1">
+<h2 class="sectionHead" data-number="7.1" id="sigil_toc_id_23"><span class="titlemark">2.1 </span> <span id="x1-260001"></span>Refreshing our knowledge of Bayesian modeling</h2>
+<p>Bayesian modeling is concerned with understanding the <span id="dx1-26001"></span>probability of an event occurring given some prior assumptions and some observations. The prior assumptions describe our initial beliefs, or hypothesis, about the event. For example, let’s say we have two six-sided dice, and we want to predict the probability that the sum of the two dice is 5. First, we need to understand how many possible outcomes there are. Because each die has 6 sides, the number of possible outcomes is 6 <span class="cmsy-10x-x-109">× </span>6 = 36. To work out the possibility of rolling a 5, we need to work out how many combinations of values will sum to 5:</p>
+<div class="IMG---Figure">
+<img src="../media/file7.png" alt="PIC"/> <span id="x1-26002r1"></span> <span id="x1-26003"></span></div>
+<p class="IMG---Caption">Figure 2.1: Illustration of all values summing to five when rolling two six-sided dice 
+</p>
+<p>As we can see here, there are 4 combinations that add up to 5, thus the <span id="dx1-26004"></span>probability of having two dice produce a sum of 5 is <img src="../media/file8.jpg" class="frac" data-align="middle" alt="-4 36"/>, or <img src="../media/file9.jpg" class="frac" data-align="middle" alt="1 9"/>. We call this <span id="dx1-26005"></span>initial belief the <strong>prior</strong>. Now, what happens if we incorporate information from an observation? Let’s say we know what the value for one of the dice will be – let’s say 3. This shrinks our number of possible values down to 6, as we only have the remaining die to roll, and for the result to be 5, we’d need this value to be 2.</p>
+<div class="IMG---Figure">
+<img src="../media/file10.png" alt="PIC"/> <span id="x1-26006r2"></span> <span id="x1-26007"></span></div>
+<p class="IMG---Caption">Figure 2.2: Illustration of remaining value, which sums to five after rolling the first die 
+</p>
+<p>Because we assume our die is fair, the probability of the sum of the dice being 5 is now <img src="../media/file11.jpg" class="frac" data-align="middle" alt="1 6"/>. This probability, called the <strong>posterior</strong>, is obtained using information <span id="dx1-26008"></span>from our observation. At the core of Bayesian statistics is Bayes’ rule (hence ”Bayesian”), which we use to <span id="dx1-26009"></span>determine the posterior probability given some prior knowledge. Bayes’ rule is defined as:</p>
+<div class="math-display">
+<img src="../media/file12.jpg" class="math-display" alt="P(A |B ) = P(B-|A)×-P-(A)- P(B ) "/>
+</div>
+<p>Where we can define <em>P</em>(<em>A</em><span class="cmsy-10x-x-109">|</span><em>B</em>) as <em>P</em>(<em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub> = 5<span class="cmsy-10x-x-109">|</span><strong>d</strong><sub><span class="cmbx-8">1</span></sub> = <strong>3</strong>), where <em>d</em><sub><span class="cmr-8">1</span></sub> and <em>d</em><sub><span class="cmr-8">2</span></sub> represent dice 1 and 2 respectively. We can see this in action using our previous example. Starting with the <strong>likelihood</strong>, that is, the term on the left of our numerator, we see that:</p>
+<div class="math-display">
+<img src="../media/file13.jpg" class="math-display" alt="1- P (B |A) = P (d1 = 3|d1 + d2 = 5) = 4 "/>
+</div>
+<p>We can verify this by looking at our grid. Moving to the second part of the numerator – the prior – we see that:</p>
+<div class="math-display">
+<img src="../media/file14.jpg" class="math-display" alt=" 4 1 P(A ) = P (d1 + d2 = 5) =--= -- 36 9 "/>
+</div>
+<p>On the denominator, we <span id="dx1-26010"></span>have our <strong>normalization constant</strong> (also <span id="dx1-26011"></span>referred to as the <strong>marginal likelihood</strong>), which is simply:</p>
+<div class="math-display">
+<img src="../media/file15.jpg" class="math-display" alt="P(B ) = P (d1 = 3) = 1 6 "/>
+</div>
+<p>Putting this all together using Bayes’ theorem, we have:</p>
+<div class="math-display">
+<img src="../media/file16.jpg" class="math-display" alt=" 14 × 19 1 P(d1 + d2 = 5|d1 = 3) = --1---= 6- 6 "/>
+</div>
+<p>What we have here is the <em>probability</em> of the outcome being 5 if we know one die’s value. However, in this book, we’ll often be referring to <strong>uncertainties</strong> rather <span id="dx1-26012"></span>than probabilities – and learning methods to obtain uncertainty estimates with DNNs. These methods belong to a <span id="dx1-26013"></span>broader class of <strong>uncertainty</strong> <strong>quantification</strong>, and aim to quantify the uncertainty in the predictions from an ML model. That is, we want to predict <em>P</em>(<em>ŷ</em><span class="cmsy-10x-x-109">|</span><em>𝜃</em>), where <em>ŷ</em> is a prediction from a model, and <em>𝜃</em> represents the parameters of the model.</p>
+<p>As we know from fundamental probability theory, probabilities are bound between 0 and 1. The closer we are to 1, the more likely – or probable – the event is. We can view our uncertainty as subtracting our probability from 1. In the context of the example here, the probability of the sum being 5 is <em>P</em>(<em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub> = 5<span class="cmsy-10x-x-109">|</span><em>d</em><sub><span class="cmr-8">1</span></sub> = 3) = <img src="../media/file17.jpg" class="frac" data-align="middle" alt="1 6"/> = 0<em>.</em>166. So, our uncertainty is simply 1 <span class="cmsy-10x-x-109">−</span><img src="../media/file18.jpg" class="frac" data-align="middle" alt="16"/> = <img src="../media/file19.jpg" class="frac" data-align="middle" alt="56"/> = 0<em>.</em>833, meaning that there’s a <em>&gt;</em> 80% chance that the outcome <em>will</em> <em>not</em> be 5. As we proceed through the book, we’ll learn about different sources of uncertainty, and how uncertainties can help us to develop more robust deep learning systems.</p>
+<p>Let’s continue using our dice example to build a better <span id="dx1-26014"></span>understanding of for model uncertainty estimates. Many common machine learning models work on the basis of <strong>maximum likelihood estimation</strong> or <strong>MLE</strong>. That is, they look to predict the value that is <em>most likely</em>: tuning their <span id="dx1-26015"></span>parameters during training to produce the most likely outcome <em>ŷ</em> given some input <em>x</em>. As a simple illustration, let’s say we want to predict the value of <em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub> given a value of <em>d</em><sub><span class="cmr-8">1</span></sub>. We can simply define this as the <strong>expectation</strong> of <em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub> conditioned on <em>d</em><sub><span class="cmr-8">1</span></sub>:</p>
+<div class="math-display">
+<img src="../media/file20.jpg" class="math-display" alt="ˆy = 𝔼 [d + d |d ] 1 2 1 "/>
+</div>
+<p>That is, the <em>mean</em> of the possible values of <em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub>.</p>
+<p>Setting <em>d</em><sub><span class="cmr-8">1</span></sub> = 3, our possible values for <em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub> are <span class="cmsy-10x-x-109">{</span>4<em>,</em>5<em>,</em>6<em>,</em>7<em>,</em>8<em>,</em>9<span class="cmsy-10x-x-109">} </span>(as illustrated in <em>Figure 2.2</em>), making our mean:</p>
+<div class="math-display">
+<img src="../media/file21.jpg" class="math-display" alt=" 1 ∑6 4+ 5 + 6+ 7+ 8 + 9 μ = -- ai = --------------------= 6.5 6 i=1 6 "/>
+</div>
+<p>This is the value we’d get from a simple linear model, such as a linear regression defined by:</p>
+<div class="math-display">
+<img src="../media/file22.jpg" class="math-display" alt="ˆy = βx + ξ "/>
+</div>
+<p>In this case, the values of our intersection and bias are <em>β</em> = 1, <em>ξ</em> = 3<em>.</em>5. If we change our value of <em>d</em><sub><span class="cmr-8">1</span></sub> to 1, we see that this mean changes to 4<em>.</em>5 – the mean of the set of possible values of <em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub><span class="cmsy-10x-x-109">|</span><em>d</em><sub><span class="cmr-8">1</span></sub> = 1, in other words <span class="cmsy-10x-x-109">{</span>2<em>,</em>3<em>,</em>4<em>,</em>5<em>,</em>6<em>,</em>7<span class="cmsy-10x-x-109">}</span>. This perspective on our model predictions is important: while this example is very straightforward, the same principle applies to far more <span id="dx1-26016"></span>sophisticated models and data. The value we typically see with ML models is the <em>expectation</em>, otherwise known as the mean. As <span id="dx1-26017"></span>you are likely aware, the mean is often referred to as the <strong>first statistical moment</strong> – with the <strong>second statistical</strong> <strong>moment</strong> being the <strong>variance</strong>, and the variance allows us to quantify uncertainty.</p>
+<p>The variance for our simple example is defined as follows:</p>
+<div class="math-display">
+<img src="../media/file23.jpg" class="math-display" alt=" ∑6 2 σ2 = --i=1(ai −-μ) n − 1 "/>
+</div>
+<p>These statistical moments should be familiar to you, as should the fact that the variance here is represented as the square of the <strong>standard deviation</strong>, <em>σ</em>. For our <span id="dx1-26018"></span>example here, for which we assume <em>d</em><sub><span class="cmr-8">2</span></sub> is a fair die, the variance will always be constant: <em>σ</em><sup><span class="cmr-8">2</span></sup> = 2<em>.</em>917. That is to say, given any value of <em>d</em><sub><span class="cmr-8">1</span></sub>, we know that values of <em>d</em><sub><span class="cmr-8">2</span></sub> are all equally likely, so the uncertainty does not change. But what if we have an unfair die <em>d</em><sub><span class="cmr-8">2</span></sub>, which has a 50% chance of landing on a 6, and a 10% chance of landing on each other number? This changes both our mean and our variance. We can see this by <span id="dx1-26019"></span>looking at how we would represent this as a set of possible values (in other words, a perfect sample of the die) – the set of possible values for <em>d</em><sub><span class="cmr-8">1</span></sub> + <em>d</em><sub><span class="cmr-8">2</span></sub><span class="cmsy-10x-x-109">|</span><em>d</em><sub><span class="cmr-8">1</span></sub> = 1 now becomes <span class="cmsy-10x-x-109">{</span>2<em>,</em>3<em>,</em>4<em>,</em>5<em>,</em>6<em>,</em>7<em>,</em>7<em>,</em>7<em>,</em>7<em>,</em>7<span class="cmsy-10x-x-109">}</span>. Our new model will now have a bias of <em>ξ</em> = 4<em>.</em>5, making our prediction:</p>
+<div class="math-display">
+<img src="../media/file24.jpg" class="math-display" alt="ˆy = 1 × 1 + 4.5 = 5.5 "/>
+</div>
+<p>We see that the expectation has increased due to the change in the underlying probability of the values of die <em>d</em><sub><span class="cmr-8">1</span></sub>. However, the important difference here is in the change in the variance value:</p>
+<div class="math-display">
+<img src="../media/file25.jpg" class="math-display" alt=" ∑10 (a − μ)2 σ2 = --i=1--i----- = 3.25 n − 1 "/>
+</div>
+<p>Our variance has <em>increased</em>. As variance essentially gives us the average of the distance of each possible value from the mean, this shouldn’t be surprising: given the weighted die, it’s more likely that the outcome will be distant from the mean than with an unweighted die, and thus our variance increases. To summarize, in terms of uncertainty: the greater the likelihood that the outcome will be further from the mean, the greater the uncertainty.</p>
+<p>This has important implications for how we interpret predictions from machine learning models (and statistical models more generally). If our predictions are an approximation of the mean, and our uncertainty quantifies how likely it is for an outcome to be distant from the mean, then our uncertainty tells us <strong>how likely it</strong> <strong>is that our model prediction is incorrect</strong>. Thus, model uncertainties allow us to decide when to trust the predictions, and when we should be more cautious.</p>
+<p>The examples given here are very basic, but should help to give you an idea of what we’re looking to achieve with model uncertainty quantification. We will continue to explore these concepts as we learn about some of the benchmark methods for Bayesian inference, learning how these concepts apply to more complex, real-world problems. We’ll start with perhaps the most fundamental method of Bayesian inference: sampling. <span id="x1-26020r30"></span></p>
+</section>
+<section id="bayesian-inference-via-sampling" class="level2 sectionHead" data-number="7.2">
+<h2 class="sectionHead" data-number="7.2" id="sigil_toc_id_24"><span class="titlemark">2.2 </span> <span id="x1-270002"></span>Bayesian inference via sampling</h2>
+<p>In practical applications, it’s not possible to <span id="dx1-27001"></span>know exactly what a given outcome would be, and, similarly, it’s not possible to observe all possible outcomes. In these cases, we need to make a best estimate based on the evidence we have. The evidence is formed of <strong>samples</strong> – observations of possible outcomes. The aim of ML, broadly speaking, is to learn <span id="dx1-27002"></span>models that generalize well from a subset of data. The aim of Bayesian ML is to do so while also providing an estimate of the uncertainty associated with the model’s predictions. In this section, we’ll learn about how we can use sampling to do this, and will also learn why sampling may not be the most sensible approach. <span id="x1-27003r25"></span></p>
+<section id="approximating-distributions" class="level3 subsectionHead" data-number="7.2.1">
+<h3 class="subsectionHead" data-number="7.2.1" id="sigil_toc_id_25"><span class="titlemark">2.2.1 </span> <span id="x1-280001"></span>Approximating distributions</h3>
+<p>At the most fundamental level, sampling is about <span id="dx1-28001"></span>approximating distributions. Say we want to know the distribution of the height of people in New York. We could go out <span id="dx1-28002"></span>and measure everyone, but that would involve measuring the height of 8.4 million people! While this would give us our most accurate answer, it’s also a deeply impractical approach.</p>
+<p>Instead, we can sample from the population. This <span id="dx1-28003"></span>gives us a basic example of <strong>Monte Carlo sampling</strong>, where we use random sampling to provide data from which we can approximate a distribution. For example, given a database of New York residents, we could select – at random – a sub-population of residents, and use this to approximate the height distribution of all residents. With random sampling – and any sampling, for that matter – the accuracy of the approximation is dependent on the size of the sub-population. What we’re looking to achieve is a <strong>statistically significant</strong> sub-sample, such that we can be confident in our approximation.<span id="dx1-28004"></span></p>
+<p>To get a better imdivssion of this, we’ll simulate the problem by generating 100,000 data points from a truncated normal distribution, to approximate the kind of height distribution we may see for a population of 100,000 people. Say we draw 10 samples, at random, from our population. Here’s what our distribution would look like (on the right) compared with the true distribution (on the left):</p>
+<div class="IMG---Figure">
+<img src="../media/file26.png" alt="PIC"/> <span id="x1-28005r3"></span> <span id="x1-28006"></span></div>
+<p class="IMG---Caption">Figure 2.3: Plot of true distribution (left) versus sample distribution (right) 
+</p>
+<p>As we can see, this isn’t a great representation of the true distribution: what we see here is closer to a triangular distribution than a truncated normal. If we were to infer something about the population’s height based on this distribution alone, we’d arrive at a number of inaccurate conclusions, such as missing the truncation above 200 cm, and the tail on the left of the distribution.</p>
+<p>We can get a better imdivssion by increasing our sample size – let’s try drawing 100 samples:</p>
+<div class="IMG---Figure">
+<img src="../media/file27.png" alt="PIC"/> <span id="x1-28007r4"></span> <span id="x1-28008"></span></div>
+<p class="IMG---Caption">Figure 2.4: Plot of true distribution (left) versus sample distribution (right). 
+</p>
+<p>Things are starting to look better: we’re starting to see some of the tail on the left as well as the truncation toward 200 cm. However, this sample has <span id="dx1-28009"></span>sampled more from some regions than others, leading to misrepresentation: our mean has been pulled down, and we’re seeing two distinct peaks, rather than the single peak we see in the true distribution. Let’s increase our sample size by a further order of magnitude, scaling up to 1,000 samples:</p>
+<div class="IMG---Figure">
+<img src="../media/file28.png" alt="PIC"/> <span id="x1-28010r5"></span> <span id="x1-28011"></span></div>
+<p class="IMG---Caption">Figure 2.5: Plot of true distribution (left) versus sample distribution (right) 
+</p>
+<p>This is looking much better – with a sample set of only <span id="dx1-28012"></span>one hundredth the size of our true population, we now see a distribution that closely matches our true distribution. This example demonstrates how, through random sampling, we can approximate the true distribution using a significantly smaller pool of observations. But that pool still has to have enough information to allow us to arrive at a good approximation of the true distribution: too few samples and our subset will be statistically <em>insufficient</em>, leading to poor approximation of the underlying distribution.</p>
+<p>But simple random sampling isn’t the most practical method for approximating distributions. To achieve this, we turn to <strong>probabilistic inference</strong>. Given a model, probabilistic <span id="dx1-28013"></span>inference provides a way to find the model parameters that best describe our data. To do so, we <span id="dx1-28014"></span>need to first define the type of model – this is our prior. For our example, we’ll use a truncated Gaussian: the idea here being, using our intuition, it’s reasonable to assume people’s height follows a normal distribution, but that very few people are above, say, 6’5.” So, we’ll specify a truncated Gaussian distribution with an upper limit of 205 cm, or just over 6’5.” As it’s a Gaussian distribution, in other words, <span class="cmsy-10x-x-109">𝒩</span>(<em>μ,σ</em>), our model parameters are <em>𝜃</em> = <span class="cmsy-10x-x-109">{</span><em>μ,σ</em><span class="cmsy-10x-x-109">} </span>– with the additional constraint that our distribution has an upper limit of <em>b</em> = 205.</p>
+<p>This brings us to a fundamental class of algorithms: <strong>Markov Chain Monte</strong> <strong>Carlo</strong>, or <strong>MCMC</strong> methods. Like simple random sampling, these <span id="dx1-28015"></span>allow us to build a picture of the true <span id="dx1-28016"></span>underlying distribution, but they do so sequentially, whereby each sample is dependent on the sample before it. This sequential dependence is known as the <strong>Markov property</strong>, thus the <em>Markov chain</em> component of the name. This sequential approach accounts for the probabilistic dependence between samples and allows us to better approximate the probability density.</p>
+<p>MCMC achieves this through sequential <span id="dx1-28017"></span>random sampling. Just as with the random sampling we’re familiar with, MCMC randomly samples from our distribution. But, unlike simple random sampling, MCMC considers pairs of samples: some previous sample <em>x</em><sub><em>t</em><span class="cmsy-8">−</span><span class="cmr-8">1</span></sub> and some current sample <em>x</em><sub><em>t</em></sub>. For each pair of samples, we have some criteria that specifies whether or not we keep the sample (this varies depending on the particular flavor of MCMC). If the new value meets this criteria, say if <em>x</em><sub><em>t</em></sub> is ”preferential to” our previous value <em>x</em><sub><em>t</em><span class="cmsy-8">−</span><span class="cmr-8">1</span></sub>, then the sample is added to the chain and becomes <em>x</em><sub><em>t</em></sub> for the next round. If the sample doesn’t meet the criteria, we stick with the current <em>x</em><sub><em>t</em></sub> for the next round. We repeat this over a (usually large) number of iterations, and in the end we should arrive at a good approximation of our distribution.</p>
+<p>The result is an efficient sampling method that is able to closely approximate the true parameters of our distribution.<span id="dx1-28018"></span> Let’s see how this applies to our height distribution example. Using MCMC with just 10 samples, we arrive at the following approximation:</p>
+<div class="IMG---Figure">
+<img src="../media/file29.png" alt="PIC"/> <span id="x1-28019r6"></span> <span id="x1-28020"></span></div>
+<p class="IMG---Caption">Figure 2.6: Plot of true distribution (left) versus approximate distribution via MCMC (right) 
+</p>
+<p>Not bad for ten samples – certainly far better than the triangular distribution we arrived at with simple random sampling. Let’s see how we do with 100:</p>
+<div class="IMG---Figure">
+<img src="../media/file30.png" alt="PIC"/> <span id="x1-28021r7"></span> <span id="x1-28022"></span></div>
+<p class="IMG---Caption">Figure 2.7: Plot of true distribution (left) versus approximate distribution via MCMC (right) 
+</p>
+<p>This is looking pretty excellent – in fact, we’re able to obtain a better approximation of our distribution with 100 MCMC samples than we are with 1,000 simple random samples. If we continue to larger numbers of samples, we’ll arrive at <span id="dx1-28023"></span>closer and closer approximations of our <span id="dx1-28024"></span>true distribution. But our simple example doesn’t fully capture the power of MCMC: MCMC’s true advantage comes from being able to approximate high-dimensional distributions, and has made it an invaluable technique for approximating intractable high-dimensional integrals in a variety of domains.</p>
+<p>In this book, we’re interested in how we can estimate the probability distribution of the parameters of machine learning models – this allows us to estimate the uncertainty associated with our predictions. In the next section, we’ll take a look at how we do this practically by applying sampling to Bayesian linear regression. <span id="x1-28025r34"></span></p>
+</section>
+<section id="implementing-probabilistic-inference-with-bayesian-linear-regression" class="level3 subsectionHead" data-number="7.2.2">
+<h3 class="subsectionHead" data-number="7.2.2" id="sigil_toc_id_26"><span class="titlemark">2.2.2 </span> <span id="x1-290002"></span>Implementing probabilistic inference with Bayesian linear regression</h3>
+<p>In typical linear regression, we want to <span id="dx1-29001"></span>predict some output <em>ŷ</em> from <span id="dx1-29002"></span>some input <em>x</em> using a linear function <em>f</em>(<em>x</em>), such that <em>ŷ</em> = <em>βx</em> + <em>ξ</em>. With Bayesian linear regression, we do this probabilistically, introducing another parameter, <em>σ</em><sup><span class="cmr-8">2</span></sup>, such that our regression equation becomes:</p>
+<div class="math-display">
+<img src="../media/file31.jpg" class="math-display" alt="ˆy = 𝒩 (x β + ξ,σ2 ) "/>
+</div>
+<p>That is, <em>ŷ</em> follows a Gaussian distribution.</p>
+<p>Here, we see our familiar bias term <em>ξ</em> and intercept <em>β</em>, and introduce a variance parameter <em>σ</em><sup><span class="cmr-8">2</span></sup>. To fit our model, we need to define a prior over these parameters – just as we did for our MCMC example in the last section. We’ll define these priors as:</p>
+<div class="math-display">
+<img src="../media/file32.jpg" class="math-display" alt="ξ ≈ 𝒩 (0,1 ) "/>
+</div>
+<div class="math-display">
+<img src="../media/file33.jpg" class="math-display" alt="β ≈ 𝒩 (0,1) "/>
+</div>
+<div class="math-display">
+<img src="../media/file34.jpg" class="math-display" alt="σ2 ≈ |𝒩 (0,1)| "/>
+</div>
+<p>Note that equation 2.15 denotes the half-normal of a Gaussian distribution (the positive half of a zero-mean Gaussian, as standard deviation cannot be negative). We’ll refer to our model parameters as <em>𝜃</em> = <em>β,ξ,σ</em><sup><span class="cmr-8">2</span></sup>, and we’ll use sampling to find the parameters that maximise the likelihood of these given our data, in other words, the conditional probability of our parameters given our data <em>D</em>: <em>P</em>(<em>𝜃</em><span class="cmsy-10x-x-109">|</span><em>D</em>).</p>
+<p>There are a variety of MCMC sampling approaches we could use to <span id="dx1-29003"></span>find our model parameters. A common approach is to use the <strong>Metropolis-Hastings</strong> algorithm. Metropolis-Hastings is particularly useful for sampling from intractable distributions. It does so through the use of a proposal distribution, <em>Q</em>(<em>𝜃</em><span class="cmsy-10x-x-109">′|</span><em>𝜃</em>), which is proportional to, but not exactly equal to, our true distribution. This means that, for example, if some value <em>x</em><sub><span class="cmr-8">1</span></sub> is twice as likely as some other value <em>x</em><sub><span class="cmr-8">2</span></sub> in our <span id="dx1-29004"></span>true distribution, this will be true of our proposal distribution too. Because we’re <span id="dx1-29005"></span>interested in the probability of observations, we don’t need to know what the <em>exact</em> value would be in our true distribution – we just need to know that, proportionally, our proposal distribution is equivalent to our true distribution.</p>
+<p>Here are the key steps of Metropolis-Hastings for our Bayesian linear regression.</p>
+<p>First, we initialize with an arbitrary point <em>𝜃</em> sampled from our parameter space, according to the priors for each of our parameters. Using a Gaussian distribution centered on our first set of parameters <em>𝜃</em>, select a new point <em>𝜃</em><span class="cmsy-10x-x-109">′</span>. Then, for each iteration <em>t</em> <span class="cmsy-10x-x-109">∈ </span><em>T</em>, do the following:</p>
+<ol>
+<li><div id="x1-29007x1">
+<p>Calculate the acceptance criteria, defined as:</p>
+<div class="math-display">
+<img src="../media/file35.jpg" class="math-display" alt=" P(𝜃′|D ) α = -------- P(𝜃|D ) "/>
+</div>
+</div></li>
+<li><div id="x1-29009x2">
+<p>Generate a random number from a uniform distribution <em>𝜖</em> <span class="cmsy-10x-x-109">∈ </span>[0<em>,</em>1]. If <em>𝜖 &lt;</em>= <em>α</em>, accept the new candidate parameters – adding these to the chain, assigning <em>𝜃</em> = <em>𝜃</em><span class="cmsy-10x-x-109">′</span>. If <em>𝜖 &gt; α</em>, keep the current <em>𝜃</em> and draw a new value.</p>
+</div></li>
+</ol>
+<p>This acceptance criteria means that, if our new set of parameters have a higher likelihood than our last set of parameters, we’ll see <em>α &gt;</em> 1, in which case <em>α &lt; 𝜖</em>. This means that, when we sample parameters that are <em>more likely</em> given our data, we’ll always accept these parameters. If, on the other hand, <em>α &lt;</em> 1, there’s a chance we’ll reject the parameters, but we may also accept them – allowing us to explore regions of lower likelihood.</p>
+<p>These mechanics of Metropolis-Hastings result in samples that can be used to compute high-quality approximations of our posterior distribution. Practically, Metropolis-Hastings (and MCMC methods more generally) requires a burn-in phase – an initial phase of sampling used to escape regions of low density, which are typically encountered given the arbitrary initialization.</p>
+<p>Let’s apply this to a simple problem: we’ll generate some data for the function <em>y</em> = <em>x</em><sup><span class="cmr-8">2</span></sup> + 5 + <em>η</em>, where <em>η</em> is a noise parameter distributed according to <em>η</em> <span class="cmsy-10x-x-109">≈𝒩</span>(0<em>,</em>5). Using Metropolis-Hastings to fit our Bayesian linear regressor,<span id="dx1-29010"></span> we get the following fit using the points sampled from our function (represented by the crosses):</p>
+<div class="IMG---Figure">
+<img src="../media/file36.png" alt="PIC"/> <span id="x1-29011r8"></span> <span id="x1-29012"></span></div>
+<p class="IMG---Caption">Figure 2.8: Bayesian linear regression on generated data with low variance
+</p>
+<p>We see that our model fits the data in the same way we would expect for standard linear regression. However, unlike standard linear regression, our model produces predictive uncertainty: this is represented by the shaded region. This predictive uncertainty gives an imdivssion of how much our underlying data varies; this makes this model much <span id="dx1-29013"></span>more useful than a <span id="dx1-29014"></span>standard linear regression, as now we can get an imdivssion of the sdivad of our data, as well as the general trend. We can see how this varies if we generate new data and fit again, this time increasing the sdivad of the data by modifying our noise distribution to <em>η</em> <span class="cmsy-10x-x-109">≈𝒩</span>(0<em>,</em>20):</p>
+<div class="IMG---Figure">
+<img src="../media/file37.png" alt="PIC"/> <span id="x1-29015r9"></span> <span id="x1-29016"></span></div>
+<p class="IMG---Caption">Figure 2.9: Bayesian linear regression on generated data with high variance 
+</p>
+<p>We see that our predictive uncertainty has increased proportionally to the sdivad of the data. This is an important property in uncertainty-aware methods: when we have small uncertainty, we know our prediction fits the data well, whereas when we have large uncertainty, we know to treat our prediction with caution, as it indicates the model isn’t fitting this region particularly well. We’ll see a better example of this in the next section, which will go on to demonstrate how regions of more or less data contribute to our model uncertainty estimates.</p>
+<p>Here, we see that our predictions fit our data pretty well. In addition, we see that <em>σ</em><sup><span class="cmr-8">2</span></sup> varies according to the availability of data in different regions. What we’re seeing here is a great example of a very important concept, <strong>well calibrated uncertainty</strong> – also termed <strong>high-quality</strong> <strong>uncertainty</strong>. This refers to the fact that, in regions where our <span id="dx1-29017"></span>Predictions are inaccurate, our <span id="dx1-29018"></span>uncertainty is also high. Our uncertainty estimates are <strong>poorly calibrated</strong> if we’re very confident in regions with inaccurate predictions, or very uncertain in regions with accurate predictions. As it’s well-calibrated, sampling is often used as a benchmark for uncertainty quantification.</p>
+<p>Unfortunately, while sampling is <span id="dx1-29019"></span>effective for many applications, the need to obtain many samples for each parameter means that it quickly becomes computationally prohibitive for high dimensions of parameters. For example, if we <span id="dx1-29020"></span>wanted to start sampling parameters for complex, non-linear relationships (such as sampling the weights of a neural network), sampling would no longer be practical. Despite this, it’s still useful in some cases, and later we’ll see how various BDL methods make use of sampling.</p>
+<p>In the next section, we’ll explore the Gaussian process – another fundamental method for Bayesian inference, and a method that does not suffer from the same computational overheads as sampling. <span id="x1-29021r33"></span></p>
+</section>
+</section>
+<section id="exploring-the-gaussian-process" class="level2 sectionHead" data-number="7.3">
+<h2 class="sectionHead" data-number="7.3" id="sigil_toc_id_27"><span class="titlemark">2.3 </span> <span id="x1-300003"></span>Exploring the Gaussian process</h2>
+<p>As we’ve seen in the previous section, sampling quickly <span id="dx1-30001"></span>becomes prohibitively expensive. To address this, we can use ML models specifically designed to produce uncertainty estimates – the gold standard of which is the <strong>Gaussian</strong> <strong>process</strong>.</p>
+<p>The Gaussian process, or <strong>GP</strong>, has become a staple probabilistic ML model, seeing use in a broad variety of applications from pharmacology through to robotics. Its success is largely down to its ability to produce high-quality uncertainty estimates over its predictions in a well-principled fashion. So, what do we mean by a Gaussian process?</p>
+<p>In essence, a GP is a distribution over functions. To understand what we mean by this, let’s take a typical ML use case. We want to learn some function <em>f</em>(<strong>x</strong>), which maps a series of inputs <strong>x</strong> onto a series of outputs <strong>y</strong>, such that we can approximate our output via <span class="accenthat"><strong>y</strong></span> = <em>f</em>(<strong>x</strong>). Before we see any data, we know nothing about our underlying function; there is an infinite number of possible functions this could be:</p>
+<div class="IMG---Figure">
+<img src="../media/file38.png" alt="PIC"/> <span id="x1-30002r10"></span> <span id="x1-30003"></span></div>
+<p class="IMG---Caption">Figure 2.10: Illustration of space of possible functions before seeing data 
+</p>
+<p>Here, the black line is the true function we wish to learn, while the dotted lines are the possible functions given the data (in this case, no data). Once we <span id="dx1-30004"></span>observe some data, we see that the number of possible functions becomes more constrained, as we see here:</p>
+<div class="IMG---Figure">
+<img src="../media/file39.png" alt="PIC"/> <span id="x1-30005r11"></span> <span id="x1-30006"></span></div>
+<p class="IMG---Caption">Figure 2.11: Illustration of space of possible functions after seeing some data 
+</p>
+<p>Here, we see that our possible functions all pass through our observed data points, but outside of those data points, our functions take on a range of very different values. In a simple linear model, we don’t care about these deviations in possible values: we’re happy to interpolate from one data point to another, as we see in <em>Figure</em> <a href="#x1-30007r12">2.12</a>:</p>
+<div class="IMG---Figure">
+<img src="../media/file40.png" alt="PIC"/> <span id="x1-30007r12"></span> <span id="x1-30008"></span></div>
+<p class="IMG---Caption">Figure 2.12: Illustration of linearly interpolating through our observations 
+</p>
+<p>But this interpolation can lead to wildly inaccurate predictions, and has no way of accounting for the degree of uncertainty associated with our model predictions. The deviations that we see here in the regions without data points are <span id="dx1-30009"></span>exactly what we want to capture with our GP. When there are a variety of possible values our function can take, then there is uncertainty – and through capturing the degree of uncertainty, we are able to estimate what the possible variation in these regions may be.</p>
+<p>Formally, a GP can be defined as a function:</p>
+<div class="math-display">
+<img src="../media/file41.jpg" class="math-display" alt="f(x) ≈ GP (m (x),k(x,x′)) "/>
+</div>
+<p>Here, <em>m</em>(<strong>x</strong>) is simply the mean of our possible function values for a given point <strong>x</strong>:</p>
+<div class="math-display">
+<img src="../media/file42.jpg" class="math-display" alt="m (x) = 𝔼[f (x)] "/>
+</div>
+<p>The next term, <em>k</em>(<strong>x</strong><em>,</em><strong>x</strong><span class="cmsy-10x-x-109">′</span>) is a covariance function, or kernel. This is a fundamental component of the GP as it defines the way we model the relationship between different points in our data. GPs use the mean and covariance functions to model the space of possible functions, and thus to produce predictions as well as their associated uncertainties. Now that we’ve introduced some of the high-level concepts, let’s dig a little deeper and understand exactly how it is they model the space of possible functions, and thus estimate uncertainty. To do this, we need to understand GP priors. <span id="x1-30010r40"></span></p>
+<section id="defining-our-prior-beliefs-with-kernels" class="level3 subsectionHead" data-number="7.3.1">
+<h3 class="subsectionHead" data-number="7.3.1" id="sigil_toc_id_28"><span class="titlemark">2.3.1 </span> <span id="x1-310001"></span>Defining our prior beliefs with kernels</h3>
+<p>GP kernels describe the prior beliefs we have <span id="dx1-31001"></span>about our data, and so you’ll often see them referred to as GP priors. In the same way that the prior in equation 2.3 tells us something about the probability of the outcome of our two dice rolls, the GP prior tells us something important about the relationship we expect from our data.</p>
+<p>While there are advanced methods for inferring a prior from our data, they are beyond the scope of this book. We will instead focus on more traditional uses of GPs, for which we select a prior using our knowledge of the data we’re working with.</p>
+<p>In the literature <span id="dx1-31002"></span>and any implementations you encounter, you’ll see that the GP prior is often referred to as the <strong>kernel</strong> or <strong>covariance function</strong> (just as we have here). These three terms are all interchangeable, but for consistency with other work, we will henceforth refer to this as the kernel. Kernels simply provide a means of calculating a distance between two <span id="dx1-31003"></span>data points, and are exdivssed as <em>k</em>(<em>x,x</em><span class="cmsy-10x-x-109">′</span>), where <em>x</em> and <em>x</em><span class="cmsy-10x-x-109">′ </span>are data points, and <em>k</em>() represents the function of the kernel. While the kernel can take on many forms, there are a small number of fundamental kernels that are used in a large proportion of GP applications.</p>
+<p>Perhaps the most <span id="dx1-31004"></span>commonly encountered <span id="dx1-31005"></span>kernel is the <strong>squared exponential</strong> or <strong>radial basis function</strong> (<strong>RBF</strong>) kernel. This kernel takes the form:</p>
+<div class="math-display">
+<img src="../media/file43.jpg" class="math-display" alt=" (x − x ′)2 k(x,x ′) = σ2exp − ----2---- 2l "/>
+</div>
+<p>This introduces us to a couple of common kernel parameters: <em>l</em> and <em>σ</em><sup><span class="cmr-8">2</span></sup>. The output variance parameter <em>σ</em><sup><span class="cmr-8">2</span></sup> is simply a scaling factor, used to control the distance of the function from its mean. The length scale parameter <em>l</em> controls the smoothness of the function – in other words, how much your function is expected to vary across particular dimensions. This parameter can either be a scalar that is applied to all input dimensions, or a vector <span id="dx1-31006"></span>with a different scalar value for each input dimension. The latter is often achieved using <strong>Automatic Relevance</strong> <strong>Determination</strong>, or <strong>ARD</strong>, which identifies the relevant values in the input space.</p>
+<p>GPs make predictions via a covariance matrix based on the kernel – essentially comparing a new data point to previously observed data points. However, just as with all ML models, GPs need to be trained, and this is where the length scale comes in. The length scale forms the parameters of our GP, and through the training process it learns the optimal value(s) for the length scale(s). This is typically done using a nonlinear optimizer, such as the <strong>Broyden-Fletcher-Goldfarb-Shanno</strong> (<strong>BFGS</strong>) optimizer. Many optimizers can be used, including optimizers you <span id="dx1-31007"></span>may be familiar with for deep learning, such as stochastic gradient descent and its variants.</p>
+<p>Let’s take a look at how different kernels affect GP predictions. We’ll start with a straightforward example – a simple sine wave:</p>
+<div class="IMG---Figure">
+<img src="../media/file44.png" alt="PIC"/> <span id="x1-31008r13"></span> <span id="x1-31009"></span></div>
+<p class="IMG---Caption">Figure 2.13: Plot of sine wave with four sampled points 
+</p>
+<p>We can see the function illustrated here, as well as some points sampled from this function. Now, let’s fit a GP with a periodic kernel to the data. The periodic kernel is defined as:</p>
+<div class="math-display">
+<img src="../media/file45.jpg" class="math-display" alt=" ′ 2 ( 2sin2(π |x − x′|∕p)) kper(x, x) = σ exp -------l2-------- "/>
+</div>
+<p>Here, we see a new parameter: <em>p</em>. This is <span id="dx1-31010"></span>simply the period of the periodic function. Setting <em>p</em> = 1 and applying a GP with a periodic kernel to the preceding example, we get the following:</p>
+<div class="IMG---Figure">
+<img src="../media/file46.png" alt="PIC"/> <span id="x1-31011r14"></span> <span id="x1-31012"></span></div>
+<p class="IMG---Caption">Figure 2.14: Plot of posterior predictions from a periodic kernel with <em>p</em> = 1 
+</p>
+<p>This looks pretty noisy, but you should be able to see that there is clear periodicity in the functions produced by the posterior. It’s noisy for a couple of reasons: a lack of data, and a poor prior. If we’re limited on data, we can try to fix the problem by improving our prior. In this case, we can use our knowledge of the periodicity of the function to improve our prior by setting <em>p</em> = 6:</p>
+<div class="IMG---Figure">
+<img src="../media/file47.png" alt="PIC"/> <span id="x1-31013r15"></span> <span id="x1-31014"></span></div>
+<p class="IMG---Caption">Figure 2.15: Plot of posterior predictions from a periodic kernel with <em>p</em> = 6 
+</p>
+<p>We see that this fits the data pretty well: we’re still <span id="dx1-31015"></span>uncertain in regions for which we have little data, but the periodicity of our posterior now looks sensible. This is possible because we’re using an informative prior; that is, a prior that incorporates information that describes the data well. This prior is composed of two key components:</p>
+<ul>
+<li><p>Our periodic kernel</p></li>
+<li><p>Our knowledge about the periodicity of the function</p></li>
+</ul>
+<p>We can see how important this is if we modify our GP to use an RBF kernel:</p>
+<div class="IMG---Figure">
+<img src="../media/file48.png" alt="PIC"/> <span id="x1-31016r16"></span> <span id="x1-31017"></span></div>
+<p class="IMG---Caption">Figure 2.16: Plot of posterior predictions from an RBF kernel 
+</p>
+<p>With an RBF kernel, we see that <span id="dx1-31018"></span>things are looking pretty chaotic again: because we have limited data and a poor prior, we’re unable to appropriately constrain the space of possible functions to fit our true function. In the ideal case, we’d fix this by using a more appropriate prior, as we saw in <em>Figure</em> <a href="#x1-31013r15"><em>2.15</em></a> – but this isn’t always possible. Another solution is to sample more data. Sticking with our RBF kernel, we sample 10 data points from our function and re-train our GP:</p>
+<div class="IMG---Figure">
+<img src="../media/file49.png" alt="PIC"/> <span id="x1-31019r17"></span> <span id="x1-31020"></span></div>
+<p class="IMG---Caption">Figure 2.17: Plot of posterior predictions from an RBF kernel, trained on 10 observations 
+</p>
+<p>This is looking much better – but what if we have more data <em>and</em> an informative prior?</p>
+<div class="IMG---Figure">
+<img src="../media/file50.png" alt="PIC"/> <span id="x1-31021r18"></span> <span id="x1-31022"></span></div>
+<p class="IMG---Caption">Figure 2.18: Plot of posterior predictions from a periodic kernel with <em>p</em> = 6, trained on 10 observations 
+</p>
+<p>The posterior now fits our true function very closely. Because we don’t have infinite data, there are still some areas of uncertainty, but the uncertainty is relatively small.</p>
+<p>Now that we’ve seen some of the core <span id="dx1-31023"></span>principles in action, let’s return to our example from <em>Figures</em> <a href="#x1-30002r10"><em>2.10</em></a><em>-</em><a href="#x1-30007r12"><em>2.12</em></a>. Here’s a quick reminder of our target function, our posterior samples, and the linear interpolation we saw earlier:</p>
+<div class="IMG---Figure">
+<img src="../media/file51.png" alt="PIC"/> <span id="x1-31024r19"></span> <span id="x1-31025"></span></div>
+<p class="IMG---Caption">Figure 2.19: Plot illustrating the difference between linear interpolation and the true function 
+</p>
+<p>Now that we’ve got some idea of how a GP will affect our predictive posterior, it’s easy to see that linear interpolation falls very short of what we achieve with a GP. To illustrate this more clearly, let’s take a look at what the GP prediction would be for this function given the three samples:</p>
+<div class="IMG---Figure">
+<img src="../media/file52.png" alt="PIC"/> <span id="x1-31026r20"></span> <span id="x1-31027"></span></div>
+<p class="IMG---Caption">Figure 2.20: Plot illustrating the difference between GP predictions and the true function 
+</p>
+<p>Here, the dotted lines are our mean (<em>μ</em>) predictions from the GP, and the shaded area is the uncertainty associated with those predictions – the standard deviation (<em>σ</em>) around the mean. Let’s contrast what we see in <em>Figure</em> <a href="#x1-31026r20"><em>2.20</em></a> with <em>Figure</em> <a href="#x1-31024r19"><em>2.19</em></a>. The differences may seem subtle at first, but we can clearly see that this is no longer a straightforward linear interpolation: the predicted values from the GP are being ”pulled” toward our actual function values. As with our earlier sine wave examples, the behavior of the GP predictions are affected by two key factors: the prior (or kernel) and the data.</p>
+<p>But there’s another crucial detail illustrated in <em>Figure</em> <a href="#x1-31026r20"><em>2.20</em></a>: the predictive uncertainties from our GP. We see that, unlike many <span id="dx1-31028"></span>typical ML models, a GP gives us uncertainties associated with its predictions. This means we can make better decisions about what we do with the model’s predictions – having this information will help us to ensure that our systems are more robust. For example, if the uncertainty is too great, we can fall back to a manual system. We can even keep track of data points with high predictive uncertainty so that we can continuously refine our models.</p>
+<p>We can see how this refinement affects our predictions by adding a few more observations – just as we did in the earlier examples:</p>
+<div class="IMG---Figure">
+<img src="../media/file53.png" alt="PIC"/> <span id="x1-31029r21"></span> <span id="x1-31030"></span></div>
+<p class="IMG---Caption">Figure 2.21: Plot illustrating the difference between GP predictions and the true function, trained on 5 observations 
+</p>
+<p><em>Figure</em> <a href="#x1-31029r21"><em>2.21</em></a> illustrates how our uncertainty changes over regions with different numbers of observations. We see here that between <em>x</em> = 3 and <em>x</em> = 4 our uncertainty is quite high. This makes a lot of sense, as we can also see that our GP’s mean predictions deviate <span id="dx1-31031"></span>significantly from the true function values. Conversely, if we look at the region between <em>x</em> = 0<em>.</em>5 and <em>x</em> = 2, we can see that our GP’s predictions follow the true function fairly closely, and our model is also more confident about these predictions, as we can see from the smaller interval of uncertainty in this region.</p>
+<p>What we’re seeing here is a great example of a <span id="dx1-31032"></span>very important concept: <strong>well</strong> <strong>calibrated uncertainty</strong> – also termed <strong>high-quality uncertainty</strong>. This refers to the fact that, in regions where our predictions are inaccurate, our <span id="dx1-31033"></span>uncertainty is also high. Our uncertainty estimates are <strong>poorly calibrated</strong> if we’re very confident in regions with inaccurate predictions, or very uncertain in regions with accurate predictions.</p>
+<p>GPs are what we can term a <strong>well principled</strong> method – this <span id="dx1-31034"></span>means that they have solid mathematical foundations, and thus come with strong theoretical guarantees. One of these guarantees is that they are well calibrated, and this is what makes GPs so popular: if we use GPs, we know we can rely on their uncertainty estimates.</p>
+<p>Unfortunately, however, GPs are not without their shortcomings – we’ll learn more about these in the following section. <span id="x1-31035r47"></span></p>
+</section>
+<section id="limitations-of-gaussian-processes" class="level3 subsectionHead" data-number="7.3.2">
+<h3 class="subsectionHead" data-number="7.3.2" id="sigil_toc_id_29"><span class="titlemark">2.3.2 </span> <span id="x1-320002"></span>Limitations of Gaussian processes</h3>
+<p>Given the fact that GPs are well-principled and <span id="dx1-32001"></span>capable of producing high-quality uncertainty estimates, you’d be forgiven for thinking they’re the perfect uncertainty-aware ML model. GPs struggle in a few key situations:</p>
+<ul>
+<li><p>High-dimensional data</p></li>
+<li><p>Large amounts of data</p></li>
+<li><p>Highly complex data</p></li>
+</ul>
+<p>The first two points here are largely down to the inability of GPs to scale well. To understand this, we just need to look at the training and inference procedures for GPs. While it’s beyond the scope of this book to cover this in detail, the key point here is in the matrix operations required for GP training.</p>
+<p>During training, it is necessary to invert a <em>D</em> <span class="cmsy-10x-x-109">× </span><em>D</em> matrix, where <em>D</em> is the dimensionality of our data. Because of this, GP training quickly becomes computationally prohibitive. This can be somewhat alleviated through the use of Cholesky deomposition, rather than direct matrix inversion. As well as being more computationally efficient, Cholesky decomposition is also more numerically stable. Unfortunately, Cholesky decomposition also has its weaknesses: computationally, its complexity is <em>O</em>(<em>n</em><sup><span class="cmr-8">3</span></sup>). This means that, as the size of our dataset increases, GP training becomes more and more expensive.</p>
+<p>But it’s not only training that’s affected: because we need to compute the covariance between a new data point and all observed data points at inference, GPs have a <em>O</em>(<em>n</em><sup><span class="cmr-8">2</span></sup>) computational complexity at inference.</p>
+<p>As well as the computational cost, GPs aren’t light in memory: because we <span id="dx1-32002"></span>need to store our covariance matrix <strong>K</strong>, GPs have a <em>O</em>(<em>n</em><sup><span class="cmr-8">2</span></sup>) memory complexity. Thus, in the case of large datasets, even if we have the compute resources necessary to train them, it may not be practical to use them in real-world applications due to their memory requirements.</p>
+<p>The last point in our list concerns the complexity of data. As you are probably aware – and as we’ll touch on in <em>Chapter 3, Fundamentals of Deep Learning</em> – one of the major advantages of DNNs is their ability to process complex, high-dimensional data through layers of non-linear transformations. While GPs are powerful, they’re also relatively simple models, and they’re not able to learn the kinds of powerful feature representations that are possible with DNNs.</p>
+<p>All of these factors mean that, while GPs are an excellent choice for relatively low-dimensional data and reasonably small datasets, they aren’t practical for many of the complex problems we face in ML. And so, we turn to BDL methods: methods that have the flexibility and scalability of deep learning, while also producing model uncertainty estimates. <span id="x1-32003r43"></span></p>
+</section>
+</section>
+<section id="summary-1" class="level2 sectionHead" data-number="7.4">
+<h2 class="sectionHead" data-number="7.4" id="sigil_toc_id_30"><span class="titlemark">2.4 </span> <span id="x1-330004"></span>Summary</h2>
+<p>In this chapter, we’ve covered some of the fundamental concepts and methods related to Bayesian inference. First, we reviewed Bayes’ theorem and the fundamentals of probability theory – allowing us to understand the concept of uncertainty, as well as how we apply it to the predictions of ML models. Next, we introduced sampling, and an important class of algorithms: Markov Chain Monte Carlo, or MCMC, methods. Lastly, we covered Gaussian processes, and illustrated the crucial concept of well calibrated uncertainty. These key topics will provide you with the necessary foundation for the content that will follow, however, we encourage you to explore the recommended reading materials for a more comprehensive treatment of the topics introduced in this chapter.</p>
+<p>In the next chapter, we will see how DNNs have changed the landscape of machine learning over the last decade, exploring the tremendous advantages offered by deep learning, and the motivation behind the development of BDL methods. <span id="x1-33001r58"></span></p>
+</section>
+<section id="further-reading" class="level2 sectionHead" data-number="7.5">
+<h2 class="sectionHead" data-number="7.5" id="sigil_toc_id_31"><span class="titlemark">2.5 </span> <span id="x1-340005"></span>Further reading</h2>
+<p>There are a variety of techniques being explored to improve the flexibility and scalability of GPs – such as Deep GPs or Sparse GPs. The following resources explore some of these topics, and also provide a more thorough treatment of the content covered in this chapter:</p>
+<ul>
+<li><p><em>Bayesian Analysis with Python</em>, Martin: this book comprehensively covers core topics in statistical modeling and probabilistic programming, and includes practical walk-throughs of various sampling methods, as well as a good overview of Gaussian processes and a variety of other techniques core to Bayesian analysis.</p></li>
+<li><p><em>Gaussian Processes for Machine Learning</em>, Rasmussen and Williams: this is often considered the definitive text on Gaussian processes, and provides highly detailed explanations of the theory underlying Gaussian processes. A key text for anyone serious about Bayesian inference.</p></li>
+</ul>
+<p><span id="x1-34001r29"></span></p>
+</section>
+</section>
+</body>
+</html>

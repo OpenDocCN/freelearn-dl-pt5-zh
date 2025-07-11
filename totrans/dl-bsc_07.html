@@ -1,0 +1,629 @@
+<html><head></head><body>
+		<div>
+			<div id="_idContainer248" class="Content">
+			</div>
+		</div>
+		<div id="_idContainer249" class="Content">
+			<h1 id="_idParaDest-144"><a id="_idTextAnchor151"/>6. Training Techniques </h1>
+		</div>
+		<div id="_idContainer303" class="Content">
+			<p>This chapter describes important ideas in neural network training, including the optimization techniques that are used to search for optimal weight parameters, the initial values of weight parameters, and the method for setting hyperparameters—all of which are important topics when it comes to neural network training. We will look at regularization methods such as weight decay and dropout to prevent overfitting and implement them. Lastly, we will look at batch normalization, which has been used in a lot of research in recent years. By using the methods described in this chapter, you will be able to promote neural network training efficiently to improve recognition accuracy.</p>
+			<h2 id="_idParaDest-145"><a id="_idTextAnchor152"/>Updating Parameters</h2>
+			<p>The purpose of neural network training is to find the parameters that minimize the value of the loss function. The problem is finding the optimal parameters—a process called <strong class="bold">optimization</strong>. Unfortunately, the optimization is difficult because the parameter space is very complicated, and the optimal solution is difficult to find. You cannot do this by solving an equation to obtain the minimum value immediately. In a deep network, it is more difficult because the number of parameters is huge.</p>
+			<p>So far, we have depended on the gradients (derivatives) of the parameters to find the optimal parameters. By repeatedly using the gradients of the parameters to update the parameters in the gradient direction, we approach the optimal parameters gradually. This is a simple method called <strong class="bold">stochastic gradient descent</strong> (<strong class="bold">SGD</strong>), but it is a "smarter" method than searching the parameter space randomly. However, SGD is a simple method, and (for some problems) there are some methods that work better. So, let's first consider the disadvantage of SGD and introduce other optimization techniques.</p>
+			<h3 id="_idParaDest-146"><a id="_idTextAnchor153"/>Story of an Adventurer</h3>
+			<p>Before moving on to the main topic, we can consider an allegory to describe the situation we are in regarding optimization.</p>
+			<h4>Note</h4>
+			<p class="callout">There is a strange adventurer. He travels through a vast dry region to find a deep valley floor every day. His goal is to reach the deepest valley bottom, which he calls the "deep place." It is the reason why he travels. In addition, he has put two strict "restrictions" on himself. One of them is to not use a map, while the other is to cover his eyes. Therefore, he does not know where the deepest valley bottom exists in the vast land, and he cannot see anything. Under these strict conditions, how can this adventurer look for the "deep place"? How can he move to find the "deep place" efficiently?</p>
+			<p>The situation we are in when searching for the optimal parameters is a world of darkness just like that of this adventurer. We must look for the "deep place" blindfolded and without a map in a vast and complicated landscape</p>
+			<p>What is important in this difficult situation is the "inclination" of the ground. The adventurer cannot see around him, but he knows the inclination of the ground due to where he stands (his feet can feel it). So, moving in the direction where the inclination is the steepest is the strategy of SGD. "By repeating this, I may be able to reach the "deep place" someday," the brave adventurer thinks.</p>
+			<h3 id="_idParaDest-147"><a id="_idTextAnchor154"/>SGD</h3>
+			<p>Now that we understand the difficulty of this optimization problem, let's start by reviewing SGD. Equation 6.1 represents SGD as follows:</p>
+			<table id="table001-4" class="No-Table-Style">
+				<colgroup>
+					<col/>
+					<col/>
+				</colgroup>
+				<tbody>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer250">
+									<img src="image/Figure_6.1a.png" alt="65"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.1)</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p>Here, the weight parameters to update are W and the gradients of the loss function for W are <img src="image/Figure_6.1b.png" alt="66"/>. η is the learning rate. We need to predefine it as a value, such as 0.01 or 0.001. <strong class="inline">&lt;-</strong> in the equation indicates that the value on the right-hand side is used to update the value on the left-hand side. As equation 6.1 shows, SGD is a simple method that moves a certain distance in the gradient direction. Now, we will implement <strong class="inline">SGD</strong> as a class in Python:</p>
+			<p class="source-code">class SGD:</p>
+			<p class="source-code">    def __init__ (self, lr=0.01):</p>
+			<p class="source-code">        self.lr = lr</p>
+			<p class="source-code">    def update(self, params, grads): </p>
+			<p class="source-code">        for key in params.keys():</p>
+			<p class="source-code">            <strong class="inline">params[key] -= self.lr * grads[key]</strong></p>
+			<p>Here, the argument at initialization, <strong class="inline">lr</strong>, is the learning rate. The learning rate is retained as an instance variable. We will also define the <strong class="inline">update(params, grads)</strong> method, which is called repeatedly in SGD. The arguments, <strong class="inline">params</strong> and <strong class="inline">grads</strong>, are dictionary variables (as in the implementation of neural networks so far). Like <strong class="inline">params['W1']</strong> and <strong class="inline">grads['W1']</strong>, each element stores a weight parameter or a gradient. By using the <strong class="inline">SGD</strong> class, you can update the parameters in a neural network as follows (the following code is pseudocode that doesn't run):</p>
+			<p class="source-code">network = TwoLayerNet(...)</p>
+			<p class="source-code"><strong class="inline">optimizer = SGD()</strong></p>
+			<p class="source-code">for i in range(10000):</p>
+			<p class="source-code">    ...</p>
+			<p class="source-code">    x_batch, t_batch = get_mini_batch(...)  # Mini-batch</p>
+			<p class="source-code">    grads = network.gradient(x_batch, t_batch)</p>
+			<p class="source-code">    params = network.params</p>
+			<p class="source-code">    <strong class="inline">optimizer.update(params, grads)</strong></p>
+			<p class="source-code">    ...</p>
+			<p>The name of the variable that appears here, <strong class="inline">optimizer</strong>, means a "person who optimizes." Here, SGD plays this role. The <strong class="inline">optimizer</strong> variable takes responsibility for updating the parameters. All we need to do here is pass information regarding the parameters and gradients to the optimizer.</p>
+			<p>Thus, separately implementing the class that optimizes facilitates the modularization of the features. For example, we will soon implement another optimization technique called <strong class="bold">Momentum</strong> so that it has a common method called <strong class="inline">update(params, grads)</strong>. Then, we can switch from SGD to Momentum by changing the <strong class="inline">optimizer = SGD()</strong> statement to <strong class="inline">optimizer = Momentum()</strong>.</p>
+			<h4>Note</h4>
+			<p class="callout">In many deep learning frameworks, various optimization techniques are implemented, and a mechanism is provided so that we can switch between them easily. For example, in a deep learning framework called Lasagne, optimization techniques are implemented as functions in the <strong class="inline">updates.py</strong> file (<a href="http://github.com/Lasagne/Lasagne/blob/master/lasagne/updates.py">http://github.com/Lasagne/Lasagne/blob/master/lasagne/updates.py</a>). The user can select the desired optimization technique from them.</p>
+			<h3 id="_idParaDest-148"><a id="_idTextAnchor155"/>Disadvantage of SGD</h3>
+			<p>Although SGD is simple and easy to implement, it may be inefficient for some problems. To discuss the disadvantage of SGD, let's consider a problem that calculates the minimum value of the following function:</p>
+			<table id="table002-4" class="No-Table-Style">
+				<colgroup>
+					<col/>
+					<col/>
+				</colgroup>
+				<tbody>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer252">
+									<img src="image/Figure_6.1c.png" alt="67"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.2)</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p>The shape of the function represented by equation 6.2 looks like a "bowl" stretched in the <span lang="en-US" xml:lang="en-US">x</span>-axis direction, as shown in the following plots. Actually, the contour lines of equation 6.2 look like ellipses extended in the <span lang="en-US" xml:lang="en-US">x</span>-axis direction.</p>
+			<p>Now, let's look at the gradients of the function that are represented by equation 6.2. <em class="italics">Figure 6.2</em> shows the gradients. These gradients are large in the <span lang="en-US" xml:lang="en-US">y</span>-axis direction and small in the <span lang="en-US" xml:lang="en-US">x</span>-axis direction. In other words, the inclination in the <span lang="en-US" xml:lang="en-US">y</span>-axis direction is steep, while in the <span lang="en-US" xml:lang="en-US">x</span>-axis direction, it's gradual. Note that the position of the minimum value of equation 6.2 is <strong class="inline">(x, y) = (0, 0)</strong> but that the gradients in <em class="italics">Figure 6.2</em> do not point to the (0, 0) direction in many places.</p>
+			<p>Let's apply SGD to the function that has the shape shown in the following plots. It starts searching at (<span lang="en-US" xml:lang="en-US">x</span>, <span lang="en-US" xml:lang="en-US">y</span>) = (−7.0, 2.0) (initial values). <em class="italics">Figure 6.3</em> shows the result:</p>
+			<div>
+				<div id="_idContainer253" class="IMG---Figure">
+					<img src="image/fig06_1.jpg" alt="Figure 6.1: Graph of  (left) and its contour lines (right)&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.1: Graph of <img src="image/Figure_6.1d.png" alt="69"/> (left) and its contour lines (right)</h6>
+			<div>
+				<div id="_idContainer255" class="IMG---Figure">
+					<img src="image/fig06_2.jpg" alt="Figure 6.2: Gradients of &#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.2: Gradients of <img src="image/Figure_6.1e.png" alt="68"/></h6>
+			<p>SGD moves in a zigzag, as shown in the following plot. The disadvantage of SGD is that its search path becomes inefficient if the shape of a function is not isotropic—that is, if it is elongated. So, we need a method that is smarter than SGD that moves only in the gradient direction. The root cause of SGD's search path being inefficient is that the gradients do not point to the correct minimum values:</p>
+			<div>
+				<div id="_idContainer257" class="IMG---Figure">
+					<img src="image/fig06_3.jpg" alt="Figure 6.3: Update path of optimization by SGD – inefficient because it moves &#13;&#10;in a zigzag to the minimum value (0, 0) &#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.3: Update path of optimization by SGD – inefficient because it moves in a zigzag to the minimum value (0, 0) </h6>
+			<p>To improve the disadvantage of SGD, we will introduce three alternative methods: Momentum, AdaGrad, and Adam. We will describe each of them briefly and show their equations and implementations in Python.</p>
+			<h3 id="_idParaDest-149"><a id="_idTextAnchor156"/>Momentum</h3>
+			<p>Momentum is related to physics; it means the "quantity of motion." The Momentum technique is represented by the following equations:</p>
+			<table id="table003-4" class="No-Table-Style">
+				<colgroup>
+					<col/>
+					<col/>
+				</colgroup>
+				<tbody>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer258">
+									<img src="image/Figure_6.3a.png" alt="70"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.3)</p>
+						</td>
+					</tr>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer259">
+									<img src="image/Figure_6.3b.png" alt="71"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.4)</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p>Just like SGD, W is the weight parameter to update, <img src="image/Figure_6.3c.png" alt="72"/> is the gradients of the loss function for W, and η is the learning rate. A new variable that appears here, v, is the "velocity" in physics. Equation 6.3 represents a physical law stating that an object receives a force in the gradient direction and is accelerated by this force. In Momentum, update functions are used as if a ball had been rolled on the ground, as shown in the following diagram: </p>
+			<div>
+				<div id="_idContainer261" class="IMG---Figure">
+					<img src="image/fig06_4.jpg" alt="Figure 6.4: Image of Momentum – a ball rolls on the slope of the ground&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.4: Image of Momentum – a ball rolls on the slope of the ground</h6>
+			<p>The term αv in equation 6.3 slows the object down gradually when it receives no force (a value such as 0.9 is set for α). This is the friction created by the ground or air resistance. The following code shows the implementation of Momentum (the source code is located at <strong class="inline">common/optimizer.py</strong>):</p>
+			<p class="source-code">class Momentum:</p>
+			<p class="source-code">    def __ init __ (self,  lr=0.01,  momentum=0.9):</p>
+			<p class="source-code">        self.lr = lr</p>
+			<p class="source-code">        self.momentum = momentum </p>
+			<p class="source-code">        self.v = None</p>
+			<p class="source-code">    def update(self, params, grads): </p>
+			<p class="source-code">        if self.v is None:</p>
+			<p class="source-code">        self.v = {}</p>
+			<p class="source-code">        for key, val in params.items(): </p>
+			<p class="source-code">            self.v[key] = np.zeros_like(val)</p>
+			<p class="source-code">        for key in params.keys():</p>
+			<p class="source-code"><strong class="inline">            self.v[key] = self.momentum*self.v[key] - self.lr*grads[key]</strong></p>
+			<p class="source-code"><strong class="inline">            params[key] += self.v[key]</strong></p>
+			<p>The instance variable, <strong class="inline">v</strong>, retains the velocity of the object. At initialization, <strong class="inline">v</strong> retains nothing. When <strong class="inline">update()</strong> is called, it retains the data of the same structure as a dictionary variable. The remaining implementation is simple: it just implements equations 6.3 and 6.4.</p>
+			<p>Now, let's use Momentum to solve the optimization problem of equation 6.2. The following image shows the result.</p>
+			<p>As shown in the following plot, the update path moves like a ball being rolled around in a bowl. You can see that "the degree of zigzag" is reduced compared to SGD. The force in the<span lang="en-US" xml:lang="en-US"> x</span>-axis direction is very small, but the object always receives the force in the same direction and is accelerated constantly in the same direction. On the other hand, the force in the <span lang="en-US" xml:lang="en-US">y</span>-axis direction is large, but the object receives the forces in the positive and negative directions alternately. They cancel each other out, so the velocity in the <span lang="en-US" xml:lang="en-US">y</span>-axis direction is unstable. This can accelerate the motion in the <span lang="en-US" xml:lang="en-US">x</span>-axis direction and reduce the zigzag motion compared to SGD:</p>
+			<div>
+				<div id="_idContainer262" class="IMG---Figure">
+					<img src="image/fig06_5.jpg" alt="Figure 6.5: Update path for optimization by Momentum&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.5: Update path for optimization by Momentum</h6>
+			<h3 id="_idParaDest-150"><a id="_idTextAnchor157"/>AdaGrad</h3>
+			<p>In neural network training, the value of the learning <strong class="inline">rate--η</strong> in the <strong class="inline">equation--</strong> is important. If it is too small, training takes too long. If it is too large, divergence occurs, and correct training cannot be achieved.</p>
+			<p>There is an effective technique for the learning rate called <strong class="bold">learning rate decay</strong>. It uses a lower learning rate as training advances. This method is often used in neural network training. A neural network learns "much" first and learns "less" gradually.</p>
+			<p>Reducing the learning rate gradually is the same as reducing the values of the learning rates for all the parameters collectively. AdaGrad ( <em class="italics">John Duchi, Elad Hazan, and Yoram Singer (2011): Adaptive Subgradient Methods for Online Learning and Stochastic Optimization. Journal of Machine Learning Research 12, Jul (2011), 2121 – 2159.</em>) is an advanced version of this method. AdaGrad creates a custom-made value for each parameter.</p>
+			<p>AdaGrad adjusts the learning rate for each element of the parameter adaptively for training (the "Ada" in AdaGrad comes from "Adaptive"). Now, we will show AdaGrad's update method with equations:</p>
+			<table id="table004-3" class="No-Table-Style">
+				<colgroup>
+					<col/>
+					<col/>
+				</colgroup>
+				<tbody>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer263">
+									<img src="image/Figure_6.5a.png" alt="73"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.5)</p>
+						</td>
+					</tr>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer264">
+									<img src="image/Figure_6.5b.png" alt="74"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.6)</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p>Just like SGD, W is the weight parameters to update, <img src="image/Figure_6.5c.png" alt="75"/> is the gradients of the loss function for W, and η is the learning rate. Here, a new variable, h, appears. The h variable stores the sum of the squared gradient values thus far, as shown in equation 6.5 (<span lang="en-US" xml:lang="en-US">⊙</span> in equation 6.5 indicates multiplication between array elements). When updating parameters, AdaGrad adjusts the scale of learning by multiplying <img src="image/Figure_6.5d.png" alt="76"/>. For the parameter element that moved significantly (i.e., was updated heavily), the learning rate becomes smaller. Thus, you can attenuate the learning rate for each parameter element by gradually reducing the learning rate of the parameter that moved significantly.</p>
+			<h4>Note</h4>
+			<p class="callout">AdaGrad records all the past gradients as the sum of squares. Therefore, as learning advances, the degree of update becomes small. When learning is conducted infinitely, the degree of update becomes 0, resulting in no update. The RMSProp (<em class="italics">Tieleman, T., &amp; Hinton, G. (2012): Lecture 6.5—RMSProp: Divide the gradient by a running average of its recent magnitude. COURSERA: Neural Networks for Machine Learning</em>) method solves this problem. It does not add all the past gradients equally. It forgets the past gradients gradually and conducts addition so that the information about new gradients is clearly reflected. This reduces the scale of the past gradients exponentially, which is called the "exponential moving average."</p>
+			<p>Now, let's implement AdaGrad. You can implement AdaGrad as follows (the source code is located at <strong class="inline">common/optimizer.py</strong>):</p>
+			<p class="source-code">class AdaGrad:</p>
+			<p class="source-code">    def __init__ (self, lr=0.01): </p>
+			<p class="source-code">        self.lr = lr</p>
+			<p class="source-code">        self.h = None</p>
+			<p class="source-code">    def update(self, params, grads): </p>
+			<p class="source-code">        if self.h is None:</p>
+			<p class="source-code">        self.h = {}</p>
+			<p class="source-code">        for key, val in params.items(): </p>
+			<p class="source-code">            self.h[key] = np.zeros_like(val)</p>
+			<p class="source-code">for key in params.keys():</p>
+			<p class="source-code"><strong class="inline">    self.h[key] += grads[key] * grads[key]</strong></p>
+			<p class="source-code"><strong class="inline">    params[key] -= self.lr * grads[key] / (np.sqrt(self.h[key]) + 1e-7)</strong></p>
+			<p>Note that a small value of <strong class="inline">1e-7</strong> was added in the last line. This prevents division by <strong class="inline">0</strong> when <strong class="inline">self.h[key]</strong> contains <strong class="inline">0</strong>. In many deep learning frameworks, you can configure this small value as a parameter, but here, a fixed value, <strong class="inline">1e-7</strong>, is used.</p>
+			<p>Now, let's use AdaGrad to solve the optimization problem of equation 6.2. The following image shows the result:</p>
+			<div>
+				<div id="_idContainer267" class="IMG---Figure">
+					<img src="image/fig06_6.jpg" alt="Figure 6.6: Update path for optimization by AdaGrad&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.6: Update path for optimization by AdaGrad</h6>
+			<p>The result shown in the preceding image shows that the parameters are moving efficiently to the minimum value. The parameters move a lot at first because the gradient in the <span lang="en-US" xml:lang="en-US">y</span>-axis direction is large. Adjustment is conducted in proportion to the large motion so that the update step becomes small. Thus, the degree of update in the <span lang="en-US" xml:lang="en-US">y</span>-axis direction is weakened, reducing the zigzag motion.</p>
+			<h3 id="_idParaDest-151"><a id="_idTextAnchor158"/>Adam</h3>
+			<p>In Momentum, the parameters move based on physical law, such as a ball rolled in a bowl. AdaGrad adjusts the update step adaptively for each parameter element. So, what happens when the two techniques, Momentum and AdaGrad, are combined? This is the basic idea of the technique called Adam (this explanation of Adam is intuitive and lacking some of the finer technical details. For a more granular definition, please see the original article).</p>
+			<p>Adam is a new technique that was proposed in 2015. The theory is slightly complicated. Intuitively, it is like a combination of Momentum and AdaGrad. By combining the advantages of these two techniques, we can expect to search the parameter space efficiently. The "bias correction" of hyperparameters is also a characteristic of Adam. For more details, please see the original paper (<em class="italics">Diederik Kingma and Jimmy Ba. (2014): Adam: A Method for Stochastic Optimization. arXiv:1412.6980[cs] (December 2014)</em>). It is implemented in Python as the <strong class="inline">Adam</strong> class in <strong class="inline">common/optimizer.py</strong>.</p>
+			<p>Now, let's use Adam to solve the optimization problem of equation 6.2. The following figure shows the result.</p>
+			<div>
+				<div id="_idContainer268" class="IMG---Figure">
+					<img src="image/fig06_7.jpg" alt="Figure 6.7: Update path for optimization by Adam&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.7: Update path for optimization by Adam</h6>
+			<p>As shown in <em class="italics">Figure 6.7</em>, the update path by Adam moves as if a ball has been rolled in a bowl. The motion is similar to that in Momentum, but the left and right motions of the ball are smaller. This advantage is caused by the adaptive adjustment of the learning rate.</p>
+			<h4>Note</h4>
+			<p class="callout">Adam has three hyperparameters. The first is the learning rate (appearing as α in the paper). The others are the coefficient for the primary moment, β<span class="P---Subscript">1</span>, and the coefficient for the secondary moment, β<span class="P---Subscript">2</span>. The article states that the standard values are 0.9 for β<span lang="en-US" xml:lang="en-US">1</span> and 0.999 for β<span lang="en-US" xml:lang="en-US">2</span>, which are effective in many cases.</p>
+			<h3 id="_idParaDest-152"><a id="_idTextAnchor159"/>Which Update Technique Should We Use?</h3>
+			<p>We have considered four-parameter updating techniques so far. Here, we will compare their results (the source code is located at <strong class="inline">ch06/optimizer_compare_naive.py</strong>).</p>
+			<p>As shown in <em class="italics">Figure 6.8</em>, different techniques use different paths to update the parameters. This image seems to show that AdaGrad is the best, but note that the results vary depending on the problems being solved. Naturally, the results also vary depending on the values of the hyperparameters (such as the learning rate):</p>
+			<div>
+				<div id="_idContainer269" class="IMG---Figure">
+					<img src="image/fig06_8.jpg" alt="Figure 6.8: Comparison of optimization techniques – SGD, Momentum, AdaGrad, and Adam&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.8: Comparison of optimization techniques – SGD, Momentum, AdaGrad, and Adam</h6>
+			<p>So far, we have looked at four techniques: SGD, Momentum, AdaGrad, and Adam. But which should we use? Unfortunately, there is no one technique currently known that is good at solving all problems. Each has its own distinct characteristics and advantages, which make it better suited to certain problems over others. Therefore, it's important to know which technique works best given a specific set of circumstances. </p>
+			<p>SGD is still used in a lot of research. Momentum and AdaGrad are also worth trying. Recently, many researchers and engineers seem to prefer Adam. This book mainly uses SGD and Adam. You can try the other techniques as you like.</p>
+			<h3 id="_idParaDest-153"><a id="_idTextAnchor160"/>Using the MNIST Dataset to Compare the Update Techniques</h3>
+			<p>For handwritten digit recognition, we will compare the four techniques we've described so far: SGD, Momentum, AdaGrad, and Adam. Let's explore how each technique works in the progress of training. <em class="italics">Figure 6.9</em> shows the results (the source code is located at <strong class="inline">h06/optimizer_compare_mnist.py</strong>):</p>
+			<div>
+				<div id="_idContainer270" class="IMG---Figure">
+					<img src="image/fig06_9.jpg" alt="Figure 6.9: Using the MNIST dataset to compare the four update techniques – the horizontal axis indicates the iterations of learning, while the vertical axis indicates the values of the loss function&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.9: Using the MNIST dataset to compare the four update techniques – the horizontal axis indicates the iterations of learning, while the vertical axis indicates the values of the loss function</h6>
+			<p>This experiment used a five-layer neural network, and each layer had 100 neurons. ReLU was used as the activation function.</p>
+			<p>The result of <em class="italics">Figure 6.9</em> shows that other techniques learned faster than SGD. It seems that the remaining three techniques learned similarly quickly. When we look closer, it seems that AdaGrad learned a little faster. In this experiment, note that the results are different depending on the hyperparameter of the learning rate and the structure of the neural network (the number of layers). However, generally, the other three techniques can learn faster than SGD and sometimes achieve better final recognition performance.<span lang="en-US" xml:lang="en-US"> </span></p>
+			<h2 id="_idParaDest-154"><a id="_idTextAnchor161"/>Initial Weight Values</h2>
+			<p>The initial weight values are especially important in neural network training. What values are set as the initial weight values often determines the success or failure of neural network training. In this section, we will explain the recommended initial weight values, then conduct an experiment to check that they accelerate neural network learning.</p>
+			<h3 id="_idParaDest-155"><a id="_idTextAnchor162"/>How About Setting the Initial Weight Values to 0?</h3>
+			<p>Later, we will look at a technique called weight decay, which reduces overfitting and improves generalization performance. In short, weight decay is a technique that reduces the values of the weight parameters to prevent overfitting.</p>
+			<p>If we want the weights to be small, starting with the smallest possible initial values is probably a good approach. Here, we use an initial weight value such as <strong class="inline">0.01 * np.random.randn(10, 100)</strong>. This small value is the value generated from the Gaussian distribution multiplied by 0.01—a Gaussian distribution with a standard deviation of 0.01.</p>
+			<p>If we want the weight values to be small, how about setting all the initial weight values to 0? This is a bad idea as it prevents us from training correctly.</p>
+			<p>Why should the initial weight values not be 0? Or in other words, why should the weights not be uniform values? Well, because all weight values are updated uniformly (in the same way) in backpropagation. So, say that layers 1 and 2 have 0 as their weights in a two-layer neural network. Then, in forward propagation, the same value is propagated to all the neurons in layer 2 because the weight of the input layer is 0. When the same values are entered for all the neurons in layer 2, all the weights in layer 2 are updated similarly in backward propagation (please remember "backward propagation in a multiplication node"). Therefore, the weights are updated with the same value and become symmetrical values (duplicate values). Due to this, there is no meaning in having many weights. To prevent the weights from being uniform or breaking their symmetrical structure, random initial values are required.</p>
+			<h3 id="_idParaDest-156"><a id="_idTextAnchor163"/>Distribution of Activations in the Hidden Layers</h3>
+			<p>Observing the distribution of activations (referring here to the output data after the activation function, though some literature calls the data that flows between layers an "activation") in the hidden layers provides a lot of information. Here, we will conduct a simple experiment to see how the initial weight values change the activations in the hidden layers. We will enter some randomly generated data into a five-layer neural network (using a sigmoid function as the activation function) and show the data distribution of the activations in each layer in a histogram. This experiment is based on the CS231n (<em class="italics">CS231n: Convolutional Neural Networks for Visual Recognition</em><span lang="en-US" xml:lang="en-US"> </span>(<a href="http://cs231n.github.io/">http://cs231n.github.io/</a>)) course at Stanford University.</p>
+			<p>The source code for the experiment is located at <strong class="inline">ch06/weight_init_activation_histogram.py</strong>. The following is part of this code:</p>
+			<p class="source-code">import numpy as np</p>
+			<p class="source-code">import matplotlib.pyplot as plt</p>
+			<p class="source-code">def sigmoid(x):</p>
+			<p class="source-code">    return 1 / (1 + np.exp(-x))</p>
+			<p class="source-code">x = np.random.randn(1000, 100) # 1000 data</p>
+			<p class="source-code">node_num = 100 # Number of nodes (neurons) in each hidden layer</p>
+			<p class="source-code">hidden_layer_size = 5 # Five hidden layers exist</p>
+			<p class="source-code">activations = {}	# The results of activations are stored here</p>
+			<p class="source-code">for i in range(hidden_layer_size):</p>
+			<p class="source-code">    if i != 0:</p>
+			<p class="source-code">        x = activations[i-1]</p>
+			<p class="source-code"><strong class="inline">    w = np.random.randn(node_num, node_num) * 1</strong></p>
+			<p class="source-code">    z = np.dot(x, w)</p>
+			<p class="source-code">    a = sigmoid(z) # Sigmoid function!</p>
+			<p class="source-code">    activations[i] = a</p>
+			<p>Here, there are five layers and that each layer has 100 neurons. As input data, 1,000 pieces of data are generated at random with Gaussian distribution and are provided to the five-layer neural network. A sigmoid function is used as the activation function, and the activation results of each layer are stored in the <strong class="inline">activations</strong> variable. Please note the weight scale. Here, a Gaussian distribution with a standard deviation of 1 is being used. The purpose of this experiment is to observe how the distribution of <strong class="inline">activations</strong> changes by changing this scale (standard deviation). Now, let's show the data of each layer that is stored in <strong class="inline">activations</strong> in a histogram:</p>
+			<p class="source-code"># Draw histograms</p>
+			<p class="source-code">for i, a in activations.items( ): </p>
+			<p class="source-code">    plt.subplot(1, len(activations), i+1)</p>
+			<p class="source-code">    plt.title(str(i+1) + "-layer")</p>
+			<p class="source-code">    plt.hist(a.flatten(), 30, range=(0,1))</p>
+			<p class="source-code">plt.show()</p>
+			<p>Executing this code creates the histograms shown in the following image.</p>
+			<p>This image shows that the activations of each layer are mainly 0 and 1. The sigmoid function that's being used here is an S-curve function. As the output of the sigmoid function approaches 0 (or 1), the value of the differential approaches 0. Therefore, when the data is mainly 0s and 1s, the values of the gradients in backward propagation get smaller until they vanish. This is a problem called <strong class="bold">gradient vanishing</strong>. In deep learning, where there's a large number of layers, gradient vanishing can be a more serious problem.</p>
+			<p>Next, let's conduct the same experiment, but this time with the standard deviation of the weights as 0.01. To set the initial weight values, you will need to modify the previous code, as follows:</p>
+			<p class="source-code"># w = np.random.randn(node_num, node_num) * 1</p>
+			<p class="source-code">w = np.random.randn(node_num, node_num) * 0.01</p>
+			<div>
+				<div id="_idContainer271" class="IMG---Figure">
+					<img src="image/fig06_10.jpg" alt="Figure 6.10: Distribution of the activations of each layer when a Gaussian distribution with a standard deviation of 1 is used for the initial weight values&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.10: Distribution of the activations of each layer when a Gaussian distribution with a standard deviation of 1 is used for the initial weight values</h6>
+			<p>Observe the results. The following image shows the distribution of the activations of each layer when a Gaussian distribution with a standard deviation of 0.01 is used:</p>
+			<div>
+				<div id="_idContainer272" class="IMG---Figure">
+					<img src="image/fig06_11.jpg" alt="Figure 6.11: Distribution of the activations of each layer when a Gaussian distribution with a standard deviation of 0.01 is used for the initial weight values&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.11: Distribution of the activations of each layer when a Gaussian distribution with a standard deviation of 0.01 is used for the initial weight values</h6>
+			<p>Now, the activations concentrate around 0.5. Unlike the previous example, they are not biased toward 0 and 1. The problem of gradient vanishing does not occur. However, when activations are biased, it causes a large problem in terms of its representation. If multiple neurons output almost the same values, there is no meaning in the existence of multiple neurons. For example, when 100 neurons output almost the same values, one neuron can represent almost the same thing. Therefore, the biased activations cause a problem because representation is limited.</p>
+			<h4>Note</h4>
+			<p class="callout">The distribution of the activations in each layer needs to be spread properly. This is because, when moderately diverse data flows in each layer, a neural network learns efficiently. On the other hand, when biased data flows, training may not go well because of the gradient vanishing and "limited representation."</p>
+			<p>Next, we will use the initial weight values that were recommended in a paper by Xavier Glorot et al. (<em class="italics">Xavier Glorot and Yoshua Bengio (2010): Understanding the difficulty of training deep feedforward neural networks. In Proceedings of the International Conference on Artificial Intelligence and Statistics (AISTATS2010). Society for Artificial Intelligence and Statistics</em>). This is called "Xavier initialization." Currently, the Xavier initializer is usually used in ordinary deep learning frameworks. For example, in the Caffe framework, you can specify the <strong class="inline">xavier</strong> argument for the initial weight setting to use the Xavier initializer.</p>
+			<p>Xavier's paper obtained the appropriate scale of weights so that the activation of each layer was spread similarly. It concluded that distribution with a standard deviation of <img src="image/Figure_6.11a.png" alt="6a"/> shoul<a id="_idTextAnchor164"/>d be used when the number of nodes in the previous layer is <span lang="en-US" xml:lang="en-US">n</span> (Xavier's paper suggested setting values that consider both the number of input nodes in the previous layer and the number of output nodes in the next layer. However, in framework implementations such as Caffe, the values are only calculated based on the input nodes in the previous layer for simplification, as described here). This can be seen in the following diagram:</p>
+			<div>
+				<div id="_idContainer274" class="IMG---Figure">
+					<img src="image/fig06_12.jpg" alt="Figure 6.12: Xavier initializer – when n nodes in the previous layer are connected, a distribution with the standard deviation of  is used for initial values&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.12: Xavier initializer – when <span lang="en-US" xml:lang="en-US">n </span>nodes in the previous layer are connected, a distribution with the standard deviation of <img src="image/Figure_6.12a.png" alt="6b"/> is used for initial values</h6>
+			<p>When the Xavier initializer is used, since the number of nodes in the previous layer is larger, the weight scale that is set for the initial values for the target nodes is smaller. Now, let's use the Xavier initializer to complete some experiments. You only have to modify the initial weight value, as follows (the implementation is simplified here because the number of nodes is 100 in all the layers):</p>
+			<p class="source-code">node_num = 100 # Number of nodes in the previous layer</p>
+			<p class="source-code">w = np.random.randn(node_num, node_num) / <strong class="inline">np.sqrt(node_num)</strong></p>
+			<div>
+				<div id="_idContainer276" class="IMG---Figure">
+					<img src="image/fig06_13.jpg" alt="Figure 6.13: Distribution of the activations of each layer when the Xavier initializer is used as the initial weight value&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.13: Distribution of the activations of each layer when the Xavier initializer is used  as the initial weight value</h6>
+			<p>The preceding image shows the results when the Xavier initializer is used. It shows that distributions are spread more widely, although a higher layer has a more distorted shape. We can expect that training is conducted efficiently because the data that flows in each layer is spread properly, and the representation of the sigmoid function is not limited.</p>
+			<h4>Note</h4>
+			<p class="callout">Also, the distributions of the upper layers are slightly distorted in terms of their shape. The distorted shape is improved when a <strong class="inline">tanh</strong> function (hyperbolic function) is used instead of a <strong class="inline">sigmoid</strong> function. Actually, when a <strong class="inline">tanh</strong> function is used, distributions will have a bell shape. The <strong class="inline">tanh</strong> function is an S-curve function, like a <strong class="inline">sigmoid</strong> function. The <strong class="inline">tanh</strong> function is symmetrical about the origin (0, 0), while the <strong class="inline">sigmoid</strong> function is symmetrical about <strong class="inline">(x, y) = (0, 0.5)</strong>. It is best to use the <strong class="inline">tanh</strong> function so that the activation function is symmetrical about the origin.</p>
+			<h3 id="_idParaDest-157"><a id="_idTextAnchor165"/>Initial Weight Values for ReLU</h3>
+			<p>The Xavier initializer is based on the assumption that the activation function is linear. The Xavier initializer is suitable because the <strong class="inline">sigmoid</strong> and <strong class="inline">tanh</strong> functions are symmetrical and can be regarded as linear functions around their centers. Meanwhile, for ReLU, using the initial value is recommended. This is known as the He initializer and was recommended by Kaiming He and et. al. <em class="italics">(Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun (2015): Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification. In 1026 – 1034</em>). The He initializer uses a Gaussian distribution with a standard deviation of <img src="image/Figure_6.13a.png" alt="6d"/> when th<a id="_idTextAnchor166"/>e number of nodes in the previous layer is <span lang="en-US" xml:lang="en-US">n</span>. When we consider that the Xavier initializer is <img src="image/Figure_6.13b.png" alt="6e"/>, we can assume (intuitively) that the coefficient must be doubled to provide more spread because a negative area is 0 for ReLU.</p>
+			<p>Let's look at the distribution of activations when ReLU is used as the activation function. We will consider the results of three experiments after using a Gaussian distribution with a standard deviation of 0.01 (that is, <strong class="inline">std=0.01</strong>), the Xavier initializer, and the He initializer, which is specifically used for ReLU (<em class="italics">Figure 6.14</em>).</p>
+			<p>The results indicate that the activations of each layer are very small (the averages of the distributions are as follows: layer 1: 0.0396, layer 2: 0.00290, layer 3: 0.000197, layer 4: 1.32e-5, and layer 5: 9.46e-7) for <strong class="inline">std=0.01</strong>. When small data flows through a neural network, the gradients of the weights in backward propagation are also small. This is a serious problem as training will barely advance.</p>
+			<p>Next, let's look at the results from using the Xavier initializer. This shows that the bias becomes larger little by little as the layers become deeper—as do the activations. Gradient vanishing will be a problem when it comes to training. On the other hand, for the He initializer, the spread of Gaussian distribution in each layer is similar. The spread of data is similar even when the layers are deeper. So, we can expect that appropriate values also flow for backward propagation.</p>
+			<p>In summary, when you use ReLU as the activation function, use the He initializer, and for S-curve functions such as <strong class="inline">sigmoid</strong> and <strong class="inline">tanh</strong>, use the Xavier initializer. As of the time of writing, this is the best practice.</p>
+			<h3 id="_idParaDest-158"><a id="_idTextAnchor167"/>Using the MNIST Dataset to Compare the Weight Initializers</h3>
+			<p>Let's use actual data to see how neural network learning is affected by different weight initializers. We will use <strong class="inline">std=0.01</strong>, the Xavier initializer, and the He initializer in our experiments (the source code is located at <strong class="inline">ch06/weight_init_compare.py</strong>). The following image shows the results:</p>
+			<p> </p>
+			<div>
+				<div id="_idContainer279" class="IMG---Figure">
+					<img src="image/fig06_14.jpg" alt="Figure 6.14: Change of activation distribution by weight initializers when ReLU is used &#13;&#10;as the activation function&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.14: Change of activation distribution by weight initializers when ReLU is used as the activation function</h6>
+			<p>This experiment uses a five-layer neural network (100 neurons in each layer) and ReLU as the activation function. The results shown in the following image reveal that no learning is conducted for <strong class="inline">std=0.01</strong>. This is because small values (data near 0) flow in forward propagation, as we observed in the distribution of activations earlier. Thus, the gradients to obtain are also small in backward propagation, resulting in few updates occurring for the weights. On the other hand, training is performed smoothly for the Xavier and He initializers. The following image also shows that training advances fast for the He initializer:</p>
+			<div>
+				<div id="_idContainer280" class="IMG---Figure">
+					<img src="image/fig06_15.jpg" alt="Figure 6.15: Using the MNIST dataset to compare the weight initializers – the horizontal axis indicates the iterations of training, while the vertical axis indicates the values of the loss function&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.15: Using the MNIST dataset to compare the weight initializers – the horizontal axis indicates the iterations of training, while the vertical axis indicates the values of the loss function</h6>
+			<p>As we have seen, the initial weight values are very important in neural network training. They often determine their success or failure. Although the importance of the initial weight values is sometimes overlooked, the starting (initial) value is important for everything. </p>
+			<h3 id="_idParaDest-159"><a id="_idTextAnchor168"/>Batch Normalization</h3>
+			<p>In the previous section, we observed the distribution of activations in each layer. We learned that the appropriate initial weight values provide a proper spread for the distribution of activations of each layer, thus enabling smooth training. So, how about adjusting the distribution of activations "forcefully" so that there's a proper spread in each layer? </p>
+			<p>This technique is based on the idea of batch normalization (<em class="italics">Sergey Ioffe and Christian Szegedy (2015): Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift. arXiv:1502.03167[cs] (February 2015)</em>)<span lang="en-US" xml:lang="en-US">.</span></p>
+			<h3 id="_idParaDest-160"><a id="_idTextAnchor169"/>Batch Normalization Algorithm</h3>
+			<p>Batch normalization (also known as batch norm) was first proposed in 2015. Although batch norm is a new technique, it is widely used by many researchers and engineers. In fact, in competitions surrounding machine learning, batch norm often achieves excellent results.</p>
+			<p>Batch norm attracts a lot of attention due to the following advantages:</p>
+			<ul>
+				<li>It can accelerate learning (it can increase the learning rate).</li>
+				<li>It is not as dependent on the initial weight values (you do not need to be cautious about the initial values).</li>
+				<li>It reduces overfitting (it reduces the necessity of dropout).</li>
+			</ul>
+			<p>The first advantage is particularly attractive because deep learning takes a lot of time. With batch norm there's no need to be anxious about the initial weight values, and due to it reducing overfitting, it removes this cause of anxiety from deep learning.</p>
+			<p>As we described earlier, the purpose of batch norm is to adjust the distribution of the activations in each layer so that it has a proper spread. To do that, the layer that normalizes data distribution is inserted into a neural network as the batch normalization layer (also known as the batch norm layer), as shown in the following diagram: </p>
+			<div>
+				<div id="_idContainer281" class="IMG---Figure">
+					<img src="image/fig06_16.jpg" alt="Figure 6.16: Neural network example that uses batch normalization (the batch norm layers &#13;&#10;are shown in gray)&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.16: Neural network example that uses batch normalization (the batch norm layers are shown in gray)</h6>
+			<p>As its name indicates, batch norm normalizes each mini-batch that is used for training. Specifically, it normalizes data so that the average is 0 and the variance is 1. The following equation shows this:</p>
+			<table id="table005-3" class="No-Table-Style">
+				<colgroup>
+					<col/>
+					<col/>
+				</colgroup>
+				<tbody>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style">
+							<p><img src="image/Figure_6.16a.png" alt="77"/></p>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.7)</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p>Here, a set of m input data, b <img src="image/Figure_6.16d.png" alt="78"/>, is treated as a mini-batch and its average, <img src="image/Figure_6.16e.png" alt="79"/>, and variance, <img src="image/Figure_6.16f.png" alt="80"/>, are calculated. The input data is normalized so that its average is 0 and its variance is 1 for the appropriate distribution. In equation 6.7, ε is a small value (such as 10e-7). This prevents division by 0.</p>
+			<p>Equation 6.7 simply converts the input data for a mini-batch, <img src="image/Figure_6.16g.png" alt="81"/>, into data with an average of 0 and a variance of 1, <img src="image/Figure_6.16h.png" alt="82"/>. By inserting this process before (or after) the activation function (see (<em class="italics">Sergey Ioffe and Christian Szegedy (2015): Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift. arXiv:1502.03167[cs] (February 2015)</em>) and (<em class="italics">Dmytro Mishkin and Jiri Matas (2015): All you need is a good init. arXiv:1511.06422[cs] (November 2015)</em>) for a discussion (and experiments) on whether batch normalization should be inserted before or after the activation function), you can reduce the distribution bias of the data.</p>
+			<p>In addition, the batch norm layer converts the normalized data with a peculiar scale and shift. The following equation shows this conversion:</p>
+			<table id="table006-3" class="No-Table-Style">
+				<colgroup>
+					<col/>
+					<col/>
+				</colgroup>
+				<tbody>
+					<tr class="No-Table-Style">
+						<td class="No-Table-Style CellOverride-1">
+							<div>
+								<div id="_idContainer288">
+									<img src="image/Figure_6.16i.png" alt="83"/>
+								</div>
+							</div>
+						</td>
+						<td class="No-Table-Style">
+							<p>(6.8)</p>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<p>Here, γ and β are parameters. They start with γ = 1 and β = 0 and will be adjusted to the appropriate values through training.</p>
+			<p>This is the algorithm of batch norm. This algorithm provides the forward propagation in a neural network. By using a computational graph, as described in <em class="italics">Chapter 5</em>, <em class="italics">Backpropagation</em>, we can represent batch norm as follows.</p>
+			<p>We won't go into detail about how to derive backward propagation in batch norm here because it is a little complicated. When you use a computational graph, such as the one shown in the following image, you can derive the backward propagation of batch norm relatively easily. Frederik Kratzert's blog, <em class="italics">Understanding the Backward Pass through the Batch Normalization Layer</em> (<a href="https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html">https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html</a>), provides a detailed description of this. Please refer to it if you are interested:</p>
+			<div>
+				<div id="_idContainer289" class="IMG---Figure">
+					<img src="image/fig06_17.jpg" alt="Figure 6.17: Computational graph of batch normalization &#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.17: Computational graph of batch normalization </h6>
+			<h4>Note</h4>
+			<p class="callout"><em class="italics">Figure 6.17</em> is cited from reference, <em class="italics">Frederik Kratzert's blog "Understanding the backward pass through Batch Normalization Layer"</em> (<a href="https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html">https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html</a>).</p>
+			<h3 id="_idParaDest-161"><a id="_idTextAnchor170"/>Evaluating Batch Normalization</h3>
+			<p>Now, let's use the batch norm layer to conduct some experiments. First, we will use the MNIST dataset to see how the progress of learning changes with and without the batch norm layer (the source code can be found at <strong class="inline">ch06/batch_norm_test.py</strong>). <em class="italics">Figure 6.18</em> shows the result.</p>
+			<p><em class="italics">Figure 6.18</em> shows that batch norm accelerates training. Next, let's see how the progress of training changes when various scales for the initial values are used. <em class="italics">Figure 6.19</em> contains graphs that show the progress of training when the standard deviations of the initial weight values are changed.</p>
+			<p>This indicates that batch norm accelerates training in almost all cases. In fact, when batch norm is not used, training does not advance at all without a good scale of initial values.</p>
+			<p>As we have seen, using batch norm can accelerate training and provides robustness to the initial weight values ("robustness to the initial values" means having a little dependence on them). Batch norm will play an active part in many situations because it has such wonderful characteristics.</p>
+			<h2 id="_idParaDest-162"><a id="_idTextAnchor171"/>Regularization</h2>
+			<p><strong class="bold">Overfitting</strong> often creates difficulties in machine learning problems. In overfitting, the model fits the training data too well and cannot properly handle other data that is not contained in the training data. Machine learning aims at generalizing performance. It is desirable for the model to properly recognize unknown data that is not contained in the training data. While you can create a complicated and representative model this way, reducing overfitting is also important:</p>
+			<div>
+				<div id="_idContainer290" class="IMG---Figure">
+					<img src="image/fig06_18.jpg" alt="Figure 6.18: Effect of batch norm – batch norm accelerates learning&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.18: Effect of batch norm – batch norm accelerates learning</h6>
+			<h3 id="_idParaDest-163"><a id="_idTextAnchor172"/>Overfitting</h3>
+			<p>The main two causes of overfitting are as follows:</p>
+			<ul>
+				<li>The model has many parameters and is representative.</li>
+				<li>The training data is insufficient.</li>
+			</ul>
+			<p>Here, we will generate overfitting by providing these two causes. Out of 60,000 pieces of training data in the MNIST dataset, only 300 are provided, and a seven-layer network is used to increase the network's complexity. It has 100 neurons in each layer. ReLU is used as the activation function:</p>
+			<div>
+				<div id="_idContainer291" class="IMG---Figure">
+					<img src="image/fig06_19.jpg" alt="Figure 6.19: The solid lines show the results of using batch norm, while the dotted lines show the results without it – the title of each graph indicates the standard deviation of the initial weight values&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.19: The solid lines show the results of using batch norm, while the dotted lines show the results without it – the title of each graph indicates the standard deviation of the initial weight values</h6>
+			<p>The following is part of the code for this experiment (the source file is at <strong class="inline">ch06/overfit_weight_decay.py</strong>). First, the code loads the data:</p>
+			<p class="source-code">(x_train, t_train), (x_test, t_test) = load_mnist(normalize=True)</p>
+			<p class="source-code"># Reduce learning data to reproduce overfitting</p>
+			<p class="source-code">x_train = x_train[:300] </p>
+			<p class="source-code">t_train = t_train[:300]</p>
+			<p>The following code conducts training. Here, the recognition accuracy is calculated for each epoch for all the training data and all the test data:</p>
+			<p class="source-code">network = MultiLayerNet(input_size=784, hidden_size_list=[100, 100, 100, 100, 100, 100], output_size=10)</p>
+			<p class="source-code">optimizer = SGD(lr=0.01) # Use SGD with the learning rate of 0.01 to update the parameters</p>
+			<p class="source-code">max_epochs = 201</p>
+			<p class="source-code">train_size = x_train.shape[0]</p>
+			<p class="source-code">batch_size = 100</p>
+			<p class="source-code">train_loss_list = []</p>
+			<p class="source-code">train_acc_list = []</p>
+			<p class="source-code">test_acc_list = []</p>
+			<p class="source-code">iter_per_epoch = max(train_size / batch_size, 1</p>
+			<p class="source-code">epoch_cnt = 0</p>
+			<p class="source-code">for i in range(1000000000):</p>
+			<p class="source-code">    batch_mask = np.random.choice(train_size, batch_size)</p>
+			<p class="source-code">    x_batch = x_train[batch_mask]</p>
+			<p class="source-code">    t_batch = t_train[batch_mask]</p>
+			<p class="source-code">    grads = network.gradient(x_batch, t_batch)</p>
+			<p class="source-code">    optimizer.update(network.params, grads)</p>
+			<p class="source-code">    if i % iter_per_epoch == 0:</p>
+			<p class="source-code">        train_acc = network.accuracy(x_train, t_train)</p>
+			<p class="source-code">        test_acc = network.accuracy(x_test, t_test)</p>
+			<p class="source-code">        train_acc_list.append(train_acc)</p>
+			<p class="source-code">        test_acc_list.append(test_acc)</p>
+			<p class="source-code">        epoch_cnt += 1</p>
+			<p class="source-code">        if epoch_cnt &gt;= max_epochs:</p>
+			<p class="source-code">            break</p>
+			<p>The <strong class="inline">train_acc_list</strong> and <strong class="inline">test_acc_list</strong> lists store the recognition accuracies for each epoch. An epoch indicates that all the training data has been used. Let's draw graphs based on these lists (<strong class="inline">train_acc_list</strong> and <strong class="inline">test_acc_list</strong>). The following plot shows the results.</p>
+			<p>The recognition accuracies that were measured using the training data reached almost 100% after 100 epochs, but the recognition accuracies on the test data are far below 100%. These large differences are caused by overfitting the training data. This graph shows that the model cannot handle general data (test data) that was not used in training properly:</p>
+			<div>
+				<div id="_idContainer292" class="IMG---Figure">
+					<img src="image/fig06_20.jpg" alt="Figure 6.20: Transition of recognition accuracies for the training data (train) and test data (test)&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.20: Transition of recognition accuracies for the training data (train) and test data (test)</h6>
+			<h3 id="_idParaDest-164"><a id="_idTextAnchor173"/>Weight Decay</h3>
+			<p>The <strong class="bold">weight decay</strong> technique has often been used to reduce overfitting. It avoids overfitting by imposing a penalty on large weights during training. Overfitting often occurs when a weight parameter takes a large value.</p>
+			<p>As described earlier, the purpose of neural network training is to reduce the value of the loss function. For example, you can add the squared norm (L2 norm) of the weight to the loss function. Then, you could prevent the weight from being large. When the weights are W, the L2 norm of the weight decay is <img src="image/Figure_6.20a.png" alt="84"/>. This <img src="image/Figure_6.20b.png" alt="85"/> is added to the loss function. Here, λ is the hyperparameter that controls the strength of regularization. If you set a larger value to λ, you can impose a stronger penalty on a large weight. <img src="image/Figure_6.20c.png" alt="88"/> at the beginning of <img src="image/Figure_6.20b.png" alt="86"/> is a constant for adjustment so that the differential of <img src="image/Figure_6.20b.png" alt="87"/> is λW.</p>
+			<p>Weight decay adds <img src="image/Figure_6.20b.png" alt="89"/> to the loss function for all weights. Therefore, the differential of the regularization term, λW, is added to the result of backpropagation when calculating the gradient of a weight.</p>
+			<p>The L2 norm is the sum of squares of each element. In addition to the L2 norm, L1 and L ∞ norms also exist. The L1 norm is the sum of absolute values, that is, |w<span lang="en-US" xml:lang="en-US">1</span>| + |w<span lang="en-US" xml:lang="en-US">2</span>| + ... + |w<span lang="en-US" xml:lang="en-US">n</span>|. The L ∞ norm is also called the max norm. It is the largest among the absolute values of all the elements. You can use any of these norms as a regularization term. Each has its own characteristics, but we will only implement the L2 norm here since it's the most commonly used.</p>
+			<p>Now, let's conduct an experiment. We will apply the weight decay of λ= 0.1 to the preceding experiment. The following plot shows the results (the network that supports weight decay is located at <strong class="inline">common/multi_layer_net.py</strong> and the code for the experiment is located at <strong class="inline">ch06/overfit_weight_decay.py</strong>):</p>
+			<div>
+				<div id="_idContainer299" class="IMG---Figure">
+					<img src="image/fig06_21.jpg" alt="Figure 6.21: Transition of recognition accuracies for the training data (train) and test data (test) when weight decay is used&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.21: Transition of recognition accuracies for the training data (train) and test data (test) when weight decay is used</h6>
+			<p>The preceding image shows that the recognition accuracies of the training data and test data are different, but that the difference is smaller than in the one shown in <em class="italics">Figure 6.20</em> where weight decay was not used. This indicates that overfitting was reduced. Note that the recognition accuracies of the training data have not reached 100% (1.0).</p>
+			<h3 id="_idParaDest-165"><a id="_idTextAnchor174"/>Dropout</h3>
+			<p>The previous section described the weight decay technique. It adds the L2 norm of the weights to the loss function to reduce overfitting. Weight decay is easy to implement and can reduce overfitting to some extent. However, as a neural network model becomes more complicated, weight decay is often insufficient. This is when the dropout technique (<em class="italics">N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov (2014): Dropout: A simple way to prevent neural networks from overfitting. The Journal of Machine Learning Research, pages 1929 – 1958, 2014</em>) is often used.</p>
+			<p>Dropout erases neurons at random during training. During training, it selects neurons in a hidden layer at random to erase them. As shown in the following image, the erased neurons do not transmit signals. During training, the neurons to be erased are selected at random each time data flows. During testing, the signals of all the neurons are propagated. The output of each neuron is multiplied by the rate of the erased neurons during training:</p>
+			<div>
+				<div id="_idContainer300" class="IMG---Figure">
+					<img src="image/fig06_22.jpg" alt="Figure 6.22: Concept of dropout &#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.22: Concept of dropout </h6>
+			<h4>Note</h4>
+			<p class="callout"><em class="italics">Figure 6.22</em> is cited from reference, <em class="italics">N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever, and R. Salakhutdinov (2014): Dropout: A simple way to prevent neural networks from overfitting. The Journal of Machine Learning Research pages 1929–1958, 2014</em>.</p>
+			<p>The left-hand image shows an ordinary neural network, while the right-hand image shows a network that dropout has been applied to. Dropout selects neurons at random and erases them to stop the transmission of subsequent signals.</p>
+			<p>Now, let's implement dropout. Simplicity is emphasized in the implementation here. If appropriate calculation is conducted during training, we only have to flow data through forward propagation (without multiplying the rate of the erased neurons). Such an implementation is conducted in deep learning frameworks. For efficient implementation, the dropout implemented in the Chainer framework, for example, may be useful:</p>
+			<p class="source-code">class Dropout:</p>
+			<p class="source-code">    def __init__ (self, dropout_ratio=0.5):</p>
+			<p class="source-code">        self.dropout_ratio = dropout_ratio</p>
+			<p class="source-code">        self.mask = None</p>
+			<p class="source-code">    def forward(self, x, train_flg=True): </p>
+			<p class="source-code">        if  train_flg:</p>
+			<p class="source-code">            self.mask = np.random.rand(*x.shape) &gt; self.dropout_ratio</p>
+			<p class="source-code">            return x * self.mask</p>
+			<p class="source-code">        else:</p>
+			<p class="source-code">            return x * (1.0 - self.dropout_ratio)</p>
+			<p class="source-code">    def backward(self, dout):</p>
+			<p class="source-code">        return dout * self.mask</p>
+			<p>Please note that, in each forward propagation, the neurons to erase are stored as <strong class="inline">False</strong> in <strong class="inline">self.mask</strong>. <strong class="inline">self.mask</strong> generates an array of the same shape as <strong class="inline">x</strong> at random and sets the elements to <strong class="inline">True</strong> when their values are larger than <strong class="inline">dropout_ratio</strong>. The behavior in backward propagation is the same as that in ReLU. If a neuron is passed a signal in forward propagation, it passes the received signal without changing it in backward propagation. If a neuron doesn't pass a signal in forward propagation, it stops the received signal in backward propagation.</p>
+			<p>We will use the MNIST dataset to validate the effect of dropout. The source code can be found in <strong class="inline">ch06/overfit_dropout.py</strong>. It uses the <strong class="inline">Trainer</strong> class to simplify implementation.</p>
+			<p>The <strong class="inline">Trainer</strong> class is implemented in <strong class="inline">common/trainer.py</strong>. It conducts network training that has been conducted so far in this chapter. For details, please see <strong class="inline">common/trainer.py</strong> and <strong class="inline">ch06/overfit_dropout.py</strong>.</p>
+			<p>To experiment with dropout, we'll use a seven-layer network (where 100 neurons exist in each layer and ReLU is used as the activation function), as in the previous experiment. One of the experiments will use dropout, while the other won't. The following image shows the results.</p>
+			<p>As we can see, using dropout reduces the difference between the recognition accuracies of training data and test data. It also indicates that the recognition accuracy of the training data has not reached 100%. Due to this, you can use dropout to reduce overfitting, even in a representative network:</p>
+			<div>
+				<div id="_idContainer301" class="IMG---Figure">
+					<img src="image/fig06_23.jpg" alt="Figure 6.23: The left-hand image shows the experiment without dropout, while the right-hand image shows the experiment with dropout (dropout_rate=0.15)&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.23: The left-hand image shows the experiment without dropout, while the right-hand image shows the experiment with dropout (dropout_rate=0.15)</h6>
+			<h4>Note</h4>
+			<p class="callout">In machine learning, ensemble learning is often used in which multiple models learn separately, and their multiple outputs are averaged through prediction. For example, when we use it in a neural network, we prepare five networks with the same (or similar) structure and train each of them. Then, we average the five outputs during testing to obtain the result. Experiments have shown that ensemble learning improves a neural network's recognition accuracy by several percent.</p>
+			<p class="callout">Ensemble learning is close to dropout. Erasing neurons at random while training in dropout can be interpreted as providing a different model to learn data each time. While predicting, the output from the neurons is multiplied by the rate of the erasures (0.5, for example) to average the models. Thus, we can say that dropout simulates ensemble learning in one network.</p>
+			<h2 id="_idParaDest-166"><a id="_idTextAnchor175"/>Validating Hyperparameters</h2>
+			<p>A neural network uses many hyperparameters, as well as parameters such as weights and biases. The hyperparameters here include the number of neurons in each layer, batch size, the learning rate for updating parameters, and weight decay. Setting the hyperparameters to inappropriate values deteriorates the performance of the model. The values of these hyperparameters are very important, but determining them usually requires a lot of trial and error. This section describes how to search for hyperparameter values as efficiently as possible.</p>
+			<h3 id="_idParaDest-167"><a id="_idTextAnchor176"/>Validation Data</h3>
+			<p>In the dataset we've used so far, the training data and test data are separate. The training data is used to train a network, while the test data is used to evaluate generalization performance. Thus, you can determine whether or not the network conforms too well only to the training data (that is, whether overfitting occurs) and how large the generalization performance is.</p>
+			<p>We will use various hyperparameter settings for validation. Please note that you must not use test data to evaluate the performance of hyperparameters. This is very important but is often overlooked.</p>
+			<p>So, why can't we use test data to evaluate the performance of hyperparameters? Well, if we use test data to adjust hyperparameters, the hyperparameter values will overfit the test data. In other words, it uses test data to check that the hyperparameter values are "good," so the hyperparameter values are adjusted so that they only fit the test data. Here, the model may provide low generalization performance and cannot fit other data.</p>
+			<p>Therefore, we need to use verification data (called <strong class="bold">validation data</strong>) to adjust them. This validation data is used to evaluate the quality of our hyperparameters.</p>
+			<p>Training data is used for learning parameters (weights and biases). Validation data is used to evaluate the performance of hyperparameters. Test data is used (once, ideally) at the end of training to check generalization performance.</p>
+			<p>Some datasets provide training data, validation data, and test data separately. Some provide only training data and test data, while some provide only one type of data. In that case, you must separate the data manually. For the MNIST dataset, the simplest way to obtain the validation data is to separate 20% of the training data beforehand and use that as validation data. The following code shows this:</p>
+			<p class="source-code">(x_train, t_train), (x_test, t_test) = load_mnist()</p>
+			<p class="source-code"># Shuffle training data</p>
+			<p class="source-code">x_train, t_train = shuffle_dataset(x_train,  t_train)</p>
+			<p class="source-code"># Separate validation data</p>
+			<p class="source-code">validation_rate = 0.20</p>
+			<p class="source-code">validation_num = int(x_train.shape[0] * validation_rate)</p>
+			<p class="source-code">x_val = x_train[:validation_num]</p>
+			<p class="source-code">t_val = t_train[:validation_num]</p>
+			<p class="source-code">x_train = x_train[validation_num:]</p>
+			<p class="source-code">t_train = t_train[validation_num:]</p>
+			<p>Here, the input data and labeled data are shuffled before separating the training data. This is because some datasets may have biased data (for example, numbers "0" to "10" are arranged in this order). The <strong class="inline">shuffle_dataset</strong> function uses <strong class="inline">np.random.shuffle</strong> and is contained in <strong class="inline">common/util.py</strong>.</p>
+			<p>Next, let's use validation data to look at the technique that's used for optimizing hyperparameters.</p>
+			<h3 id="_idParaDest-168"><a id="_idTextAnchor177"/>Optimizing Hyperparameters</h3>
+			<p>What is important when optimizing hyperparameters is to gradually narrow down the range where "good" hyperparameter values exist. To do this, we will set a broad range initially, select hyperparameters at random from the range (sampling), and use the sampled values to evaluate the recognition accuracy. Next, we will repeat these steps several times and observe the result of the recognition accuracy. Based on the result, we will narrow down the range of "good" hyperparameter values. By repeating this procedure, we can gradually limit the range of appropriate hyperparameters.</p>
+			<p>It has been reported that random sampling before a search provides better results than a systematic search, such as a grid search, to optimize hyperparameters in a neural network (<em class="italics">James Bergstra and Yoshua Bengio (2012): Random Search for Hyper-Parameter Optimization. Journal of Machine Learning Research 13, Feb (2012), 281 – 305</em>). This is because the degree by which the final recognition accuracy will be affected is different among different hyperparameters.</p>
+			<p>Specifying a "broad" range of hyperparameters is effective. We will specify the range in "powers of 10," such as from 0.001 (10<span lang="en-US" xml:lang="en-US">−3</span>) to 1,000 (10<span lang="en-US" xml:lang="en-US">3</span>) (this is also called "specifying on a log scale").</p>
+			<p>Please note that when optimizing hyperparameters, deep learning takes a lot of time (even a few days or weeks). Therefore, any hyperparameters that seem inappropriate must be abandoned while searching for them. When optimizing hyperparameters, it is effective to reduce the size of epoch for training to shorten the time that one evaluation takes. We discussed the optimization of hyperparameters previously. The following summarizes this discussion:</p>
+			<p><strong class="bold">Step 0</strong></p>
+			<p>Specify the range of the hyperparameters.</p>
+			<p><strong class="bold">Step 1</strong></p>
+			<p>Sample the hyperparameters from the range at random.</p>
+			<p><strong class="bold">Step 2</strong></p>
+			<p>Use the hyperparameter values sampled in <em class="italics">Step 1</em> for training and use the validation data to evaluate the recognition accuracy (set small epochs).</p>
+			<p><strong class="bold">Step 3</strong></p>
+			<p>Repeat <em class="italics">steps 1</em> and <em class="italics">2</em> a certain number of times (such as 100 times) and narrow down the range of hyperparameters based on the result of the recognition accuracy. When the range is narrowed down to some extent, select one hyperparameter value from it. This is one practical approach to optimizing hyperparameters.</p>
+			<h4>Note</h4>
+			<p class="callout">However, you may feel that this approach is the "wisdom" of engineers rather than science. If you need a more refined technique for optimizing hyperparameters, you can use <strong class="bold">Bayesian optimization</strong>. It makes good use of mathematical theories such as Bayes' theorem to provide stricter and more efficient optimization. For details, please see the paper <em class="italics">Practical Bayesian Optimization of Machine Learning Algorithms</em> (<em class="italics">Jasper Snoek, Hugo Larochelle, and Ryan P. Adams (2012): Practical Bayesian Optimization of Machine Learning Algorithms. In F. Pereira, C. J. C. Burges, L. Bottou, &amp; K. Q. Weinberger, eds. Advances in Neural Information Processing Systems 25. Curran Associates, Inc., 2951 – 2959</em>).</p>
+			<h3 id="_idParaDest-169"><a id="_idTextAnchor178"/>Implementing Hyperparameter Optimization</h3>
+			<p>Now, let's use the MNIST dataset to optimize some hyperparameters. We will look for two hyperparameters: the learning rate and the weight decay rate. The weight decay rate controls the strength of weight decay. This problem and solution are based on the <em class="italics">CS231n</em> (<em class="italics">CS231n: Convolutional Neural Networks for Visual Recognition</em> (<a href="http://cs231n.github.io/">http://cs231n.github.io/</a>)) course at Stanford University.</p>
+			<p>As described earlier, hyperparameters are validated by sampling them at random from the range on a log scale, such as from 0.001 (10<span lang="en-US" xml:lang="en-US">−3</span>) to 1,000 (10<span lang="en-US" xml:lang="en-US">3</span>). We can write this as <strong class="inline">10 ** np.random.uniform(-3, 3)</strong> in Python. This experiment will start with a range from 10<span lang="en-US" xml:lang="en-US">−8</span> to 10<span lang="en-US" xml:lang="en-US">−4</span> for the weight decay rate and from 10<span lang="en-US" xml:lang="en-US">−6</span> to 10<span lang="en-US" xml:lang="en-US">−2</span> for the learning rate. In this case, we can write the random sampling of the hyperparameters as follows:</p>
+			<p class="source-code">weight_decay = 10 ** np.random.uniform(-8, -4)</p>
+			<p class="source-code">lr = 10 ** np.random.uniform(-6, -2)</p>
+			<p>Here, the hyperparameters were sampled at random, and the sampled values were used for training. Then, training is repeated several times by using various hyperparameter values to find where the appropriate hyperparameters exist. Here, the details of implementation have been omitted, and only the result has been shown. The source code for optimizing hyperparameters is located at <strong class="inline">ch06/hyperparameter_optimization.py</strong>. </p>
+			<p>When we have a range of 10<span lang="en-US" xml:lang="en-US">−8</span> to 10<span lang="en-US" xml:lang="en-US">−4</span> for the weight decay rate and a range of 10<span lang="en-US" xml:lang="en-US">−6</span> to 10<span lang="en-US" xml:lang="en-US">−2</span> for the learning rate, we get the following results. Here, we can see the transitions in learning the validation data in descending order of high-recognition accuracies:</p>
+			<div>
+				<div id="_idContainer302" class="IMG---Figure">
+					<img src="image/fig06_24.jpg" alt="Figure 6.24: The solid lines show the recognition accuracies of the validation data, while the dotted lines show the recognition accuracies of the training data&#13;&#10;"/>
+				</div>
+			</div>
+			<h6>Figure 6.24: The solid lines show the recognition accuracies of the validation data, while the dotted lines show the recognition accuracies of the training data</h6>
+			<p>This indicates that the training advanced smoothly from <strong class="inline">Best-1</strong> to <strong class="inline">Best-5</strong>. Let's check the hyperparameter values (that is, the learning rate and weight decay rate) of <strong class="inline">Best-1</strong> to <strong class="inline">Best-5</strong>. These are the results: </p>
+			<p class="source-code">Best-1 (val acc:0.83) | lr:0.0092, weight decay:3.86e-07</p>
+			<p class="source-code">Best-2 (val acc:0.78) | lr:0.00956, weight decay:6.04e-07</p>
+			<p class="source-code">Best-3 (val acc:0.77) | lr:0.00571, weight decay:1.27e-06</p>
+			<p class="source-code">Best-4 (val acc:0.74) | lr:0.00626, weight decay:1.43e-05</p>
+			<p class="source-code">Best-5 (val acc:0.73) | lr:0.0052, weight decay:8.97e-06</p>
+			<p>Here, we can see that when the learning rate was 0.001 to 0.01 and the weight decay rate was 10<span lang="en-US" xml:lang="en-US">−8</span> to 10<span lang="en-US" xml:lang="en-US">−6</span>, learning advanced well. Due to this, the range of the hyperparameters where training is likely to succeed is observed to narrow the range of values. You can repeat the same procedure in the narrowed range. Thus, you can narrow the range where appropriate hyperparameters exist and select each of the final hyperparameters at a certain stage.</p>
+			<h2 id="_idParaDest-170"><a id="_idTextAnchor179"/>Summary</h2>
+			<p>This chapter described some important techniques that are used for neural network training. How to update parameters, how to specify initial weight values, batch normalization, and dropout are all essential techniques that are used in modern neural networks. The techniques described here are often used in state-of-the-art deep learning. In this chapter, we learned about the following:</p>
+			<ul>
+				<li>Four famous methods for updating parameters: Momentum, AdaGrad, Adam, and SGD.</li>
+				<li>How to specify initial weight values, which is very important if we wish to train correctly.</li>
+				<li>The Xavier initializer and He initializer, which are effective as initial weight values.</li>
+				<li>Batch normalization accelerates training and provides robustness to the initial weight values.</li>
+				<li>Weight decay and dropout are regularization techniques that are used to reduce overfitting.</li>
+				<li>To search for good hyperparameters, gradually narrowing down the range where appropriate values exist is an efficient method.</li>
+			</ul>
+		</div>
+		<div>
+			<div id="_idContainer304" class="Content">
+			</div>
+		</div>
+		<div>
+			<div id="_idContainer305" class="Content">
+			</div>
+		</div>
+		<div>
+			<div id="_idContainer306" class="Content">
+			</div>
+		</div>
+	</body></html>

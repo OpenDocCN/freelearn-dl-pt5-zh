@@ -1,0 +1,804 @@
+<html><head></head><body>
+		<div id="_idContainer649">
+			<h1 id="_idParaDest-106"><em class="italic"><a id="_idTextAnchor106"/>Chapter 5</em>: Solving the Reinforcement Learning Problem</h1>
+			<p>In the previous chapter, we provided the mathematical foundations for modeling a reinforcement learning (RL) problem. In this chapter, we'll lay the foundations for solving it. Many of the following chapters will focus on some specific solution approaches that will build on this foundation. To this end, we'll first cover the <strong class="bold">dynamic programming</strong> (<strong class="bold">DP</strong>) approach, with which we'll introduce some key ideas and concepts. DP methods provide optimal solutions to <strong class="bold">Markov decision processes </strong>(<strong class="bold">MDPs</strong>) yet require the complete knowledge and a compact representation of the state transition and reward dynamics of the environment. This could be severely limiting and impractical in a realistic scenario, where the agent is either directly trained in the environment itself or in a simulation of it. The <strong class="bold">Monte Carlo</strong> and <strong class="bold">temporal difference </strong>(<strong class="bold">TD</strong>) approaches, which we'll cover later, unlike DP, use sampled transitions from the environment and relax the aforementioned limitations. Finally, we'll also talk in detail about what makes a simulation model suitable for RL.</p>
+			<p>In particular, here are the sections in this chapter:</p>
+			<ul>
+				<li>Exploring dynamic programming</li>
+				<li>Training your agent with Monte Carlo methods</li>
+				<li>Temporal difference learning</li>
+				<li>Understanding the importance of simulation in reinforcement learning</li>
+			</ul>
+			<h1 id="_idParaDest-107"><a id="_idTextAnchor107"/>Exploring dynamic programming</h1>
+			<p>DP <a id="_idIndexMarker300"/>is a branch of mathematical optimization that proposes optimal solution methods to MDPs. Although most real-world problems are too complex to optimally solve via DP methods, the ideas behind these algorithms are central to many RL approaches. So, it is important to have a solid understanding of them. Throughout this chapter, we'll go from these optimal methods to more practical approaches by systematically introducing approximations. </p>
+			<p>We'll start this section by describing an example that will serve as a use case for the algorithms that we will introduce later in the chapter. Then, we will cover how to do prediction and <a id="_idIndexMarker301"/>control using DP.</p>
+			<p>Let's get started!</p>
+			<h2 id="_idParaDest-108"><a id="_idTextAnchor108"/>Example use case – Inventory replenishment of a food truck</h2>
+			<p>Our use case <a id="_idIndexMarker302"/>involves a food truck business that needs to decide how many burger patties to buy every weekday to replenish its inventory. Inventory planning is an important class of problems in retail and manufacturing that a lot of companies need to deal with all the time. Of course, for pedagogical reasons, our example is much simpler than what you would see in practice. However, it should still give you an idea about this problem class. </p>
+			<p>Now, let's dive into the example:</p>
+			<ul>
+				<li>Our food truck operates downtown during the weekdays.</li>
+				<li>Every weekday morning, the owner needs to decide on how many burger patties to buy with the following options: <img src="image/Formula_05_001.png" alt=""/>. The cost of a single patty is <img src="image/Formula_05_002.png" alt=""/></li>
+				<li>The food truck can store the patties up to a capacity of <img src="image/Formula_05_003.png" alt=""/> during the weekdays. However, since the truck does not operate over the weekend, and any inventory unsold by Friday evening spoils, if during a weekday, the number of patties purchased and the existing inventory exceeds the capacity, the excess inventory also spoils.</li>
+				<li>Burger demand for any weekday is a random variable <img src="image/Formula_05_004.png" alt=""/> with the following probability mass function:</li>
+			</ul>
+			<div>
+				<div id="_idContainer347" class="IMG---Figure">
+					<img src="image/Formula_05_005.jpg" alt=""/>
+				</div>
+			</div>
+			<ul>
+				<li>The net revenue per burger (after the cost of the ingredients other than the patty) is <img src="image/Formula_05_006.png" alt=""/>.</li>
+				<li>Sales in a <a id="_idIndexMarker303"/>day is the minimum of the demand and the available inventory, since the truck cannot sell more burgers than the number of patties available.</li>
+			</ul>
+			<p>So, what we have is a multi-step inventory planning problem and our goal is to maximize the total expected profit (<img src="image/Formula_05_007.png" alt=""/>) in a week.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The one-step inventory planning problem is often called "the newsvendor problem." It is about balancing the cost of overage and underage given a demand distribution. For many common demand distributions, this problem can be solved analytically. Of course, many real-world inventory problems are multi-step, similar to what we will solve in this chapter. You can read more about the newsvendor problem at <a href="https://en.wikipedia.org/wiki/Newsvendor_model">https://en.wikipedia.org/wiki/Newsvendor_model</a>. We will solve a more sophisticated version of this problem in <a href="B14160_15_Final_SK_ePub.xhtml#_idTextAnchor329"><em class="italic">Chapter 15</em></a>, <em class="italic">Supply Chain Management</em>.</p>
+			<p>So far so good. Next, let's create this environment in Python.</p>
+			<h3>Implementing the food truck environment in Python</h3>
+			<p>What we <a id="_idIndexMarker304"/>are<a id="_idIndexMarker305"/> about to create is a simulation environment for the food truck example as per the dynamics we described above. In doing so, we will use the popular framework designed for exactly the same purpose, which is OpenAI's Gym library. Chances are you have probably come across it before. But if not, that is perfectly fine since it does not play a critical role in this example. We will cover what you need to know as we go through it.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">OpenAI's Gym is the standard library for defining RL environments and developing and comparing solution methods. It is also compatible with various RL solution libraries, such as RLlib. If you are not already familiar with the Gym environment, take a look at its concise documentation here: <a href="https://gym.openai.com/docs/">https://gym.openai.com/docs/</a>.</p>
+			<p>Now, let's go into the implementation:</p>
+			<ol>
+				<li>We start by importing the libraries we will need:<p class="source-code">import numpy as np</p><p class="source-code">import gym</p></li>
+				<li>Next, we create a Python class, which is initialized with the environment parameters we described in the previous section: <p class="source-code">class FoodTruck(gym.Env):</p><p class="source-code">    def __init__(self):</p><p class="source-code">        self.v_demand = [100, 200, 300, 400]</p><p class="source-code">        self.p_demand = [0.3, 0.4, 0.2, 0.1]</p><p class="source-code">        self.capacity = self.v_demand[-1]</p><p class="source-code">        self.days = ['Mon', 'Tue', 'Wed', </p><p class="source-code">                     'Thu', 'Fri', "Weekend"]</p><p class="source-code">        self.unit_cost = 4</p><p class="source-code">        self.net_revenue = 7</p><p class="source-code">        self.action_space = [0, 100, 200, 300, 400]</p><p class="source-code">        self.state_space = [("Mon", 0)] \</p><p class="source-code">                         + [(d, i) for d in self.days[1:] </p><p class="source-code">                             for i in [0, 100, 200, 300]]</p><p>The state is a tuple of the day of the week (or the weekend) and the starting inventory <a id="_idIndexMarker306"/>level for the day. Again, the action is the number of patties to<a id="_idIndexMarker307"/> purchase before the sales start. This purchased inventory becomes available immediately. Note that this is a fully observable environment, so the state space and the observation space are the same. Possible inventory levels are 0, 100, 200, and 300 at the beginning of a given day (because of how we defined the action set, possible demand scenarios, and the capacity); except we start Monday with no inventory. </p></li>
+				<li>Next, let's define a method that calculates the next state and the reward along with the relevant quantities, given the current state, the action, and the demand. Note that this method does not change anything in the object:<p class="source-code">    def get_next_state_reward(self, state, action, demand):</p><p class="source-code">        day, inventory = state</p><p class="source-code">        result = {}</p><p class="source-code">        result['next_day'] = self.days[self.days.index(day) \</p><p class="source-code">                                       + 1]</p><p class="source-code">        result['starting_inventory'] = min(self.capacity, </p><p class="source-code">                                           inventory </p><p class="source-code">                                           + action)</p><p class="source-code">        result['cost'] = self.unit_cost * action </p><p class="source-code">        result['sales'] = min(result['starting_inventory'], </p><p class="source-code">                              demand)</p><p class="source-code">        result['revenue'] = self.net_revenue * result['sales']</p><p class="source-code">        result['next_inventory'] \</p><p class="source-code">            = result['starting_inventory'] - result['sales']</p><p class="source-code">        result['reward'] = result['revenue'] - result['cost']</p><p class="source-code">        return result</p></li>
+				<li>Now, we<a id="_idIndexMarker308"/> define <a id="_idIndexMarker309"/>a method that returns all possible transitions and rewards for a given state-action pair using the <strong class="source-inline">get_next_state_reward</strong> method, together with the corresponding probabilities. Notice that different demand scenarios will lead to the same next state and reward if the demand exceeds the inventory:<p class="source-code">    def get_transition_prob(self, state, action):</p><p class="source-code">        next_s_r_prob = {}</p><p class="source-code">        for ix, demand in enumerate(self.v_demand):</p><p class="source-code">            result = self.get_next_state_reward(state, </p><p class="source-code">                                                action, </p><p class="source-code">                                                demand)</p><p class="source-code">            next_s = (result['next_day'],</p><p class="source-code">                      result['next_inventory'])</p><p class="source-code">            reward = result['reward']</p><p class="source-code">            prob = self.p_demand[ix]</p><p class="source-code">            if (next_s, reward) not in next_s_r_prob:</p><p class="source-code">                next_s_r_prob[next_s, reward] = prob</p><p class="source-code">            else:</p><p class="source-code">                next_s_r_prob[next_s, reward] += prob</p><p class="source-code">        return next_s_r_prob</p></li>
+			</ol>
+			<p>That's all<a id="_idIndexMarker310"/> we<a id="_idIndexMarker311"/> need for now. Later, we will add other methods to this class to be able to simulate the environment. Now, we'll dive into DP with the policy evaluation methods.</p>
+			<h2 id="_idParaDest-109"><a id="_idTextAnchor109"/>Policy evaluation</h2>
+			<p>In MDPs (and RL), our <a id="_idIndexMarker312"/>goal is to obtain (near) optimal policies. But how do we even evaluate a given policy? After all, if we cannot <a id="_idIndexMarker313"/>evaluate it, we <a id="_idIndexMarker314"/>cannot compare it against another policy and decide which one is better. So, we start discussing the DP approaches with <strong class="bold">policy evaluation</strong> (also called the <strong class="bold">prediction problem</strong>). There are multiple ways to evaluate a given policy. In fact, in <a href="B14160_04_Final_SK_ePub.xhtml#_idTextAnchor080"><em class="italic">Chapter 4</em></a>, <em class="italic">Making of the Markov Decision Process</em>, when we defined the state-value function, we discussed how to calculate it analytically and iteratively. Well, that is policy evaluation! In this section, we will go with the iterative version, which we'll turn to next. </p>
+			<h3>Iterative policy evaluation</h3>
+			<p>Let's first discuss<a id="_idIndexMarker315"/> the iterative policy evaluation algorithm and refresh your mind on what we covered in the previous chapter. Then, we will evaluate the policy that the owner of the food truck already has (the base policy).</p>
+			<h4>Iterative policy iteration algorithm</h4>
+			<p>Recall that the value of a state is defined as follows for a given policy:</p>
+			<div>
+				<div id="_idContainer350" class="IMG---Figure">
+					<img src="image/Formula_05_008.jpg" alt=""/>
+				</div>
+			</div>
+			<p><img src="image/Formula_05_009.png" alt=""/> is the expected discounted cumulative reward starting in state <img src="image/Formula_05_010.png" alt=""/> and following policy <img src="image/Formula_05_011.png" alt=""/>. In our food truck example, the value of the state <img src="image/Formula_05_012.png" alt=""/> is the expected reward (profit) of <a id="_idIndexMarker316"/>a week that starts with zero inventory on Monday. The policy that maximizes <img src="image/Formula_05_013.png" alt=""/> would be the optimal policy!</p>
+			<p>Now, the Bellman equation tells us the state values must be consistent with each other. It means that the expected one-step reward together with the discounted value of the next state should be equal to the value of the current state. More formally, this is as follows:</p>
+			<div>
+				<div id="_idContainer356" class="IMG---Figure">
+					<img src="image/Formula_05_014.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+
+</p>
+			<div>
+				<div id="_idContainer357" class="IMG---Figure">
+					<img src="image/Formula_05_015.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer358" class="IMG---Figure">
+					<img src="image/Formula_05_016.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Since we know all the transition probabilities for this simple problem, we can analytically calculate this expectation:</p>
+			<div>
+				<div id="_idContainer359" class="IMG---Figure">
+					<img src="image/Formula_05_017.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The <img src="image/Formula_05_018.png" alt=""/> term at the beginning is because the policy may suggest taking actions probabilistically given the state. Since the transition probabilities depend on the action, we need to account for each possible action the policy may lead us to.</p>
+			<p>Now, all we need to do to obtain an iterative algorithm is to convert the Bellman equation into <a id="_idIndexMarker317"/>an update rule as follows:</p>
+			<div>
+				<div id="_idContainer361" class="IMG---Figure">
+					<img src="image/Formula_05_019.jpg" alt=""/>
+				</div>
+			</div>
+			<p><em class="italic">A single round of updates, </em><img src="image/Formula_05_020.png" alt=""/><em class="italic">, involves updating all the state values</em>. The algorithm stops until the changes in state values are sufficiently small in successive iterations. We won't go into the proof, but this update rule can be shown to converge to <img src="image/Formula_05_021.png" alt=""/> as <img src="image/Formula_05_022.png" alt=""/> This algorithm is called <strong class="bold">iterative policy evaluation</strong> with <strong class="bold">expected update</strong> since we take into account all possible one-step transitions. </p>
+			<p>One last note before we implement this method is that rather than carrying two copies of the state values for <img src="image/Formula_05_023.png" alt=""/> and <img src="image/Formula_05_024.png" alt=""/>, and replacing <img src="image/Formula_05_025.png" alt=""/> with <img src="image/Formula_05_026.png" alt=""/> after a full round of updates, we'll just make in-place updates. This tends to converge faster since we make the latest estimate for the value of a state immediately available to be used for the other state updates.</p>
+			<p>Next, let's evaluate a base policy for the inventory replenishment problem. </p>
+			<h4>Iterative evaluation of a base inventory replenishment policy</h4>
+			<p>Imagine that the <a id="_idIndexMarker318"/>owner of<a id="_idIndexMarker319"/> the food truck has the following policy: At the beginning of a weekday, the owner replenishes the inventory up to 200 or 300 patties, with equal probability. For example, if the inventory at the beginning of the day is 100, they are equally likely to purchase 100 or 200 patties. Let's evaluate this policy and see how much profit we should expect in the course of a week:</p>
+			<ol>
+				<li value="1">We first define a function that returns a <strong class="source-inline">policy</strong> dictionary, in which the keys correspond to the states. The value that corresponds to a state is another dictionary that has actions as the keys and the probability of selecting that action in that state as the values:<p class="source-code">def base_policy(states):</p><p class="source-code">    policy = {}</p><p class="source-code">    for s in states:</p><p class="source-code">        day, inventory = s</p><p class="source-code">        prob_a = {} </p><p class="source-code">        if inventory &gt;= 300:</p><p class="source-code">            prob_a[0] = 1</p><p class="source-code">        else:</p><p class="source-code">            prob_a[200 - inventory] = 0.5</p><p class="source-code">            prob_a[300 - inventory] = 0.5</p><p class="source-code">        policy[s] = prob_a</p><p class="source-code">    return policy</p></li>
+				<li>Now the policy evaluation. We define a function that will calculate the expected update for a given state and the corresponding policy for that state: <p class="source-code">def expected_update(env, v, s, prob_a, gamma):</p><p class="source-code">    expected_value = 0</p><p class="source-code">    for a in prob_a:</p><p class="source-code">        prob_next_s_r = env.get_transition_prob(s, a)</p><p class="source-code">        for next_s, r in prob_next_s_r:</p><p class="source-code">            expected_value += prob_a[a] \</p><p class="source-code">                            * prob_next_s_r[next_s, r] \</p><p class="source-code">                            * (r + gamma * v[next_s])</p><p class="source-code">    return expected_value</p><p>In <a id="_idIndexMarker320"/>other <a id="_idIndexMarker321"/>words, this function calculates <img src="image/Formula_05_027.png" alt=""/> for a given <img src="image/Formula_05_028.png" alt=""/>.</p></li>
+				<li>The policy evaluation function executes the expected updates for all states until the state values converge (or it reaches a maximum number of iterations):<p class="source-code">def policy_evaluation(env, policy, max_iter=100, </p><p class="source-code">                      v = None, eps=0.1, gamma=1):</p><p class="source-code">    if not v:</p><p class="source-code">        v = {s: 0 for s in env.state_space}</p><p class="source-code">    k = 0</p><p class="source-code">    while True:</p><p class="source-code">        max_delta = 0</p><p class="source-code">        for s in v:</p><p class="source-code">            if not env.is_terminal(s):</p><p class="source-code">                v_old = v[s]</p><p class="source-code">                prob_a = policy[s]</p><p class="source-code">                v[s] = expected_update(env, v, </p><p class="source-code">                                       s, prob_a, </p><p class="source-code">                                       gamma)</p><p class="source-code">                max_delta = max(max_delta, </p><p class="source-code">                                abs(v[s] - v_old))</p><p class="source-code">        k += 1</p><p class="source-code">        if max_delta &lt; eps:</p><p class="source-code">            print("Converged in", k, "iterations.")</p><p class="source-code">            break</p><p class="source-code">        elif k == max_iter:</p><p class="source-code">            print("Terminating after", k, "iterations.")</p><p class="source-code">            break</p><p class="source-code">    return v</p><p>Let's <a id="_idIndexMarker322"/>elaborate<a id="_idIndexMarker323"/> on how this function works:</p><p>a) The <strong class="source-inline">policy_evaluation</strong> function receives an environment object, which will be an instance of the <strong class="source-inline">FoodTruck</strong> class in our example.</p><p>b) The function evaluates the specified policy, which is in the form of a dictionary that maps states to action probabilities. </p><p>c) All the state values are initialized to 0 unless an initialization is passed into the function. The state values for the terminal states (states corresponding to the weekend in this example) are not updated since we don't expect any reward from that point on.</p><p>d) We define an epsilon value to use as a threshold for convergence. If the maximum change between updates among all the state values is less than this threshold <a id="_idIndexMarker324"/>in a <a id="_idIndexMarker325"/>given round, the evaluation is terminated. </p><p>e) Since this is an episodic task with a finite number of steps, we set the discount factor <strong class="source-inline">gamma</strong> to 1 by default.</p><p>f) The function returns the state values, which we will need later. </p></li>
+				<li>Now, we evaluate the base policy the owner has using this function. First, create a <strong class="source-inline">foodtruck</strong> object from the class we defined above:<p class="source-code">foodtruck = FoodTruck()</p></li>
+				<li>Get the base policy for the environment:<p class="source-code">policy = base_policy(foodtruck.state_space)</p></li>
+				<li>Evaluate the base policy and get the corresponding state values – specifically for the initial state:<p class="source-code">v = policy_evaluation(foodtruck, policy)</p><p class="source-code">print("Expected weekly profit:", v["Mon", 0])</p></li>
+				<li>The results will look like the following:<p class="source-code"><strong class="bold">Converged in 6 iterations.</strong></p><p class="source-code"><strong class="bold">Expected weekly profit: 2515.0</strong></p></li>
+			</ol>
+			<p>The state-value of <strong class="source-inline">("Mon", 0)</strong>, which is the initial state, is 2515 under this policy. Not a bad profit for a week! </p>
+			<p>Great job so far! Now you are able to evaluate a given policy and calculate the state values corresponding to that policy. Before going into improving the policy, though, let's do one more<a id="_idIndexMarker326"/> thing. Let's <a id="_idIndexMarker327"/>verify that simulating the environment under this policy leads to a similar reward.</p>
+			<h3>Comparing the policy evaluation against a simulation</h3>
+			<p>In order to <a id="_idIndexMarker328"/>be able to simulate the environment, we need to add a few more methods to the <strong class="source-inline">FoodTruck</strong> class: </p>
+			<ol>
+				<li value="1">Create a <strong class="source-inline">reset</strong> method, which simply initializes/resets the object to Monday morning with zero inventory. We will call this method before we start an episode, every time:<p class="source-code">    def reset(self):</p><p class="source-code">        self.day = "Mon"</p><p class="source-code">        self.inventory = 0</p><p class="source-code">        state = (self.day, self.inventory)</p><p class="source-code">        return state</p></li>
+				<li>Next, define a method to check if a given state is terminal or not. Remember that episodes terminate at the end of the week in this example:<p class="source-code">    def is_terminal(self, state):</p><p class="source-code">        day, inventory = state</p><p class="source-code">        if day == "Weekend":</p><p class="source-code">            return True</p><p class="source-code">        else:</p><p class="source-code">            return False</p></li>
+				<li>Finally, define the <strong class="source-inline">step</strong> method that simulates the environment for a one-time step given the current state and the action: <p class="source-code">    def step(self, action):</p><p class="source-code">        demand = np.random.choice(self.v_demand, </p><p class="source-code">                                  p=self.p_demand)</p><p class="source-code">        result = self.get_next_state_reward((self.day, </p><p class="source-code">                                             self.inventory), </p><p class="source-code">                                       action, </p><p class="source-code">                                       demand)</p><p class="source-code">        self.day = result['next_day']</p><p class="source-code">        self.inventory = result['next_inventory']</p><p class="source-code">        state = (self.day, self.inventory)</p><p class="source-code">        reward = result['reward']</p><p class="source-code">        done = self.is_terminal(state)</p><p class="source-code">        info = {'demand': demand, 'sales': result['sales']}</p><p class="source-code">        return state, reward, done, info</p><p>The method <a id="_idIndexMarker329"/>returns the new state, one-step reward, whether the episode is complete, and any additional information we would like to return. This is the standard Gym convention. It also updates the state stored within the class.</p></li>
+				<li>Now that our <strong class="source-inline">FoodTruck</strong> class is ready for the simulation. Next, let's create a function that chooses an action from a – possibly probabilistic – policy given a state:<p class="source-code">def choose_action(state, policy):</p><p class="source-code">    prob_a = policy[state]</p><p class="source-code">    action = np.random.choice(a=list(prob_a.keys()), </p><p class="source-code">                              p=list(prob_a.values()))</p><p class="source-code">    return action</p></li>
+				<li>Let's create<a id="_idIndexMarker330"/> a function (outside of the class) to simulate a given policy: <p class="source-code">def simulate_policy(policy, n_episodes):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    foodtruck = FoodTruck()</p><p class="source-code">    rewards = []</p><p class="source-code">    for i_episode in range(n_episodes):</p><p class="source-code">        state = foodtruck.reset()</p><p class="source-code">        done = False</p><p class="source-code">        ep_reward = 0</p><p class="source-code">        while not done:</p><p class="source-code">            action = choose_action(state, policy)</p><p class="source-code">            state, reward, done, info = foodtruck.step(action) </p><p class="source-code">            ep_reward += reward</p><p class="source-code">        rewards.append(ep_reward)</p><p class="source-code">    print("Expected weekly profit:", np.mean(rewards))</p><p>The <strong class="source-inline">simulate_policy</strong> function simply performs the following actions:</p><p>a) Receives a policy dictionary that returns the actions and the corresponding probabilities the policy suggests for a given state.</p><p>b) It simulates the policy for a specified number of episodes.</p><p>c) Within an episode, it starts at the initial state and probabilistically selects the actions suggested by the policy at each step.</p><p>d) The selected action is passed to the environment, which transitions into the next state as per the dynamics of the environment.</p></li>
+				<li>Now, let's simulate the environment with the base policy!<p class="source-code">simulate_policy(policy, 1000)</p></li>
+				<li>The result should look like the following:<p class="source-code"><strong class="bold">Expected weekly profit: 2518.1</strong></p></li>
+			</ol>
+			<p>Great! This closely <a id="_idIndexMarker331"/>matches what we calculated analytically! Now it is time to use this iterative policy evaluation method for something more useful: finding optimal policies!</p>
+			<h2 id="_idParaDest-110"><a id="_idTextAnchor110"/>Policy iteration</h2>
+			<p>Now that we<a id="_idIndexMarker332"/> have a way of evaluating a given policy, we can use it to compare two policies and iteratively improve them. In this section, we first discuss how policies are compared. Then, we introduce the policy improvement theorem and finally put everything together in the policy improvement algorithm.</p>
+			<h3>Policy comparison and improvement</h3>
+			<p>Suppose that <a id="_idIndexMarker333"/>we have two policies, <img src="image/Formula_05_029.png" alt=""/> and <img src="image/Formula_05_030.png" alt=""/>, that we<a id="_idIndexMarker334"/> would like to compare. We say <img src="image/Formula_05_030.png" alt=""/> is as good as <img src="image/Formula_05_032.png" alt=""/> if:</p>
+			<p class="figure-caption"><img src="image/Formula_05_033.png" alt=""/>.</p>
+			<p>In other words, if the state values under a policy <img src="image/Formula_05_034.png" alt=""/> are greater than or equal to the state values under another policy <img src="image/Formula_05_035.png" alt=""/> for all possible states, then it means <img src="image/Formula_05_036.png" alt=""/> is as good as <img src="image/Formula_05_037.png" alt=""/>. If this relation is a strict inequality for any state <img src="image/Formula_05_028.png" alt=""/>, then <img src="image/Formula_05_039.png" alt=""/> is a better policy than <img src="image/Formula_05_040.png" alt=""/>. This should be intuitive since a state-value represents the expected cumulative reward from that<a id="_idIndexMarker335"/> point<a id="_idIndexMarker336"/> on.</p>
+			<p>Now, the question is how we go from <img src="image/Formula_05_037.png" alt=""/> to a better policy <img src="image/Formula_05_030.png" alt=""/>. For that, we need to recall the action-value function we defined in <a href="B14160_04_Final_SK_ePub.xhtml#_idTextAnchor080"><em class="italic">Chapter 4</em></a>, <em class="italic">Making of the Markov Decision Process</em>:</p>
+			<div>
+				<div id="_idContainer385" class="IMG---Figure">
+					<img src="image/Formula_05_043.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Remember that the definition of the action-value function is a bit nuanced. It is the expected cumulative future reward when:</p>
+			<ul>
+				<li>Action <img src="image/Formula_05_044.png" alt=""/> is taken at the current state <img src="image/Formula_05_045.png" alt=""/>.</li>
+				<li>Then the policy <img src="image/Formula_05_046.png" alt=""/> is followed.</li>
+			</ul>
+			<p>The nuance is that policy <img src="image/Formula_05_047.png" alt=""/> may normally suggest another action when in state <img src="image/Formula_05_048.png" alt=""/>. The q-value represents a one-time deviation from policy <img src="image/Formula_05_035.png" alt=""/> that happens in the current step.</p>
+			<p>How does this help<a id="_idIndexMarker337"/> with improving the<a id="_idIndexMarker338"/> policy though? The <strong class="bold">policy improvement theorem</strong> suggests that <em class="italic">if it is better to select </em><img src="image/Formula_05_050.png" alt=""/><em class="italic"> initially when in state </em><img src="image/Formula_05_051.png" alt=""/><em class="italic"> and then follow </em><img src="image/Formula_05_052.png" alt=""/><em class="italic"> rather than following </em><img src="image/Formula_05_053.png" alt=""/><em class="italic"> all along, selecting </em><img src="image/Formula_05_050.png" alt=""/><em class="italic"> every time when in state </em><img src="image/Formula_05_055.png" alt=""/><em class="italic"> is a better policy than </em><img src="image/Formula_05_053.png" alt=""/>. In other words, if <img src="image/Formula_05_057.png" alt=""/>, then we can improve <img src="image/Formula_05_037.png" alt=""/> by taking action <img src="image/Formula_05_059.png" alt=""/> when in state <img src="image/Formula_05_060.png" alt=""/> and following <img src="image/Formula_05_061.png" alt=""/> for the rest of the states. We don't include it here but the proof of this theorem is actually quite intuitive, and it is available <em class="italic">Sutton &amp; Barto, 2018</em>.</p>
+			<p>Let's generalize this argument. Say some policy <img src="image/Formula_05_030.png" alt=""/> is at least as good as another policy <img src="image/Formula_05_061.png" alt=""/> if, for all <img src="image/Formula_05_064.png" alt=""/>, the following holds:</p>
+			<div>
+				<div id="_idContainer407" class="IMG---Figure">
+					<img src="image/Formula_05_065.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Then, all we need to do to improve a policy is to choose actions that maximize the respective q-values for each state. Namely, </p>
+			<div>
+				<div id="_idContainer408" class="IMG---Figure">
+					<img src="image/Formula_05_066.jpg" alt=""/>
+				</div>
+			</div>
+			<p>One last note before we close this discussion: Although we described the policy improvement method for deterministic policies, only a single action is suggested by the policies for a given <a id="_idIndexMarker339"/>state <img src="image/Formula_05_067.png" alt=""/>, the <a id="_idIndexMarker340"/>method holds for stochastic policies as well.</p>
+			<p>So far, so good! Now, let's turn this policy improvement into an algorithm that will allow us to find optimal policies!</p>
+			<h3>The policy iteration algorithm </h3>
+			<p>The policy iteration<a id="_idIndexMarker341"/> algorithm simply includes starting with an arbitrary policy, followed by a policy evaluation step, and then with a policy improvement step. This procedure, when repeated, eventually leads to an optimal policy. This process is depicted in the following figure:</p>
+			<div>
+				<div id="_idContainer410" class="IMG---Figure">
+					<img src="image/B14160_05_1.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.1 – Generalized policy iteration</p>
+			<p>Actually, iterating between some forms of policy evaluation and policy improvement steps is a general <a id="_idIndexMarker342"/>recipe for solving RL problems. That is why this idea is named <strong class="bold">generalized policy iteration (GPI)</strong> <em class="italic">Sutton &amp; Barto, 2018</em>. It is just that the policy iteration method <a id="_idIndexMarker343"/>we describe in this section involves specific forms of these steps.</p>
+			<p>Let's implement a policy iteration for the food truck environment.</p>
+			<h3>Implementing a policy iteration for the inventory replenishment problem</h3>
+			<p>We have <a id="_idIndexMarker344"/>already <a id="_idIndexMarker345"/>coded the policy evaluation and expected update steps. What we need additionally for the policy iteration algorithm is the policy improvement step, and then we can obtain an optimal policy! This is exciting, so, let's dive right in:</p>
+			<ol>
+				<li value="1">Let's start by implementing the policy improvement as we described above:<p class="source-code">def policy_improvement(env, v, s, actions, gamma):</p><p class="source-code">    prob_a = {}</p><p class="source-code">    if not env.is_terminal(s):</p><p class="source-code">        max_q = np.NINF</p><p class="source-code">        best_a = None</p><p class="source-code">        for a in actions:</p><p class="source-code">            q_sa = expected_update(env, v, s, {a: 1}, gamma)</p><p class="source-code">            if q_sa &gt;= max_q:</p><p class="source-code">                max_q = q_sa</p><p class="source-code">                best_a = a</p><p class="source-code">        prob_a[best_a] = 1</p><p class="source-code">    else:</p><p class="source-code">        max_q = 0</p><p class="source-code">    return prob_a, max_q</p><p>This function <a id="_idIndexMarker346"/>searches<a id="_idIndexMarker347"/> for the action that gives the maximum q-value for a given state using the value functions obtained under the current policy. For the terminal states, the q-value is always equal to 0.</p></li>
+				<li>Now, we put everything together in a policy iteration algorithm: <p class="source-code">def policy_iteration(env,  eps=0.1, gamma=1):</p><p class="source-code">    np.random.seed(1)</p><p class="source-code">    states = env.state_space</p><p class="source-code">    actions = env.action_space</p><p class="source-code">    policy = {s: {np.random.choice(actions): 1}</p><p class="source-code">             for s in states}</p><p class="source-code">    v = {s: 0 for s in states}</p><p class="source-code">    while True:</p><p class="source-code">        v = policy_evaluation(env, policy, v=v, </p><p class="source-code">                          eps=eps, gamma=gamma)</p><p class="source-code">        old_policy = policy</p><p class="source-code">        policy = {}</p><p class="source-code">        for s in states:</p><p class="source-code">            policy[s], _ = policy_improvement(env, v, s, </p><p class="source-code">                                    actions, gamma)</p><p class="source-code">        if old_policy == policy:</p><p class="source-code">            break</p><p class="source-code">    print("Optimal policy found!")</p><p class="source-code">    return policy, v</p><p>This <a id="_idIndexMarker348"/>algorithm <a id="_idIndexMarker349"/>starts with a random policy, and in each iteration, implements the policy evaluation and improvement steps. It stops when the policy becomes stable.</p></li>
+				<li>And the big moment! Let's find out the optimal policy for our food truck and see what the expected weekly profit is!<p class="source-code">policy, v = policy_iteration(foodtruck)</p><p class="source-code">print("Expected weekly profit:", v["Mon", 0])</p></li>
+				<li>The result should look like the following:<p class="source-code"><strong class="bold">Converged in 6 iterations.</strong></p><p class="source-code"><strong class="bold">Converged in 6 iterations.</strong></p><p class="source-code"><strong class="bold">Converged in 5 iterations.</strong></p><p class="source-code"><strong class="bold">Optimal policy found!</strong></p><p class="source-code"><strong class="bold">Expected weekly profit: 2880.0</strong></p></li>
+			</ol>
+			<p>We have just figured out a policy that gives an expected weekly profit of $2,880. This is a significant improvement over the base policy! Well, thanks for supporting your local business!</p>
+			<p>You can see from the output that there were two policy improvement steps over the random policy. The third policy improvement step did not lead to any changes in the policy and the algorithm terminated.</p>
+			<p>Let's see<a id="_idIndexMarker350"/> what the <a id="_idIndexMarker351"/>optimal policy looks like:</p>
+			<div>
+				<div id="_idContainer411" class="IMG---Figure">
+					<img src="image/B14160_05_2.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.2 – Optimal policy for the food truck example</p>
+			<p>What the policy iteration algorithm comes up with is quite intuitive. Let's analyze this policy for a moment:</p>
+			<ul>
+				<li>On Monday and Tuesday, it is guaranteed that 400 burgers will be sold in the remainder of the week. Since the patties can be safely stored during the weekdays, it makes sense to fill the inventory up to capacity.</li>
+				<li>At the beginning of Wednesday, there is a chance that the total number of sales will be 300 till the end of the week and 100 patties will be spoiled. However, this is a rather small likelihood and the expected profit is still positive. </li>
+				<li>For Thursday and Friday, it makes more sense to be more conservative and de-risk costly spoilage in case the demand is less than the inventory.</li>
+			</ul>
+			<p>Congratulations! You have successfully solved an MDP using policy iteration!</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">The optimal policy, we have found, heavily depends on the cost of patties, the net revenue per unit, as well as the demand distribution. You can gain more intuition on the structure of the optimal policy and how it changes by modifying the problem parameters and solving it again. </p>
+			<p>You have come a long way! We built an exact solution method starting with the fundamentals<a id="_idIndexMarker352"/> of MDP <a id="_idIndexMarker353"/>and DP. Next, we will look into another algorithm that is often more efficient than policy iteration.</p>
+			<h2 id="_idParaDest-111"><a id="_idTextAnchor111"/>Value iteration</h2>
+			<p>Policy iteration<a id="_idIndexMarker354"/> requires us to fully evaluate the policies until the state values converge before we<a id="_idIndexMarker355"/> perform an improvement step. In more sophisticated problems, it could be quite costly to wait for a complete evaluation. Even in our example, a single policy evaluation step took 5-6 sweeps over all states until it converged. It turns out that we can get away with terminating the policy evaluation before it converges without losing the convergence guarantee of the policy iteration. In fact, we can even combine policy iteration and policy improvement into a single step by turning the Bellman optimality equation we introduced in the previous chapter into an update rule: </p>
+			<div>
+				<div id="_idContainer412" class="IMG---Figure">
+					<img src="image/Formula_05_068.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+
+</p>
+			<div>
+				<div id="_idContainer413" class="IMG---Figure">
+					<img src="image/Formula_05_069.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer414" class="IMG---Figure">
+					<img src="image/Formula_05_070.jpg" alt=""/>
+				</div>
+			</div>
+			<p>We simply perform the update for all states again and again until the state values converge. This algorithm is called <strong class="bold">value iteration</strong>. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Notice the difference between a policy evaluation update and a value iteration update. The former selects the actions from a given policy, hence the <img src="image/Formula_05_071.png" alt=""/> term in front of the expected update. The latter, on the other hand, does not follow a policy but actively searches for the best actions through the <img src="image/Formula_05_072.png" alt=""/> operator.</p>
+			<p>This is all we<a id="_idIndexMarker356"/> need to<a id="_idIndexMarker357"/> implement the value iteration algorithm. So, let's dive right into the implementation.</p>
+			<h3>Implementing the value iteration for the inventory replenishment problem </h3>
+			<p>To implement value iteration, we'll <a id="_idIndexMarker358"/>use <a id="_idIndexMarker359"/>the <strong class="source-inline">policy_improvement</strong> function we defined earlier. However, after improving the policy for each state, we'll also update the state-value estimate of the state. </p>
+			<p>Now, we can go ahead and implement the value iteration using the following steps:</p>
+			<ol>
+				<li value="1">We first define the value iteration function as defined above with in-place replacement of the state values:<p class="source-code">def value_iteration(env, max_iter=100, eps=0.1, gamma=1):</p><p class="source-code">    states = env.state_space</p><p class="source-code">    actions = env.action_space</p><p class="source-code">    v = {s: 0 for s in states}</p><p class="source-code">    policy = {}</p><p class="source-code">    k = 0</p><p class="source-code">    while True:</p><p class="source-code">        max_delta = 0</p><p class="source-code">        for s in states:</p><p class="source-code">            old_v = v[s]</p><p class="source-code">            policy[s], v[s] = policy_improvement(env, </p><p class="source-code">                                                 v, </p><p class="source-code">                                                 s, </p><p class="source-code">                                                 actions, </p><p class="source-code">                                                 gamma)</p><p class="source-code">            max_delta = max(max_delta, abs(v[s] - old_v))</p><p class="source-code">        k += 1</p><p class="source-code">        if max_delta &lt; eps:</p><p class="source-code">            print("Converged in", k, "iterations.")</p><p class="source-code">            break</p><p class="source-code">        elif k == max_iter:</p><p class="source-code">            print("Terminating after", k, "iterations.")</p><p class="source-code">            break</p><p class="source-code">    return policy, v</p></li>
+				<li>Then, we <a id="_idIndexMarker360"/>execute <a id="_idIndexMarker361"/>the value iteration and observe the value of the initial state:<p class="source-code">policy, v = value_iteration(foodtruck)</p><p class="source-code">print("Expected weekly profit:", v["Mon", 0])</p></li>
+				<li>The result should look like the following:<p class="source-code"><strong class="bold">Converged in 6 iterations.</strong></p><p class="source-code"><strong class="bold">Expected weekly profit: 2880.0</strong></p></li>
+			</ol>
+			<p>Value iteration gives the optimal policy, but with less computational effort compared to the policy iteration algorithm! It took only a total of 6 sweeps over the state space with the value iteration, while the policy iteration arrived at the same optimal policy after 20 sweeps (17 for policy evaluation and 3 for policy improvement).</p>
+			<p>Now, remember our discussion around generalized policy improvement. You can, in fact, combine the policy improvement step with a truncated policy evaluation step, which, in some sophisticated examples where the state values change significantly after the policy improvement, converge faster than both policy iteration and value iteration algorithms.</p>
+			<p>Great work! We have covered how to solve the prediction problem for MDPs using DP and then two algorithms to find optimal policies. And they worked great for our simple example. On the<a id="_idIndexMarker362"/> other <a id="_idIndexMarker363"/>hand, DP methods suffer from two important drawbacks in practice. Let's discuss what those are next, and why we need the other approaches that we will introduce later in the chapter.</p>
+			<h2 id="_idParaDest-112"><a id="_idTextAnchor112"/>Drawbacks of dynamic programming</h2>
+			<p>DP methods are great<a id="_idIndexMarker364"/> to learn to get a solid grasp of how MDPs can be solved. They are also much more efficient compared to direct search algorithms or linear programming methods. On the other hand, in practice, these algorithms are still either intractable or impossible to use. Let's elaborate on why.</p>
+			<h3>The curse of dimensionality</h3>
+			<p>Both the policy<a id="_idIndexMarker365"/> iteration and the value iteration algorithms iterate over the entire state space, multiple times, until they arrive at an optimal policy. We also store the policy, the state values, and the action values for each state in a tabular form. Any realistic problem, on the other hand, would have a gigantic number of possible states, explained by a phenomenon<a id="_idIndexMarker366"/> called the <strong class="bold">curse of dimensionality</strong>. This refers to the fact that the possible number of values of a variable (states) grows exponentially as we add more dimensions. </p>
+			<p>Consider our food truck example. In addition to keeping track of patties, let's assume we also keep track of burger buns, tomatoes, and onions. Also assume that the capacity for each of these items is 400, and we have a precise count of the inventory. The possible number of states in this case would be <img src="image/Formula_05_073.png" alt=""/>, that is, greater than <img src="image/Formula_05_074.png" alt=""/> This is a ridiculous number of states to keep track of for such a simple problem.</p>
+			<p>One mitigation for <a id="_idIndexMarker367"/>the curse of dimensionality is <strong class="bold">asynchronous dynamic programming</strong>: </p>
+			<ul>
+				<li>This approach suggests not sweeping over the entire state space in each iteration of policy improvement but focusing on the states that are more likely to be encountered. </li>
+				<li>For many problems, not all parts of the state space are of equal importance. Therefore, it is wasteful to wait for a complete sweep of the state space before there is an update to the policy. </li>
+				<li>With an asynchronous algorithm, we can simulate the environment in parallel to the policy improvement, observe which states are visited, and update the policy and the value functions for those states. </li>
+				<li>At the same time, we can pass the updated policy to the agent so the simulation would continue with the new policy. </li>
+			</ul>
+			<p>Given that the <a id="_idIndexMarker368"/>agent sufficiently<a id="_idIndexMarker369"/> explores the state space, the algorithm would converge to an optimal solution eventually.</p>
+			<p>A more important tool that we use to address this problem, on the other hand, is <strong class="bold">function approximators</strong>, such as deep neural networks. Think about it! What is the benefit in storing<a id="_idIndexMarker370"/> a separate policy/state-value/action-value for the inventory levels 135, 136, 137? Not much, really. Function approximators represent what we would like to learn in a much more compact manner (although approximately) compared to a tabular representation. In fact, in many cases, deep neural networks are only a meaningful choice for function approximation due to their representation power. That is why, starting from the next chapter, we will exclusively focus on deep RL algorithms.</p>
+			<h3>The need for a complete model of the environment</h3>
+			<p>In the methods <a id="_idIndexMarker371"/>we have used so far, we have relied on the transition probabilities of the environment in our policy evaluation, policy iteration, and value iteration algorithms to obtain optimal policies. This is a luxury that we usually don't have in practice. It is either these probabilities are very difficult to calculate for each possible transition (which is often impossible to even enumerate), or we simply don't know them. You know what is much easier to obtain? A sample trajectory of transitions, either from the environment itself or from its <strong class="bold">simulation</strong>. In fact, simulation is a particularly important component in RL, as we will discuss separately towards the end of this chapter.</p>
+			<p>Then the question becomes how we use sample trajectories to learn near-optimal policies. Well, this is exactly what we'll cover next in the rest of this chapter with Monte Carlo and<a id="_idIndexMarker372"/> TD methods. The concepts you will learn are at the center of many of the advanced RL algorithms.</p>
+			<h1 id="_idParaDest-113"><a id="_idTextAnchor113"/>Training your agent with Monte Carlo methods</h1>
+			<p>Let's say you<a id="_idIndexMarker373"/> would like to learn the chance of flipping heads with a particular, possibly biased, coin: </p>
+			<ul>
+				<li>One way of calculating this is through a careful analysis of the physical properties of the coin. Although this could give you the precise probability distribution of the outcomes, it is far from being a practical approach. </li>
+				<li>Alternatively, you can just flip the coin many times and look at the distribution in your sample. Your estimate could be a bit off if you don't have a large sample, but it will do the job for most practical purposes. The math you need to deal with using the latter method will be incomparably simpler.</li>
+			</ul>
+			<p>Just like in the coin example, we can estimate the state values and action values in an MDP from random samples. <strong class="bold">Monte Carlo (MC)</strong> estimation is a general concept that refers to making <a id="_idIndexMarker374"/>estimations through repeated random sampling. In the context of RL, it refers to <em class="italic">a collection of methods that estimates state values and action values using sample trajectories of complete episodes</em>. Using random samples is incredibly convenient, and in fact essential, for any realistic RL problem, because the environment dynamics (state transition and reward probability distributions) are often either of the following:</p>
+			<ul>
+				<li>Too complex to deal with </li>
+				<li>Not known in the first place</li>
+			</ul>
+			<p>Monte Carlo methods, therefore, are powerful methods that allow an RL agent to learn optimal policies<a id="_idIndexMarker375"/> only from the experience it collects through interacting with its environment, without knowing how the environment works.</p>
+			<p>In this section, we'll first look into estimating the state values and the action values for a given policy with MC methods. Then, we'll cover how to make improvements to obtain optimal policies.</p>
+			<h2 id="_idParaDest-114"><a id="_idTextAnchor114"/>Monte Carlo prediction</h2>
+			<p>As in the DP methods, we need to be able to evaluate a given policy <img src="image/Formula_05_075.png" alt=""/> to be able to improve it. In this<a id="_idIndexMarker376"/> section, we'll cover how to evaluate a policy by estimating the corresponding state and action values. In doing so, we'll briefly revisit the grid world example from the previous chapter and then go into the food truck inventory replenishment problem.</p>
+			<h3>Estimating the state-value function</h3>
+			<p>Remember<a id="_idIndexMarker377"/> that the value of a <a id="_idIndexMarker378"/>state <img src="image/Formula_05_010.png" alt=""/> under policy <img src="image/Formula_05_061.png" alt=""/>, <img src="image/Formula_05_078.png" alt=""/> is defined as the expected cumulative reward when started in state <img src="image/Formula_05_079.png" alt=""/>: </p>
+			<div>
+				<div id="_idContainer424" class="IMG---Figure">
+					<img src="image/Formula_05_080.jpg" alt=""/>
+				</div>
+			</div>
+			<p>MC prediction suggests simply <a id="_idIndexMarker379"/>observing (many) sample <strong class="bold">trajectories</strong>, sequences of state-action-reward tuples, starting in <img src="image/Formula_05_081.png" alt=""/>, to estimate this expectation. This is similar to flipping a coin to estimate its distribution from a sample.</p>
+			<p>It is best to explain <a id="_idIndexMarker380"/>Monte Carlo <a id="_idIndexMarker381"/>methods with an example. In particular, it will be quite intuitive to see how it works in the grid world example, so let's revisit that next.</p>
+			<h4>Using sample trajectories for state value estimation</h4>
+			<p>Recall that <a id="_idIndexMarker382"/>the robot in the grid world receives +1 reward for every move as long as it does not crash. When it does crash into a wall, the episode ends. Assume that this robot can be controlled only to a certain extent. When instructed to go in a particular direction, there is a 70% chance of it following the command. There is a 10% chance of the robot going in each of the other three directions.</p>
+			<p>Consider a deterministic policy <img src="image/Formula_05_061.png" alt=""/> illustrated in <em class="italic"> Figure 5.3 (a)</em>. If the robot starts in state (1,2), two example trajectories it can follow, <img src="image/Formula_05_083.png" alt=""/> and <img src="image/Formula_05_084.png" alt=""/>, and the corresponding probabilities of making each of the transitions are shown in <em class="italic"> Figure 5.3 (b)</em>: </p>
+			<div>
+				<div id="_idContainer429" class="IMG---Figure">
+					<img src="image/B14160_05_3.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.3 – a) A deterministic policy π, b) Two sample trajectories under π</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Notice that the robot follows a random trajectory but the policy itself is deterministic, which means the <a id="_idIndexMarker383"/>action taken (the command sent to the robot) in a given state is always the same. The randomness comes from the environment due to probabilistic state transitions.</p>
+			<p>For the trajectory <img src="image/Formula_05_085.png" alt=""/>, the probability of observing it and the corresponding discounted return are as follows:</p>
+			<div>
+				<div id="_idContainer431" class="IMG---Figure">
+					<img src="image/Formula_05_086.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer432" class="IMG---Figure">
+					<img src="image/Formula_05_087.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer433" class="IMG---Figure">
+					<img src="image/Formula_05_088.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer434" class="IMG---Figure">
+					<img src="image/Formula_05_089.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer435" class="IMG---Figure">
+					<img src="image/Formula_05_090.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer436" class="IMG---Figure">
+					<img src="image/Formula_05_091.jpg" alt=""/>
+				</div>
+			</div>
+			<p>And<a id="_idIndexMarker384"/> for <img src="image/Formula_05_092.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer438" class="IMG---Figure">
+					<img src="image/Formula_05_093.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer439" class="IMG---Figure">
+					<img src="image/Formula_05_094.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer440" class="IMG---Figure">
+					<img src="image/Formula_05_095.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer441" class="IMG---Figure">
+					<img src="image/Formula_05_096.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer442" class="IMG---Figure">
+					<img src="image/Formula_05_097.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer443" class="IMG---Figure">
+					<img src="image/Formula_05_098.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer444" class="IMG---Figure">
+					<img src="image/Formula_05_099.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer445" class="IMG---Figure">
+					<img src="image/Formula_05_100.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer446" class="IMG---Figure">
+					<img src="image/Formula_05_101.jpg" alt=""/>
+				</div>
+			</div>
+			<p>For these two example trajectories, we were able to calculate the corresponding probabilities and the returns. To calculate the state-value of <img src="image/Formula_05_102.png" alt=""/>, though, we need to evaluate the following expression:</p>
+			<div>
+				<div id="_idContainer448" class="IMG---Figure">
+					<img src="image/Formula_05_103.jpg" alt=""/>
+				</div>
+			</div>
+			<p>That means we <a id="_idIndexMarker385"/>need to identify the following:</p>
+			<ul>
+				<li>Every single possible trajectory <img src="image/Formula_05_104.png" alt=""/> that can originate from <img src="image/Formula_05_105.png" alt=""/> under policy <img src="image/Formula_05_106.png" alt=""/></li>
+				<li>The probability of observing <img src="image/Formula_05_107.png" alt=""/> under <img src="image/Formula_05_108.png" alt=""/>, <img src="image/Formula_05_109.png" alt=""/></li>
+				<li>The corresponding discounted return, <img src="image/Formula_05_110.png" alt=""/></li>
+			</ul>
+			<p>Well, that is an impossible task. Even in this simple problem, there is an infinite number of possible trajectories. </p>
+			<p>This is exactly where Monte Carlo prediction comes in. It simply tells us to estimate the value of state <img src="image/Formula_05_111.png" alt=""/> by averaging the sample returns as follows:</p>
+			<div>
+				<div id="_idContainer457" class="IMG---Figure">
+					<img src="image/Formula_05_112.jpg" alt=""/>
+				</div>
+			</div>
+			<p>That's it! Sample trajectories and returns are all you need to estimate the value of the state. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Note that <img src="image/Formula_05_021.png" alt=""/> denotes the true value of the state, whereas <img src="image/Formula_05_114.png" alt=""/> denotes an estimate.</p>
+			<p>At this <a id="_idIndexMarker386"/>point, you may be asking the following questions:</p>
+			<ul>
+				<li><em class="italic">How come it's enough to have two sample returns to estimate a quantity that is the outcome of an infinite number of trajectories?</em> It is not. The more sample trajectories you have, the more accurate your estimate is.</li>
+				<li><em class="italic">How do we know we have enough sample trajectories?</em> That is hard to quantify. But more complex environments, especially when there is a significant degree of randomness, would require more samples for an accurate estimation. It is a good idea, though, to check if the estimate is converging as you add more trajectory samples.</li>
+				<li><img src="image/Formula_05_115.png" alt=""/><em class="italic"> and </em><img src="image/Formula_05_116.png" alt=""/><em class="italic"> have very different likelihoods of occurring. Is it appropriate to assign them equal weights in the estimation?</em> This is indeed problematic when we have only two trajectories in the sample. However, as we sample more trajectories, we can expect to observe the trajectories in the sample occurring proportionally to their true probabilities of occurrence.</li>
+				<li><em class="italic">Can we use the same trajectory in estimating the values of the other states it visits?</em> Yes! Indeed, that is what we will do in Monte Carlo prediction.</li>
+			</ul>
+			<p>Let's elaborate<a id="_idIndexMarker387"/> on how we can use the same trajectory in estimating the values of different states next.</p>
+			<h4>First-visit versus every-visit Monte Carlo prediction</h4>
+			<p>If you recall <a id="_idIndexMarker388"/>what the Markov property <a id="_idIndexMarker389"/>is, it simply tells us the future depends on the current state, not the past. Therefore, we can think of, for example, <img src="image/Formula_05_117.png" alt=""/> as three separate trajectories that originate from states <img src="image/Formula_05_118.png" alt=""/>, and <img src="image/Formula_05_119.png" alt=""/>. Let's call the latter two trajectories <img src="image/Formula_05_120.png" alt=""/> and <img src="image/Formula_05_121.png" alt=""/>. So, we can obtain a value estimate for all the states visited by the trajectories in our sample set. For instance, the value estimate for state <img src="image/Formula_05_122.png" alt=""/> would be as follows:</p>
+			<div>
+				<div id="_idContainer468" class="IMG---Figure">
+					<img src="image/Formula_05_123.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer469" class="IMG---Figure">
+					<img src="image/Formula_05_124.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Since there is no other trajectory visiting state <img src="image/Formula_05_125.png" alt=""/>, we used a single return to estimate the state-value. Notice the discounts are applied to the rewards according to their time distance to the initial time-step. That is why the exponents of the <img src="image/Formula_05_126.png" alt=""/> discount reduced by one.</p>
+			<p>Consider the following set of trajectories in <em class="italic">Figure 5.4</em> and assume we again want to estimate <img src="image/Formula_05_127.png" alt=""/>. None of the sample trajectories actually originate from state <img src="image/Formula_05_128.png" alt=""/> but that is totally fine. We can use trajectories <img src="image/Formula_05_129.png" alt=""/>, <img src="image/Formula_05_130.png" alt=""/>, and  <img src="image/Formula_05_131.png" alt=""/> for the estimation. But then there is an interesting case here: <img src="image/Formula_05_132.png" alt=""/> visits state <img src="image/Formula_05_133.png" alt=""/> twice. Should we use <a id="_idIndexMarker390"/>the return only from its first <a id="_idIndexMarker391"/>visit or from each of its visits?</p>
+			<div>
+				<div id="_idContainer479" class="IMG---Figure">
+					<img src="image/B14160_05_4.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.4 – Monte Carlo estimation of <img src="image/Formula_05_134.png" alt=""/></p>
+			<p>Both these <a id="_idIndexMarker392"/>approaches are valid. The former <a id="_idIndexMarker393"/>method is called <strong class="bold">first-visit MC method</strong> and the latter is called <strong class="bold">every-visit MC method</strong>. They compare to each other as follows:</p>
+			<ul>
+				<li>Both converge to true <img src="image/Formula_05_135.png" alt=""/> as the number of visits approaches infinity.</li>
+				<li>The first-visit MC <a id="_idIndexMarker394"/>method gives an unbiased estimate of the state-value whereas the every-visit MC method is biased.</li>
+				<li>The <strong class="bold">mean squared error</strong> (<strong class="bold">MSE</strong>) of the first-visit MC method is higher with fewer samples but lower than every-visit MSE with more samples.</li>
+				<li>The every-visit MC method is more natural to use with function approximations.</li>
+			</ul>
+			<p>If it sounds complicated, it is actually not! Just remember these things: </p>
+			<ul>
+				<li>We are trying to estimate a parameter, such as the state-value of <img src="image/Formula_05_136.png" alt=""/>, <img src="image/Formula_05_137.png" alt=""/>.</li>
+				<li>By observing the random variable <img src="image/Formula_05_138.png" alt=""/> , the discounted value returns starting from <img src="image/Formula_05_139.png" alt=""/>, many times.</li>
+				<li>It is both <a id="_idIndexMarker395"/>valid to consider<a id="_idIndexMarker396"/> trajectories from their first visit of <img src="image/Formula_05_140.png" alt=""/> on, or from, their every visit.</li>
+			</ul>
+			<p>Now it is time to implement Monte Carlo prediction next! </p>
+			<h4>Implementing first-visit Monte Carlo estimation of the state values </h4>
+			<p>We have used<a id="_idIndexMarker397"/> the grid <a id="_idIndexMarker398"/>world example to get a visual intuition, and now let's go back to our food truck example for the implementation. Here, we will implement the first-visit MC method, but the implementation can be easily modified to every-visit MC. This can be done by removing the condition that calculates the return only if the state does not appear in the trajectory up to that point. For the food truck example, since a trajectory will never visit the same state – because the day of the week, which is part of the state, changes after every transition – both methods are identical.</p>
+			<p>Let's follow these steps for the implementation:</p>
+			<ol>
+				<li value="1">We start by defining a function that takes a trajectory and calculates the returns from the first visit for each state that appears in the trajectory: <p class="source-code">def first_visit_return(returns, trajectory, gamma):</p><p class="source-code">    G = 0</p><p class="source-code">    T = len(trajectory) - 1</p><p class="source-code">    for t, sar in enumerate(reversed(trajectory)):</p><p class="source-code">        s, a, r = sar</p><p class="source-code">        G = r + gamma * G</p><p class="source-code">        first_visit = True</p><p class="source-code">        for j in range(T - t):</p><p class="source-code">            if s == trajectory[j][0]:</p><p class="source-code">                first_visit = False</p><p class="source-code">        if first_visit:</p><p class="source-code">            if s in returns:</p><p class="source-code">                returns[s].append(G)</p><p class="source-code">            else:</p><p class="source-code">                returns[s] = [G]</p><p class="source-code">    return returns</p><p>This <a id="_idIndexMarker399"/>function<a id="_idIndexMarker400"/> does the following: </p><p>a) Takes a dictionary <strong class="source-inline">returns</strong> as input, whose keys are states and values are lists of returns calculated in some other trajectories. </p><p>b) Takes a list <strong class="source-inline">trajectory</strong> as input, which is a list of state-action-reward tuples. </p><p>c) Appends the calculated return for each state to <strong class="source-inline">returns</strong>. If that state has never been visited by another trajectory before, it initializes the list.</p><p>d) Traverses the trajectory backward to conveniently calculate the discounted returns. It applies the discount factor in each step.</p><p>e) Checks if a state is visited earlier in the trajectory after each calculation. It saves the calculated return to the <strong class="source-inline">returns</strong> dictionary only for the first visit of a state.</p></li>
+				<li>Next, we implement a function that simulates the environment for a single episode<a id="_idIndexMarker401"/> with<a id="_idIndexMarker402"/> a given policy and returns the trajectory:<p class="source-code">def get_trajectory(env, policy):</p><p class="source-code">    trajectory = []</p><p class="source-code">    state = env.reset()</p><p class="source-code">    done = False</p><p class="source-code">    sar = [state]</p><p class="source-code">    while not done:</p><p class="source-code">        action = choose_action(state, policy)</p><p class="source-code">        state, reward, done, info = env.step(action)</p><p class="source-code">        sar.append(action)</p><p class="source-code">        sar.append(reward)</p><p class="source-code">        trajectory.append(sar)</p><p class="source-code">        sar = [state]</p><p class="source-code">    return trajectory</p></li>
+				<li>Now, implement the first-visit return Monte Carlo function, which simulates the environment for a specified number of episodes/trajectories with a given policy. We keep track of the trajectories and average the returns for each state calculated by the <strong class="source-inline">first_visit_return</strong> function:<p class="source-code">def first_visit_mc(env, policy, gamma, n_trajectories):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    returns = {}</p><p class="source-code">    v = {}</p><p class="source-code">    for i in range(n_trajectories):</p><p class="source-code">        trajectory = get_trajectory(env, policy)</p><p class="source-code">        returns = first_visit_return(returns, </p><p class="source-code">                                     trajectory, </p><p class="source-code">                                     gamma)</p><p class="source-code">    for s in env.state_space:</p><p class="source-code">        if s in returns:</p><p class="source-code">            v[s] = np.round(np.mean(returns[s]), 1)</p><p class="source-code">    return v</p></li>
+				<li>We make <a id="_idIndexMarker403"/>sure<a id="_idIndexMarker404"/> that we create an environment instance (or we can simply use the one from the previous sections). Also obtain the base policy, which fills the patty inventory up to 200 or 300 with equal chance: <p class="source-code">foodtruck = FoodTruck()</p><p class="source-code">policy = base_policy(foodtruck.state_space)</p></li>
+				<li>Now, let's use the first-visit MC method to estimate the state values from 1,000 trajectories:<p class="source-code">v_est = first_visit_mc(foodtruck, policy, 1, 1000)</p></li>
+				<li>The result, <strong class="source-inline">v_est</strong>, will look like the following:<p class="source-code"><strong class="bold">{('Mon', 0): 2515.9,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 0): 1959.1,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 100): 2362.2,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 200): 2765.2,</strong></p><p class="source-code"><strong class="bold">...</strong></p></li>
+				<li>Now, remember that we can use DP's policy evaluation method to calculate the true state values for comparison: <p class="source-code">v_true = policy_evaluation(foodtruck, policy)</p></li>
+				<li>The true state values will look very similar:<p class="source-code"><strong class="bold">{('Mon', 0): 2515.0,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 0): 1960.0,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 100): 2360.0,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 200): 2760.0,</strong></p><p class="source-code"><strong class="bold">...</strong></p></li>
+				<li>We can <a id="_idIndexMarker405"/>obtain <a id="_idIndexMarker406"/>the estimations with a different number of trajectories, such as 10, 100, and 1000. Let's do that and compare how the state value estimations get closer to the true values, as shown in <em class="italic">Figure 5.5</em>:</li>
+			</ol>
+			<div>
+				<div id="_idContainer487" class="IMG---Figure">
+					<img src="image/B14160_05_5.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.5 – First-visit Monte Carlo estimates versus true state values</p>
+			<p>Let's analyze the results a bit more closely:</p>
+			<p>a) As we collected more trajectories, the estimates got closer to the true state values. You can increase the number of trajectories to even higher numbers to obtain even better estimates.</p>
+			<p>b) After we collected 10 trajectories, no values were estimated for ("Tue", 200). This is because this state was never visited within those 10 trajectories. This highlights the importance of collecting enough trajectories.</p>
+			<p>c) No values are estimated for states that started the day with 300 units of inventory. This is because, under the base policy, these states are impossible to visit. But<a id="_idIndexMarker407"/> then, we<a id="_idIndexMarker408"/> have no idea about the value of those states. On the other hand, they might be valuable states that we want our policy to lead us to. This is <a id="_idIndexMarker409"/>an <strong class="bold">exploration problem</strong> we need to address.</p>
+			<p>Now we have a way of estimating state values without knowing the environment dynamics, and by only using the agent's experience in the environment. Great job so far! However, an important problem remains. With the state value estimates alone, we cannot really improve the policy on hand. To see why this is the case, recall how we improved the policy with the DP methods, such as value iteration:</p>
+			<div>
+				<div id="_idContainer488" class="IMG---Figure">
+					<img src="image/Formula_05_141.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer489" class="IMG---Figure">
+					<img src="image/Formula_05_142.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer490" class="IMG---Figure">
+					<img src="image/Formula_05_143.jpg" alt=""/>
+				</div>
+			</div>
+			<p>We used the state value estimates <em class="italic">together with the transition probabilities</em> to obtain action (q) values. We then chose, for each state, the action that maximized the q-value of the state. Right now, since we don't assume knowledge of the environment, we can't go from the state values to action values.</p>
+			<p>This leaves us<a id="_idIndexMarker410"/> with <a id="_idIndexMarker411"/>one option: We need to estimate the action values directly. Fortunately, it will be similar to how we estimated the state values. Let's look into using Monte Carlo methods to estimate the action values next.</p>
+			<h3>Estimating the action-value function</h3>
+			<p>Action <a id="_idIndexMarker412"/>values, <img src="image/Formula_05_144.png" alt=""/>, represent the<a id="_idIndexMarker413"/> expected discounted cumulative return when starting in state <img src="image/Formula_05_045.png" alt=""/>, taking action <img src="image/Formula_05_146.png" alt=""/>, and following the policy <img src="image/Formula_05_075.png" alt=""/>. Consider the following trajectory:</p>
+			<div>
+				<div id="_idContainer495" class="IMG---Figure">
+					<img src="image/Formula_05_148.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The discounted return observed can be used in estimating <img src="image/Formula_05_149.png" alt=""/>, <img src="image/Formula_05_150.png" alt=""/>, and so on. We can then use them to determine the best action for a given state <img src="image/Formula_05_010.png" alt=""/>, as in the following:</p>
+			<div>
+				<div id="_idContainer499" class="IMG---Figure">
+					<img src="image/Formula_05_152.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here is the challenge: What if we don't have the action-value estimates for all possible <img src="image/Formula_05_059.png" alt=""/> that can be taken in state <img src="image/Formula_05_154.png" alt=""/>? Consider the grid world example. If the policy is always to go right when in state <img src="image/Formula_05_155.png" alt=""/>, we will never have a trajectory that starts with state-action pairs <img src="image/Formula_05_156.png" alt=""/>, or <img src="image/Formula_05_157.png" alt=""/>. So, even if one of those actions gives a higher action <a id="_idIndexMarker414"/>value than <img src="image/Formula_05_158.png" alt=""/>, we <a id="_idIndexMarker415"/>will never discover it. The situation was similar with the base policy in the food truck example. In general, this is the case when we use a deterministic policy, or a stochastic policy that does not take all of the actions with some positive probability. </p>
+			<p>So, what we have here is essentially an <em class="italic">exploration</em> problem, which is a fundamental challenge in RL.</p>
+			<p>There are two possible solutions to this:</p>
+			<ul>
+				<li>Starting the trajectories with a random action selected in a random initial state, and then following<a id="_idIndexMarker416"/> a policy <img src="image/Formula_05_061.png" alt=""/> as usual. This is called <strong class="bold">exploring starts</strong>. This ensures choosing all state-action pairs at least once, so we can estimate the action-values. The drawback of this approach is that we need to keep starting episodes with random initializations. If we want to learn the action-values from ongoing interaction with the environment, without frequent restarts, this method will not be too helpful.</li>
+				<li>The other and more common solution to the exploration problem is to maintain a policy that selects all actions in any state with positive probability. More formally, we need a policy that satisfies <img src="image/Formula_05_160.png" alt=""/>, for all <img src="image/Formula_05_161.png" alt=""/> and for all <img src="image/Formula_05_162.png" alt=""/>; where <img src="image/Formula_05_163.png" alt=""/> is the set of all possible states and <img src="image/Formula_05_164.png" alt=""/> is the set of all possible actions <a id="_idIndexMarker417"/>available <a id="_idIndexMarker418"/>in state <img src="image/Formula_05_165.png" alt=""/>. Such <a id="_idIndexMarker419"/>a policy <img src="image/Formula_05_166.png" alt=""/> is called a <strong class="bold">soft policy</strong>. </li>
+			</ul>
+			<p>In the next section, we will use soft policy action-value estimation, which will in turn be used for policy improvement.</p>
+			<h2 id="_idParaDest-115"><a id="_idTextAnchor115"/>Monte Carlo control</h2>
+			<p>Monte Carlo control <a id="_idIndexMarker420"/>refers to a collection of methods that find optimal/near-optimal policies using the <em class="italic">samples</em> of discounted return. In other words, this is learning optimal policies from experience. And, since we depend on experience to discover optimal policies, we have to explore, as we explained above. Next, we'll implement <img src="image/Formula_05_167.png" alt=""/><strong class="bold">-greedy</strong> policies that enable us to explore during training, which is a particular form of soft policy. After that, we'll cover two different flavors of Monte Carlo control, namely<a id="_idIndexMarker421"/> on-policy and off-policy methods.</p>
+			<h3>Implementing <img src="image/Formula_05_168.png" alt=""/>-greedy policies</h3>
+			<p>Very similar<a id="_idIndexMarker422"/> to what we did in bandit <a id="_idIndexMarker423"/>problems, an <img src="image/Formula_05_1681.png" alt=""/>-greedy policy picks an action at random with ε probability; and with <img src="image/Formula_05_169.png" alt=""/> probability, it selects the action that maximizes the action-value function. This way, we continue to explore all state-action pairs while selecting the best actions we identify with high likelihood.</p>
+			<p>Let's now implement a function that converts a deterministic action to an <img src="image/Formula_05_170.png" alt=""/>-greedy one, which we will need later. The function assigns <img src="image/Formula_05_171.png" alt=""/> probability to the best action, and <img src="image/Formula_05_172.png" alt=""/> probability to all other actions:</p>
+			<p class="source-code">def get_eps_greedy(actions, eps, a_best):</p>
+			<p class="source-code">    prob_a = {}</p>
+			<p class="source-code">    n_a = len(actions)</p>
+			<p class="source-code">    for a in actions:</p>
+			<p class="source-code">        if a == a_best:</p>
+			<p class="source-code">            prob_a[a] = 1 - eps + eps/n_a</p>
+			<p class="source-code">        else:</p>
+			<p class="source-code">            prob_a[a] = eps/n_a</p>
+			<p class="source-code">    return prob_a</p>
+			<p>Exploration is necessary to find optimal policies during training. On the other hand, we would not want<a id="_idIndexMarker424"/> to take exploratory actions after the training/during inference but take the best ones. Therefore, the two policies differ. To make the distinction, the <a id="_idIndexMarker425"/>former is called the <strong class="bold">behavior policy</strong> and the latter is called the <strong class="bold">target policy</strong>. We can make the state and <a id="_idIndexMarker426"/>the action values aligned with the former or the latter, leading to two different <a id="_idIndexMarker427"/>classes of methods: <strong class="bold">on-policy</strong> and <strong class="bold">off-policy</strong>. Let's compare the two approaches in detail next.</p>
+			<h3>On-policy versus off-policy methods</h3>
+			<p>Remember <a id="_idIndexMarker428"/>that the state and the action values<a id="_idIndexMarker429"/> are associated with a particular policy, hence the notation <img src="image/Formula_05_173.png" alt=""/> and <img src="image/Formula_05_174.png" alt=""/>. On-policy methods estimate the state and the action values for the behavior policy used during training, such as the one that generates the training data/the experience. Off-policy methods estimate the state and the action values for a policy that is other than the behavior policy, such as the target policy. We ideally want to decouple exploration from value estimation. Let's look into why this is the case in detail.</p>
+			<h4>The impact of on-policy methods on value function estimates</h4>
+			<p>Exploratory<a id="_idIndexMarker430"/> policies are usually not <a id="_idIndexMarker431"/>optimal as they take random actions once in a while for the sake of exploration. Since on-policy methods estimate the state and action values for the behavior policy, that sub-optimality is reflected in the value estimates. </p>
+			<p>Consider the following modified grid world example to see how involving the effects of the exploratory actions in value estimation could be potentially harmful: The robot needs to choose between going left or right in state <img src="image/Formula_05_175.png" alt=""/> of a <img src="image/Formula_05_176.png" alt=""/> grid world, and between up and down in states 1 and 3. The robot follows the actions perfectly, so there is no randomness in the environment. This is illustrated in <em class="italic">Figure 5.6</em>:</p>
+			<div>
+				<div id="_idContainer525" class="IMG---Figure">
+					<img src="image/B14160_05_6.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 5.6 – Modified grid world</p>
+			<p>The robot <a id="_idIndexMarker432"/>has an <img src="image/Formula_05_177.png" alt=""/>-greedy <a id="_idIndexMarker433"/>policy, which suggests taking the best action with 0.99 chance, and an exploratory action with 0.01 chance. The best policy in state 3 is to go up with a high likelihood. In state 1, the choice does not really matter. The state value estimates obtained in an on-policy manner will then be the following:</p>
+			<div>
+				<div id="_idContainer527" class="IMG---Figure">
+					<img src="image/Formula_05_178.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer528" class="IMG---Figure">
+					<img src="image/Formula_05_179.jpg" alt=""/>
+				</div>
+			</div>
+			<p>A policy obtained in an on-policy fashion for state 2 will suggest going left, towards state 1. On the other hand, in this deterministic environment, the robot could perfectly avoid the big penalty when there is no exploration involved. An on-policy method would fail to identify this <a id="_idIndexMarker434"/>since the exploration <a id="_idIndexMarker435"/>influences the value estimates and yields a sub-optimal policy as a result. On the other hand, in some cases, we may want the agent to take the impact of exploration into account if, for example, the samples are collected using a physical robot and some states are very costly to visit. </p>
+			<h4>Sample efficiency comparison between on-policy and off-policy methods</h4>
+			<p>As mentioned<a id="_idIndexMarker436"/> above, off-policy methods estimate<a id="_idIndexMarker437"/> the state and the action values for a policy that is different than the behavior policy. On-policy methods, on the other hand, estimate these values only for the behavior policy. When we cover deep RL on-policy methods in later chapters, we will see that this will require the on-policy methods to discard the past experience once the behavior policy is updated. Off-policy deep RL methods, however, can reuse the past experience again and again. This is a significant advantage in sample efficiency, especially if it is costly to obtain the experience. </p>
+			<p>Another area where off-policy methods' ability to use the experience generated by a policy other than the behavior policy comes in handy is when we want to warm-start the training based on the data generated by a non-RL controller, such as classical PID controllers or a human operator. This is especially useful when the environment is hard/expensive to simulate or collect experience from.</p>
+			<h4>Advantages of on-policy methods</h4>
+			<p>The natural <a id="_idIndexMarker438"/>question is then why do we even talk about on-policy methods instead of just ignoring them? There are several advantages of on-policy methods:</p>
+			<ul>
+				<li>As mentioned above, if the cost of sampling from the environment is high (the actual environment rather than a simulation), we may want to have a policy that reflects the impact of exploration to avoid catastrophic outcomes.</li>
+				<li>Off-policy methods, when combined with function approximators, could have issues with converging to a good policy. We will discuss this in the next chapter.</li>
+				<li>On-policy methods are easier to work with when the action space is continuous, again, as we will discuss later.</li>
+			</ul>
+			<p>With that, it is <a id="_idIndexMarker439"/>finally time to implement first on-policy and then off-policy Monte Carlo methods!</p>
+			<h3>On-policy Monte Carlo control</h3>
+			<p>The GPI<a id="_idIndexMarker440"/> framework we described earlier, which suggests going back and forth between some forms of policy evaluation and policy improvement, is also what we use with the Monte Carlo methods to obtain optimal policies. In each cycle, we collect a trajectory from a complete episode, then estimate the action-values and update the policy, and so on.</p>
+			<p>Let's implement an on-policy MC control algorithm and use it to optimize the food truck inventory replenishment:</p>
+			<ol>
+				<li value="1">We first create a function that generates a random policy where all actions are equally likely to be taken, to be used to initialize the policy: <p class="source-code">def get_random_policy(states, actions):</p><p class="source-code">    policy = {}</p><p class="source-code">    n_a = len(actions)</p><p class="source-code">    for s in states:</p><p class="source-code">        policy[s] = {a: 1/n_a for a in actions}</p><p class="source-code">    return policy</p></li>
+				<li>And now, we build the on-policy first-visit MC control algorithm: <p class="source-code">import operator</p><p class="source-code">def on_policy_first_visit_mc(env, n_iter, eps, gamma):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    states =  env.state_space</p><p class="source-code">    actions = env.action_space</p><p class="source-code">    policy =  get_random_policy(states, actions)</p><p class="source-code">    Q = {s: {a: 0 for a in actions} for s in states}</p><p class="source-code">    Q_n = {s: {a: 0 for a in actions} for s in states}</p><p class="source-code">    for i in range(n_iter):</p><p class="source-code">        if i % 10000 == 0:</p><p class="source-code">            print("Iteration:", i)</p><p class="source-code">        trajectory = get_trajectory(env, policy)</p><p class="source-code">        G = 0</p><p class="source-code">        T = len(trajectory) - 1</p><p class="source-code">        for t, sar in enumerate(reversed(trajectory)):</p><p class="source-code">            s, a, r = sar</p><p class="source-code">            G = r + gamma * G</p><p class="source-code">            first_visit = True</p><p class="source-code">            for j in range(T - t):</p><p class="source-code">                s_j = trajectory[j][0]</p><p class="source-code">                a_j = trajectory[j][1]</p><p class="source-code">                if (s, a) == (s_j, a_j):</p><p class="source-code">                    first_visit = False</p><p class="source-code">            if first_visit:</p><p class="source-code">                Q[s][a] = Q_n[s][a] * Q[s][a] + G</p><p class="source-code">                Q_n[s][a] += 1</p><p class="source-code">                Q[s][a] /= Q_n[s][a]</p><p class="source-code">                a_best = max(Q[s].items(), </p><p class="source-code">                             key=operator.itemgetter(1))[0]</p><p class="source-code">                policy[s] = get_eps_greedy(actions, </p><p class="source-code">                                           eps, </p><p class="source-code">                                           a_best)</p><p class="source-code">    return policy, Q, Q_n</p><p>This is very similar to the first-visit MC prediction method, with the following key differences:</p><p>a) Instead of <a id="_idIndexMarker441"/>estimating the state values, <img src="image/Formula_05_180.png" alt=""/>, we estimate the action values, <img src="image/Formula_05_181.png" alt=""/>.</p><p>b) To explore all state-action pairs, we use ε-greedy policies.</p><p>c) This is a first-visit approach, but instead of checking if the state appeared earlier in the trajectory, we check if the state-action pair appeared before in the trajectory before we update the <img src="image/Formula_05_182.png" alt=""/> estimate.</p><p>d) Whenever we update the <img src="image/Formula_05_183.png" alt=""/> estimate of a state-action pair, we also update the policy to assign the highest probability to the action that maximizes the <img src="image/Formula_05_184.png" alt=""/>, which is <img src="image/Formula_05_185.png" alt=""/>.</p></li>
+				<li>Use the algorithm to optimize the food truck policy:<p class="source-code">policy, Q, Q_n = on_policy_first_visit_mc(foodtruck, </p><p class="source-code">                                          300000, </p><p class="source-code">                                          0.05, </p><p class="source-code">                                          1)</p></li>
+				<li>Display the <strong class="source-inline">policy</strong> dictionary. You will see that it is the optimal one that we found earlier with DP methods:<p class="source-code"><strong class="bold">{('Mon', 0):{0:0.01, 100:0.01, 200:0.01, 300:0.01, 400:0.96},</strong></p><p class="source-code"><strong class="bold">…</strong></p></li>
+			</ol>
+			<p>That's it! This<a id="_idIndexMarker442"/> algorithm does not use any knowledge of the environment, unlike the DP methods. It learns from its interaction with the (simulation of the) environment! And, when we run the algorithm long enough, it converges to the optimal policy. </p>
+			<p>Great job! Next, let's proceed to off-policy MC control.</p>
+			<h3>Off-policy Monte Carlo control</h3>
+			<p>In an off-policy <a id="_idIndexMarker443"/>approach, we have a set of samples (trajectories) collected under some behavior policy <img src="image/Formula_05_186.png" alt=""/>, yet we would like to use that experience to estimate the state and action values under a target policy <img src="image/Formula_05_046.png" alt=""/>. This requires us to <a id="_idIndexMarker444"/>use a trick called <strong class="bold">importance sampling</strong>. Let's look into what it is next, and then describe off-policy Monte Carlo control.</p>
+			<h4>Importance sampling</h4>
+			<p>Let's start<a id="_idIndexMarker445"/> describing importance<a id="_idIndexMarker446"/> sampling in a simple game setting, in which you roll a six-sided die. Depending on what comes up on the die, you receive a random reward. This could be something like this: If you get a 1, you get a reward from a normal distribution with mean 10 and variance 25. There are similar hidden reward distributions for all outcomes, which are unknown to you. Let's denote the reward you receive when the face <img src="image/Formula_05_188.png" alt=""/> comes up with the random variable <img src="image/Formula_05_189.png" alt=""/>.</p>
+			<p>You want to estimate the expected reward after a single roll, which is</p>
+			<div>
+				<div id="_idContainer539" class="IMG---Figure">
+					<img src="image/Formula_05_190.jpg" alt=""/>
+				</div>
+			</div>
+			<p>where <img src="image/Formula_05_191.png" alt=""/> is the probability of observing side <img src="image/Formula_05_192.png" alt=""/>. </p>
+			<p>Now, assume that you have two dice to choose from, A and B, with different probability distributions. You first pick A, and roll the die <img src="image/Formula_05_193.png" alt=""/> times. Your observations are as in the following table:</p>
+			<div>
+				<div id="_idContainer543" class="IMG---Figure">
+					<img src="image/B14160_05_7.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Table 5.1 – Observed rewards after n rolls with die A</p>
+			<p>Here, <img src="image/Formula_05_194.png" alt=""/> denotes the reward observed after the <img src="image/Formula_05_195.png" alt=""/> roll when the observed side is <img src="image/Formula_05_196.png" alt=""/>. The estimated expected reward with die A,  <img src="image/Formula_05_197.png" alt=""/>, is simply given by the following:</p>
+			<div>
+				<div id="_idContainer548" class="IMG---Figure">
+					<img src="image/Formula_05_198.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, the<a id="_idIndexMarker447"/> question is whether we can <a id="_idIndexMarker448"/>use this data to estimate the expected reward with die B, such as <img src="image/Formula_05_199.png" alt=""/>, without any new observations? The answer is yes if we know <img src="image/Formula_05_200.png" alt=""/> and <img src="image/Formula_05_201.png" alt=""/>. Here is how.</p>
+			<p>In the current estimation, each observation has a weight of 1. Importance sampling suggests scaling these weights according to <img src="image/Formula_05_202.png" alt=""/>. Now, consider the observation <img src="image/Formula_05_203.png" alt=""/>. If with die B, we are three times as likely to observe <img src="image/Formula_05_204.png" alt=""/> compared to die A, then we increase the weight of this observation in the sum to 3. More formally, we do the following:</p>
+			<div>
+				<div id="_idContainer555" class="IMG---Figure">
+					<img src="image/Formula_05_205.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, the ratio <img src="image/Formula_05_206.png" alt=""/> is called the importance sampling ratio. By the way, the above<a id="_idIndexMarker449"/> preceding estimation, <img src="image/Formula_05_207.png" alt=""/>, is called <strong class="bold">ordinary importance sampling</strong>. We <a id="_idIndexMarker450"/>can also normalize the new estimate with respect to the new weights and obtain <strong class="bold">weighted importance sampling</strong> as follows:</p>
+			<div>
+				<div id="_idContainer558" class="IMG---Figure">
+					<img src="image/Formula_05_208.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, after<a id="_idIndexMarker451"/> this detour, let's go back to using <a id="_idIndexMarker452"/>this to get off-policy predictions. In the context of Monte Carlo prediction, observing a particular side of the die corresponds to observing a particular trajectory, and the die reward corresponds to the total return.</p>
+			<p>If you are thinking <em class="italic">"well, we don't really know the probability of observing a particular trajectory, that's why we are using Monte Carlo methods, isn't it?"</em> You are right, but we don't need to. Here is why. Starting in some <img src="image/Formula_05_209.png" alt=""/>, the probability of observing a trajectory <img src="image/Formula_05_210.png" alt=""/> under a behavior policy <img src="image/Formula_05_211.png" alt=""/> is as follows:</p>
+			<div>
+				<div id="_idContainer562" class="IMG---Figure">
+					<img src="image/Formula_05_212.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer563" class="IMG---Figure">
+					<img src="image/Formula_05_213.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer564" class="IMG---Figure">
+					<img src="image/Formula_05_214.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The expression is the same for the target policy, except <img src="image/Formula_05_035.png" alt=""/> replaces <img src="image/Formula_05_216.png" alt=""/>. Now, when we calculate the importance sampling ratio, the transition probabilities cancel out and we end up <a id="_idIndexMarker453"/>with<a id="_idIndexMarker454"/> the following (<em class="italic">Sutton &amp; Barto, 2018</em>):</p>
+			<div>
+				<div id="_idContainer567" class="IMG---Figure">
+					<img src="image/Formula_05_217.jpg" alt=""/>
+				</div>
+			</div>
+			<p>With that, we go from estimating the expectation under the behavior policy:</p>
+			<div>
+				<div id="_idContainer568" class="IMG---Figure">
+					<img src="image/Formula_05_218.jpg" alt=""/>
+				</div>
+			</div>
+			<p>to estimating the expectation under the target policy:</p>
+			<div>
+				<div id="_idContainer569" class="IMG---Figure">
+					<img src="image/Formula_05_219.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Let's close this section with a few notes on importance sampling before we implement it:</p>
+			<ul>
+				<li>In order to be able to use the samples obtained under behavior policy <img src="image/Formula_05_211.png" alt=""/> to estimate the state and action values under <img src="image/Formula_05_221.png" alt=""/>, it is required to have <img src="image/Formula_05_222.png" alt=""/> if <img src="image/Formula_05_223.png" alt=""/>. Since we would not want to impose what <img src="image/Formula_05_224.png" alt=""/> could be taken under the<a id="_idIndexMarker455"/> target policy, <img src="image/Formula_05_225.png" alt=""/> is usually <a id="_idIndexMarker456"/>chosen as a soft policy.</li>
+				<li>In the weighted importance sampling, if the denominator is zero, then the estimate is considered zero.</li>
+				<li>The formulas above ignored the discount in the return, which is a bit more complicated to deal with.</li>
+				<li>The observed trajectories can be chopped with respect to the first-visit or every-visit rule.</li>
+				<li>The ordinary importance sampling is unbiased but can have very high variance. The weighted importance sampling, on the other hand, is biased but usually has a much lower variance, hence it's preferred in practice.</li>
+			</ul>
+			<p>This was<a id="_idIndexMarker457"/> a quite detour, and we hope you <a id="_idIndexMarker458"/>are still with us! If you are, let's go back to coding!</p>
+			<h4>Application to the inventory replenishment problem</h4>
+			<p>In our <a id="_idIndexMarker459"/>application of the off-policy Monte Carlo method, we use the weighted importance sampling. The behavior policy is chosen as an <img src="image/Formula_05_226.png" alt=""/>-greedy policy, yet the target is a greedy policy maximizing the action value for each state. Also, we use an incremental method to update the state and action value estimates as follows (Sutton &amp; Barto, 2018):</p>
+			<div>
+				<div id="_idContainer577" class="IMG---Figure">
+					<img src="image/Formula_05_227.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer578" class="IMG---Figure">
+					<img src="image/Formula_05_228.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer579" class="IMG---Figure">
+					<img src="image/Formula_05_229.jpg" alt=""/>
+				</div>
+			</div>
+			<p>And this:</p>
+			<div>
+				<div id="_idContainer580" class="IMG---Figure">
+					<img src="image/Formula_05_230.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, the implementation can be done as follows:</p>
+			<ol>
+				<li value="1">Let's first define the function for the incremental implementation of the off-policy <a id="_idIndexMarker460"/>Monte Carlo:<p class="source-code">def off_policy_mc(env, n_iter, eps, gamma):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    states =  env.state_space</p><p class="source-code">    actions = env.action_space</p><p class="source-code">    Q = {s: {a: 0 for a in actions} for s in states}</p><p class="source-code">    C = {s: {a: 0 for a in actions} for s in states}</p><p class="source-code">    target_policy = {}</p><p class="source-code">    behavior_policy = get_random_policy(states, </p><p class="source-code">                                        actions)</p><p class="source-code">    for i in range(n_iter):</p><p class="source-code">        if i % 10000 == 0:</p><p class="source-code">            print("Iteration:", i)</p><p class="source-code">        trajectory = get_trajectory(env, </p><p class="source-code">                                    behavior_policy)</p><p class="source-code">        G = 0</p><p class="source-code">        W = 1</p><p class="source-code">        T = len(trajectory) - 1</p><p class="source-code">        for t, sar in enumerate(reversed(trajectory)):</p><p class="source-code">            s, a, r = sar</p><p class="source-code">            G = r + gamma * G</p><p class="source-code">            C[s][a] += W</p><p class="source-code">            Q[s][a] += (W/C[s][a]) * (G - Q[s][a])</p><p class="source-code">            a_best = max(Q[s].items(), </p><p class="source-code">                         key=operator.itemgetter(1))[0]</p><p class="source-code">            target_policy[s] = a_best</p><p class="source-code">            behavior_policy[s] = get_eps_greedy(actions, </p><p class="source-code">                                                eps, </p><p class="source-code">                                                a_best)</p><p class="source-code">            if a != target_policy[s]:</p><p class="source-code">                break</p><p class="source-code">            W = W / behavior_policy[s][a]</p><p class="source-code">    target_policy = {s: target_policy[s] for s in states}</p><p class="source-code">    return target_policy, Q</p></li>
+				<li>We use the <a id="_idIndexMarker461"/>off-policy MC to optimize the food truck inventory replenishment policy:<p class="source-code">policy, Q = off_policy_mc(foodtruck, 300000, 0.05, 1)</p></li>
+				<li>Finally, display the obtained policy. You will see that it is the optimal one!<p class="source-code"><strong class="bold">{('Mon', 0): 400,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 0): 400,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 100): 300,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 200): 200,</strong></p><p class="source-code"><strong class="bold"> ('Tue', 300): 100,</strong></p><p class="source-code"><strong class="bold"> ('Wed', 0): 400,</strong></p><p class="source-code"><strong class="bold">...</strong></p></li>
+			</ol>
+			<p>Yay! We are done with the Monte Carlo methods for now. Congratulations, this was not the easiest <a id="_idIndexMarker462"/>part! You deserve a break. Next, we will dive into yet another very important topic: temporal-difference learning.</p>
+			<h1 id="_idParaDest-116"><a id="_idTextAnchor116"/>Temporal-difference learning</h1>
+			<p>The first class of<a id="_idIndexMarker463"/> methods to solve MDP we covered in this chapter was DP: </p>
+			<ul>
+				<li>It needs to completely know the environment dynamics to be able to find the optimal solution. </li>
+				<li>It allows us to progress toward the solution with one-step updates of the value functions. </li>
+			</ul>
+			<p>We then covered the MC methods: </p>
+			<ul>
+				<li>They only require the ability to sample from the environment, therefore they learn from experience, as opposed to knowing the environment dynamics – a huge advantage over DP.</li>
+				<li>But they need to wait for a complete episode trajectory to update a policy. </li>
+			</ul>
+			<p><strong class="bold">Temporal-difference (TD)</strong> methods <a id="_idIndexMarker464"/>are, in some sense, the best of both worlds: They learn from experience, and they can update the policy after each step by <strong class="bold">bootstrapping</strong>. This comparison of TD to DP and MC is illustrated in <em class="italic">Table 5.2</em>:</p>
+			<div>
+				<div id="_idContainer581" class="IMG---Figure">
+					<img src="image/B14160_05_8.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Table 5.2 – Comparison of DP, MC, and TD learning methods</p>
+			<p>As a result, TD methods are central in RL and you will encounter them again and again in various<a id="_idIndexMarker465"/> forms. In this section, you will learn how to implement TD methods in tabular form. Modern RL algorithms, which we will cover in the following chapters, implement TD methods with function approximations such as neural networks.</p>
+			<h2 id="_idParaDest-117"><a id="_idTextAnchor117"/>One-step TD learning – TD(0)</h2>
+			<p>TD methods <a id="_idIndexMarker466"/>can update a policy after a single state transition or multiple ones. The former version is called one-step TD learning or TD(0) and it is easier to implement compared to <img src="image/Formula_05_231.png" alt=""/>-step TD learning. We'll start covering one-step TD learning with the prediction problem. We'll then introduce an on-policy method, SARSA, and then an off-policy algorithm, the famous Q-learning. </p>
+			<h3>TD prediction</h3>
+			<p>Remember how <a id="_idIndexMarker467"/>we can write the state-value function of a policy <img src="image/Formula_05_046.png" alt=""/> in terms of one-step reward and the value of the next state:</p>
+			<div>
+				<div id="_idContainer584" class="IMG---Figure">
+					<img src="image/Formula_05_233.jpg" alt=""/>
+				</div>
+			</div>
+			<p>When the agent takes an action under policy <img src="image/Formula_05_061.png" alt=""/> while in state <img src="image/Formula_05_010.png" alt=""/>, it observes three random variables realized:</p>
+			<ul>
+				<li><img src="image/Formula_05_236.png" alt=""/></li>
+				<li><img src="image/Formula_05_237.png" alt=""/></li>
+				<li><img src="image/Formula_05_238.png" alt=""/></li>
+			</ul>
+			<p>We already <a id="_idIndexMarker468"/>know the probability of observing <img src="image/Formula_05_059.png" alt=""/> as part of the policy, but the latter two come from the environment. The observed quantity <img src="image/Formula_05_240.png" alt=""/> gives us a new estimate for <img src="image/Formula_05_241.png" alt=""/> based on a single sample. Of course, we don't want to completely discard the existing estimate and replace it with the new one, because the transitions are usually random, and we could have also observed completely different <img src="image/Formula_05_242.png" alt=""/> and <img src="image/Formula_05_243.png" alt=""/> values even with the same action <img src="image/Formula_05_244.png" alt=""/>. <em class="italic">The idea in TD learning is that we use this observation to update the existing estimate </em><img src="image/Formula_05_245.png" alt=""/><em class="italic"> by moving it in the direction of this new estimate.</em> And the step-size <img src="image/Formula_05_246.png" alt=""/> controls how aggressively we move towards the new estimate. More formally, we use the following update rule:</p>
+			<div>
+				<div id="_idContainer598" class="IMG---Figure">
+					<img src="image/Formula_05_247.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+</p>
+			<div>
+				<div id="_idContainer599" class="IMG---Figure">
+					<img src="image/Formula_05_248.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The term in the<a id="_idIndexMarker469"/> square brackets is called the <strong class="bold">TD error</strong>. As <a id="_idIndexMarker470"/>is obvious from the name, it estimates how much the current state-value estimate of <img src="image/Formula_05_249.png" alt=""/>, <img src="image/Formula_05_250.png" alt=""/> is off from the truth based on the latest observation. <img src="image/Formula_05_251.png" alt=""/> would completely ignore the new signal while <img src="image/Formula_05_252.png" alt=""/> would completely ignore the existing estimate. Again, since a single observation is often noisy, and the new estimate itself uses another erroneous estimate (<img src="image/Formula_05_253.png" alt=""/>); the new estimate cannot be solely relied on. Therefore, the <img src="image/Formula_05_254.png" alt=""/> value is chosen between <img src="image/Formula_05_255.png" alt=""/> and 1, and often closer to <img src="image/Formula_05_256.png" alt=""/>.</p>
+			<p>With that, it is trivial to implement a TD prediction method to evaluate a given policy <img src="image/Formula_05_046.png" alt=""/> and estimate the state values. Follow along to use TD prediction to evaluate the base policy in the food truck example:</p>
+			<ol>
+				<li value="1">First, we<a id="_idIndexMarker471"/> implement the TD prediction as described above as in the following function:<p class="source-code">def one_step_td_prediction(env, policy, gamma, alpha, n_iter):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    states = env.state_space</p><p class="source-code">    v = {s: 0 for s in states}</p><p class="source-code">    s = env.reset()</p><p class="source-code">    for i in range(n_iter):</p><p class="source-code">        a = choose_action(s, policy)</p><p class="source-code">        s_next, reward, done, info = env.step(a)</p><p class="source-code">        v[s] += alpha * (reward + gamma * v[s_next] - v[s])</p><p class="source-code">        if done:</p><p class="source-code">            s = env.reset()</p><p class="source-code">        else:</p><p class="source-code">            s = s_next</p><p class="source-code">    return v</p><p>This function simply simulates a given environment using a specified policy over a specified number of iterations. After each observation, it does a one-step TD update using the given <img src="image/Formula_05_258.png" alt=""/> step size and the discount factor <img src="image/Formula_05_259.png" alt=""/>.</p></li>
+				<li>Next, we get the base policy as defined by the <strong class="source-inline">base_policy</strong> function we introduced before:<p class="source-code">policy = base_policy(foodtruck.state_space)</p></li>
+				<li>Then, let's<a id="_idIndexMarker472"/> estimate the state values using TD prediction for <img src="image/Formula_05_260.png" alt=""/> and <img src="image/Formula_05_261.png" alt=""/> over 100,000 steps:<p class="source-code">one_step_td_prediction(foodtruck, policy, 1, 0.01, 100000)</p></li>
+				<li>After rounding, the state-value estimates will look like the following:<p class="source-code"><strong class="bold">{('Mon', 0): 2507.0, </strong></p><p class="source-code"><strong class="bold"> ('Tue', 0): 1956.0</strong></p><p class="source-code"><strong class="bold">...</strong></p></li>
+			</ol>
+			<p>If you go back to the DP methods section and check what the true state values are under the base policy, which we obtained using the policy evaluation algorithm, you will see that the TD estimates are very much in line with them. </p>
+			<p>So, great! We have successfully evaluated a given policy using TD prediction and things are working as expected. On the other hand, just like with the MC methods, we know that we have to estimate the action values to be able to improve the policy and find an optimal one in the absence of the environment dynamics. Next, we'll look into two different methods, SARSA and Q-learning, which do exactly that.</p>
+			<h3>On-policy control with SARSA</h3>
+			<p>With slight <a id="_idIndexMarker473"/>additions and modifications to the TD(0), we <a id="_idIndexMarker474"/>can <a id="_idIndexMarker475"/>turn it into an optimal control algorithm. Namely, we will do the following:</p>
+			<ul>
+				<li>Ensure that we always have a soft policy, such as <img src="image/Formula_05_262.png" alt=""/>-greedy, to try all actions for a given state over time.</li>
+				<li>Estimate the action values.</li>
+				<li>Improve the policy based on the action-value estimates.</li>
+			</ul>
+			<p>And we will do all of these at each step and using the observations <img src="image/Formula_05_263.png" alt=""/>, hence the name <strong class="bold">SARSA</strong>. In particular, the action values are updated as follows:</p>
+			<div>
+				<div id="_idContainer615" class="IMG---Figure">
+					<img src="image/Formula_05_264.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, let's dive into the implementation!</p>
+			<ol>
+				<li value="1">We define the function <strong class="source-inline">sarsa</strong>, which will take as the arguments the environment, the discount factor <img src="image/Formula_05_265.png" alt=""/>, the exploration parameter <img src="image/Formula_05_266.png" alt=""/>, and the learning step size <img src="image/Formula_05_267.png" alt=""/>. Also, implement the usual initializations:<p class="source-code">def sarsa(env, gamma, eps, alpha, n_iter):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    states = env.state_space</p><p class="source-code">    actions = env.action_space</p><p class="source-code">    Q = {s: {a: 0 for a in actions} for s in states}</p><p class="source-code">    policy = get_random_policy(states, actions)</p><p class="source-code">    s = env.reset()</p><p class="source-code">    a = choose_action(s, policy)</p></li>
+				<li>Next, we <a id="_idIndexMarker476"/>implement the algorithm loop, in which we simulate the environment for a single <a id="_idIndexMarker477"/>step, observe <img src="image/Formula_05_268.png" alt=""/> and <img src="image/Formula_05_269.png" alt=""/>, choose the next<a id="_idIndexMarker478"/> action <img src="image/Formula_05_270.png" alt=""/> based on <img src="image/Formula_05_271.png" alt=""/> and the <img src="image/Formula_05_272.png" alt=""/>-greedy policy, and update the action-value estimates:<p class="source-code">    for i in range(n_iter):</p><p class="source-code">        if i % 100000 == 0:</p><p class="source-code">            print("Iteration:", i)</p><p class="source-code">        s_next, reward, done, info = env.step(a)</p><p class="source-code">        a_best = max(Q[s_next].items(), </p><p class="source-code">                     key=operator.itemgetter(1))[0]</p><p class="source-code">        policy[s_next] = get_eps_greedy(actions, eps, a_best)</p><p class="source-code">        a_next = choose_action(s_next, policy)</p><p class="source-code">        Q[s][a] += alpha * (reward </p><p class="source-code">                            + gamma * Q[s_next][a_next] </p><p class="source-code">                            - Q[s][a])</p><p class="source-code">        if done:</p><p class="source-code">            s = env.reset()</p><p class="source-code">            a_best = max(Q[s].items(), </p><p class="source-code">                         key=operator.itemgetter(1))[0]</p><p class="source-code">            policy[s] = get_eps_greedy(actions, eps, a_best)</p><p class="source-code">            a = choose_action(s, policy)</p><p class="source-code">        else:</p><p class="source-code">            s = s_next</p><p class="source-code">            a = a_next</p><p class="source-code">    return policy, Q</p></li>
+				<li>Then, let's <a id="_idIndexMarker479"/>execute <a id="_idIndexMarker480"/>the algorithm with a selection of <a id="_idIndexMarker481"/>hyperparameters, such as <img src="image/Formula_05_273.png" alt=""/>, and over 1 million iterations:<p class="source-code">policy, Q = sarsa(foodtruck, 1, 0.1, 0.05, 1000000)</p></li>
+				<li>The <strong class="source-inline">policy</strong> we obtain is the following:<p class="source-code"><strong class="bold">{('Mon', 0): {0: 0.02, 100: 0.02, 200: 0.02, 300: 0.02, 400: 0.92},</strong></p><p class="source-code"><strong class="bold"> ('Tue', 0): {0: 0.02, 100: 0.02, 200: 0.02, 300: 0.92, 400: 0.02},</strong></p><p class="source-code"><strong class="bold"> ('Tue', 100): {0: 0.02, 100: 0.02, 200: 0.02, 300: 0.92, 400: 0.02},</strong></p><p class="source-code"><strong class="bold">...</strong></p><p>Note that the exploratory actions would be ignored when implementing this policy after training, and we would simply always pick the action with the highest probability for each state.</p></li>
+				<li>The action values, for example, for the state Monday – 0 beginning inventory (accessed via <strong class="source-inline">Q[('Mon', 0)]</strong>), are as follows:<p class="source-code"><strong class="bold">{0: 2049.95351191411,</strong></p><p class="source-code"><strong class="bold"> 100: 2353.5460655683123,</strong></p><p class="source-code"><strong class="bold"> 200: 2556.736260693101,</strong></p><p class="source-code"><strong class="bold"> 300: 2558.210868908282,</strong></p><p class="source-code"><strong class="bold"> 400: 2593.7601273913133}</strong></p></li>
+			</ol>
+			<p>And that's it! We <a id="_idIndexMarker482"/>have successfully implemented the TD(0) algorithm<a id="_idIndexMarker483"/> for our example. Notice that, however, the<a id="_idIndexMarker484"/> policy we obtain is a near-optimal one, not the optimal one we obtained with the DP methods. There are also inconsistencies in the policy, such as having a policy of buying 300 patties both when in states (Tuesday, 0) and (Tuesday, 100). There are several culprits for not getting the optimal policy: </p>
+			<ul>
+				<li>SARSA converges to an optimal solution in the limit, such as when <img src="image/Formula_05_274.png" alt=""/>. In practice, we run the algorithm for a limited number of steps. Try increasing <img src="image/Formula_05_275.png" alt=""/> and you will see that the policy (usually) will get better.</li>
+				<li>The learning rate <img src="image/Formula_05_254.png" alt=""/> is a hyperparameter that needs to be tuned. The speed of the convergence depends on this selection.</li>
+				<li>This is an on-policy algorithm. Therefore, the action values reflect the exploration due to the <img src="image/Formula_05_277.png" alt=""/>-greedy policy, which is not what we really want in this example. Because, after training, there will be no exploration while following the policy in practice (since we need the exploration just to discover the best actions for <a id="_idIndexMarker485"/>each state). The policy we would use <a id="_idIndexMarker486"/>in practice is not the same as the policy we<a id="_idIndexMarker487"/> estimated the action values for.</li>
+			</ul>
+			<p>Next, we turn to Q-learning, which is an off-policy TD method. </p>
+			<h3>Off-policy control with Q-learning </h3>
+			<p>As mentioned<a id="_idIndexMarker488"/> above, we would like to isolate the action-value <a id="_idIndexMarker489"/>estimates from the exploration <a id="_idIndexMarker490"/>effect, which means having an off-policy method. Q-learning is such an approach, which makes it very powerful, and as a result, a very popular one.</p>
+			<p>Here are how the action values are updated in Q-learning:</p>
+			<div>
+				<div id="_idContainer629" class="IMG---Figure">
+					<img src="image/Formula_05_278.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Notice that instead of <img src="image/Formula_05_279.png" alt=""/>, we have the term <img src="image/Formula_05_280.png" alt=""/>. The difference may look small, but it is key. <em class="italic">It means that the action the agent uses to update the action-value, </em><img src="image/Formula_05_281.png" alt=""/><em class="italic">, is not necessarily the one it will take in the next step when in </em><img src="image/Formula_05_282.png" alt=""/><em class="italic">, </em><img src="image/Formula_05_283.png" alt=""/><em class="italic">. Instead, </em><img src="image/Formula_05_284.png" alt=""/><em class="italic"> is an action that maximizes </em><img src="image/Formula_05_285.png" alt=""/><em class="italic">, just like what we would use if not in training.</em> As a result, no exploratory actions are involved in action-value estimates and they are aligned with the policy that would be followed after training.</p>
+			<p>It means the action the agent takes in the next step, such as <img src="image/Formula_05_286.png" alt=""/>, is not used in the update. Instead, we use the maximum action value for the state <img src="image/Formula_05_287.png" alt=""/>, such as <img src="image/Formula_05_288.png" alt=""/>, in the update. Such an action <img src="image/Formula_05_281.png" alt=""/> is what we would use after training with those <a id="_idIndexMarker491"/>action<a id="_idIndexMarker492"/> values, hence no exploratory actions are<a id="_idIndexMarker493"/> involved in action-value estimations.</p>
+			<p>The implementation of Q-learning is only slightly different than that of SARSA. Let's go ahead and see Q-learning in action:</p>
+			<ol>
+				<li value="1">We start by defining the <strong class="source-inline">q_learning</strong> function with the usual initializations:<p class="source-code">def q_learning(env, gamma, eps, alpha, n_iter):</p><p class="source-code">    np.random.seed(0)</p><p class="source-code">    states = env.state_space</p><p class="source-code">    actions = env.action_space</p><p class="source-code">    Q = {s: {a: 0 for a in actions} for s in states}</p><p class="source-code">    policy = get_random_policy(states, actions)</p><p class="source-code">    s = env.reset()</p></li>
+				<li>Then, we implement the main loop, where the action the agent takes in <img src="image/Formula_05_290.png" alt=""/> comes from<a id="_idIndexMarker494"/> the <img src="image/Formula_05_291.png" alt=""/>-greedy <a id="_idIndexMarker495"/>policy. During the update, the <a id="_idIndexMarker496"/>maximum of <img src="image/Formula_05_292.png" alt=""/> is used:<p class="source-code">     for i in range(n_iter):</p><p class="source-code">        if i % 100000 == 0:</p><p class="source-code">            print("Iteration:", i)</p><p class="source-code">        a_best = max(Q[s].items(), </p><p class="source-code">                     key=operator.itemgetter(1))[0]</p><p class="source-code">        policy[s] = get_eps_greedy(actions, eps, a_best)</p><p class="source-code">        a = choose_action(s, policy)</p><p class="source-code">        s_next, reward, done, info = env.step(a)</p><p class="source-code">        Q[s][a] += alpha * (reward </p><p class="source-code">                            + gamma * max(Q[s_next].values()) </p><p class="source-code">                            - Q[s][a])</p><p class="source-code">        if done:</p><p class="source-code">            s = env.reset()</p><p class="source-code">        else:</p><p class="source-code">            s = s_next</p></li>
+				<li>We return the policy stripped of the exploratory actions after the main loop is finished:<p class="source-code">    policy = {s: {max(policy[s].items(), </p><p class="source-code">                 key=operator.itemgetter(1))[0]: 1}</p><p class="source-code">                 for s in states}</p><p class="source-code">    return policy, Q</p></li>
+				<li>Finally, we execute the algorithm with a selection of the hyperparameters, such as the <a id="_idIndexMarker497"/>following:<p class="source-code">policy, Q = q_learning(foodtruck, 1, 0.1, 0.01, 1000000)</p></li>
+				<li>Observe <a id="_idIndexMarker498"/>the<a id="_idIndexMarker499"/> returned <strong class="source-inline">policy</strong>:<p class="source-code"><strong class="bold">{('Mon', 0): {400: 1},</strong></p><p class="source-code"><strong class="bold"> ('Tue', 0): {400: 1},</strong></p><p class="source-code"><strong class="bold"> ('Tue', 100): {300: 1},</strong></p><p class="source-code"><strong class="bold"> ('Tue', 200): {200: 1},</strong></p><p class="source-code"><strong class="bold"> ('Tue', 300): {100: 1},</strong></p><p class="source-code"><strong class="bold">...</strong></p></li>
+			</ol>
+			<p>You will see that this hyperparameter set gives you the optimal policy (or something close to it depending on how randomization plays out in your case).</p>
+			<p>That concludes our discussion on Q-learning. Next, let's discuss how these approaches can be extended to <img src="image/Formula_05_193.png" alt=""/>-step learning.</p>
+			<h2 id="_idParaDest-118"><a id="_idTextAnchor118"/>n-step TD learning</h2>
+			<p>In the Monte<a id="_idIndexMarker500"/> Carlo methods, we collected complete episodes before making a policy update. With TD(0), on the other extreme, we updated the value estimates and the policy after a single transition in the environment. One could possibly find a sweet spot by following a path in between by updating the policy after <img src="image/Formula_05_294.png" alt=""/>-steps of transitions. For <img src="image/Formula_05_295.png" alt=""/>, the two-step return looks like the following:</p>
+			<div>
+				<div id="_idContainer647" class="IMG---Figure">
+					<img src="image/Formula_05_296.jpg" alt=""/>
+				</div>
+			</div>
+			<p>And the general form is the following:</p>
+			<div>
+				<div id="_idContainer648" class="IMG---Figure">
+					<img src="image/Formula_05_297.jpg" alt=""/>
+				</div>
+			</div>
+			<p>This form can be used in the TD update to reduce the weight of the estimates used in bootstrapping, which could be especially inaccurate at the beginning of the training. We don't include the implementation here as it gets a bit messy but still wanted to bring this alternative to your attention for you to have it in your toolkit.</p>
+			<p>With that, we have completed the TD methods! Before finishing the chapter, let's take a closer look at the importance of simulations in RL. </p>
+			<h1 id="_idParaDest-119"><a id="_idTextAnchor119"/>Understanding the importance of simulation in reinforcement learning</h1>
+			<p>As we've mentioned <a id="_idIndexMarker501"/>multiple times so far, and <a id="_idIndexMarker502"/>especially in the first chapter when we talked about RL success stories, RL's hunger for data is orders of magnitude greater than regular deep learning. That is why it takes many months to train some complex RL agents, over millions and billions of iterations. Since it is often impractical to collect such data in a physical environment, we heavily rely on simulation models in training RL agents. This brings some challenges along with it:</p>
+			<ul>
+				<li>Many businesses don't have a simulation model for their business processes. This makes it challenging to put RL technology to use in the business.</li>
+				<li>When a simulation model exists, it is often too simplistic to capture the real-world<a id="_idIndexMarker503"/> dynamics. As a result, RL <a id="_idIndexMarker504"/>models could easily overfit the simulation environment and may fail in deployment. It takes significant time and resources to calibrate and validate a simulation model to make it reflect reality sufficiently.</li>
+				<li>In general, deploying an RL agent that is trained in simulation in the real world is not easy, because, well, they are two different worlds. This is against the core principle in machine learning that says the training and the test should follow the same<a id="_idIndexMarker505"/> distribution. This is known as the <strong class="bold">simulation-to-real (sim2real)</strong> gap.</li>
+				<li>Increased fidelity in simulation comes with slowness and compute resource consumption, which is a real disadvantage for fast experimentation and RL model development.</li>
+				<li>Many simulation models are not generic enough to cover scenarios that have not been encountered in the past but are likely to be encountered in the future.</li>
+				<li>A lot of commercial simulation software could be hard to integrate (due to the lack of a proper API) with the languages RL packages are naturally available in, such as Python.</li>
+				<li>Even when integration is possible, the simulation software may not be flexible enough to work with the algorithms. For example, it may not reveal the state of the environment, reset it when needed, define terminal states, and so on.</li>
+				<li>Many simulation vendors allow a limited number of sessions per license, whereas RL model development is the fastest – you can run thousands of simulation environments in parallel.</li>
+			</ul>
+			<p>In this book, we will cover some techniques to overcome some of these challenges, such as domain randomization for the sim2real gap and offline RL for environments without simulation. However, the key message of this section is that you usually should invest in your simulation<a id="_idIndexMarker506"/> model to get the best out of RL. In <a id="_idIndexMarker507"/>particular, your simulation model should be fast, accurate, and scalable to many sessions.</p>
+			<p>With this, we conclude this chapter. Great work! This marks a milestone in our journey with this book. We have come a long way and built a solid foundation of RL solution approaches! Next, let's summarize what we have learned and see what is coming up in the next chapter.</p>
+			<h1 id="_idParaDest-120"><a id="_idTextAnchor120"/>Summary</h1>
+			<p>In this chapter, we covered three important approaches to solving MDPs: DP, Monte Carlo methods, and temporal-difference learning. We have seen that while DP provides exact solutions to MDPs, it relies on the knowledge of the environment. Monte Carlo and TD learning methods, on the other hand, explore the environment and learn from experience. TD learning, in particular, can learn from even a single step transition in the environment. Along the way, we also discussed on-policy methods, which estimate the value functions for a behavior policy, and off-policy methods for a target policy. Finally, we also discussed the importance of the simulator in RL experiments and what to pay attention to when working with one.</p>
+			<p>Next, we'll take our journey to the next stage and dive into deep RL, which will enable us to solve some real-world problems using RL. Particularly, in the next chapter, we'll cover deep Q-learning in detail.</p>
+			<p>See you there!</p>
+			<h1 id="_idParaDest-121"><a id="_idTextAnchor121"/>Exercises</h1>
+			<ol>
+				<li value="1">Change these values to see how the optimal policy changes for the modified problem.</li>
+				<li>Add a policy evaluation step after the policy improvement step in the value iteration algorithm. You can set the number of iterations you want to perform the evaluation for before you go back to policy improvement. Use the <strong class="source-inline">policy_evaluation</strong> function with a <strong class="source-inline">max_iter</strong> value of your choice. Also, be careful about how you track changes in the state values.</li>
+			</ol>
+			<h1 id="_idParaDest-122"><a id="_idTextAnchor122"/>References</h1>
+			<ul>
+				<li>Sutton, R. S., &amp; Barto, A. G. (2018). <em class="italic">Reinforcement Learning: An Introduction.</em> A Bradford Book. URL: <a href="http://incompleteideas.net/book/the-book.html">http://incompleteideas.net/book/the-book.html</a></li>
+				<li>Barto, A. (2006). <em class="italic">Reinforcement learning</em>. University of Massachusetts – Amherst  CMPSCI 687. URL: <a href="https://www.andrew.cmu.edu/course/10-703/textbook/BartoSutton.pdf">https://www.andrew.cmu.edu/course/10-703/textbook/BartoSutton.pdf</a></li>
+				<li>Goldstick, J. (2009). <em class="italic">Importance sampling. Statistics 406: Introduction to Statistical Computing at the University of Michigan</em>: <a href="http://dept.stat.lsa.umich.edu/~jasoneg/Stat406/lab7.pdf">http://dept.stat.lsa.umich.edu/~jasoneg/Stat406/lab7.pdf</a></li>
+			</ul>
+		</div>
+	</body></html>

@@ -1,0 +1,262 @@
+<html><head></head><body>
+<div id="sbo-rt-content"><div id="_idContainer171">
+<h1 class="chapter-number" id="_idParaDest-120" lang="en-GB"><a id="_idTextAnchor124"/>9</h1>
+<h1 id="_idParaDest-121" lang="en-GB"><a id="_idTextAnchor125"/>Performing End-to-End View Synthesis with SynSin</h1>
+<p lang="en-GB">This chapter is dedicated to the latest state-of-the-art view synthesis model called SynSin. View synthesis is one of the main directions in 3D deep learning, which can be used in multiple different domains such as AR, VR, gaming, and more. The goal is to create a model for the given image as an input to reconstruct a new image from another view.</p>
+<p lang="en-GB">In this chapter, first, we will explore view synthesis and the existing approaches to solving this problem. We will discuss all advantages and disadvantages of these techniques.</p>
+<p lang="en-GB">Second, we are going to dive deeper into the architecture of the SynSin model. This is an end-to-end model that consists of three main modules. We will discuss each of them and understand how these modules help to solve view synthesis without any 3D data.</p>
+<p lang="en-GB">After understanding the whole structure of the model, we will move on to hands-on practice, where we will set up and work with the model to better understand the whole view synthesis process. We will train and test the model, and also use pre-trained models for inference.</p>
+<p lang="en-GB">In this chapter, we’re going to cover the following main topics:</p>
+<ul>
+<li lang="en-GB">Overview of view synthesis</li>
+<li lang="en-GB">SynSin network architecture</li>
+<li lang="en-GB">Hands-on model training and testing</li>
+</ul>
+<h1 id="_idParaDest-122" lang="en-GB"><a id="_idTextAnchor126"/>Technical requirements</h1>
+<p lang="en-GB">To run the example code snippets in this book, ideally, readers need to have a computer with a GPU. However, running the code snippets with only CPUs is not impossible.</p>
+<p lang="en-GB">The recommended computer configuration includes the following:</p>
+<ul>
+<li lang="en-GB">A GPU, for example, the Nvidia GTX series or the RTX series with at least 8 GB of memory</li>
+<li lang="en-GB">Python 3</li>
+<li lang="en-GB">The PyTorch and PyTorch3D libraries</li>
+</ul>
+<p lang="en-GB">The code snippets for this chapter can be found at <a href="https://github.com/PacktPublishing/3D-Deep-Learning-with-Python">https:github.com/PacktPublishing/3D-Deep-Learning-with-Python</a>.</p>
+<h1 id="_idParaDest-123" lang="en-GB"><a id="_idTextAnchor127"/>Overview of view synthesis</h1>
+<p lang="en-GB">One of the most popular research directions in 3D computer vision is view synthesis. Given the data and the <a id="_idIndexMarker411"/>viewpoint, the idea of this research direction is to generate a new image that renders the object from another viewpoint.</p>
+<p lang="en-GB">View synthesis comes with two challenges. The model<a id="_idIndexMarker412"/> should understand the 3D structure and semantic information of the image. By 3D structure, we mean that when changing the viewpoint, we get closer to some objects and far away from others. A good model should handle this by rendering images where some objects are bigger and some are smaller to view - change. By semantic information, we mean that the model should differentiate the objects and should understand what objects are presented in the image. This is important because some objects can be partially included in the image; therefore, during the reconstruction, the model should understand the semantics of the object to know how to reconstruct the continuation of that object. For example, given an image of a car on one side where we only see two wheels, we know that there are two more wheels on the other side of the car. The model must contain these semantics during reconstruction:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer156">
+<img alt="Figure 9.1: The red-framed photographs show the original image, and the blue-framed photographs show the newly generated images; this is an example of view synthesis using the SynSin methodology " height="394" src="image/B18217_09_1.jpg" width="872"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.1: The red-framed photographs show the original image, and the blue-framed photographs show the newly generated images; this is an example of view synthesis using the SynSin methodology</p>
+<p lang="en-GB">Many challenges need to<a id="_idIndexMarker413"/> be addressed. For the models, it’s hard to understand the 3D scene from an image. There are several methods for view synthesis:</p>
+<ul>
+<li lang="en-GB"><strong class="bold" lang="">View synthesis from multiple images</strong>: Deep neural networks can be used to learn the depth of multiple<a id="_idIndexMarker414"/> images, and then reconstruct new images from another view. However, as mentioned earlier, this implies that we have multiple images from slightly different views, and sometimes, it’s hard to obtain such data.</li>
+<li lang="en-GB"><strong class="bold" lang="">View synthesis using ground-truth depth</strong>: This involves a group of techniques where a ground-truth mask is used beside the image, which represents the depth of the image and semantics. Although in some cases, these types of models can achieve good results, it’s hard and expensive to gather data on a large scale, especially when it comes to outdoor scenes. Also, it’s expensive and time-consuming to annotate such data on a large scale, too.</li>
+<li lang="en-GB"><strong class="bold" lang="">View synthesis from a single image</strong>: This is a more realistic setting when we have only one image and we aim to reconstruct an image from the new view. It’s harder to<a id="_idIndexMarker415"/> get more accurate results by only using one image. SynSin <a id="_idIndexMarker416"/>belongs to a group of methods that can achieve a state-of-the-art view synthesis.</li>
+</ul>
+<p lang="en-GB">So, we have covered a brief overview of view synthesis. Now, we will explore SynSin, dive into the network architecture, and examine the model training and testing processes.</p>
+<h1 id="_idParaDest-124" lang="en-GB"><a id="_idTextAnchor128"/>SynSin network architecture</h1>
+<p lang="en-GB">The idea of SynSin is<a id="_idIndexMarker417"/> to solve the view synthesis problem with an end-to-end model using only one image at test time. This is a model that doesn’t need 3D data annotations and acheives very good accuracy compared to its baseline:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer157">
+<img alt="Figure 9.2: The structure of the end-to-end SynSin method " height="258" src="image/B18217_09_2.jpg" width="1276"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.2: The structure of the end-to-end SynSin method</p>
+<p lang="en-GB">The model is <a id="_idIndexMarker418"/>trained end-to-end, and it consists of three different modules:</p>
+<ul>
+<li lang="en-GB">Spatial feature and depth networks</li>
+<li lang="en-GB">Neural point cloud renderer</li>
+<li lang="en-GB">Refinement module and discriminator</li>
+</ul>
+<p lang="en-GB">Let’s dive deeper into each one to better understand the architecture.</p>
+<h2 id="_idParaDest-125" lang="en-GB"><a id="_idTextAnchor129"/>Spatial feature and depth networks</h2>
+<p lang="en-GB">If we zoom into the first part of <em class="italic" lang="">Figure 9.2</em>, we can see two different networks that are fed by the same image. These <a id="_idIndexMarker419"/>are the spatial feature network (<strong class="bold" lang="">f</strong>) and the depth network (<strong class="bold" lang="">d</strong>) (<em class="italic" lang="">Figure 9.3</em>):</p>
+<div>
+<div class="IMG---Figure" id="_idContainer158">
+<img alt=" Figure 9.3: Input and outputs of the spatial feature and depth networks " height="426" src="image/B18217_09_3.jpg" width="871"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US"> Figure 9.3: Input and outputs of the spatial feature and depth networks</p>
+<p lang="en-GB">Given a reference image and the desired change in pose (<strong class="bold" lang="">T</strong>), we wish to generate an image as if that change in the pose were applied to the reference image. For the first part, we only use a reference image and feed it to two networks. A spatial feature network aims to learn feature maps, which are higher-resolution representations of the image. This part of the model is responsible for learning semantic information about the image. This model consists of eight ResNet blocks and outputs 64-dimensional feature maps for each pixel of the image. The output has the same resolution as the original image.</p>
+<p lang="en-GB">Next, the depth network <a id="_idIndexMarker420"/>aims to learn the 3D structure of the image. It won’t be an accurate 3D structure, as we don’t use exact 3D annotations. However, the model will further improve it. UNet with eight downsampling and upsampling layers are used for this network, followed by the sigmoid layer. Again, the output has the same resolution as the original image.</p>
+<p lang="en-GB">As you might have noticed, both models keep a high resolution for the output channels. This will further help to reconstruct more accurate and higher-quality images.</p>
+<h2 id="_idParaDest-126" lang="en-GB"><a id="_idTextAnchor130"/>Neural point cloud renderer</h2>
+<p lang="en-GB">The next step is to create a 3D point cloud that can then be used with a view transform point to render a new image from the new viewpoint. For that, we use the combined output of the spatial feature and depth networks.</p>
+<p lang="en-GB">The next step <a id="_idIndexMarker421"/>should be rendering the image from another point. In most scenarios, a naïve renderer would be used. This projects 3D points to one pixel or a small region in the new view. A naïve renderer uses a z-buffer, which keeps all the distances from the point to the camera. The problem with the naïve renderer is that it’s not differentiable, which means we can’t use gradients to update our depth and spatial feature networks. Moreover, we want to render features instead of RGB images. This means the naïve renderer won’t work for this technique:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer159">
+<img alt="Figure 9.4: Pose transformation in the neural point cloud renderer " height="224" src="image/B18217_09_4.jpg" width="592"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.4: Pose transformation in the neural point cloud renderer</p>
+<p lang="en-GB">Why not just differentiate naïve renderers? Here, we face two problems:</p>
+<ul>
+<li lang="en-GB"><strong class="bold" lang="">Small neighborhoods</strong>: As mentioned earlier, each point only appears on one or a few pixels of the rendered image. Therefore, there are only a few gradients for each point. This is a drawback of local gradients, which degrades the performance of the network relying on gradient updates.</li>
+<li lang="en-GB"><strong class="bold" lang="">The hard z-buffer</strong>: The z-buffer only keeps the nearest point for rendering the image. If new points appear <a id="_idIndexMarker422"/>closer, suddenly the output will change drastically.</li>
+</ul>
+<p lang="en-GB">To overcome the issues presented here, the model tries to soften the hard decision. This technique is called a <strong class="bold" lang="">neural point cloud renderer</strong>. To <a id="_idIndexMarker423"/>do that, the renderer, instead of assigning a pixel for a point, splats <a id="_idIndexMarker424"/>with varying influence. This solves a small neighborhood problem. For the hard z-buffer issue, we then accumulate the effect of the nearest points, not just the nearest point:</p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US"> </p>
+<div>
+<div class="IMG---Figure" id="_idContainer160">
+<img alt="Figure 9.5: Projecting the point with the splatting technique " height="313" src="image/B18217_09_5.jpg" width="598"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.5: Projecting the point with the splatting technique</p>
+<p lang="en-GB">A 3D point is projected and splatted with radius <strong class="bold" lang="">r</strong> (<em class="italic" lang="">Figure 9.5</em>). Then, the influence of the 3D point on that pixel is measured by the Euclidean distance between the center of the splatted point to that point:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer161">
+<img alt="Figure 9.6:  The effect of forward and backward propagation with a neural point cloud renderer on an example of naïve (b) and SynSin (c) rendering " height="327" src="image/B18217_09_6.jpg" width="854"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.6:  The effect of forward and backward propagation with a neural point cloud renderer on an example of naïve (b) and SynSin (c) rendering</p>
+<p lang="en-GB">As you can see<a id="_idIndexMarker425"/> in the preceding figure, each point is splatted, which helps us to not lose too much information and helps in solving tricky problems.</p>
+<p lang="en-GB">The advantage of this approach is that it allows you to gather more gradients for one 3D point, which improves the network learning process for both spatial features and depth networks:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer162">
+<img alt="Figure 9.7: Backpropagation for the naïve renderer and the neural point cloud renderer " height="305" src="image/B18217_09_7.jpg" width="795"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.7: Backpropagation for the naïve renderer and the neural point cloud renderer</p>
+<p lang="en-GB">Lastly, we need to <a id="_idIndexMarker426"/>gather and accumulate points in the z-buffer. First, we sort points according to their distance from the new camera, and then K-nearest neighbors with alpha compositing are used to accumulate points:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer163">
+<img alt="Figure 9.8: 3D point cloud output " height="558" src="image/B18217_09_8.jpg" width="471"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.8: 3D point cloud output</p>
+<p lang="en-GB">As you can see in <em class="italic" lang="">Figure 9.8</em>, the 3D point cloud outputs an unrefined new view. The output should then become<a id="_idIndexMarker427"/> the input of the refiner module.</p>
+<h2 id="_idParaDest-127" lang="en-GB"><a id="_idTextAnchor131"/>Refinement module and discriminator</h2>
+<p lang="en-GB">Last but not least, the model consists of a refinement module. This module has two missions: first to improve the<a id="_idIndexMarker428"/> accuracy of the projected feature and, second, to fill the nonvisible part of the image from the new view. It should output semantically meaningful and geometrically accurate images. For example, if only one part of the table is visible in the image and in the new view, the image should contain a larger part of it, this module should understand semantically that this is a table, and during the reconstruction, it should keep the lines of the new part geometrically correct (for instance, the straight lines should remain straight). The model learns these properties from a dataset of real-world images:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer164">
+<img alt="Figure 9.9: The refinement module " height="547" src="image/B18217_09_9.jpg" width="931"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.9: The refinement module</p>
+<p lang="en-GB">The refinement module (<strong class="bold" lang="">g</strong>) gets inputs <a id="_idIndexMarker429"/>from the neural point cloud renderer and then outputs the final reconstructed image. Then, it is used in loss objectives to improve the training process.</p>
+<p lang="en-GB">This task is solved with generative models. ResNet with eight blocks is used, and to keep the resolution of the image good, downsampling and <a id="_idIndexMarker430"/>upsampling blocks were used, too. We use GAN with two multilayer discriminators and feature matching loss on the discriminator.</p>
+<p lang="en-GB">The final loss of the model consists of the L1 loss, content loss, and discriminator loss between the generated and target images:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer165">
+<img alt="" height="73" src="image/Formula_09_001.jpg" width="759"/>
+</div>
+</div>
+<p lang="en-GB">The loss function is then used for model optimization as usual.</p>
+<p lang="en-GB">This is how SynSin combines various modules to create an end-to-end process of synthesizing views from just one image. Next, we will explore the practical implementation of the model.</p>
+<h1 id="_idParaDest-128" lang="en-GB"><a id="_idTextAnchor132"/>Hands-on model training and testing</h1>
+<p lang="en-GB">Facebook Research released the <a id="_idIndexMarker431"/>GitHub repository of the SynSin model, which allows us to train the model and use an already pre-trained model for inference. In this section, we will discuss both the training process and inference with pre-trained models:</p>
+<ol>
+<li lang="en-GB">But first, we need to set <a id="_idIndexMarker432"/>up the model. We need to clone the GitHub repository, create an environment, and install all the requirements:<p class="source-code" lang="en-GB"><strong class="bold" lang="">git clone https://github.com/facebookresearch/synsin.git</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">cd synsin/</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">conda create –-name synsin_env –-file requirements.txt</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">conda activate synsin_env</strong></p></li>
+</ol>
+<p lang="en-GB">If requirements can’t be installed with the preceding command, it’s always possible to install them manually. For manual installation, follow the <strong class="source-inline" lang="">synsin/INSTALL.md</strong> file instructions.</p>
+<ol>
+<li lang="en-GB" value="2">The model was trained on three different datasets:<ol><li lang="en-GB"><strong class="source-inline" lang="">RealEstate10K</strong></li><li lang="en-GB"><strong class="source-inline" lang="">MP3D</strong></li><li lang="en-GB"><strong class="source-inline" lang="">KITTI</strong></li></ol></li>
+</ol>
+<p lang="en-GB">For the training, data can be downloaded from the dataset websites. For this book, we are going to use the <strong class="source-inline" lang="">KITTI</strong> dataset; however, feel free to try other datasets, too.</p>
+<p lang="en-GB">Instructions on how to download the KITTI dataset can be found in the SynSin repository at <a href="https://github.com/facebookresearch/synsin/blob/main/KITTI.md">https://github.com/facebookresearch/synsin/blob/main/KITTI.md</a>.</p>
+<p lang="en-GB">First, we need to download the dataset from the website and store the files in <strong class="source-inline" lang="">${KITTI_HOME}/dataset_kitti</strong>, where <strong class="source-inline" lang="">KITTI_HOME</strong> is the path where the dataset will be located.</p>
+<ol>
+<li lang="en-GB" value="3">Next, we need to update the <strong class="source-inline" lang="">./options/options.py</strong> file, where we need to add the path to the KITTI dataset on our local machine:<p class="source-code" lang="en-GB">elif opt.dataset == 'kitti':</p><p class="source-code" lang="en-GB">   opt.min_z = 1.0</p><p class="source-code" lang="en-GB">   opt.max_z = 50.0</p><p class="source-code" lang="en-GB">   opt.train_data_path = (</p><p class="source-code" lang="en-GB">       './DATA/dataset_kitti/'</p><p class="source-code" lang="en-GB">   )</p><p class="source-code" lang="en-GB">   from data.kitti import KITTIDataLoader</p><p class="source-code" lang="en-GB">   return KITTIDataLoader</p></li>
+</ol>
+<p lang="en-GB">If you are going to <a id="_idIndexMarker433"/>use another dataset, you should find the <strong class="source-inline" lang="">DataLoader</strong> for other datasets and add the path to that dataset.</p>
+<ol>
+<li lang="en-GB" value="4">Before training, we have to download pre-trained models by running the following command:<p class="source-code" lang="en-GB"><strong class="bold" lang="">bash ./download_models.sh</strong></p></li>
+</ol>
+<p lang="en-GB">If we open and look<a id="_idIndexMarker434"/> inside the file, we can see that it includes all the pre-trained models for all three datasets. Therefore, when running the command, it will create three different folders per dataset and download all the pre-trained models for that dataset. We can use them both for training and inference. If you don’t want them all downloaded, you can always download them manually by just running the following:</p>
+<p class="source-code" lang="en-GB"><strong class="bold" lang="">wget https://dl.fbaipublicfiles.com/synsin/checkpoints/realestate/synsin.pth</strong></p>
+<p lang="en-GB">This command will run the SynSin pre-trained model for the real estate dataset. For more information about pre-trained models, the <strong class="source-inline" lang="">readme.txt</strong> file can be downloaded as follows:</p>
+<p class="source-code" lang="en-GB"><strong class="bold" lang="">wget https://dl.fbaipublicfiles.com/synsin/checkpoints/readme.txt</strong></p>
+<ol>
+<li lang="en-GB" value="5">For training, you need to run the <strong class="source-inline" lang="">train.py</strong> file. You can run it from the shell using <strong class="source-inline" lang="">./train.sh</strong>. If we<a id="_idIndexMarker435"/> open the <strong class="source-inline" lang="">train.sh</strong> file, we can find commands for the three different datasets. The default example for KITTI is as follows:<p class="source-code" lang="en-GB"><strong class="bold" lang="">python train.py --batch-size 32 \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --folder 'temp' --num_workers 4  \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --resume --dataset 'kitti' --use_inv_z \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --use_inverse_depth \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --accumulation 'alphacomposite' \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --model_type 'zbuffer_pts' \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --refine_model_type 'resnet_256W8UpDown64'  \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --norm_G 'sync:spectral_batch' \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --gpu_ids 0,1 --render_ids 1 \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">      --suffix '' --normalize_image --lr 0.0001</strong></p></li>
+</ol>
+<p lang="en-GB">You can play with parameters and datasets and try to simulate the results of the original model. When the training process is complete, you can use your new model for evaluation.</p>
+<ol>
+<li lang="en-GB" value="6">For the evaluation, first, we need to have generated ground-truth images. To get that, we need to run the following code:<p class="source-code" lang="en-GB">export KITTI=${KITTI_HOME}/dataset_kitti/images</p><p class="source-code" lang="en-GB">python evaluation/eval_kitti.py --old_model ${OLD_MODEL} --result_folder ${TEST_FOLDER}</p></li>
+</ol>
+<p lang="en-GB">We need to set the path where the results will be saved instead of <strong class="source-inline" lang="">TEST_FOLDER</strong>.</p>
+<p lang="en-GB">The first line exports a new<a id="_idIndexMarker436"/> variable, named <strong class="source-inline" lang="">KITTI</strong>, with the path of the images to the dataset. The next script creates the generated and ground-truth pairs for each image:</p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US"><img alt="Figure 9.10: An example of the output of eval_kitti.py " height="280" src="image/B18217_09_10.png" width="668"/></p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.10: An example of the output of eval_kitti.py</p>
+<p lang="en-GB">The first image is the<a id="_idIndexMarker437"/> input image, and the second image is the ground truth. The third image is the network output. As you might have noticed, the camera was moved forward slightly, and for this specific case, the model output seems very well generated.</p>
+<ol>
+<li lang="en-GB" value="7">However, we need some numerical representation to understand how well the network works. That is why we need to run the<strong class="source-inline" lang=""> evaluation/evaluate_perceptualsim.py</strong> file, which will calculate the accuracy:<p class="source-code" lang="en-GB"><strong class="bold" lang="">python evaluation/evaluate_perceptualsim.py \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">     --folder ${TEST_FOLDER} \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">     --pred_image im_B.png \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">     --target_image im_res.png \</strong></p><p class="source-code" lang="en-GB"><strong class="bold" lang="">     --output_file kitti_results</strong></p></li>
+</ol>
+<p lang="en-GB">The preceding<a id="_idIndexMarker438"/> command will help to evaluate the model given the path to test images, where one of them is the predicted image and the other one is the target image.</p>
+<p lang="en-GB">The output from my test is as follows:</p>
+<p class="source-code" lang="en-GB">Perceptual similarity for ./DATA/dataset_kitti/test_folder/:  2.0548</p>
+<p class="source-code" lang="en-GB">PSNR for /DATA/dataset_kitti/test_folder/:  16.7344</p>
+<p class="source-code" lang="en-GB">SSIM for /DATA/dataset_kitti/test_folder/:  0.5232</p>
+<p lang="en-GB">One of the metrics used in the evaluation is perceptual similarity, which measures distance in the VGG feature space. The closer to zero, the higher the similarity between images. PSNR is the next metric to measure image reconstruction. It calculates the ratio between the maximum signal power and the power of distorting noise, which, in our<a id="_idIndexMarker439"/> case, is the reconstructed image. Finally, the <strong class="bold" lang="">Structural Similarity Index</strong> (<strong class="bold" lang="">SSIM</strong>) is a metric that quantifies the deterioration in image quality.</p>
+<ol>
+<li lang="en-GB" value="8">Next, we can use a pre-trained model for inference. We need an input image that we will use for inference:</li>
+</ol>
+<div>
+<div class="IMG---Figure" id="_idContainer167">
+<img alt="Figure 9.11: The input image for inference " height="427" src="image/B18217_09_11.jpg" width="634"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.11: The input image for inference</p>
+<ol>
+<li lang="en-GB" value="9">Next, we will use the <strong class="source-inline" lang="">realestate</strong> model to generate a new image. First, we need to set up the<a id="_idIndexMarker440"/> model.</li>
+</ol>
+<p lang="en-GB">The codes for setting up the model can be found in the GitHub repository in a file called <strong class="source-inline" lang="">set_up_model_for_inference.py</strong>.</p>
+<p lang="en-GB">To set up the model, first, we need to import all the necessary packages:</p>
+<p class="source-code" lang="en-GB">import torch</p>
+<p class="source-code" lang="en-GB">import torch.nn as nn</p>
+<p class="source-code" lang="en-GB">import sys</p>
+<p class="source-code" lang="en-GB">sys.path.insert(0, './synsin')</p>
+<p class="source-code" lang="en-GB">import os</p>
+<p class="source-code" lang="en-GB">os.environ['DEBUG'] = '0'</p>
+<p class="source-code" lang="en-GB">from synsin.models.networks.sync_batchnorm import convert_model</p>
+<p class="source-code" lang="en-GB">from synsin.models.base_model import BaseModel</p>
+<p class="source-code" lang="en-GB">from synsin.options.options import get_model</p>
+<ol>
+<li lang="en-GB" value="10"> Next, we are going to <a id="_idIndexMarker441"/>create a function that takes the model path as an input and outputs the model ready for inference. We will break the whole function into smaller chunks to understand the code better. However, the complete function can be found on GitHub:<p class="source-code" lang="en-GB">      torch.backends.cudnn.enabled = True</p><p class="source-code" lang="en-GB">      opts = torch.load(model_path)['opts']</p><p class="source-code" lang="en-GB">      opts.render_ids = [1]</p><p class="source-code" lang="en-GB">       torch_devices = [int(gpu_id.strip()) for gpu_id in opts.gpu_ids.split(",")]</p><p class="source-code" lang="en-GB">       device = 'cuda:' + str(torch_devices[0])</p></li>
+</ol>
+<p lang="en-GB">Here, we enable the <strong class="source-inline" lang="">cudnn</strong> package and define the device on which the model will be working. Also, the second line imports the model, allowing it to gain access to all the options set for the training, which can be modified if needed. Note that <strong class="source-inline" lang="">render_ids</strong> refers to the GPU ID, which, in some cases, might be different for users with different hardware setups.</p>
+<ol>
+<li lang="en-GB" value="11">Next, we define the model:<p class="source-code" lang="en-GB">model = get_model(opts)</p><p class="source-code" lang="en-GB">if 'sync' in opts.norm_G:</p><p class="source-code" lang="en-GB">model = convert_model(model)</p><p class="source-code" lang="en-GB">model = nn.DataParallel(model,       torch_devices[0:1]).cuda()</p><p class="source-code" lang="en-GB">else:</p><p class="source-code" lang="en-GB">    model = nn.DataParallel(model, torch_devices[0:1]).cuda()</p></li>
+</ol>
+<p lang="en-GB">The <strong class="source-inline" lang="">get_model</strong> function is imported from the <strong class="source-inline" lang="">options.py</strong> file, which loads the weights and returns the final model. Then, from <strong class="source-inline" lang="">options</strong>, we check whether we have a synchronized model, which means we are running the model on different machines. If we have it, we run the <strong class="source-inline" lang="">convert_model</strong> function, which takes<a id="_idIndexMarker442"/> the model and replaces all the <strong class="source-inline" lang="">BatchNorm</strong> modules with the <strong class="source-inline" lang="">SunchronizedBatchNorm</strong> modules.</p>
+<ol>
+<li lang="en-GB" value="12">Finally, we load the model:<p class="source-code" lang="en-GB">#  Load the original model to be tested</p><p class="source-code" lang="en-GB">model_to_test = BaseModel(model, opts)</p><p class="source-code" lang="en-GB">model_to_test.load_state_dict(torch.load(MODEL_PATH)['state_dict'])</p><p class="source-code" lang="en-GB">model_to_test.eval()</p><p class="source-code" lang="en-GB">print("Loaded model")</p></li>
+</ol>
+<p lang="en-GB">The <strong class="source-inline" lang="">BaseModel</strong> function sets up the final mode. Depending on the train or test mode, it can set the optimizer and initialize the weights. In our case, it will set up the model for test mode.</p>
+<p lang="en-GB">All this code is summed up in one function called <strong class="source-inline" lang="">synsin_model</strong>, which we will import for inference.</p>
+<p lang="en-GB">The following code is from the <strong class="source-inline" lang="">inference_unseen_image.py</strong> file. We will write a function that takes the model path, the test image, and the new view transformation parameters and will output the new image from the new view. If we specify the <strong class="source-inline" lang="">save_path</strong> parameter, it will automatically save the output image.</p>
+<ol>
+<li lang="en-GB" value="13">Again, we will first import all the modules needed for inference:<p class="source-code" lang="en-GB">import matplotlib.pyplot as plt</p><p class="source-code" lang="en-GB">import quaternion</p><p class="source-code" lang="en-GB">import torch</p><p class="source-code" lang="en-GB">import torch.nn as nn</p><p class="source-code" lang="en-GB">import torchvision.transforms as transforms</p><p class="source-code" lang="en-GB">from PIL import Image</p><p class="source-code" lang="en-GB">from set_up_model_for_inference import synsin_model</p></li>
+<li lang="en-GB">Next, we set up the <a id="_idIndexMarker443"/>model and create the data transformation for preprocessing:<p class="source-code" lang="en-GB"> model_to_test = synsin_model(path_to_model)</p><p class="source-code" lang="en-GB">    # Load the image</p><p class="source-code" lang="en-GB">    transform = transforms.Compose([</p><p class="source-code" lang="en-GB">        transforms.Resize((256,256)),</p><p class="source-code" lang="en-GB">        transforms.ToTensor(),</p><p class="source-code" lang="en-GB">        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])</p><p class="source-code" lang="en-GB">    if isinstance(test_image, str):</p><p class="source-code" lang="en-GB">        im = Image.open(test_image)</p><p class="source-code" lang="en-GB">    else:</p><p class="source-code" lang="en-GB">        im = test_image</p><p class="source-code" lang="en-GB">    im = transform(im)</p></li>
+<li lang="en-GB">Now we need to specify the view transformation parameters:<p class="source-code" lang="en-GB">    # Parameters for the transformation</p><p class="source-code" lang="en-GB">    theta = -0.15</p><p class="source-code" lang="en-GB">    phi = -0.1</p><p class="source-code" lang="en-GB">    tx = 0</p><p class="source-code" lang="en-GB">    ty = 0</p><p class="source-code" lang="en-GB">    tz = 0.1</p><p class="source-code" lang="en-GB">RT = torch.eye(4).unsqueeze(0)</p><p class="source-code" lang="en-GB"># Set up rotation</p><p class="source-code" lang="en-GB">RT[0,0:3,0:3] = torch.Tensor(quaternion.as_rotation_matrix(quaternion.from_rotation_vector([phi, theta, 0])))</p><p class="source-code" lang="en-GB"># Set up translation</p><p class="source-code" lang="en-GB">RT[0,0:3,3] = torch.Tensor([tx, ty, tz])</p></li>
+</ol>
+<p lang="en-GB">Here, we need to specify<a id="_idIndexMarker444"/> parameters for rotation and translation. Note that <strong class="source-inline" lang="">theta</strong> and <strong class="source-inline" lang="">phi</strong> are responsible for rotation, while <strong class="source-inline" lang="">tx</strong>, <strong class="source-inline" lang="">ty</strong>, and <strong class="source-inline" lang="">tz</strong> are used for translation.</p>
+<ol>
+<li lang="en-GB" value="16">Next, we are going to use the uploaded image and new transformation to get output from the network:<p class="source-code" lang="en-GB">batch = {</p><p class="source-code" lang="en-GB">    'images' : [im.unsqueeze(0)],</p><p class="source-code" lang="en-GB">    'cameras' : [{</p><p class="source-code" lang="en-GB">        'K' : torch.eye(4).unsqueeze(0),</p><p class="source-code" lang="en-GB">        'Kinv' : torch.eye(4).unsqueeze(0)</p><p class="source-code" lang="en-GB">    }]</p><p class="source-code" lang="en-GB">}</p><p class="source-code" lang="en-GB"># Generate a new view of the new transformation</p><p class="source-code" lang="en-GB">with torch.no_grad():</p><p class="source-code" lang="en-GB">    pred_imgs = model_to_test.model.module.forward_angle(batch, [RT])</p><p class="source-code" lang="en-GB">    depth = nn.Sigmoid()(model_to_test.model.module.pts_regressor(batch['images'][0].cuda()))</p></li>
+</ol>
+<p lang="en-GB">Here, <strong class="source-inline" lang="">pred_imgs</strong> is the model output that is the new image, and depth is the 3D depth predicted by the model.</p>
+<ol>
+<li lang="en-GB" value="17">Finally, we will use the<a id="_idIndexMarker445"/> output of the network to visualize the original image, the new predicted image, and the output image:<p class="source-code" lang="en-GB">    fig, axis = plt.subplots(1,3, figsize=(10,20))</p><p class="source-code" lang="en-GB">    axis[0].axis('off')</p><p class="source-code" lang="en-GB">    axis[1].axis('off')</p><p class="source-code" lang="en-GB">    axis[2].axis('off')</p><p class="source-code" lang="en-GB">    axis[0].imshow(im.permute(1,2,0) * 0.5 + 0.5)</p><p class="source-code" lang="en-GB">    axis[0].set_title('Input Image')</p><p class="source-code" lang="en-GB">    axis[1].imshow(pred_imgs[0].squeeze().cpu().permute(1,2,0).numpy() * 0.5 + 0.5)</p><p class="source-code" lang="en-GB">    axis[1].set_title('Generated Image')</p><p class="source-code" lang="en-GB">    axis[2].imshow(depth.squeeze().cpu().clamp(max=0.04))</p><p class="source-code" lang="en-GB">    axis[2].set_title('Predicted Depth')</p></li>
+</ol>
+<p lang="en-GB">We use <strong class="source-inline" lang="">matplotlib</strong> to visualize the output. Here is the result of the following code:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer168">
+<img alt="Figure 9.12: Result of the inference " height="427" src="image/B18217_09_12.jpg" width="841"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.12: Result of the inference</p>
+<p lang="en-GB">As we can see, we have <a id="_idIndexMarker446"/>a new view, and the model reconstructs the new angle very well. Now we can play with transformation parameters, to generate images from another view.</p>
+<ol>
+<li lang="en-GB" value="18">If we slightly change <strong class="source-inline" lang="">theta</strong> and <strong class="source-inline" lang="">phi</strong>, we get another view transformation. Now we will reconstruct the right part of the image:<p class="source-code" lang="en-GB">  # Parameters for the transformation</p><p class="source-code" lang="en-GB">    theta = 0.15</p><p class="source-code" lang="en-GB">    phi = 0.1</p><p class="source-code" lang="en-GB">    tx = 0</p><p class="source-code" lang="en-GB">    ty = 0</p><p class="source-code" lang="en-GB">    tz = 0.1</p></li>
+</ol>
+<p lang="en-GB">The output looks like this:</p>
+<div>
+<div class="IMG---Figure" id="_idContainer169">
+<img alt="Figure 9.13: The result of the inference " height="427" src="image/B18217_09_13.jpg" width="734"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.13: The result of the inference</p>
+<p lang="en-GB">Changing the transformation parameters all at once or changing them in bigger steps can result in worse accuracy.</p>
+<ol>
+<li lang="en-GB" value="19">Now we know how<a id="_idIndexMarker447"/> to create an image from the new view. Next, we will write some brief code to sequentially create images and make a small video:<p class="source-code" lang="en-GB">from inference_unseen_image import inference</p><p class="source-code" lang="en-GB">from PIL import Image</p><p class="source-code" lang="en-GB">import numpy as np</p><p class="source-code" lang="en-GB">import imageio</p><p class="source-code" lang="en-GB">def create_gif(model_path, image_path, save_path, theta = -0.15, phi = -0.1, tx = 0,</p><p class="source-code" lang="en-GB">              ty = 0, tz = 0.1, num_of_frames = 5):</p><p class="source-code" lang="en-GB">    im = inference(model_path, test_image=image_path, theta=theta,</p><p class="source-code" lang="en-GB">                   phi=phi, tx=tx, ty=ty, tz=tz)</p><p class="source-code" lang="en-GB">    frames = []</p><p class="source-code" lang="en-GB">    for i in range(num_of_frames):</p><p class="source-code" lang="en-GB">        im = Image.fromarray((im * 255).astype(np.uint8))</p><p class="source-code" lang="en-GB">        frames.append(im)</p><p class="source-code" lang="en-GB">        im = inference(model_path, im, theta=theta,</p><p class="source-code" lang="en-GB">                   phi=phi, tx=tx, ty=ty, tz=tz)</p><p class="source-code" lang="en-GB">    imageio.mimsave(save_path, frames,  duration=1)</p></li>
+</ol>
+<p lang="en-GB">This chunk of code takes <a id="_idIndexMarker448"/>an image as input and, for the given number of frames, generates sequential images. By sequential, we mean that each output of the model becomes the input for the next image generation:</p>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US"> </p>
+<div>
+<div class="IMG---Figure" id="_idContainer170">
+<img alt="Figure 9.14: Sequential view synthesis " height="767" src="image/B18217_09_14.jpg" width="1125"/>
+</div>
+</div>
+<p class="IMG---Caption" lang="en-US" xml:lang="en-US">Figure 9.14: Sequential view synthesis</p>
+<p lang="en-GB">In the preceding figure, there<a id="_idIndexMarker449"/> are four consecutive frames. As you can see, it’s harder and harder for the model to generate good images when we try bigger steps. This is a good time to start playing with the model’s hyperparameters, different camera settings, and step sizes to see how it can improve or reduce the accuracy of the model’s output.</p>
+<h1 id="_idParaDest-129" lang="en-GB"><a id="_idTextAnchor133"/>Summary</h1>
+<p lang="en-GB">At the beginning of the chapter, we looked at the SynSin model structure, and we gained a deep understanding of the end-to-end process of the model. As mentioned earlier, one interesting approach during the model creation was a differentiable renderer as a part of the training. Also, we saw that the model helps to solve the problem of not having a huge, annotated dataset, or if you don’t have multiple images for test time. That is why this is a state-of-the-art model, which would be easier to use in real-life scenarios. We looked at the pros and cons of the model. Also, we looked at how to initialize the model, train, test, and use new images for inference.</p>
+<p lang="en-GB">In the next chapter, we will look at the Mesh R-CNN model, which combines two different tasks (object detection and 3D model construction) into one model. We will explore the architecture of the model and test the model performance on a random image.</p>
+</div>
+<div>
+<div id="_idContainer172">
+</div>
+</div>
+</div></body></html>

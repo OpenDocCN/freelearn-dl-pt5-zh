@@ -1,0 +1,255 @@
+<html><head></head><body>
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Deep Q-Learning for Maze Solving</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, you will learn how to use R to implement reinforcement learning techniques within a maze environment. In particular, we will create an agent to solve a maze by training the agent to perform actions and learn from failed attempts. We will learn how to define the maze environment and configure the agent to travel through it. We will also be adding neural networks to Q-learning. This provides us with an alternative way of getting the value for all the state-action pairs. We are going to iterate over our model numerous times to create the policy to get through the maze.</p>
+<p>This chapter will cover the following topics:</p>
+<ul>
+<li>Creating an environment for reinforcement learning</li>
+<li>Defining an agent to perform actions </li>
+<li>Building a deep Q-learning model</li>
+<li>Running the experiment</li>
+<li>Improving performance with policy functions</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Technical requirements</h1>
+                </header>
+            
+            <article>
+                
+<p><span>You can find the code files used in this chapter at</span> <a href="https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R">https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R</a>.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Creating an environment for reinforcement learning</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we will define an environment for reinforcement learning. We could think of this as a typical maze where an agent needs to navigate the two-dimensional grid space to get to the end. However, in this case, we are going to use more of a physics-based maze. We will represent this using the mountain car problem. An agent is in a valley and needs to get to the top; however, it cannot simply go up the hill. It has to use momentum to get to the top. In order to do this, we need two functions. One function will start or reset the agent to a random point on the surface. The other function will describe where the agent is on the surface after a step.</p>
+<p>We will use the following code to define the <kbd>reset</kbd> function to provide a place for the agent to start: </p>
+<pre><span class="n">reset</span> <span class="o">=</span> <span class="nf">function</span><span class="p">(</span><span class="n">self</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">position</span> <span class="o">=</span> <span class="nf">runif</span><span class="p">(</span><span class="m">1</span><span class="p">,</span> <span class="m">-0.6</span><span class="p">,</span> <span class="m">-0.4</span><span class="p">)</span>
+  <span class="n">velocity</span> <span class="o">=</span> <span class="m">0</span>
+  <span class="n">state</span> <span class="o">=</span> <span class="nf">matrix</span><span class="p">(</span><span class="nf">c</span><span class="p">(</span><span class="n">position</span><span class="p">,</span> <span class="n">velocity</span><span class="p">),</span> <span class="n">ncol</span> <span class="o">=</span> <span class="m">2</span><span class="p">)</span>
+  <span class="n">state</span>
+<span class="p">}<br/></span></pre>
+<p>We can see that with this function, the first thing that happens is that the<span> <kbd>position</kbd> variable is defined by taking one random value from a uniform distribution between <kbd>-0.6</kbd> and <kbd>-0.4</kbd>. This is the point on the surface where the agent will be placed. Next, the variable velocity is set to <kbd>0</kbd>, since our agent is not moving yet. The</span> <kbd>reset</kbd> <span>functions act merely to place the agent at a starting point. The</span> <kbd>position</kbd> <span>variable and the</span> <kbd>velocity</kbd> <span>variable are now added to a 1 x 2 matrix and this</span> <kbd>matrix</kbd> <span>variable is the starting spot and starting speed for our agent.</span></p>
+<p>The next function takes a value for every action and calculates the next step that the agent will take. To code this function, we use the following code:</p>
+<pre><span class="n">  step</span> <span class="o">=</span> <span class="nf">function</span><span class="p">(</span><span class="n">self</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">position</span> <span class="o">=</span> <span class="n">self</span><span class="o">$</span><span class="n">state[1]</span>
+  <span class="n">velocity</span> <span class="o">=</span> <span class="n">self</span><span class="o">$</span><span class="n">state[2]</span>
+  <span class="n">velocity</span> <span class="o">=</span> <span class="p">(</span><span class="n">action</span> <span class="o">-</span> <span class="m">1L</span><span class="p">)</span> <span class="o">*</span> <span class="m">0.001</span> <span class="o">+</span> <span class="nf">cos</span><span class="p">(</span><span class="m">3</span> <span class="o">*</span> <span class="n">position</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="m">-0.0025</span><span class="p">)</span>
+  <span class="n">velocity</span> <span class="o">=</span> <span class="nf">min</span><span class="p">(</span><span class="nf">max</span><span class="p">(</span><span class="n">velocity</span><span class="p">,</span> <span class="m">-0.07</span><span class="p">),</span> <span class="m">0.07</span><span class="p">)</span>
+  <span class="n">position</span> <span class="o">=</span> <span class="n">position</span> <span class="o">+</span> <span class="n">velocity</span>
+  <span class="nf">if </span><span class="p">(</span><span class="n">position</span> <span class="o">&lt;</span> <span class="m">-1.2</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">position</span> <span class="o">=</span> <span class="m">-1.2</span>
+    <span class="n">velocity</span> <span class="o">=</span> <span class="m">0</span>
+  <span class="p">}</span>
+  <span class="n">state</span> <span class="o">=</span> <span class="nf">matrix</span><span class="p">(</span><span class="nf">c</span><span class="p">(</span><span class="n">position</span><span class="p">,</span> <span class="n">velocity</span><span class="p">),</span> <span class="n">ncol</span> <span class="o">=</span> <span class="m">2</span><span class="p">)</span>
+  <span class="n">reward</span> <span class="o">=</span> <span class="m">-1</span>
+  <span class="nf">if </span><span class="p">(</span><span class="n">position</span> <span class="o">&gt;=</span> <span class="m">0.5</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="kc">TRUE</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="m">0</span>
+  <span class="p">}</span> <span class="n">else</span> <span class="p">{</span>
+    <span class="n">done</span> <span class="o">=</span> <span class="kc">FALSE</span>
+  <span class="p">}</span>
+  <span class="nf">list</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">reward</span><span class="p">,</span> <span class="n">done</span><span class="p">)</span>
+<span class="p">}</span></pre>
+<p>In this function, the first part defines the position and velocity. In this case, this is taken from the <kbd>self</kbd> object, which we will cover next. The <kbd>self</kbd> variable contains details about the agent. Here, the <kbd>position</kbd> and <kbd>velocity</kbd> variables are taken from <kbd>self</kbd> and represent where the agent currently is on the surface and the current velocity. Then, the <kbd>action</kbd> argument is used to calculate the velocity. The next line constrains <kbd>velocity</kbd> between <kbd>-0.7</kbd> and <kbd>0.7</kbd>. After this, we calculate the next position by adding the velocity to the current position. Then, there is one more constraint line. If <kbd>position</kbd> goes past <kbd>-1.2</kbd>, then the agent is out of bounds and gets reset to the <span><kbd>-1.2</kbd> </span><span>position with no velocity. Finally, a check is carried out to see whether the agent has reached its goal. If the state is greater than <kbd>0.5</kbd>, then the agent wins; otherwise, the agent keeps moving and attempts to reach the goal.</span></p>
+<p>When we finish with the two coding blocks, we will see that we have two functions defined in our <strong>Environment</strong> pane. Your <strong>Environment</strong> pane will appear as in the following screenshot:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-874 image-border" src="assets/8674eb48-130b-404b-bdb6-9f72c15a330d.png" style="width:27.08em;height:4.08em;"/></p>
+<p>The combination of these two functions defines the shape of the surface and the location of the agent on the surface, as well as the placement of the target spot on that surface. The <kbd>reset</kbd> function is the initial placement of the agent and the <kbd>step</kbd> function defines the step the agent takes at every iteration. With these two functions, we have a way of defining the shape and boundaries of our environment and a mechanism for placing and moving our agent within this environment. Next, let's define our agent.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Defining an agent to perform actions</h1>
+                </header>
+            
+            <article>
+                
+<p>In this section, we will define our agent for deep Q-learning. We have already seen how the preceding environment functions define how the agent moves. Here, we define the agent itself. In the previous chapter, we used Q-learning and were able to apply the Bellman equation to the new state that was the result of a given action. In this chapter, we will augment that portion of Q-learning with a neural network, which is what takes standard Q-learning and makes it deep Q-learning. </p>
+<p>In order to add this neural network model to the process, we need to define a class. This is something that is<span> </span><span>often</span><span> done in object-oriented programming; however, it is done less often in a programming language such as R. To accomplish this, we will use the</span> <kbd>R6</kbd> <span>package for class creation. We will break up the creation of this</span> <kbd>R6</kbd> <span>class into numerous parts to make it easier to understand. A class provides instructions for instantiating and operating on a data object. In this case, our class will use declared variables to instantiate the data object and a series of functions, which are referred to as methods within a class context, to operate on the data object. In the following steps, we will just look at the individual parts of our class one by one to make it easier to understand the parts of the class that we are creating. However, running parts of the code will result in errors. After walking through all the parts, we will wrap everything in a function to create our class and this final, longer</span> <kbd>R6</kbd> <span>code that includes everything that you will run. To get started, we will set up the initial values using the following code:</span></p>
+<pre>portable = FALSE,<br/>lock_objects = FALSE,<br/>public = list(<br/>  state_size = NULL,<br/>  action_size = NA, <br/>  initialize = function(state_size, action_size) {<br/>      self$state_size = state_size<br/>      self$action_size = action_size<br/>      self$memory = deque()<br/>      self$gamma = 0.95 <br/>      self$epsilon = 1.0 <br/>      self$epsilon_min = 0.01<br/>      self$epsilon_decay = 0.995<br/>      self$learning_rate = 0.001<br/>      self$model = self$build_model()<br/>  }<br/>)</pre>
+<p>When creating a class for this purpose using R, we first set two options. First, we set <kbd>portable</kbd> to <kbd>FALSE</kbd>, which means other classes cannot inherit methods or functions from this class. However, it also means that we can use the <kbd>self</kbd> keyword. Second, we set <kbd>lock_objects</kbd> to <kbd>FALSE</kbd>, since we will need to modify objects within this class.</p>
+<p>Next, we define our initial values. We use <kbd>self</kbd> here, which is a special keyword that refers to the object created. Remember that a class is not an object—it is a constructor for creating an object. Here, we will create an instance of our class and this object will be the agent. The agent will initialize with the following values. The state size and action size will be passed in as arguments when creating the environment. The next memory is an empty deque. A <strong>deque</strong> is a special object type, which is double-ended so that values can be added to and removed from both sides. We will use this to store the steps the agent takes while trying to reach the goal. Gamma is the discount rate. Epsilon is the exploration rate. As we know, with deep learning, the goal is to balance exploration and exploitation, so we begin with an aggressive exploration rate. However, we then define an epsilon decay, which is how much the rate will be reduced, and an epsilon minimum, so the rate never reaches <kbd>0</kbd>. Lastly, the learning rate is just the constant value used when adjusting weights and the model takes the result of running our neural network model, which we will get to next.</p>
+<p>Next, we will give the class the power to act on variables by adding a function. In particular, we will add the <kbd>build_model</kbd> function to run the neural network:</p>
+<pre>build_model = function(...){<br/>        model = keras_model_sequential() %&gt;% <br/>        layer_dense(units = 24, activation = "relu", input_shape = self$state_size) %&gt;%<br/>        layer_dense(units = 24, activation = "relu") %&gt;%<br/>        layer_dense(units = self$action_size, activation = "linear")<br/>        <br/>        compile(model, loss = "mse", optimizer = optimizer_adam(lr = self$learning_rate), metrics = "accuracy")<br/><br/>        return(model)<br/>    }</pre>
+<p>The model takes the current state as input and the output will be one of the actions available when we predict the model. However, this function just returns the model because we will pass a different state argument to the model, depending on what part of the deep Q-learning path we are on when it is called. The model is called in two different scenarios, which we will cover shortly.</p>
+<p>Next, we include a function for memory. The memory portion of this class will be a function to store the state, action, reward, and next state details as the agent attempts to solve the maze. We store those values in the agent's memory by adding them to the deque using the following code:</p>
+<pre>memorize = function(state, action, reward, next_state, done){<br/>        pushback(self$memory,state)<br/>        pushback(self$memory,action)<br/>        pushback(self$memory,reward)<br/>        pushback(self$memory, next_state)<br/>        pushback(self$memory, done)<br/>    }</pre>
+<p>We use the <kbd>pushback</kbd> function to add a given value to the first position in the deque and move all the existing elements back by one. We do this for state, action, reward, and next state, and the flag that shows whether or not the puzzle is complete. This sequence is stored in the agent's memory, so it can exploit what it already knows by accessing this sequence in memory rather than continuing to explore when the exploration-versus-exploitation formula selects the exploitation option.</p>
+<p>Next, we will add some code to select the next action. To perform this task, we will use a check on the decaying epsilon value. Depending on whether or not the decaying epsilon is greater than a randomly selected value from a uniform distribution, one of two actions will take place. We set up the function for deciding on the next action by using the following code:</p>
+<pre>act = function(state){<br/>        if (runif(1) &lt;= self$epsilon){<br/>            return(sample(self$action_size, 1))<br/>            } else {<br/>        act_values &lt;- predict(self$model, state)<br/>        return(which(act_values==max(act_values)))<br/>            }<br/>    }</pre>
+<p>As noted previously, there are two possible outcomes from this action function. First, if the randomly selected value from the uniform distribution is less than or equal to epsilon, then a value will be selected between the full range of active movements. Otherwise, the current state is used to predict the next action using the model we defined earlier, which results in weighted probabilities that any of these actions are correct. The action with the highest probability is selected. This is a balance between two different forms of exploration in seeking the correct next step.</p>
+<p>Having covered exploration steps previously, we will now write our <kbd>replay()</kbd> function, which will exploit what the agent already knows and has stored in memory. We code this exploitation function using the following code:</p>
+<pre>replay = function(batch_size){<br/>        minibatch = sample(length(self$memory), batch_size) <br/>            state = minibatch[1]<br/>            action = minibatch[2]<br/>            target = minibatch[3]<br/>            next_state = minibatch[4]<br/>            done = minibatch[5]<br/>            if (done == FALSE){<br/>                target = (target + self$gamma *<br/>                          max(predict(self$model, next_state)))<br/>            target_f = predict(self$model, state)<br/>            target_f[0][action] = target<br/>            self$model(state, target_f, epochs=1, verbose=0)<br/>            }<br/>        if (self$epsilon &gt; self$epsilon_min){<br/>            self$epsilon = self$epsilon * self$epsilon_decay<br/>            }<br/>    }</pre>
+<p>Let's break apart the function for leveraging what the agent already knows to help solve the puzzle. The first thing we will do is select a random sequence from the memory deque. We will then place each element from our sample into a given part of a sequence for the agent: state, action, target, next state, and the <kbd>done</kbd> flag to indicate whether the maze is solved. Next, we will add some code to change the way that our model predicts. We start by defining the target using the resulting state from the sequence, leveraging what we have already learned from attempting this sequence.</p>
+<p>Next, we predict on the state to get all the possible values the model would predict. We then insert the calculated value into that vector. When we run the model once more, we help train the model based on experience. This is also the step where epsilon is updated, which will result in more exploitation and less exploration during future iterations.</p>
+<p>The very last step is to add a method or function for saving and loading our model. We add the means to save and load our model using the following code:</p>
+<pre>load = function(name) {<br/>    self$model %&gt;% load_model_tf(name)<br/>},<br/>save = function(name) {<br/>    self$model %&gt;% save_model_tf(name)<br/>}</pre>
+<p>With these methods, we are now able to save the model that we defined earlier, as well as load the trained models.</p>
+<p>We will now need to take everything that we have covered and place it all in a overarching function that will take all the declared variables and functions and use them to create an <kbd>R6</kbd> class. To create our <kbd>R6</kbd> class, we will take all the code that we have just written and put it all together.</p>
+<p>After running the complete code, we will have an <kbd>R6</kbd> class in our environment. It will have a class of <kbd>Environment</kbd>. If you click on it, you can see all the attributes of the class. You will notice that there are many attributes associated with creating a class that we did not specifically define; however, take a look at the following screenshot. We can see that the class is not portable, we can see the public fields where we will assign values, and we can see all the functions we defined, which are called methods when included as part of a class:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-875 image-border" src="assets/5d74bda2-7d86-4252-b88d-ae67c317616c.png" style="width:38.83em;height:24.25em;"/></p>
+<p>With this step, we have completely created an <kbd>R6</kbd> class to act as our agent. We have provided it with various means to take an action based on the current state and an element of randomness, and we have also provided a way for our agent to explore the surface of this maze to find the target location. We have also provided a means for the agent to recall what it has already learned from past experience and use that to inform future decisions. Altogether, we have a complete reinforcement learning agent that learns through trial and error and, importantly, learns from past mistakes and from continually taking actions at random.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Building a deep Q-learning model </h1>
+                </header>
+            
+            <article>
+                
+<p>At this point, we have defined the environment and our agent, which will make running our model quite straightforward. Remember that to get set up for reinforcement learning using R, we used a technique from object-oriented programming, which is not used very often in a programming language such as R. We created a class that describes an object, but is itself<span> </span><span>not</span><span> an object. To create an object from a class, we must instantiate it. We set our initial values and instantiate an object using our</span> <kbd>DQNAgent</kbd> <span>class by using the following code:</span></p>
+<pre><span class="n">state_size</span> <span class="o">=</span> <span class="m">2</span>
+<span class="n">action_size</span> <span class="o">=</span> <span class="m">20<br/></span><span class="pl-s1">agent</span><span> </span><span class="pl-c1">=</span><span> </span><span class="pl-v">DQNAgent</span><span>(</span><span class="pl-s1">state_size</span><span>, </span><span class="pl-s1">action_size</span><span>)<br/></span></pre>
+<p>After running this block of code, we will see an agent object in our environment. The agent has a class of <kbd>Environment</kbd>; however, if we click on it, we will see something similar to the following screenshot, which contains some differences compared with our class:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-876 image-border" src="assets/2ef1b1d8-1d0d-4d94-ae68-dd27e6addb57.png" style="width:42.42em;height:30.33em;"/></p>
+<p>After running this line, we will now have an object that has inherited all the attributes defined in the class. We pass in a state size of <kbd>2</kbd> as an argument because, for this environment, the state is two-dimensional. <span>The two dimensions are position and velocity. </span>We see the value that we passed is reflected alongside the <kbd>state_size</kbd> field. We pass in an action size of <kbd>20</kbd> as an argument because for this game, we will allow the agent to use up to <kbd>20</kbd> units of force to propel forward or backward. We can see this value as well. We also can see all the methods; however, they are no longer nested under various methods—they are <span>now</span><span> </span><span>all just inherited by the <kbd>agent</kbd> object.</span></p>
+<p>To create our environment, we use the <kbd>makeEnvironment</kbd> function from the <kbd>reinforcelearn</kbd> package, which allows for custom environment creation. We use the following code to pass the <kbd>step</kbd> and <kbd>reset</kbd> functions as arguments to create the custom environment for the agent to navigate:</p>
+<pre><span class="n">env</span> <span class="o">=</span> <span class="nf">makeEnvironment</span><span class="p">(</span><span class="n">step</span> <span class="o">=</span> <span class="n">step</span><span class="p">,</span> <span class="n">reset</span> <span class="o">=</span> <span class="n">reset</span><span class="p">)</span></pre>
+<p>After running the preceding line of code, you will see an <kbd>env</kbd> object in your <strong>Environment</strong> pane. Note that this object also has a class of <kbd>Environment</kbd>. When we click on this object, we will see the following:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-877 image-border" src="assets/59c8dba6-55e5-4355-a3ce-16d19a18bb5d.png" style="width:50.25em;height:32.08em;"/></p>
+<p>The preceding line of code used the functions that we created earlier to define an environment. We now have an instance of the environment, which includes a means of initializing a game, while the <kbd>step</kbd> function defines the range of possible motions that the agent can make every turn. Note that this is also an <kbd>R6</kbd> class, just like our agent class.</p>
+<p>Lastly, we include two additional initial values. We establish the remaining initial values to complete our model setup by running the following code:</p>
+<pre>done<span> </span><span class="o">=</span><span> </span><span class="kc">FALSE<br/></span><span class="n">batch_size</span> <span class="o">=</span> <span class="m">32</span></pre>
+<p>The first value of <kbd>FALSE</kbd> for <kbd>done</kbd> denotes that the objective is not yet complete. The batch size of <kbd>32</kbd> is the size of the exploration attempt or series of moves the agent will make before beginning to leverage what is already known before the next series of moves. </p>
+<p>This is the complete model setup for deep Q-learning. We have an instance of our agent, which is an object created with the characteristics we established in the class earlier. We also have an environment defined with the parameters we set up when we created our <kbd>step</kbd> and <kbd>reset</kbd> functions. Lastly, we defined some initial values and now, everything is complete. The next step is just <span>to</span><span> </span><span>put the agent in motion, which we will do next.</span></p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Running the experiment</h1>
+                </header>
+            
+            <article>
+                
+<p>The last step in reinforcement learning is to run the experiment. To do this, we need to drop the agent into the environment and then allow the agent to take steps until it reaches the goal. The agent is constrained by a limited number of possible moves and the environment also places another constraint—in our case, by setting boundaries. We set up a <kbd>for</kbd> loop that iterates through rounds of the agent attempting a legal move and then sees whether the maze has been successfully accomplished. The loop stops when the agent reaches the goal. To begin our experiment with our defined agent and environment, we write the following code:</p>
+<pre>state = reset(env)<br/>for (j in 1:5000) {<br/>  action = agent$act(state)<br/>  nrd = step(env,action)<br/>  next_state = unlist(nrd[1])<br/>  reward = as.integer(nrd[2])<br/>  done = as.logical(nrd[3])<br/>  next_state = matrix(c(next_state[1],next_state[2]), ncol = 2)<br/>  reward = dplyr::if_else(done == TRUE, reward, as.integer(-10))<br/>  agent$memorize(state, action, reward, next_state, done)<br/>  state = next_state<br/>  env$state = next_state<br/>  if (done == TRUE) {<br/>    cat(sprintf("score: %d, e: %.2f",j,agent$epsilon))<br/>    break<br/>  } <br/>  if (length(agent$memory) &gt; batch_size) {<br/>    agent$replay(batch_size)<br/>  } <br/>  if (j %% 10 == 0) {<br/>    cat(sprintf("try: %d, state: %f,%f ",j,state[1],state[2])) <br/>  }<br/>  <br/>}</pre>
+<p>The preceding code runs the experiment that sets our agent in motion. The agent is governed by the values and functions in the class that we defined and is furthered by the environment that we created. As we can see, quite a few steps take place when we run our experiment. We will review each step here:</p>
+<ol>
+<li>After running the first line in the preceding code, we will see a starting state for our agent. If you view the <kbd>state</kbd> object, it will look something like this, where the position value is between <kbd>-0.4</kbd> and <kbd>-0.6</kbd> and the velocity is <kbd>0</kbd>:</li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-878 image-border" src="assets/9bbec86f-5db7-48e7-be24-23f5415d686c.png" style="width:13.17em;height:5.58em;"/></p>
+<ol start="2">
+<li><span>After running the remaining code block, we will see something like the following printed to the console, which shows the state at every tenth round:</span></li>
+</ol>
+<p class="CDPAlignCenter CDPAlign"><img class="alignnone size-full wp-image-879 image-border" src="assets/d7b2c0e8-6db0-43a5-8f9e-4b16da70a73e.png" style="width:57.67em;height:8.08em;"/></p>
+<ol start="3">
+<li><span>When we run this code, the first thing that happens is that the environment is reset and the agent is placed on the surface.<br/></span></li>
+</ol>
+<ol start="4">
+<li>Then<span>, the loop is initiated. Every round in the loop has the following sequence of activities:</span>
+<ol>
+<li><span>First, use the <kbd>act</kbd> function in the <kbd>agent</kbd> class to take an action. Remember, this function defines the allowable moves for the agent. </span></li>
+<li><span>Next, we pass the action that the agent takes through to the <kbd>step</kbd> function to get the results.</span></li>
+<li><span>The output is the next state, which is where the agent lands after the action, as well as the reward based on whether the action led to a positive result, and finally the <kbd>done</kbd> flag, which indicates whether the target has been reached successfully.</span></li>
+<li><span>These three elements are output from the function as a <kbd>list</kbd> object.</span></li>
+<li>The next steps are to assign them to their own objects. For <kbd>reward</kbd> and <kbd>done</kbd>, we just extract them from the list and <span>assign </span>them to an integer and logical data type, respectively. For the next state, it is a little more difficult. We first use <kbd>unlist</kbd> to extract the two values and then we place them in a 2 x 1 matrix.</li>
+<li><span>After all of the elements in an agent's move are moved to their own objects, the reward is calculated. In our case, there are no intermediate accomplishments that would lead to a reward short of reaching the target, so <kbd>reward</kbd> and <kbd>done</kbd> operate in a similar way. Here, we see that if the <kbd>done</kbd> flag is set to <kbd>TRUE</kbd>, then <kbd>reward</kbd> is set to <kbd>0</kbd>, as defined in the <kbd>step</kbd> function, when <kbd>reward</kbd> is <kbd>TRUE</kbd>.</span></li>
+<li><span>Next, all the values that were output from the <kbd>step</kbd> function are added to the <kbd>memory</kbd> deque object. The <kbd>memorize</kbd> function takes each value and pushes it to the first element in the deque while pushing existing values back.</span></li>
+<li><span>After this, the <kbd>state</kbd> object is assigned the value of the next state. This is because the next state is now the new current state as the agent takes a new step. </span></li>
+<li><span>There is then a check to see whether the agent has reached the end of the maze. If so, the loop breaks and the epsilon value is printed to see how much was done through exploration and how much through exploitation. For all the other rounds, there is a secondary check that prints the current state and velocity for every tenth move. </span></li>
+<li><span>The other conditional is the trigger for the <kbd>replay</kbd> function. After reaching the threshold, the agent pulls values from the memory deque and the process continues from there. </span></li>
+</ol>
+</li>
+</ol>
+<p>This is the entire process for running an experiment for reinforcement learning. With this process, we now have a method of reinforcement learning that is more robust than just using Q-learning. While using Q-learning is a good solution when the environment is limited and known, deep Q-learning is required when the environment scales up or changes dynamically. By iterating over a defined agent taking actions in a defined environment, we can see how well the defined agent can solve the problem presented in the environment.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Improving performance with policy functions</h1>
+                </header>
+            
+            <article>
+                
+<p>We have successfully coded an agent to use a neural network deep learning architecture to solve a problem. Let's now look at a few ways that we could improve our model. Unlike other machine learning, we cannot evaluate to a performance metric as usual, where we try to minimize some chosen error rate. Success in reinforcement learning is slightly more subjective. You may want an agent to complete a task as quickly as possible, to acquire as many points as possible, or to make the fewest mistakes possible. In addition, depending on the task, we may be able to alter the agent itself to see how it impacts results.</p>
+<p>We will look at three possible methods for improving performance:</p>
+<ul>
+<li><strong>Action size</strong>:<strong> </strong>At times, this will be an option and, at times, it will not. If you are trying to solve a problem where the agent rules and environment rules are set externally, such as trying to optimize performance in a game such as chess, then this will not be an option. However, you can imagine a problem such as setting up a self-driving car and in this case, you could change the agent, if it would work better in this environment. With our experiment, try changing the action size value from <kbd>20</kbd> to <kbd>10</kbd> and also to <kbd>40</kbd> to see what happens.</li>
+<li><strong>Batch size</strong><span>:</span> <span><span>We can also adjust the batch size to see how it impacts performance. Remember that when the move count for the agent reaches the threshold for a batch, the agent then selects values from memory to begin to leverage what is already known. By raising or lowering this threshold, we provide a policy for the agent that, more or less, exploration should be conducted before using what is already known. Change the batch size to <kbd>16</kbd>, <kbd>64</kbd>, and <kbd>128</kbd> to see which option results in the agent completing the challenge the quickest.</span></span></li>
+<li><strong>Neural network</strong><span>:</span><strong> </strong><span>The last part of the agent policy that we will discuss modifying is the neural network. In many ways, this is the brain for the agent. By making changes, we can allow our agent to make choices that will lead to a more optimized performance. Within the <kbd>AgentDQN</kbd> class, add some layers to the neural network and then run the experiment again to see what happens. Then, make some changes to the number of units in each layer and run those experiments to see what happens.</span></li>
+</ul>
+<p>In addition to these changes, we could also make changes to the starting epsilon value, how quickly the epsilon decays, and the learning rate for the neural network model. All of these types of changes will impact the policy functions for the agent. When we change a value that alters the output of the act or replay function, then we modify the policy that the agent uses to solve the problem. We can make a policy for the agent to explore a wider or narrower number of actions if possible, or to use more or less time exploring the environment versus exploiting current knowledge, as well as adjust how quickly the agent learns from every move, how many times an agent may try a similar action to see whether it is always incorrect, and how drastically the agent tries to adjust after trying actions that lead towards failure.</p>
+<p>As with any type of machine learning, there are a number of parameters that can be tuned to optimize performance in reinforcement learning. Unlike other problems, there may not be a standard metric to help tune these, and deciding on the values that will work best may be more subjective and rely more on trial and error experimentation.</p>
+
+
+            </article>
+
+            
+        </section>
+    
+
+        <section>
+
+                            <header>
+                    <h1 class="header-title">Summary</h1>
+                </header>
+            
+            <article>
+                
+<p>In this chapter, we wrote code to conduct reinforcement learning using deep Q-learning. We noted that while Q-learning is a simpler approach, it requires a limited and known environment. Applying deep Q-learning allows us to solve problems at a larger scale. We also defined our agent, which required creating a class. The class defined our agent and we instantiated an object with the attributes defined in our class to solve the reinforcement learning challenge. We then created a custom environment using functions that defined boundaries, as well as the range of moves the agent could take and the target or objective. Deep Q-learning involves adding a neural network to select actions, rather than relying on the Q matrix, as in Q-learning. We then added a neural network to our agent class.</p>
+<p>Lastly, we put it all together by placing our agent object in our custom environment and letting it take various actions until it solved the problem. We further discussed some choices we could make to improve the agent's performance. With this framework, you are ready to apply reinforcement learning to any number of environments using any number of possible agents. The process will largely stay consistent; the changes will be in how the agent is programmed to act and learn and what the rules are in the environment.</p>
+<p>This completes <em>Hands-On Deep Learning with R</em>. Throughout this book, you have learned a wide variety of deep learning methods. In addition, we applied these methods to a diverse set of tasks. This book was written with a bias toward action. The goal of this book was to provide concise code that addresses practical projects. Using what you have learned in this book, I hope that I have prepared you well to begin solving real-world challenges using deep learning.</p>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

@@ -1,0 +1,506 @@
+<html><head></head><body>
+		<div id="_idContainer342">
+			<p><a id="_idTextAnchor080"/></p>
+			<h1 id="_idParaDest-81"><em class="italic"><a id="_idTextAnchor081"/>Chapter 4</em>: Makings of the Markov Decision Process</h1>
+			<p>In the first chapter, we talked about many applications of <strong class="bold">Reinforcement Learning</strong> (<strong class="bold">RL</strong>), from robotics to finance. Before implementing any RL algorithms for these applications, we need to first model them mathematically. <strong class="bold">Markov Decision Process</strong> (<strong class="bold">MDP</strong>) is the framework we use to model these sequential decision-making problems. MDPs have some special characteristics that make it easier for us to theoretically analyze those problems. Building on that theory, <strong class="bold">Dynamic Programming</strong> (<strong class="bold">DP</strong>) is the field that proposes solution methods for MDPs. RL, in some sense, is a collection of approximate DP approaches that enable us to obtain good (but not necessarily optimal) solutions to very complex problems that are intractable to solve with exact DP methods.</p>
+			<p>In this chapter, we will step-by-step build an MDP, explain its characteristics, and lay down the mathematical foundation for the RL algorithms coming up in later chapters. In an MDP, the actions an agent takes have long-term consequences, which is what differentiates it from the <strong class="bold">Multi-Armed Bandit</strong> (<strong class="bold">MAB</strong>) problems we covered earlier. This chapter focuses on some key concepts that quantify this long-term impact. It involves a bit more theory than other chapters, but don't worry, we will quickly dive into Python exercises to get a better grasp of the concepts. Specifically, we cover the following topics in this chapter:</p>
+			<ul>
+				<li>Markov chains</li>
+				<li>Markov reward processes</li>
+				<li>Markov decision processes</li>
+				<li>Partially observable MDPs</li>
+			</ul>
+			<h1 id="_idParaDest-82"><a id="_idTextAnchor082"/>Starting with Markov chains</h1>
+			<p>We start this chapter with <a id="_idIndexMarker217"/>Markov chains, which do not involve any decision-making. They only model a special type of stochastic processes that are governed by some internal transition dynamics. Therefore, we won't talk about an agent yet. Understanding how Markov chains work will allow us to lay the foundation for the MDPs that we will cover later.</p>
+			<h2 id="_idParaDest-83"><a id="_idTextAnchor083"/>Stochastic processes with the Markov property</h2>
+			<p>We already<a id="_idIndexMarker218"/> defined the <strong class="bold">state</strong> as the set<a id="_idIndexMarker219"/> information that completely describes the situation that an environment is in. If the next state that the environment will<a id="_idIndexMarker220"/> transition into only depends on the current state, not the past ones, we say that the process has the <strong class="bold">Markov property</strong>. This is named after the Russian mathematician Andrey Markov.</p>
+			<p>Imagine a broken robot that randomly moves in a grid world. At any given step, the robot goes up, down, left, and right with 0.2, 0.3, 0.25, and 0.25 probability, respectively. This is depicted in <em class="italic">Figure 4.1</em>, as follows:</p>
+			<div>
+				<div id="_idContainer160" class="IMG---Figure">
+					<img src="image/B14160_04_01.jpg" alt="Figure 4.1 – A broken robot in a grid world, currently at (1,2)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.1 – A broken robot in a grid world, currently at (1,2)</p>
+			<p>The robot is currently in state <img src="image/Formula_04_001.png" alt=""/>. It does not matter where it has come from; it will be in state <img src="image/Formula_04_002.png" alt=""/> with a probability of <img src="image/Formula_04_003.png" alt=""/>, in <img src="image/Formula_04_004.png" alt=""/> with a probability of <img src="image/Formula_04_005.png" alt=""/>, and so on. Since the probability of where it will transition next depends only on which state it is currently in, but not where it<a id="_idIndexMarker221"/> was before, the process has the Markov property.</p>
+			<p>Let's define this more formally. We denote the state at time <img src="image/Formula_04_006.png" alt=""/> by <img src="image/Formula_04_007.png" alt=""/>. A process has the Markov property if the following holds for all states and times:</p>
+			<div>
+				<div id="_idContainer168" class="IMG---Figure">
+					<img src="image/Formula_04_008.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Such a<a id="_idIndexMarker222"/> stochastic process is called a <strong class="bold">Markov chain</strong>. Note that if the robot hits a wall, we assume that it bounces back and remains in the same state. So, while in state <img src="image/Formula_04_009.png" alt=""/>, for example, the robot will be still there in the next step with a probability of <img src="image/Formula_04_010.png" alt=""/>.</p>
+			<p>A Markov chain is usually depicted using a directed graph. The directed graph for the broken robot example in a <img src="image/Formula_04_011.png" alt=""/> grid world would be as in <em class="italic">Figure 4.2</em>:</p>
+			<div>
+				<div id="_idContainer172" class="IMG---Figure">
+					<img src="image/B14160_04_02.jpg" alt="Figure 4.2 – A Markov chain diagram for the robot example in a 2x2 grid world&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.2 – A Markov chain diagram for the robot example in a 2x2 grid world</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Many systems can be made Markovian by including historical information in the state. Consider a modified robot example where the robot is more likely to continue in the direction it moved in the previous time step. Although such a system seemingly does not satisfy the Markov property, we can simply redefine the state to include the visited cells over the last two time steps, such as <img src="image/Formula_04_012.png" alt=""/>. The transition probabilities would be independent of the past states under this new state definition and the Markov property would be satisfied. </p>
+			<p>Now that we have<a id="_idIndexMarker223"/> defined what a Markov chain is, let's go deeper. Next, we will look at how to classify states in a Markov chain as they might differ in terms of their transition behavior.</p>
+			<h2 id="_idParaDest-84"><a id="_idTextAnchor084"/>Classification of states in a Markov chain</h2>
+			<p>An environment that can go<a id="_idIndexMarker224"/> from any state to any other state after some number of transitions, as we have in our robot example, is a special kind of Markov chain. As you<a id="_idIndexMarker225"/> can imagine, a more realistic system would involve states with a richer set of characteristics, which we will introduce next.</p>
+			<h3>Reachable and communicating states</h3>
+			<p>If the environment can<a id="_idIndexMarker226"/> transition from state <img src="image/Formula_04_013.png" alt=""/> to state <img src="image/Formula_04_014.png" alt=""/> after some number of steps with a positive probability, we say <img src="image/Formula_04_015.png" alt=""/> is <strong class="bold">reachable</strong> from <img src="image/Formula_04_016.png" alt=""/>. If <img src="image/Formula_04_017.png" alt=""/> is also reachable from <img src="image/Formula_04_018.png" alt=""/>, those states are said to <strong class="bold">communicate</strong>. If all the states in a Markov chain communicate with each<a id="_idIndexMarker227"/> other, we say that the Markov chain is <strong class="bold">irreducible</strong>, which is what we had in our robot example.</p>
+			<h3>Absorbing state</h3>
+			<p>A state, <img src="image/Formula_04_019.png" alt=""/>, is an <strong class="bold">absorbing state</strong> if the only <a id="_idIndexMarker228"/>possible transition is to itself, which is <img src="image/Formula_04_020.png" alt=""/>. Imagine that the robot cannot move again if it crashes into a wall in the preceding example. This would be an example of an absorbing state since the robot can never leave it. The <img src="image/Formula_04_021.png" alt=""/> version of our grid world with an absorbing state could be represented in a Markov chain diagram, as in <em class="italic">Figure 4.3</em>:</p>
+			<div>
+				<div id="_idContainer183" class="IMG---Figure">
+					<img src="image/B14160_04_03.jpg" alt="Figure 4.3 – A Markov chain diagram with an absorbing state&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.3 – A Markov chain diagram with an absorbing state</p>
+			<p>An absorbing state is <a id="_idIndexMarker229"/>equivalent to a terminal state that marks the end of an episode in the context of RL, which we defined in <a href="B14160_01_Final_SK_ePub.xhtml#_idTextAnchor016"><em class="italic">Chapter 1</em></a><em class="italic">, Introduction to Reinforcement Learning</em>. In addition to terminal states, an episode can also terminate after a time limit T is reached.</p>
+			<h3>Transient and recurrent states</h3>
+			<p>A <a id="_idIndexMarker230"/> state <img src="image/Formula_04_022.png" alt=""/> is called a <strong class="bold">transient state</strong>, if there is another state  <img src="image/Formula_04_023.png" alt=""/>, that is reachable from <img src="image/Formula_04_024.png" alt=""/>, but not vice versa. Provided enough time, an environment will eventually move away from transient states and never come back.</p>
+			<p>Consider a modified grid world with two sections; let's call them the light side and the dark side for fun. The possible transitions in this world are illustrated in <em class="italic">Figure 4.4</em>. Can you identify the transient state(s)?</p>
+			<div>
+				<div id="_idContainer187" class="IMG---Figure">
+					<img src="image/B14160_04_04.jpg" alt="Figure 4.4 – Grid world with a light and dark side&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.4 – Grid world with a light and dark side</p>
+			<p>If your answer is <img src="image/Formula_04_027.png" alt=""/> of the light<a id="_idIndexMarker231"/> side, think again. For each of the states on the light side, there is a way out to the states on the dark side without a way back. So, wherever the robot is on the light side, it will eventually transition into the dark side and won't be able to come back. Therefore, all the states on the light side are transient. Such a dystopian world! Similarly, in the modified grid world with a <strong class="bold">crashed</strong> state, all the states are transient except the <strong class="bold">crashed</strong> state.</p>
+			<p>Finally, a state that is<a id="_idIndexMarker232"/> not transient is called a <strong class="bold">recurrent state</strong>. The states on the dark side are recurrent in this example.</p>
+			<h3>Periodic and aperiodic states</h3>
+			<p>We call a state, <img src="image/Formula_04_028.png" alt=""/>, <strong class="bold">periodic</strong> if all of the paths leaving <img src="image/Formula_04_029.png" alt=""/> come<a id="_idIndexMarker233"/> back after some multiple of <img src="image/Formula_04_030.png" alt=""/> steps. Consider the example in <em class="italic">Figure 4.5</em>, where all the states have a period of <img src="image/Formula_04_031.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer193" class="IMG---Figure">
+					<img src="image/B14160_04_05.jpg" alt="Figure 4.5 – A Markov chain with periodic states, k=4&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.5 – A Markov chain with periodic states, k=4</p>
+			<p>A recurrent <a id="_idIndexMarker234"/>state is called <strong class="bold">aperiodic</strong> if <img src="image/Formula_04_032.png" alt=""/>.</p>
+			<h3>Ergodicity</h3>
+			<p>We can finally define an <a id="_idIndexMarker235"/>important class of Markov chains. A Markov chain is called <strong class="bold">ergodic</strong> if all states exhibit the following properties:</p>
+			<ul>
+				<li>Communicate with each other (irreducible)</li>
+				<li>Are recurrent</li>
+				<li>Are aperiodic</li>
+			</ul>
+			<p>For ergodic Markov chains, we can calculate a single probability distribution that tells which state the system <a id="_idIndexMarker236"/>would be in, after a very long time from its initialization, with what probability. This is called the <strong class="bold">steady state probability distribution</strong>.</p>
+			<p>So far, so good, but what we<a id="_idIndexMarker237"/> have covered has also been a bit dense with all the sets of definitions. Before we go into practical examples, though, let's also define the math of how a Markov chain transitions between states.</p>
+			<h2 id="_idParaDest-85"><a id="_idTextAnchor085"/>Transitionary and steady state behavior</h2>
+			<p>We can mathematically<a id="_idIndexMarker238"/> calculate how a Markov chain behaves over time. To this end, we first need to know the <strong class="bold">initial probability distribution</strong> of the system. When<a id="_idIndexMarker239"/> we initialize a grid world, for example, in which state does the robot<a id="_idIndexMarker240"/> appear at the beginning? This is given by the initial probability distribution. Then, we define the <strong class="bold">transition probability matrix</strong>, whose entries give, well, the transition <a id="_idIndexMarker241"/>probabilities between all state pairs from one time step to the next. More formally, the entry at the <img src="image/Formula_04_033.png" alt=""/> row and <img src="image/Formula_04_034.png" alt=""/> column of this matrix gives <img src="image/Formula_04_035.png" alt=""/>, where <img src="image/Formula_04_036.png" alt=""/> and <img src="image/Formula_04_037.png" alt=""/> are the state indices (starting with 1 in our convention).</p>
+			<p>Now, to calculate the probability of the system being in state <img src="image/Formula_04_038.png" alt=""/> after <img src="image/Formula_04_039.png" alt=""/> steps, we use the following formula:</p>
+			<div>
+				<div id="_idContainer202" class="IMG---Figure">
+					<img src="image/Formula_04_040.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_04_041.png" alt=""/> is the initial probability distribution and <img src="image/Formula_04_042.png" alt=""/> is the transition probability matrix raised to the <a id="_idIndexMarker242"/>power <img src="image/Formula_04_043.png" alt=""/>. Note that <img src="image/Formula_04_044.png" alt=""/> gives the probability of being in state <img src="image/Formula_04_045.png" alt=""/> after <img src="image/Formula_04_046.png" alt=""/> steps when started in state <img src="image/Formula_04_047.png" alt=""/>. </p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">A Markov chain is completely characterized by the <img src="image/Formula_04_048.png" alt=""/> tuple, where <img src="image/Formula_04_049.png" alt=""/> is the set of all states and <img src="image/Formula_04_050.png" alt=""/> is the transition probability matrix.</p>
+			<p>Yes, we have covered a lot of<a id="_idIndexMarker243"/> definitions and theory so far. Now, it is a good time to finally look at a practical example. </p>
+			<h2 id="_idParaDest-86"><a id="_idTextAnchor086"/>Example – n-step behavior in the grid world</h2>
+			<p>In many RL algorithms, the <a id="_idIndexMarker244"/>core idea is to arrive at a consistency between our<a id="_idIndexMarker245"/> understanding of the environment in its current state and after <img src="image/Formula_04_051.png" alt=""/> steps of transitions and to iterate until this consistency is ensured. Therefore, it is important to get a solid intuition of how an environment modeled as a Markov chain evolves over time. To this end, we will look into <img src="image/Formula_04_052.png" alt=""/>-step behavior in the grid world example. Follow along!</p>
+			<ol>
+				<li>Let's start by creating a <img src="image/Formula_04_053.png" alt=""/> grid world with our robot in it, similar to the one in <em class="italic">Figure 4.1</em>. For now, let's always<a id="_idIndexMarker246"/> initialize the world with the robot being at the <a id="_idIndexMarker247"/>center. Moreover, we index the states/cells so that <img src="image/Formula_04_054.png" alt=""/> So, the initial probability distribution, <img src="image/Formula_04_055.png" alt=""/>, is given by the following code:<p class="source-code">import numpy as np</p><p class="source-code">m = 3</p><p class="source-code">m2 = m ** 2</p><p class="source-code">q = np.zeros(m2)</p><p class="source-code">q[m2 // 2] = 1</p><p>Here, <strong class="source-inline">q</strong> is the initial probability distribution.</p></li>
+				<li>We define a function that gives the <img src="image/Formula_04_056.png" alt=""/> transition probability matrix:<p class="source-code">def get_P(m, p_up, p_down, p_left, p_right):</p><p class="source-code">    m2 = m ** 2</p><p class="source-code">    P = np.zeros((m2, m2))</p><p class="source-code">    ix_map = {i + 1: (i // m, i % m) for i in range(m2)}</p><p class="source-code">    for i in range(m2):</p><p class="source-code">        for j in range(m2):</p><p class="source-code">            r1, c1 = ix_map[i + 1]</p><p class="source-code">            r2, c2 = ix_map[j + 1]</p><p class="source-code">            rdiff = r1 - r2</p><p class="source-code">            cdiff = c1 - c2</p><p class="source-code">            if rdiff == 0:</p><p class="source-code">                if cdiff == 1:</p><p class="source-code">                    P[i, j] = p_left</p><p class="source-code">                elif cdiff == -1:</p><p class="source-code">                    P[i, j] = p_right</p><p class="source-code">                elif cdiff == 0:</p><p class="source-code">                    if r1 == 0:</p><p class="source-code">                        P[i, j] += p_down</p><p class="source-code">                    elif r1 == m - 1:</p><p class="source-code">                        P[i, j] += p_up</p><p class="source-code">                    if c1 == 0:</p><p class="source-code">                        P[i, j] += p_left</p><p class="source-code">                    elif c1 == m - 1:</p><p class="source-code">                        P[i, j] += p_right</p><p class="source-code">            elif rdiff == 1:</p><p class="source-code">                if cdiff == 0:</p><p class="source-code">                    P[i, j] = p_down</p><p class="source-code">            elif rdiff == -1:</p><p class="source-code">                if cdiff == 0:</p><p class="source-code">                    P[i, j] = p_up</p><p class="source-code">    return P</p><p>The code may seem a bit long but what it does is pretty simple: it just fills an <img src="image/Formula_04_057.png" alt=""/> transition probability<a id="_idIndexMarker248"/> matrix according to specified probabilities of<a id="_idIndexMarker249"/> going up, down, left, and right. </p></li>
+				<li>Get the transition probability matrix for the <img src="image/Formula_04_058.png" alt=""/> grid world of ours:<p class="source-code">P = get_P(3, 0.2, 0.3, 0.25, 0.25)</p></li>
+				<li>Calculate the <img src="image/Formula_04_059.png" alt=""/>-step transition probabilities. For example, for <img src="image/Formula_04_060.png" alt=""/>, we have the following:<p class="source-code">n = 1</p><p class="source-code">Pn = np.linalg.matrix_power(P, n)</p><p class="source-code">np.matmul(q, Pn)</p></li>
+				<li>The result will look like the following:<p class="source-code">array([0., 0.3, 0., 0.25, 0., 0.25, 0., 0.2, 0.])</p><p>Nothing surprising, right? The output just tells us that the robot starting at the center will be a cell above with a probability of <img src="image/Formula_04_061.png" alt=""/>, a cell down with a probability of <img src="image/Formula_04_062.png" alt=""/>, and so<a id="_idIndexMarker250"/> on. Let's do this for 3, 10, and 100 steps. The results are shown in <em class="italic">Figure 4.6</em>:</p></li>
+			</ol>
+			<div>
+				<div id="_idContainer225" class="IMG---Figure">
+					<img src="image/B14160_04_06.jpg" alt="Figure 4.6 – n-step transition probabilities&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.6 – n-step transition probabilities</p>
+			<p>You might notice that the<a id="_idIndexMarker251"/> probability distribution after 10 steps and 100 steps are very similar. This is because the system has almost reached a steady state after a few steps. So, the chance that we will find the robot in a specific state is almost the same after 10, 100, or 1,000 steps. Also, you should have noticed that we are more likely to find the robot at the bottom cells, simply because we have <img src="image/Formula_04_063.png" alt=""/>.</p>
+			<p>Before we wrap up our discussion about the transitionary and steady state behaviors, let's go back to ergodicity and look into a special property of ergodic Markov chains.</p>
+			<h2 id="_idParaDest-87"><a id="_idTextAnchor087"/>Example – a sample path in an ergodic Markov chain</h2>
+			<p>If the Markov chain is ergodic, we can <a id="_idIndexMarker252"/>simply simulate it for a long time once and estimate the steady state distribution of the states through the frequency of visits. This is especially useful if we don't have access to the transition probabilities of the system, but we can simulate it. </p>
+			<p>Let's see this in an example:</p>
+			<ol>
+				<li value="1">First, let's Import the SciPy library to count the number of visits. Set the number of steps to one million in the sample path, initialize a vector to keep track of the visits, and initialize the first state to <strong class="source-inline">4</strong>, which is <img src="image/Formula_04_064.png" alt=""/>:<p class="source-code">from scipy.stats import itemfreq</p><p class="source-code">s = 4</p><p class="source-code">n = 10 ** 6</p><p class="source-code">visited = [s]</p></li>
+				<li>Simulate the environment for one million steps:<p class="source-code">for t in range(n):</p><p class="source-code">s = np.random.choice(m2, p=P[s, :])</p><p class="source-code">visited.append(s)</p></li>
+				<li>Count the number of visits to each state:<p class="source-code">itemfreq(visited)</p></li>
+				<li>You will see numbers similar to the following:<p class="source-code">array([[0, 158613],       [1, 157628],       [2, 158070],       [3, 105264],       [4, 104853],       [5, 104764],       [6,  70585],       [7,  70255],       [8,  69969]], dtype=int64)</p></li>
+			</ol>
+			<p>The results are indeed very <a id="_idIndexMarker253"/>much in line with the steady state probability distribution we calculated.</p>
+			<p>Great job so far, as we've covered Markov chains in a fair amount of detail, worked on some examples, and gained a solid intuition! Before we close this section, let's briefly look into a more realistic type of Markov process.</p>
+			<h2 id="_idParaDest-88"><a id="_idTextAnchor088"/>Semi-Markov processes and continuous-time Markov chains</h2>
+			<p>All of the examples <a id="_idIndexMarker254"/>and formulas we have provided so far are related to discrete-time Markov chains, which are environments where transitions occur at discrete time steps, such as every minute <a id="_idIndexMarker255"/>or every 10 seconds. But in many real-world scenarios, when the next transition will happen is also random, which makes them a <strong class="bold">semi-Markov process</strong>. In those cases, we are usually interested in predicting the state after <img src="image/Formula_04_065.png" alt=""/> amount of time (rather than after <img src="image/Formula_04_066.png" alt=""/> steps). </p>
+			<p>One example of a scenario where a time component is important is queuing systems – for instance, the number of customers waiting in a customer service line. A customer could join the queue anytime and a representative could complete the service with a customer at any time – not just at discrete time steps. Another example is a work-in-process inventory waiting in front of an assembly station to be processed in a factory. In all these cases, analyzing the behavior of the system over time is very important to be able to improve the system and take action accordingly.</p>
+			<p>In semi-Markov processes, we would need to know the current state of the system, and also how long the system has been in it. This means the system depends on the past from the time perspective, but not from the perspective of the type of transition it will make – hence the name semi-Markov. </p>
+			<p>Let's look into several possible versions of how this can be of interest to us:</p>
+			<ul>
+				<li>If we are only interested in the transitions themselves, not when they happen, we can simply ignore everything related to time and work with the <strong class="bold">embedded Markov chain of the semi-Markov process</strong>, which is essentially the same as working with a discrete-time<a id="_idIndexMarker256"/> Markov chain.</li>
+				<li>In some processes, although the time between transitions is random, it is memoryless, which means exponentially distributed. Then, we have the Markov property fully satisfied, and the system is a <strong class="bold">continuous-time Markov chain</strong>. Queuing systems, for example, are often modeled in this category.</li>
+				<li>If it is both<a id="_idIndexMarker257"/> that we are interested in, and the time component<a id="_idIndexMarker258"/> and the transition times are not memoryless, then we have a general semi-Markov process.</li>
+			</ul>
+			<p>When it comes to working with these types of environments and solving them using RL, although not ideal, it is common to treat everything as discrete and use the same RL algorithms developed for discrete-time systems with some workarounds. For now, it is good for you to know and acknowledge the differences, but we will not go deeper into semi-Markov processes. Instead, you will see what these workarounds are when we solve continuous-time examples in later chapters.</p>
+			<p>We have made great progress toward building our understanding of MDPs with Markov chains. The next step in this journey is to introduce a "reward" to the environment.</p>
+			<h1 id="_idParaDest-89"><a id="_idTextAnchor089"/>Introducing the reward – Markov reward process</h1>
+			<p>In our robot example so far, we<a id="_idIndexMarker259"/> have not really identified any situation/state that is "good" or "bad." In any system, though, there are desired states to be in and there are other states that are less desirable. In this section, we will attach rewards to states/transitions, which gives us a <strong class="bold">Markov Reward Process</strong> (<strong class="bold">MRP</strong>). We then assess the "value" of each state.</p>
+			<h2 id="_idParaDest-90"><a id="_idTextAnchor090"/>Attaching rewards to the grid world example</h2>
+			<p>Remember the<a id="_idIndexMarker260"/> version of the robot example where it could not bounce back to the cell it was in when it hits a wall but crashed in a way that it was not recoverable? From now on, we will work on that version, and attach rewards to the process. Now, let's build this example:</p>
+			<ol>
+				<li value="1">Modify the transition <a id="_idIndexMarker261"/>probability matrix to assign self-transition probabilities to the "crashed" state that we add to the matrix:<p class="source-code">P = np.zeros((m2 + 1, m2 + 1))</p><p class="source-code">P[:m2, :m2] = get_P(3, 0.2, 0.3, 0.25, 0.25)</p><p class="source-code">for i in range(m2):</p><p class="source-code">    P[i, m2] = P[i, i]</p><p class="source-code">    P[i, i] = 0</p><p class="source-code">P[m2, m2] = 1</p></li>
+				<li>Assign rewards to transitions:<p class="source-code">n = 10 ** 5</p><p class="source-code">avg_rewards = np.zeros(m2)</p><p class="source-code">for s in range(9):</p><p class="source-code">    for i in range(n):</p><p class="source-code">        crashed = False</p><p class="source-code">        s_next = s</p><p class="source-code">        episode_reward = 0</p><p class="source-code">        while not crashed:</p><p class="source-code">            s_next = np.random.choice(m2 + 1, \</p><p class="source-code">                                      p=P[s_next, :])</p><p class="source-code">            if s_next &lt; m2:</p><p class="source-code">                episode_reward += 1</p><p class="source-code">            else:</p><p class="source-code">                crashed = True</p><p class="source-code">        avg_rewards[s] += episode_reward</p><p class="source-code">avg_rewards /= n</p><p>For every transition <a id="_idIndexMarker262"/>where the robot stays alive, it collects +1 reward. It collects 0 reward when it crashes. Since "crashed" is a terminal/absorbing state, we terminate the episode there. Simulate this model for different initializations, 100K times for each initialization, and see how much reward is collected on average in each case.</p><p>The results will look as in <em class="italic">Figure 4.7</em> (yours will be a bit different due to the randomness):</p></li>
+			</ol>
+			<div>
+				<div id="_idContainer230" class="IMG---Figure">
+					<img src="image/B14160_04_07.jpg" alt="Figure 4.7 – Average returns with respect to the initial state&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.7 – Average returns with respect to the initial state</p>
+			<p>In this example, if the initial state is  <img src="image/Formula_04_067.png" alt=""/>, the average return is the highest. This makes it a "valuable" state to be in. Contrast this with state <img src="image/Formula_04_068.png" alt=""/> with an average return of <img src="image/Formula_04_069.png" alt=""/>. Not surprisingly, it is not a great state to be in. This is because it is more likely for the robot to hit the wall earlier when it starts in the corner. Another thing that is not surprising is that the returns are vertically symmetrical (almost), since <img src="image/Formula_04_070.png" alt=""/>.</p>
+			<p>Now that we have calculated<a id="_idIndexMarker263"/> the average reward with respect to each initialization, let's go deeper and see how they are related to each other.</p>
+			<h2 id="_idParaDest-91"><a id="_idTextAnchor091"/>Relationships between average rewards with different initializations</h2>
+			<p>The average returns that we have<a id="_idIndexMarker264"/> observed have quite a structural relationship between them. Think about it: assume the robot started at <img src="image/Formula_04_071.png" alt=""/> and made a transition to <img src="image/Formula_04_072.png" alt=""/>. Since it is still alive, we collected a reward of +1. If we knew the "value" of state <img src="image/Formula_04_073.png" alt=""/>, would we need to continue the simulation to figure out what return to expect? Not really! The value already gives us the expected return from that point on. Remember that this is a Markov process and what happens next does not depend on the past! </p>
+			<p>We can extend this relationship to derive the value of a state from the other state values. But remember that the robot could have transitioned into some other state. Taking into account other possibilities and denoting the value of a state by <img src="image/Formula_04_074.png" alt=""/>, we obtain the following relationship:</p>
+			<div>
+				<div id="_idContainer239" class="IMG---Figure">
+					<img src="image/Formula_04_075.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+
+
+
+</p>
+			<div>
+				<div id="_idContainer240" class="IMG---Figure">
+					<img src="image/Formula_04_076.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer241" class="IMG---Figure">
+					<img src="image/Formula_04_077.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer242" class="IMG---Figure">
+					<img src="image/Formula_04_078.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer243" class="IMG---Figure">
+					<img src="image/Formula_04_079.jpg" alt=""/>
+				</div>
+			</div>
+			<p>As you can see, some <a id="_idIndexMarker265"/>small inaccuracies in the estimations of the state values aside, the state values are consistent with each other. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">This recursive relationship between state values is central to many RL algorithms and it will come up again and again. We will formalize this idea using the Bellman equation in the next section.</p>
+			<p>Let's formalize all these concepts in the next section.</p>
+			<h2 id="_idParaDest-92"><a id="_idTextAnchor092"/>Return, discount, and state values</h2>
+			<p>We define the <strong class="bold">return</strong> in a Markov <a id="_idIndexMarker266"/>process after time step <img src="image/Formula_04_080.png" alt=""/> as follows:</p>
+			<div>
+				<div id="_idContainer245" class="IMG---Figure">
+					<img src="image/Formula_04_081.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_04_082.png" alt=""/> is the reward at time <img src="image/Formula_04_083.png" alt=""/> and <img src="image/Formula_04_084.png" alt=""/> is the terminal time step. This definition, however, could be potentially problematic. In an MRP that has no<a id="_idIndexMarker267"/> terminal state, the return could<a id="_idIndexMarker268"/> go up to infinity. To avoid this, we <a id="_idIndexMarker269"/>introduce a <strong class="bold">discount rate</strong>, <img src="image/Formula_04_085.png" alt=""/>, in this calculation <a id="_idIndexMarker270"/>and define a <strong class="bold">discounted return</strong>, as follows:</p>
+			<div>
+				<div id="_idContainer250" class="IMG---Figure">
+					<img src="image/Formula_04_086.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+</p>
+			<div>
+				<div id="_idContainer251" class="IMG---Figure">
+					<img src="image/Formula_04_087.jpg" alt=""/>
+				</div>
+			</div>
+			<p>For <img src="image/Formula_04_088.png" alt=""/>, this sum is guaranteed to be finite as far as the reward sequence is bounded. Here is how varying <img src="image/Formula_04_089.png" alt=""/> affects the sum:</p>
+			<ul>
+				<li><img src="image/Formula_04_090.png" alt=""/> values closer to 1 place almost equal emphasis on distant rewards as immediate rewards. </li>
+				<li>When <img src="image/Formula_04_091.png" alt=""/>, all the rewards, distant or immediate, are weighted equally. </li>
+				<li>For <img src="image/Formula_04_092.png" alt=""/> values closer to 0, the sum is more myopic. </li>
+				<li>At <img src="image/Formula_04_093.png" alt=""/>, the return is equal to the immediate reward.</li>
+			</ul>
+			<p>Throughout the rest of the book, our<a id="_idIndexMarker271"/> goal will be to maximize the expected discounted return. So, it is important to understand the other benefits of using a discount in the return calculation:</p>
+			<ul>
+				<li>The discount diminishes the weight placed on the rewards that will be obtained in the distant future. This is reasonable as our estimations about the distant future may not be very accurate when we bootstrap values estimations using other estimations (more on this later).</li>
+				<li>Human (and animal) behavior prefers immediate rewards over future rewards.</li>
+				<li>For financial rewards, immediate rewards are more valuable due to the time value of money.</li>
+			</ul>
+			<p>Now that we have defined the discounted return, the <strong class="bold">value</strong> of a state, <img src="image/Formula_04_095.png" alt=""/>, is defined as the expected discounted return when starting in <img src="image/Formula_04_0951.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer260" class="IMG---Figure">
+					<img src="image/Formula_04_096.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+</p>
+			<div>
+				<div id="_idContainer261" class="IMG---Figure">
+					<img src="image/Formula_04_097.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Note that this definition allows us to use the recursive relationships that we figured out in the previous section:</p>
+			<div>
+				<div id="_idContainer262" class="IMG---Figure">
+					<img src="image/Formula_04_098.jpg" alt=""/>
+				</div>
+			</div>
+			<p>This equation is called the <strong class="bold">Bellman equation for MRP</strong>. It is what we utilized in the preceding grid world <a id="_idIndexMarker272"/>example when we calculated the value of a state from the other state values. The Bellman equation is at the heart of many RL algorithms and is of crucial importance. We will give its full version after we introduce the MDP.</p>
+			<p>Let's close this section with a more formal definition of an MRP, which is detailed in the following info box.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">An MRP is fully characterized by a <img src="image/Formula_04_099.png" alt=""/> tuple, where <img src="image/Formula_04_100.png" alt=""/> is a set of states, <img src="image/Formula_04_101.png" alt=""/> is a transition probability matrix, <img src="image/Formula_04_102.png" alt=""/> is a reward function, and <img src="image/Formula_04_103.png" alt=""/> is a discount factor. </p>
+			<p>Next, we will look at how to calculate the state values analytically.</p>
+			<h2 id="_idParaDest-93"><a id="_idTextAnchor093"/>Analytically calculating the state values</h2>
+			<p>The Bellman equation<a id="_idIndexMarker273"/> gives us the relationships between the state values, rewards, and transition probabilities. When the transition probabilities and the reward dynamics are known, we can use the Bellman equation to precisely calculate the state values. Of course, this is only feasible when the total number of states is small enough to make the calculations. Let's now see how we can do this.</p>
+			<p>When we write the Bellman equation in matrix form, it looks as follows:</p>
+			<div>
+				<div id="_idContainer268" class="IMG---Figure">
+					<img src="image/Formula_04_104.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Here, <img src="image/Formula_04_105.png" alt=""/> is a column vector where each entry is the value of the corresponding state, and <img src="image/Formula_04_106.png" alt=""/> is another column vector where each entry corresponds to the reward obtained when transitioned into that state. Accordingly, we get the<a id="_idIndexMarker274"/> following expanded representation of the previous formula:</p>
+			<div>
+				<div id="_idContainer271" class="IMG---Figure">
+					<img src="image/Formula_04_107.jpg" alt=""/>
+				</div>
+			</div>
+			<p>We can solve this system of linear equations as follows:</p>
+			<div>
+				<div id="_idContainer272" class="IMG---Figure">
+					<img src="image/Image88879.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+</p>
+			<div>
+				<div id="_idContainer273" class="IMG---Figure">
+					<img src="image/Formula_04_109.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now it is time to implement this for our grid world example. Note that, in the <img src="image/Formula_04_110.png" alt=""/> example, we have 10 states, where the 10th state represents the robot's crash. Transitioning into any state results in +1 reward, except in the "crashed" state. Let's get started:</p>
+			<ol>
+				<li value="1">Construct the <img src="image/Formula_04_111.png" alt=""/> vector:<p class="source-code">R = np.ones(m2 + 1)</p><p class="source-code">R[-1] = 0</p></li>
+				<li>Set <img src="image/Formula_04_112.png" alt=""/> (something very close to 1 that we actually have in the example) and calculate the state values:<p class="source-code">inv = np.linalg.inv(np.eye(m2 + 1) - 0.9999 * P)</p><p class="source-code">v = np.matmul(inv, np.matmul(P, R))</p><p class="source-code">print(np.round(v, 2)) </p><p>The output will look like this:</p><p class="source-code">[1.47 2.12 1.47 2.44 3.42 2.44 1.99 2.82 1.99 0.]</p></li>
+			</ol>
+			<p>Remember that these are<a id="_idIndexMarker275"/> the true (theoretical, rather than estimated) state values (for the given discount rate), and they are aligned with what we estimated through simulation before in <em class="italic">Figure 4.7</em>!</p>
+			<p>If you are wondering why we did not simply set <img src="image/Formula_04_113.png" alt=""/> to 1, remember that we have now introduced a discount factor, which is necessary for things to converge mathematically. If you think about it, there is a chance that the robot will randomly move but stay alive infinitely long, collecting an infinite reward. Yes, this is extremely unlikely, and you will never see this in practice. So, you may think that we can set <img src="image/Formula_04_114.png" alt=""/> here. However, this would lead to a singular matrix that we cannot take the inverse of. So, instead, we will choose <img src="image/Formula_04_115.png" alt=""/>. For practical purposes, this discount factor almost equally weighs the immediate and future rewards.</p>
+			<p>We can estimate the state values in other ways than simulation or matrix inversion. Let's look at an iterative approach next.</p>
+			<h2 id="_idParaDest-94"><a id="_idTextAnchor094"/>Estimating the state values iteratively</h2>
+			<p>One of the central ideas in RL is to use<a id="_idIndexMarker276"/> the value function definition to estimate the value functions iteratively. To achieve that, we arbitrarily initialize the state values and use its definition as an update rule. Since we estimate states based on other estimations, this is a <strong class="bold">bootstrapping</strong> method. We stop <a id="_idIndexMarker277"/>when the maximum update to the state value over all the states is below a set threshold. </p>
+			<p>Here is the code to estimate the state values in our robot example:</p>
+			<p class="source-code">def estimate_state_values(P, m2, threshold):</p>
+			<p class="source-code">    v = np.zeros(m2 + 1)</p>
+			<p class="source-code">    max_change = threshold</p>
+			<p class="source-code">    terminal_state = m2 </p>
+			<p class="source-code">    while max_change &gt;= threshold:</p>
+			<p class="source-code">        max_change = 0</p>
+			<p class="source-code">        for s in range(m2 + 1):</p>
+			<p class="source-code">            v_new = 0</p>
+			<p class="source-code">            for s_next in range(m2 + 1):</p>
+			<p class="source-code">                r = 1 * (s_next != terminal_state)</p>
+			<p class="source-code">                v_new += P[s, s_next] * (r + v[s_next])</p>
+			<p class="source-code">            max_change = max(max_change, np.abs(v[s] - v_new))</p>
+			<p class="source-code">            v[s] = v_new</p>
+			<p class="source-code">    return np.round(v, 2)</p>
+			<p>The result will closely resemble the estimations in <em class="italic">Figure 4.7</em>. Just run the following code:</p>
+			<p class="source-code">estimate_state_values(P, m2, 0.01)</p>
+			<p>You should get something similar to the following:</p>
+			<p class="source-code">array([1.46, 2.11, 1.47, 2.44, 3.41, 2.44, 1.98, 2.82, 1.99, 0.])</p>
+			<p>This looks great! Again, remember the following:</p>
+			<ul>
+				<li>We had to iterate<a id="_idIndexMarker278"/> over all possible states. This is intractable when the state space is large.</li>
+				<li>We used the transition probabilities explicitly. In a realistic system, we don't know what these probabilities are.</li>
+			</ul>
+			<p>Modern RL algorithms tackle these drawbacks by using a function approximation to represent the states and sample the transitions from (a simulation of) the environment. We will visit those approaches in later chapters.</p>
+			<p>So far, so good! Now, we will incorporate the last major piece into this picture: actions.</p>
+			<h1 id="_idParaDest-95"><a id="_idTextAnchor095"/>Bringing the action in – MDP</h1>
+			<p>The MRP allowed us to <a id="_idIndexMarker279"/>model and study a Markov chain with rewards. Of course, our ultimate goal is to control such a system to achieve the maximum reward. Now, we will incorporate decisions into the MRP.</p>
+			<h2 id="_idParaDest-96"><a id="_idTextAnchor096"/>Definition</h2>
+			<p>An MDP is simply <a id="_idIndexMarker280"/>an MRP with decisions affecting transition probabilities and potentially the rewards. </p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">An MDP is characterized by a <img src="image/Formula_04_116.png" alt=""/> tuple, where we have a finite set of actions, <img src="image/Formula_04_117.png" alt=""/>, on top of the MRP. </p>
+			<p>MDP is the mathematical framework behind RL. So, now is the time to recall the RL diagram that we introduced in <a href="B14160_01_Final_SK_ePub.xhtml#_idTextAnchor016"><em class="italic">Chapter 1</em></a>, <em class="italic">Introduction to Reinforcement Learning</em>:</p>
+			<div>
+				<div id="_idContainer282" class="IMG---Figure">
+					<img src="image/B14160_04_08.jpg" alt="Figure 4.8 – MDP diagram&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 4.8 – MDP diagram</p>
+			<p>Our goal in an MDP is to find a <strong class="bold">policy</strong> that maximizes the <a id="_idIndexMarker281"/>expected cumulative reward. A policy simply tells which action(s) to take for a given state. In other words, it is a mapping from states to actions. More formally, a policy is a distribution over actions given states, and is denoted by <img src="image/Formula_04_118.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer284" class="IMG---Figure">
+					<img src="image/Formula_04_119.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The policy of an agent potentially affects the transition probabilities, as well as the rewards, and it fully defines the agent's behavior. It is also stationary and does not change over time. Therefore, the dynamics of the MDP are defined by the following transition probabilities:</p>
+			<div>
+				<div id="_idContainer285" class="IMG---Figure">
+					<img src="image/Formula_04_120.jpg" alt=""/>
+				</div>
+			</div>
+			<p>These are for all states and actions.</p>
+			<p>Next, let's see how an <a id="_idIndexMarker282"/>MDP might look in the grid world example.</p>
+			<h2 id="_idParaDest-97"><a id="_idTextAnchor097"/>Grid world as an MDP</h2>
+			<p>Imagine that we can<a id="_idIndexMarker283"/> control the robot in our grid world, but only to some extent. In each step, we can take one of the following actions: up, down, left, and right. Then, the robot goes in the direction of the action with 70% chance and one of the other directions with 10% chance each. Given these dynamics, a sample policy could be as follows:</p>
+			<ul>
+				<li>Right, when in state <img src="image/Formula_04_121.png" alt=""/></li>
+				<li>Up, when in state ­<img src="image/Formula_04_122.png" alt=""/></li>
+			</ul>
+			<p>The policy also determines the transition probability matrix and the reward distribution. For example, we can write the transition probabilities for state <img src="image/Formula_04_123.png" alt=""/> and given our policy, as follows:</p>
+			<ul>
+				<li><img src="image/Formula_04_124.png" alt=""/></li>
+				<li><img src="image/Formula_04_125.png" alt=""/></li>
+				<li><img src="image/Formula_04_126.png" alt=""/><p class="callout-heading">Tip</p><p class="callout">Once a policy is defined in an MDP, the state and reward sequence become an MRP. </p></li>
+			</ul>
+			<p>So far, so good. Now, let's be a<a id="_idIndexMarker284"/> bit more rigorous about how we express the policy. Remember that a policy is actually a probability distribution over actions given the state. Therefore, saying that "the policy is to take the "right" action in state <img src="image/Formula_04_127.png" alt=""/>" actually means "we take the "right" action with probability 1 when in state <img src="image/Formula_04_128.png" alt=""/>." This can be expressed more formally as follows:</p>
+			<div>
+				<div id="_idContainer294" class="IMG---Figure">
+					<img src="image/Formula_04_129.jpg" alt=""/>
+				</div>
+			</div>
+			<p>A perfectly legitimate policy is a probabilistic one. For example, we can choose to take the left or up action when in state <img src="image/Formula_04_130.png" alt=""/> with equal probability, which is as follows:</p>
+			<div>
+				<div id="_idContainer296" class="IMG---Figure">
+					<img src="image/Formula_04_131.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer297" class="IMG---Figure">
+					<img src="image/Formula_04_132.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Again, our goal in RL is to figure out an optimal policy for the environment and the problem at hand that maximizes the expected discounted return. Starting from the next chapter, we will go into the details of how to do that and solve detailed examples. For now, this example is enough to illustrate what an MDP looks like in a toy example.</p>
+			<p>Next, we will define the value functions and related equations for MDPs as we did for MRPs.</p>
+			<h2 id="_idParaDest-98"><a id="_idTextAnchor098"/>State-value function</h2>
+			<p>We have already talked<a id="_idIndexMarker285"/> about the value of a state in the context of the MRP. The value of a state, which we now formally call the <strong class="bold">state-value function</strong>, is defined as the expected discounted return when starting in state <img src="image/Formula_04_133.png" alt=""/>. However, there is a crucial point here: <em class="italic">the state-value function in an MDP is defined for a policy</em>. After all, the transition probability matrix is determined by the policy. So, changing the policy is likely to lead to a different state-value function. This is formally defined as follows:</p>
+			<div>
+				<div id="_idContainer299" class="IMG---Figure">
+					<img src="image/Formula_04_134.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Note the <img src="image/Formula_04_135.png" alt=""/> subscript in the state-value function, as well as the expectation operator. Other than that, the idea is the same as what we defined with the MRP. </p>
+			<p>Now, we can finally define the Bellman equation for <img src="image/Formula_04_136.png" alt=""/>:</p>
+			<div>
+				<div id="_idContainer302" class="IMG---Figure">
+					<img src="image/Formula_04_137.jpg" alt=""/>
+				</div>
+			</div>
+			<p>You already know that the values of the states are related to each other from our discussion on MRPs. The only difference here is that now the transition probabilities depend on the actions and the corresponding probabilities of taking them in a given state as per the policy. Imagine "no action" is one of the possible actions in our grid world. The state values in <em class="italic">Figure 4.7</em> would correspond to the policy of taking no action in any state.</p>
+			<h2 id="_idParaDest-99"><a id="_idTextAnchor099"/>Action-value function</h2>
+			<p>An interesting quantity we use a lot in RL is the <a id="_idIndexMarker286"/>action-value function. Now, assume that you have a policy, <img src="image/Formula_04_138.png" alt=""/> (not necessarily an optimal one). The policy already tells you which actions to take for each state with the associated probabilities, and you will follow that policy. However, for the current time step, you ask "what would be the expected cumulative return if I take action <img src="image/Formula_04_139.png" alt=""/> initially while in the current state, and follow <img src="image/Formula_04_140.png" alt=""/> thereafter for all states?" The answer to this<a id="_idIndexMarker287"/> question is the <strong class="bold">action-value function</strong>. Formally, this is how we define it in various but equivalent ways:</p>
+			<div>
+				<div id="_idContainer306" class="IMG---Figure">
+					<img src="image/Formula_04_141.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+
+
+</p>
+			<div>
+				<div id="_idContainer307" class="IMG---Figure">
+					<img src="image/Formula_04_142.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer308" class="IMG---Figure">
+					<img src="image/Formula_04_143.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer309" class="IMG---Figure">
+					<img src="image/Formula_04_144.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Now, you may ask what the point in defining this quantity is if we will follow policy <img src="image/Formula_04_145.png" alt=""/> thereafter anyway. Well, it can be shown that we can improve our policy by choosing the action that gives the highest action value for state <img src="image/Formula_04_146.png" alt=""/>, represented by <img src="image/Formula_04_147.png" alt=""/>. </p>
+			<p>We will come to how to improve and find the optimal policies later in the next chapter.</p>
+			<h2 id="_idParaDest-100"><a id="_idTextAnchor100"/>Optimal state-value and action-value functions</h2>
+			<p>An optimal policy is <a id="_idIndexMarker288"/>one that gives the optimal<a id="_idIndexMarker289"/> state-value function: </p>
+			<div>
+				<div id="_idContainer313" class="IMG---Figure">
+					<img src="image/Formula_04_148.jpg" alt=""/>
+				</div>
+			</div>
+			<p>An optimal policy is denoted by <img src="image/Formula_04_149.png" alt=""/>. Note that more than one policy could be optimal. However, there is a single optimal state-value function. We can also define optimal action-value functions, as follows:</p>
+			<div>
+				<div id="_idContainer315" class="IMG---Figure">
+					<img src="image/Formula_04_150.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The relationship between the optimal state-value and action-value functions is the following:</p>
+			<div>
+				<div id="_idContainer316" class="IMG---Figure">
+					<img src="image/Formula_04_151.jpg" alt=""/>
+				</div>
+			</div>
+			<h2 id="_idParaDest-101"><a id="_idTextAnchor101"/>Bellman optimality</h2>
+			<p>When we defined the Bellman <a id="_idIndexMarker290"/>equation earlier for <img src="image/Formula_04_152.png" alt=""/>, we needed to use <img src="image/Formula_04_153.png" alt=""/> in the equation. This is because the state-value function is defined for a policy and we needed to calculate the expected reward and the value of the following state with respect to the action(s) suggested by the policy while in state <img src="image/Formula_04_154.png" alt=""/> (together with the corresponding probabilities if multiple actions are suggested to be taken with positive probability). This equation was the following:</p>
+			<div>
+				<div id="_idContainer320" class="IMG---Figure">
+					<img src="image/Formula_04_155.jpg" alt=""/>
+				</div>
+			</div>
+			<p>However, while dealing with the<a id="_idIndexMarker291"/> optimal state-value function, <img src="image/Formula_04_156.png" alt=""/>, we don't really need to retrieve <img src="image/Formula_04_157.png" alt=""/> from somewhere to plug into the equation. Why? Because the optimal policy should be suggesting an action that maximizes the consequent expression. After all, the state-value function represents the cumulative expected reward. If the optimal policy was not suggesting the action that maximizes the expectation term, it would not be an optimal policy. Therefore, for the optimal policy and the state-value function, we can write a special form of the<a id="_idIndexMarker292"/> Bellman equation. This is called the <strong class="bold">Bellman optimality equation</strong> and is defined as follows:</p>
+			<div>
+				<div id="_idContainer323" class="IMG---Figure">
+					<img src="image/Formula_04_158.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+
+</p>
+			<div>
+				<div id="_idContainer324" class="IMG---Figure">
+					<img src="image/Formula_04_159.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer325" class="IMG---Figure">
+					<img src="image/Formula_04_160.jpg" alt=""/>
+				</div>
+			</div>
+			<p>We can write the Bellman optimality equation for the action-value function similarly:</p>
+			<div>
+				<div id="_idContainer326" class="IMG---Figure">
+					<img src="image/Formula_04_161.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">
+
+</p>
+			<div>
+				<div id="_idContainer327" class="IMG---Figure">
+					<img src="image/Formula_04_162.jpg" alt=""/>
+				</div>
+			</div>
+			<div>
+				<div id="_idContainer328" class="IMG---Figure">
+					<img src="image/Formula_04_163.jpg" alt=""/>
+				</div>
+			</div>
+			<p>The Bellman optimality<a id="_idIndexMarker293"/> equation is one of the most central ideas in RL, which will form the basis of many of the algorithms we will introduce in the next chapter. </p>
+			<p>With that, we have now covered a great deal of the theory behind the RL algorithms. Before we actually go into using them to solve some RL problems, we will discuss an extension to MDPs next, called partially observable MDPs, which frequently occur in many real-world problems.</p>
+			<h1 id="_idParaDest-102"><a id="_idTextAnchor102"/>Partially observable MDPs</h1>
+			<p>The definition of policy we <a id="_idIndexMarker294"/>have used in this chapter so far is that it is a mapping from the state of the environment to actions. Now, the question we should ask is <em class="italic">is the state really known to the agent in all types of environments</em>? Remember the definition of state: it describes everything in an environment related to the agent's decision-making (in the grid world example, the color of the walls is not important, for instance, so it would not be part of the state).  </p>
+			<p>If you think about it, this is a very strong definition. Consider the situation when someone is driving a car. Does the driver know everything about the world around them while making their driving decisions? Of course not! To begin with, the cars would be blocking each other in the driver's sight more often than not. Not knowing the precise state of the world does not stop anyone from driving, though. In such cases, we base our decision on our <strong class="bold">observations</strong>, for example, what we see and hear during driving, rather than the state. Then, we say the environment is <strong class="bold">partially observable</strong>. If it is an MDP, we call it a <strong class="bold">partially observable MDP</strong>, or <strong class="bold">POMDP</strong>. </p>
+			<p>In a POMDP, the probability of seeing a particular observation for an agent depends on the latest action<a id="_idIndexMarker295"/> and the current state. The function that describes this <a id="_idIndexMarker296"/>probability distribution is called the <strong class="bold">observation function</strong>.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">A POMDP is characterized by a <img src="image/Formula_04_164.png" alt=""/> tuple, where <img src="image/Formula_04_165.png" alt=""/> is the set of possible observations and <img src="image/Formula_04_166.png" alt=""/> is an observation function, as follows:</p>
+			<p class="callout"><img src="image/Formula_04_167.png" alt=""/></p>
+			<p>In practice, having a partially observable environment usually requires keeping a memory of observations to<a id="_idIndexMarker297"/> base the actions off of. In other words, a policy is formed based not only on the latest observation but also on the observations from the last <img src="image/Formula_04_168.png" alt=""/> steps. To better understand why this works, think of how much information a self-driving car can get from a single, frozen scene obtained from its camera. This picture alone does not reveal some important information about the environment, such as the speed and the exact directions of other cars. To infer that, we need a sequence of scenes and then to see how the cars have moved between the scenes. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">In partially observable environments, keeping a memory of observations makes it possible to uncover<a id="_idIndexMarker298"/> more information about the state of the environment. That is why many famous RL settings utilize <strong class="bold">Long</strong> <strong class="bold">Short-Term</strong> <strong class="bold">Memory</strong> (<strong class="bold">LSTM</strong>) networks to process the observations. We will look at this in more detail in later chapters.</p>
+			<p>With that, we conclude our discussion on MDPs. You are now set to dive into how to solve RL problems!</p>
+			<h1 id="_idParaDest-103"><a id="_idTextAnchor103"/>Summary</h1>
+			<p>In this chapter, we covered the mathematical framework in which we model the sequential decision-making problems we face in real life: MDPs. To this end, we started with Markov chains, which do not involve any concept of reward or decision-making. Markov chains simply describe stochastic processes where the system transitions based on the current state, independent of the previously visited states. We then added the notion of reward and started discussing things such as which states are more advantageous to be in in terms of the expected future rewards. This created a concept of a "value" for a state. We finally brought in the concept of "decision/action" and defined the MDP. We then finalized the definitions of state-value functions and action-value functions. Lastly, we discussed partially observable environments and how they affect the decision-making of an agent. </p>
+			<p>The Bellman equation variations we introduced in this chapter are central to many of the RL algorithms today, which<a id="_idIndexMarker299"/> are called "value-based methods." Now that you are equipped with a solid understanding of what they are, starting from the next chapter, we will use these ideas to come up with optimal policies. In particular, we will first look at the exact solution algorithms to MDPs, which are dynamic programming methods. We will then go into methods such as Monte Carlo and temporal-difference learning, which provide approximate solutions but don't require knowing the precise dynamics of the environment, unlike dynamic programming methods.</p>
+			<p>Stay tuned and see you in the next chapter!</p>
+			<h1 id="_idParaDest-104"><a id="_idTextAnchor104"/>Exercises</h1>
+			<ol>
+				<li value="1">Calculate <img src="image/Formula_04_169.png" alt=""/>-step transition probabilities for the robot using the Markov chain model we introduced with the state initialized at <img src="image/Formula_04_170.png" alt=""/>. You will notice that it will take a bit more time for the system to reach the steady state.</li>
+				<li>Modify the Markov chain to include the absorbing state for the robot crashing into the wall. What does your <img src="image/Formula_04_171.png" alt=""/> look like for a large <img src="image/Formula_04_172.png" alt=""/>?</li>
+				<li>Using the state values in <em class="italic">Figure 4.7</em>, calculate the value of a corner state using the estimates for the neighboring state values.</li>
+				<li>Iteratively estimate the state values in the grid world MRP using matrix forms and operations instead of a <strong class="source-inline">for</strong> loop.</li>
+				<li>Calculate the <img src="image/Formula_04_173.png" alt=""/> action value, where the π policy corresponds to taking no action in any state, using the values in <em class="italic">Figure 4.7</em>. Based on how <img src="image/Formula_04_174.png" alt=""/> compares to <img src="image/Formula_04_175.png" alt=""/>, would you consider changing your policy to take the up action instead of no action in state <img src="image/Formula_04_176.png" alt=""/>?  </li>
+			</ol>
+			<h1 id="_idParaDest-105"><a id="_idTextAnchor105"/>Further reading</h1>
+			<ul>
+				<li>Silver, D. (2015). <em class="italic">Lecture 2: Markov Decision Processes</em>. Retrieved from a UCL course on RL: <a href="https://www.davidsilver.uk/wp-content/uploads/2020/03/MDP.pdf">https://www.davidsilver.uk/wp-content/uploads/2020/03/MDP.pdf</a></li>
+				<li>Sutton, R. S., &amp; Barto, A. G. (2018). <em class="italic">Reinforcement Learning: An Introduction</em>. A Bradford book</li>
+				<li>Ross, S. M. (1996). <em class="italic">Stochastic Processes</em>. 2nd ed., Wiley</li>
+			</ul>
+		</div>
+	</body></html>

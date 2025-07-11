@@ -1,0 +1,211 @@
+<html><head></head><body>
+		<div id="_idContainer1518">
+			<h1 id="_idParaDest-252"><em class="italic"><a id="_idTextAnchor260"/>Chapter 12</em>: Meta-Reinforcement Learning</h1>
+			<p>Humans learn new skills from much less data compared to a <strong class="bold">reinforcement learning</strong> (<strong class="bold">RL</strong>) agent. This is because first, we come with priors in our brains at birth; and second, we are able to transfer our knowledge from one skill to another quite efficiently. Meta-RL aims to achieve a similar capability. In this chapter, we will describe what meta-RL is, what approaches we use, and what the challenges are under the following topics: </p>
+			<ul>
+				<li>Introduction to meta-RL</li>
+				<li>Meta-RL with recurrent policies</li>
+				<li>Gradient-based meta-RL</li>
+				<li>Meta-RL as partially observed RL</li>
+				<li><a id="_idTextAnchor261"/>Challenges in meta-RL</li>
+			</ul>
+			<h1 id="_idParaDest-253"><a id="_idTextAnchor262"/>Introduction to meta-RL</h1>
+			<p>In this chapter, we will<a id="_idIndexMarker1128"/> introduce meta-RL, which is actually a very intuitive concept but could be hard to wrap your mind around at first. To make things even clearer for you, we will also discuss the connection between meta-RL and other concepts we covered in the earlier chapters. </p>
+			<h2 id="_idParaDest-254"><a id="_idTextAnchor263"/>Learning to learn</h2>
+			<p>Let's say you are <a id="_idIndexMarker1129"/>trying to convince a friend to go on a trip that you really want to go on together. There are several arguments that come to your mind. You could talk about the following:</p>
+			<ul>
+				<li>The beauty of the nature at your destination.</li>
+				<li>How you are so burned out and really need this time away.</li>
+				<li>This could be the last chance for a trip together for a while because you will be busy at work.</li>
+			</ul>
+			<p>Well, you've known your friend for years now and know how they love nature, so you recognize that the first argument will be the most enticing one, because they love nature! If it was your mom, perhaps you could use the second one because she cares about you a lot and wants to support you. In either of these situations, you know how to achieve what you want because you have a common past with these individuals.</p>
+			<p>Have you ever left a store, say a car dealership, buying something more expensive than you had originally planned? How were you convinced? Perhaps the salesperson figured out how much you <a id="_idIndexMarker1130"/>care about the following:</p>
+			<ul>
+				<li>Your family, and convinced you to buy an SUV to make them more comfortable</li>
+				<li>Your look, and convinced you to buy a sports car that will attract a lot of eyes</li>
+				<li>The environment, and convinced you to buy an electric vehicle with no emissions</li>
+			</ul>
+			<p>The salesperson does not know you, but through years of experience and training, they know how to learn about you very quickly and effectively. They ask you questions, understand your background, discover your interests, and figure out your budget. Then, you are presented with some options, and based on what you like and don't like, you end up with an offer package with a make and model, upgrades and options, and a payment plan, all customized for you.</p>
+			<p>Here, the former of these examples correspond to RL, where an agent learns a good policy for a particular environment and a task to maximize its reward. The latter example corresponds to meta-RL, where an agent learns a good <strong class="bold">procedure</strong> to quickly adapt to a new environment and task to maximize its reward.</p>
+			<p>After this example, let's formally define meta-RL.</p>
+			<h2 id="_idParaDest-255"><a id="_idTextAnchor264"/>Defining meta-RL</h2>
+			<p>In meta-RL, in each<a id="_idIndexMarker1131"/> episode, the agent faces a task, <img src="image/Formula_12_001.png" alt=""/>, that comes from a <a id="_idIndexMarker1132"/>distribution, <img src="image/Formula_12_002.png" alt=""/>, <img src="image/Formula_12_003.png" alt=""/>. A task, <img src="image/Formula_12_004.png" alt=""/>, is a <strong class="bold">Markov</strong> <strong class="bold">decision</strong> <strong class="bold">process</strong> (<strong class="bold">MDP</strong>) with possibly different transition and reward dynamics, described as <img src="image/Formula_12_005.png" alt=""/>, where we have the following:</p>
+			<ul>
+				<li><img src="image/Formula_12_006.png" alt=""/> is the state space.</li>
+				<li><img src="image/Formula_12_007.png" alt=""/> is the action space.</li>
+				<li><img src="image/Formula_12_008.png" alt=""/> is the transition<a id="_idIndexMarker1133"/> distribution for task <img src="image/Formula_12_009.png" alt=""/>.</li>
+				<li><img src="image/Formula_12_010.png" alt=""/> is the reward function for task <img src="image/Formula_12_011.png" alt=""/>.</li>
+			</ul>
+			<p>So, during the training and test time, we expect the tasks to come from the same distribution, but we don't expect them to be the same, which is the setup in a typical machine learning problem. In meta-RL, at the test time, we expect the agent to do the following:</p>
+			<ol>
+				<li>Effectively explore to understand the task.</li>
+				<li>Adapt to the task.</li>
+			</ol>
+			<p>Meta-learning is embedded in animal learning. Let's explore this connection next.</p>
+			<h2 id="_idParaDest-256"><a id="_idTextAnchor265"/>Relation to animal learning and the Harlow experiment</h2>
+			<p>Artificial <a id="_idIndexMarker1134"/>neural networks notoriously require a lot <a id="_idIndexMarker1135"/>of data to be trained. On the other hand, our brains learn much more efficiently from small data. There are two major factors contributing to this:</p>
+			<ul>
+				<li>Unlike an untrained artificial neural network, our brains are pre-trained and come with <strong class="bold">priors</strong> embedded in for vision, audio, and motor skill tasks. Some especially impressive examples of pre-trained beings are <strong class="bold">precocial</strong> animals, such as ducks, whose ducklings take to water within 2 hours of hatching.</li>
+				<li>When we learn new tasks, we learn at two time scales: in a <strong class="bold">fast loop</strong>, we learn about the specific task we are dealing with and, as we will see more examples, in a <strong class="bold">slow loop</strong>, we learn <strong class="bold">abstractions</strong> that help us generalize our knowledge to new examples very fast. Let's say you learn about a particular cat breed, such as the American Curl, and all the examples you have seen are in white and yellow tones. When you see a black cat of this breed, it won't be difficult for you to recognize it. That is because the abstraction you developed will help you recognize this breed from its peculiar ears that curl back toward the back of the skull, not from its color. </li>
+			</ul>
+			<p>One of the big challenges in machine learning is to enable learning from small data similar to previously. To mimic <em class="italic">step 1</em>, we fine-tune trained models for new tasks. For example, a language model that is trained on generic corpora (Wikipedia pages, news articles, and so on) can be fine-tuned on a specialized corpus (maritime law) where the amount of data available is limited. <em class="italic">Step 2</em> is what meta-learning is about. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Empirically, fine-tuning trained models for new tasks doesn't work in RL as well as in image or language tasks. It turns out that the neural network representations of RL policies are not as hierarchical as, for example, in image recognition, where the first layers detect edges and the last layers detect complete objects.</p>
+			<p>To better understand meta-learning capabilities in animals, let's take a look at a canonical <a id="_idIndexMarker1136"/>example: the<a id="_idIndexMarker1137"/> Harlow experiment.</p>
+			<h3>The Harlow experiment</h3>
+			<p>The Harlow<a id="_idIndexMarker1138"/> experiment explored meta-learning in animals, and involved a monkey that was shown two objects at a time: </p>
+			<ul>
+				<li>One of these objects was associated with a food reward, which the monkey had to discover. </li>
+				<li>In each step (in a total of six), the objects were randomly placed in left and right positions.</li>
+				<li>The monkey had to learn which object gave it a reward independent of its position.</li>
+				<li>After the six steps were over, the objects were replaced with new ones that were unfamiliar to the monkey and with an unknown reward association.</li>
+				<li>The monkey learned a strategy to randomly pick an object in the first step, understand which object gave the reward, and choose that object in the remaining steps regardless of the position of the object.</li>
+			</ul>
+			<p>This experiment nicely expresses the meta-learning capabilities in animals as it involves the following:</p>
+			<ul>
+				<li>An unfamiliar environment/task for the agent</li>
+				<li>The agent's effective adaptation to the unfamiliar environment/task through a strategy that involves necessary exploration, developing a task-specific policy on the fly (making a choice based on the object associated with the reward but not its position), and then exploitation</li>
+			</ul>
+			<p>The goal in meta-RL is along the same lines, as we will see shortly. For now, let's continue to explore meta-RL's relation to some other concepts we have covered.</p>
+			<h2 id="_idParaDest-257"><a id="_idTextAnchor266"/>Relation to partial observability and domain randomization</h2>
+			<p>One of the<a id="_idIndexMarker1139"/> main goals in a meta-RL procedure is to <a id="_idIndexMarker1140"/>uncover the underlying environment/task at the test time. By definition, this means the environment is partially observable, and meta-RL is a specific approach to deal with it.</p>
+			<p>In the previous chapter, <a href="B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239"><em class="italic">Chapter 11</em></a>, <em class="italic">Generalization and Partial Observability</em>, we discussed that we need memory and domain randomization to deal with partial observability. So, how is meta-RL different? Well, memory is still one of the key tools leveraged in meta-RL. We also randomize the environments/tasks while training meta-RL agents, similar to domain randomization. At this point, they may seem indistinguishable to you. However, there is a key difference:</p>
+			<ul>
+				<li>In domain randomization, the goal of training the agent is to develop a robust policy for all variations of an environment over a set of parameter ranges. For example, a robot could be trained under a range of friction and torque values. At test time, based on a sequence of observations that carry information and torque, the agent takes actions using the trained policy.</li>
+				<li>In meta-RL, the goal of training the agent is to develop an adaptation procedure for new environments/tasks, which will potentially lead to different policies at the test time after an exploration period.</li>
+			</ul>
+			<p>The difference can still be subtle when it comes to memory-based meta-RL methods, and the training procedure may be identical in some cases. To better understand the difference, remember the Harlow experiment: the idea of domain randomization does not suit the experiment, since the objects shown to the agent are completely new in every episode. Therefore, the agent does not learn how to act over a range of objects in meta-RL. Instead, it learns how to discover the task and act accordingly when it is shown completely new objects.</p>
+			<p>With that, now it is finally time to discuss several meta-RL approaches.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">A pioneer in meta-learning is Professor Chelsea Finn of Stanford University, who worked with Professor Sergey Levine of UC Berkeley as her PhD advisor. Profesor Finn has an entire course on meta-learning, available at <a href="https://cs330.stanford.edu/">https://cs330.stanford.edu/</a>. In this chapter, we mostly follow the terminology and classification of meta-RL approaches used by <a id="_idIndexMarker1141"/>Professor<a id="_idIndexMarker1142"/> Finn and Professor Levine.</p>
+			<p>Next, let's start with meta-RL with recurrent policies.</p>
+			<h1 id="_idParaDest-258"><a id="_idTextAnchor267"/>Meta-RL with recurrent policies</h1>
+			<p>In this section, we <a id="_idIndexMarker1143"/>will cover one of the more intuitive <a id="_idIndexMarker1144"/>approaches in meta-RL that uses <strong class="bold">recurrent</strong> <strong class="bold">neural</strong> <strong class="bold">networks</strong> (<strong class="bold">RNNs</strong>) to keep a memory, also known as the RL­2 algorithm. Let's start with an example to understand this approach.</p>
+			<h2 id="_idParaDest-259"><a id="_idTextAnchor268"/>Grid world example</h2>
+			<p>Consider a grid <a id="_idIndexMarker1145"/>world where the agent's task is to reach a goal state, G, from a start state, S. These states are randomly placed for different tasks, so the agent has to learn exploring the world to discover where the goal state is, and is then given a big reward. When the same task is repeated, the agent is expected to quickly reach the goal state, which is to adapt to the environment, since there is a penalty incurred for each time step. This is illustrated in <em class="italic">Figure 12.1</em>:</p>
+			<div>
+				<div id="_idContainer1508" class="IMG---Figure">
+					<img src="image/B14160_12_1.jpg" alt="Figure 12.1 – Grid world example for meta-RL. (a) a task, (b) the agent's exploration of the task, (c) the agent's exploitation of what it learned&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 12.1 – Grid world example for meta-RL. (a) a task, (b) the agent's exploration of the task, (c) the agent's exploitation of what it learned</p>
+			<p>In order to excel at the task, the agent must do the following:</p>
+			<ol>
+				<li value="1">Explore the environment (at test time).</li>
+				<li>Remember and exploit what it learned earlier.</li>
+			</ol>
+			<p>Now, since we would like the agent to remember its previous experiences, we need to introduce a memory mechanism, implying using an RNN to represent the policy. There are several points we need to pay attention to:</p>
+			<ol>
+				<li value="1">Just remembering the past observations is not enough as the goal state changes from task to task. The agent also needs to remember the past actions and rewards so<a id="_idIndexMarker1146"/> that it can associate which actions in which states led to which reward to be able to uncover the task. </li>
+				<li>Just remembering the history within the current episode is not enough. Notice that once the agent reaches the goal state, the episode ends. If we don't carry the memory over to the next episode, the agent has no way of benefiting from the experience gained in the previous episode. Again, note that there is no training or updates to the weights of the policy network taking place here. This is all happening at the test time, in an unseen task.</li>
+			</ol>
+			<p>Handling the former is easy: we just need to feed actions and rewards along with the observations to the RNN. To handle the former, we make sure that we <em class="italic">do not reset the recurrent state between episodes</em> unless the task changes so that the memory is not discontinued. </p>
+			<p>Now, during training, why would the agent learn a policy that explicitly starts a new task with an exploration phase? That is because the exploration phase helps the agent discover the task and collect higher rewards later. If we reward the agent during training based on individual episodes, the agent would not learn this behavior. That is because exploration has some immediate costs, which are recouped only in future episodes and when that memory is carried across episodes for the same task. To this end, we form <strong class="bold">meta-episodes</strong>, or <strong class="bold">trials</strong>, which are <img src="image/Formula_12_012.png" alt=""/> episodes of the same task that are concatenated together. Again, the recurrent state is not reset within each episode, and the reward is calculated over the<a id="_idIndexMarker1147"/> meta-episode. This is illustrated in <em class="italic">Figure 12.2</em>:</p>
+			<div>
+				<div id="_idContainer1510" class="IMG---Figure">
+					<img src="image/B14160_12_2.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 12.2 – Procedure of agent-environment interaction (source: Duan et al., 2017)</p>
+			<p>Next, let's see how this can be implemented in RLlib.</p>
+			<h2 id="_idParaDest-260"><a id="_idTextAnchor269"/>RLlib implementation</h2>
+			<p>Concerning what <a id="_idIndexMarker1148"/>we mentioned <a id="_idIndexMarker1149"/>previously, meta-episodes can be formed by modifying the environment, so that is not quite related to RLlib. For the rest, we modify the model dictionary inside the agent config:</p>
+			<ol>
+				<li value="1">First, we <a id="_idIndexMarker1150"/>enable the <strong class="bold">long short-term memory</strong> (<strong class="bold">LSTM</strong>) model:<p class="source-code">"use_lstm": True</p></li>
+				<li>We pass actions and rewards in addition to observations to the LSTM:<p class="source-code">"lstm_use_prev_action_reward": True</p></li>
+				<li>We make sure that the LSTM input sequence is long enough to cover the multiple episodes within a meta-episode. The default sequence length is <strong class="source-inline">20</strong>:<p class="source-code">max_seq_len": 20</p></li>
+			</ol>
+			<p>That is all you need! You can train your meta-RL agents with a few lines of code change!</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">This procedure may not always converge, or when it does, it may converge to bad policies. Try training multiple times (with different seeds) and with different hyperparameter <a id="_idIndexMarker1151"/>settings, and this may help <a id="_idIndexMarker1152"/>you obtain a good policy, but this is not guaranteed.</p>
+			<p> With this, we can proceed on to gradient-based approaches.</p>
+			<h1 id="_idParaDest-261"><a id="_idTextAnchor270"/>Gradient-based meta-RL</h1>
+			<p>Gradient-based <a id="_idIndexMarker1153"/>meta-RL methods propose improving the policy by continuing the training at test time so that the policy adapts to the environment it is applied in. The key is that the policy parameters right before adaptation, <img src="image/Formula_06_036.png" alt=""/>, are set in such a way that the adaptation takes place in just a few shots. </p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">Gradient-based meta-RL is based on the idea that some initializations of policy parameters enable learning from very little data during adaptation. The meta-training procedure aims to find this initialization. </p>
+			<p>A specific approach in this branch is called <strong class="bold">model-agnostic meta-learning</strong> (<strong class="bold">MAML</strong>), which is a general meta-learning method that can also be applied to RL. MAML trains the agent for a variety of tasks to figure out a good <img src="image/Formula_12_014.png" alt=""/> value that facilitates adaptation and learning from a few shots.</p>
+			<p>Let's see how you can use RLlib for this. </p>
+			<h2 id="_idParaDest-262"><a id="_idTextAnchor271"/>RLlib implementation</h2>
+			<p>MAML is one<a id="_idIndexMarker1154"/> of the agents implemented <a id="_idIndexMarker1155"/>in RLlib and can be easily used with Ray's Tune:</p>
+			<p class="source-code">tune.run(</p>
+			<p class="source-code">    "MAML",</p>
+			<p class="source-code">    config=dict(</p>
+			<p class="source-code">        DEFAULT_CONFIG,</p>
+			<p class="source-code">        ...</p>
+			<p class="source-code">    )</p>
+			<p class="source-code">)</p>
+			<p>Using MAML requires implementing a few additional methods within the environment. These are, namely, the <strong class="source-inline">sample_tasks</strong>, <strong class="source-inline">set_task</strong>, and <strong class="source-inline">get_task</strong> methods, which help with training over various tasks. An example implementation could be in a pendulum environment, which is implemented in RLlib as follows (<a href="https://github.com/ray-project/ray/blob/releases/1.0.0/rllib/examples/env/pendulum_mass.py">https://github.com/ray-project/ray/blob/releases/1.0.0/rllib/examples/env/pendulum_mass.py</a>):</p>
+			<p class="source-code">class PendulumMassEnv(PendulumEnv, gym.utils.EzPickle, MetaEnv):</p>
+			<p class="source-code">    """PendulumMassEnv varies the weight of the pendulum</p>
+			<p class="source-code">    Tasks are defined to be weight uniformly sampled between [0.5,2]</p>
+			<p class="source-code">    """</p>
+			<p class="source-code">    def sample_tasks(self, n_tasks):</p>
+			<p class="source-code">        # Mass is a random float between 0.5 and 2</p>
+			<p class="source-code">        return np.random.uniform(low=0.5, high=2.0, size=(n_tasks, ))</p>
+			<p class="source-code">    def set_task(self, task):</p>
+			<p class="source-code">        """</p>
+			<p class="source-code">        Args:</p>
+			<p class="source-code">            task: task of the meta-learning environment</p>
+			<p class="source-code">        """</p>
+			<p class="source-code">        self.m = task</p>
+			<p class="source-code">    def get_task(self):</p>
+			<p class="source-code">        """</p>
+			<p class="source-code">        Returns:</p>
+			<p class="source-code">            task: task of the meta-learning environment</p>
+			<p class="source-code">        """</p>
+			<p class="source-code">        return self.m</p>
+			<p>While training<a id="_idIndexMarker1156"/> MAML, RLlib measures the agent's <a id="_idIndexMarker1157"/>performance before any adaptation to the environment it is in via <strong class="source-inline">episode_reward_mean</strong>. The performance after <em class="italic">N</em> gradient steps of adaptation is shown in <strong class="source-inline">episode_reward_mean_adapt_N</strong>. The number of these inner adaptation steps is a config of the agent that can be modified:</p>
+			<p class="source-code">"inner_adaptation_steps": 1</p>
+			<p>During training, you can see these metrics displayed on TensorBoard:</p>
+			<div>
+				<div id="_idContainer1513" class="IMG---Figure">
+					<img src="image/B14160_12_3.jpg" alt="Figure 12.3 – TensorBoard statistics&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 12.3 – TensorBoard statistics</p>
+			<p>That's it! Now, let's<a id="_idIndexMarker1158"/> introduce the last approach <a id="_idIndexMarker1159"/>of this chapter.</p>
+			<h1 id="_idParaDest-263"><a id="_idTextAnchor272"/>Meta-RL as partially observed RL</h1>
+			<p>Another approach in<a id="_idIndexMarker1160"/> meta-RL is to focus on the partially <a id="_idIndexMarker1161"/>observable nature of the tasks and explicitly estimate the state from the observations until that point in time:</p>
+			<div>
+				<div id="_idContainer1514" class="IMG---Figure">
+					<img src="image/Formula_12_015.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Then, form a probability distribution over possible tasks based on the likelihood of them being active in that episode, or more precisely, some vector that contains the task information:</p>
+			<div>
+				<div id="_idContainer1515" class="IMG---Figure">
+					<img src="image/Formula_12_016.jpg" alt=""/>
+				</div>
+			</div>
+			<p>Then, iteratively sample a task vector from this probability distribution and pass that to the policy, in addition to the state:</p>
+			<ol>
+				<li value="1">Sample <img src="image/Formula_12_017.png" alt=""/>.</li>
+				<li>Take actions from a policy that receives the state and task vector as input, <img src="image/Formula_12_018.png" alt=""/>.</li>
+			</ol>
+			<p>With that, we <a id="_idIndexMarker1162"/>conclude our discussion on the three main<a id="_idIndexMarker1163"/> meta-RL methods. Before we wrap up the chapter, let's discuss some of the challenges in meta-RL.</p>
+			<h1 id="_idParaDest-264"><a id="_idTextAnchor273"/>Challenges in meta-RL</h1>
+			<p>The main challenges<a id="_idIndexMarker1164"/> regarding meta-RL, following <em class="italic">Rakelly</em>, <em class="italic">2019</em>, are as follows:</p>
+			<ul>
+				<li>Meta-RL requires a meta-training step over various tasks, which are usually hand-crafted. A challenge is to create an automated procedure to generate these tasks.</li>
+				<li>The exploration phase that is supposed to be learned during meta-training is in practice not efficiently learned.</li>
+				<li>Meta-training involves sampling from an independent and identical distribution of tasks, which is not a realistic assumption. So, one goal is to make meta-RL more "online" by making it learn from a stream of tasks. </li>
+			</ul>
+			<p>Well, congratulations on coming this far! We have just covered meta-RL, a concept that could be hard to absorb. Hopefully, this introduction gives you the courage to dive into the literature on this topic and further explore it for yourself.</p>
+			<h1 id="_idParaDest-265"><a id="_idTextAnchor274"/>Summary</h1>
+			<p>In this chapter, we covered meta-RL, one of the most important research directions in RL as its promise is to train agents that can adapt to new environments very quickly. To this end, we covered three methods: recurrent policies, gradient-based, and partial observability-based. Currently, meta-RL is in its infancy and is not performing as well as the more established approaches, so we covered the challenges in this area.</p>
+			<p>In the next chapter, we will cover several advanced topics in a single chapter. So, stay tuned to further deepen your RL expertise.</p>
+			<h1 id="_idParaDest-266"><a id="_idTextAnchor275"/>References</h1>
+			<ul>
+				<li><em class="italic">Prefrontal cortex as a meta-reinforcement learning system</em>, Wang, JX., Kurth-Nelson, Z., et al: <a href="https://www.nature.com/articles/s41593-018-0147-8">https://www.nature.com/articles/s41593-018-0147-8</a></li>
+				<li><em class="italic">Meta-Reinforcement Learning</em>: <a href="https://blog.floydhub.com/meta-rl/">https://blog.floydhub.com/meta-rl/</a></li>
+				<li><em class="italic">Prefrontal cortex as a meta-reinforcement learning system</em>, blog: <a href="https://deepmind.com/blog/article/prefrontal-cortex-meta-reinforcement-learning-system">https://deepmind.com/blog/article/prefrontal-cortex-meta-reinforcement-learning-system</a></li>
+				<li><em class="italic">RL2, Fast Reinforcement Learning via Slow Reinforcement Learning</em>, Duan, Y., Schulman, J., Chen, X., Bartlett, P. L., Sutskever, I., &amp; Abbeel P.: <a href="https://arxiv.org/abs/1611.02779">https://arxiv.org/abs/1611.02779</a></li>
+				<li><em class="italic">Learning to reinforcement learn</em>, Wang, JX., Kurth-Nelson, Z., Tirumala, D., Soyer, H., Leibo, J. Z., Munos, R., Blundell, C., Kumaran, D., &amp; Botvinick, M.: <a href="https://arxiv.org/abs/1611.05763">https://arxiv.org/abs/1611.05763</a></li>
+				<li><em class="italic">Open-sourcing Psychlab</em>: <a href="https://deepmind.com/blog/article/open-sourcing-psychlab">https://deepmind.com/blog/article/open-sourcing-psychlab</a></li>
+				<li><em class="italic">Meta-Reinforcement Learning of Structured Exploration Strategies</em>: <a href="https://papers.nips.cc/paper/2018/file/4de754248c196c85ee4fbdcee89179bd-Paper.pdf">https://papers.nips.cc/paper/2018/file/4de754248c196c85ee4fbdcee89179bd-Paper.pdf</a></li>
+				<li><em class="italic">Precociality</em>: <a href="https://en.wikipedia.org/wiki/Precociality">https://en.wikipedia.org/wiki/Precociality</a></li>
+				<li><em class="italic">Meta-Learning: from Few-Shot Learning to Rapid Reinforcement Learning</em>: <a href="https://icml.cc/media/Slides/icml/2019/halla(10-09-15)-10-13-00-4340-meta-learning.pdf">https://icml.cc/media/Slides/icml/2019/halla(10-09-15)-10-13-00-4340-meta-learning.pdf</a></li>
+				<li>Workshop on Meta-Learning (MetaLearn 2020): <a href="https://meta-learn.github.io/2020/">https://meta-learn.github.io/2020/</a></li>
+			</ul>
+		</div>
+	</body></html>

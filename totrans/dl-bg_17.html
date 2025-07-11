@@ -1,0 +1,265 @@
+<html><head></head><body>
+        <section>
+
+                            <header class="header-title chapter-title">
+                    Generative Adversarial Networks
+                </header>
+            
+            <article>
+                
+<p class="mce-root">Reading about making sushi is easy; actually cooking a new kind of sushi is harder than we might think. In deep learning, the creative process is harder, but not impossible. We have seen how to build models that can classify numbers, using dense, convolutional, or recurrent networks, and today we will see how to build a model that can create numbers. This chapter introduces a learning approach known as generative adversarial networks, which belong to the family of adversarial learning and generative models. The chapter explains the concepts of generators and discriminators and why having good approximations of the distribution of the training data can lead to the success of the model in other areas such as <em>data augmentation</em>. By the end of the chapter, you will know why adversarial training is important; you will be able to code the necessary mechanisms for training a generator and a discriminator on questionable data; and you will code a <span><strong>Generative Adversarial Network</strong> (</span><strong>GAN</strong>) to generate images from a learned latent space.</p>
+<p>This chapter is organized as follows:</p>
+<ul>
+<li>Introducing adversarial learning</li>
+<li>Training a GAN</li>
+<li>Comparing GANs and VAEs</li>
+<li>Thinking about the ethical implications of generative models</li>
+</ul>
+<h1 id="uuid-ed8891bf-ab75-4072-8e17-259192b82ac4">Introducing adversarial learning</h1>
+<p>Recently, there has been interest in adversarial training using adversarial neural networks (Abadi, M., et al. (2016)). This is due to adversarial neural networks that can be trained to protect the model itself from AI-based adversaries. We could categorize adversarial learning into two major branches:</p>
+<ul>
+<li><strong>Black box</strong>: In this category, a machine learning model exists as a black box, and the adversary can only learn to attack the black box to make it fail. The adversary arbitrarily (within some bounds) creates fake input to make the black box model fail, but it has no access to the model it is attacking (Ilyas, A., et al. (2018)).</li>
+<li><strong>Insider</strong>: This type of adversarial learning is meant to be part of the training process of the model it aims to attack. The adversary has an influence on the outcome of a model that is trained <em>not</em> to be fooled by such an adversary (Goodfellow, I., et al. (2014)).</li>
+</ul>
+<p>There are pros and cons to each of these:</p>
+<table style="border-collapse: collapse;width: 100%" border="1">
+<tbody>
+<tr>
+<td>
+<p><strong>Black box pros</strong></p>
+</td>
+<td>
+<p><strong>Black box cons</strong></p>
+</td>
+<td>
+<p><strong>Insider pros</strong></p>
+</td>
+<td>
+<p><strong>Insider cons</strong></p>
+</td>
+</tr>
+<tr>
+<td>
+<p>It gives the ability to explore more generative approaches.</p>
+</td>
+<td>
+<p>Does not have a way to influence or change the black box model.</p>
+</td>
+<td>
+<p>The model that is trained adversarially can be more robust to specific black box attacks.</p>
+</td>
+<td>
+<p>The options for generating attacks are currently limited.</p>
+</td>
+</tr>
+<tr>
+<td>
+<p>It is usually fast and likely to find a way to break a model.</p>
+</td>
+<td>
+<p>The generator usually focuses only on perturbing existing data.</p>
+</td>
+<td>
+<p>The generator can be used to <em>augment</em> datasets.</p>
+</td>
+<td>
+<p>It is usually slower.</p>
+</td>
+</tr>
+<tr>
+<td/>
+<td>
+<p>The generator may not be usable in <em>augmenting</em> datasets.</p>
+</td>
+<td/>
+<td/>
+</tr>
+</tbody>
+</table>
+<p> </p>
+<p>Since this book is for beginners, we will focus on one of the simplest models: an insider model known as a GAN. We will look at its parts and discuss the batch training of it. </p>
+<p>GANs have historically been used to generate realistic images (<span>Goodfellow, I., </span>et al.<span> (2014)),</span> generally solving multi-agent problems (Sukhbaatar, S., <em>et al.</em> (2016)), and even cryptography (Rivas, P., et al. (2020)). </p>
+<p>Let's briefly discuss adversarial learning and GANs.</p>
+<h2 id="uuid-4dccd8af-34ae-473a-8aa7-8b085d036298">Learning using an adversary</h2>
+<p>A machine learning model can learn traditionally to do classification or regression and other tasks, among which there may be a model trying to learn to distinguish whether the input is legitimate or fake. In this scenario, an machine learning model can be created to be an adversary that produces fake inputs, as shown in <em>Figure 14.1</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/91180858-c5ad-465e-a34a-2a50c08f263e.png" style="width:29.25em;height:19.33em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.1 - Adversarial learning</div>
+<p>In this paradigm, a machine learning model needs to learn to distinguish between true inputs and fake ones. When it makes a mistake, it needs to <em>learn</em> to adjust itself to make sure it properly recognizes true input. On the other hand, the adversary will need to keep producing fake inputs with the aim of making the model fail.</p>
+<p>Here is what success looks like for each model:</p>
+<ul>
+<li>The <strong>machine learning main model</strong> is successful if it can successfully distinguish fake from real input.</li>
+<li>The <strong>Adversary model</strong> is successful if it can fool the machine learning main model into passing fake data as real.</li>
+</ul>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<p>As you can see, they are competing against each other. One's success is the failure of the other, and vice versa.</p>
+<p>During the learning process, the machine learning main model will continuously call for batches of real and fake data to learn, adjust, and repeat until we are satisfied with the performance, or some other stopping criteria have been met.</p>
+<p>In general in adversarial learning, there is no specific requirement on the adversary, other than to produce fake data. </p>
+<div class="packt_infobox"><strong>Adversarial robustness</strong> is a new term that is used to certify that certain models are robust against adversarial attacks. These certificates are usually designated for particular types of adversaries. See Cohen, J. M., <em>et al.</em> (2019) for further details.</div>
+<p>A popular type of adversarial learning takes place within a GAN, which we will discuss next.</p>
+<h2 id="uuid-b12530f6-4d9a-4cbd-8bae-af16a8c7fb9b">GANs</h2>
+<p>A GAN is one of the simplest neural-based models that implements adversarial learning, and was initially conceived in a bar in Montreal by Ian Goodfellow and collaborators (<span>Goodfellow, I., </span>et al.<span> (2014))</span>. It is based on a min-max optimization problem that can be posed as follows:</p>
+<p class="CDPAlignCenter CDPAlign"><img class="fm-editor-equation" src="assets/0b573800-6bdf-4433-8909-35c9a245825c.png" style="width:40.33em;height:2.25em;"/></p>
+<p>There are several parts to this equation that require an explanation, so here we go:</p>
+<ul>
+<li><img class="fm-editor-equation" src="assets/530da91e-fd4b-408a-9c71-b41264bb9b22.png" style="width:1.92em;height:1.00em;"/>: In a GAN, this is the discriminator, which is a neural network that takes input data <img class="fm-editor-equation" src="assets/cc202992-bba0-4e9f-8a96-2438a06b6f27.png" style="width:3.33em;height:1.00em;"/> and determines whether it is fake or real, as shown in <em>Figure 14.2</em>.</li>
+<li><img class="fm-editor-equation" src="assets/b29516df-1c42-4df7-b399-1cb96d67038b.png" style="width:1.83em;height:1.00em;"/>: In a GAN, this is the generator, which is also a neural network, but its input is random noise, <img class="fm-editor-equation" src="assets/7e4747cc-6204-46b0-a126-eeaab1448a2b.png" style="width:3.17em;height:1.17em;"/>, with the probability <img class="fm-editor-equation" src="assets/3db1149e-bb25-4f0c-8c17-d75a8d6624f7.png" style="width:1.67em;height:1.08em;"/>:</li>
+</ul>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/09cb1a8f-dc00-4c81-86ca-0e958b50a8ec.png" style="width:21.75em;height:15.33em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.2 - GAN main paradigm</div>
+<p>Ideally, we want to maximize the correct predictions of the discriminator <img class="fm-editor-equation" src="assets/612c1e2c-f7da-4500-9b2c-56397fee42b0.png" style="width:0.75em;height:0.83em;"/>, while, at the same time, we want to minimize the error of the generator, <img class="fm-editor-equation" src="assets/90d6dec2-992d-4841-9a0b-27f5b6b5610a.png" style="width:0.75em;height:0.83em;"/>, producing a sample that does not fool the discriminator, which is expressed as <img class="fm-editor-equation" src="assets/12e9c0b3-a3e2-45a1-aac7-1bdff68ccaf0.png" style="width:6.92em;height:1.08em;"/>. The formulation of expectations and logarithms comes from the standard cross-entropy loss function.</p>
+<p>To recap, in a GAN, the generator and the discriminator are neural networks. The generator draws random noise from a random distribution, and uses that noise to generate <em>fake</em> input to fool the discriminator. </p>
+<p>With this in mind, let's proceed and code a simple GAN.</p>
+<h1 id="uuid-5be4a103-334a-442b-8558-639ac96da7ee">Training a GAN</h1>
+<p>We will begin our implementation with a simple MLP-based model, that is, our generator and discriminator will be dense, fully connected, networks. Then, we will move on to implementing a convolutional GAN. </p>
+<h2 id="uuid-f26c3f7f-f1d0-4727-8634-443049a14340">An MLP model</h2>
+<p>We will now focus in creating the model shown in <em>Figure 14.3</em>. The model has a generator and discriminator that are distinct in terms of their numbers of layers and total parameters. It is usually the case that the generator takes more resources to build than the discriminator. This is intuitive if you think about it: the creative process is usually more complex than the process of recognition. In life, it might be easy to recognize a painting from Pablo Picasso if you see all of his paintings repeatedly.</p>
+<p>However, it might be much harder, in comparison, to actually paint like Picasso:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/5abff9d3-4f0b-4129-a969-40b777d0c526.png" style="width:45.58em;height:27.17em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.3 - MLP-based GAN architecture</div>
+<p>This figure depicts an icon that simply represents the fact that the discriminator will be taking both fake and valid data and learning from both worlds. One thing that you must always remember about GANs is that they <strong>generate </strong>data from <strong>random noise</strong>. Just think about that for a minute and you will realize that this is very cool. </p>
+<p>So, the architecture in <em>Figure 14.3</em> does not have any new items we have not discovered before. However, the design itself is what is original. Also, the way to create it in Keras is quite the task. So, we will show the whole code, with as many comments as possible to make things clear. </p>
+<p>Here is the full code:</p>
+<pre>from tensorflow.keras.models import Model<br/>from tensorflow.keras.layers import Dense, Activation, Input, Flatten<br/>from tensorflow.keras.layers import BatchNormalization, Dropout, Reshape<br/>from tensorflow.keras.optimizers import Adam<br/>from tensorflow.keras.datasets import mnist<br/>import numpy as np<br/>import matplotlib.pyplot as plt<br/><br/>img_dims = 28<br/>img_chnl = 1 <br/>ltnt_dim = 100<br/><br/>(x_train, y_train), (x_test, y_test) = mnist.load_data()<br/><br/>x_train = x_train.astype('float32') / 255.<br/>x_test = x_test.astype('float32') / 255.<br/><br/># this makes sure that each image has a third dimension<br/>x_train = np.expand_dims(x_train, axis=3)    # 28x28x1<br/>x_test = np.expand_dims(x_test, axis=3)<br/><br/>print('x_train shape:', x_train.shape)<br/>print('x_test shape:', x_test.shape)</pre>
+<p>Next, we define the generator as follows:</p>
+<pre># building the generator network<br/><strong>inpt_noise</strong> = Input(shape=(ltnt_dim,))<br/>gl1 = Dense(256, activation='relu')(inpt_noise)<br/>gl2 = BatchNormalization()(gl1)<br/>gl3 = Dense(512, activation='relu')(gl2)<br/>gl4 = BatchNormalization()(gl3)<br/>gl5 = Dense(1024, activation='relu')(gl4)<br/>gl6 = BatchNormalization()(gl5)<br/>gl7 = Dropout(0.5)(gl6)<br/>gl8= Dense(img_dims*img_dims*img_chnl, activation='sigmoid')(gl7)<br/>gl9= Reshape((img_dims,img_dims,img_chnl))(gl8)<br/><strong>generator</strong> = Model(<strong>inpt_noise</strong>, gl9)<br/><strong>gnrtr_img</strong> = generator(<strong>inpt_noise</strong>)<br/># uncomment this if you want to see the summary<br/># generator.summary()</pre>
+<p>Next, we can define the discriminator as follows:</p>
+<pre># building the discriminator network<br/><strong>inpt_img</strong> = Input(shape=(img_dims,img_dims,img_chnl))<br/>dl1 = Flatten()(<strong>inpt_img</strong>)<br/>dl2 = Dropout(0.5)(dl1)<br/>dl3 = Dense(512, activation='relu')(dl2)<br/>dl4 = Dense(256, activation='relu')(dl3)<br/>dl5 = Dense(1, activation='sigmoid')(dl4)<br/><strong>discriminator</strong> = Model(<strong>inpt_img</strong>, dl5)<br/><strong>validity</strong> = <strong>discriminator</strong>(<strong>gnrtr_img</strong>)<br/># uncomment this if you want to see the summary<br/># discriminator.summary()</pre>
+<p>The next step is to put things together as follows:</p>
+<pre># you can use either optimizer:<br/># optimizer = RMSprop(0.0005)<br/><strong>optimizer</strong> = Adam(0.0002, 0.5)<br/><br/># compiling the discriminator<br/><strong>discriminator</strong>.compile(loss='binary_crossentropy', optimizer=<strong>optimizer</strong>, <br/>                      metrics=['accuracy'])<br/><br/># this will freeze the discriminator in gen_dis below<br/><strong>discriminator</strong>.trainable = False<br/><br/><strong>gen_dis</strong> = Model(<strong>inpt_noise</strong>, <strong>validity</strong>)    # full model<br/><strong>gen_dis</strong>.compile(loss='binary_crossentropy', optimizer=<strong>optimizer</strong>)</pre>
+<p>Next, we will make the training happen inside a loop that will run for as many epochs as we want:</p>
+<pre>epochs = 12001     # this is up to you!<br/>batch_size=128    # small batches recommended<br/>sample_interval=200    # for generating samples<br/><br/># target vectors<br/>valid = np.ones((batch_size, 1))<br/>fake = np.zeros((batch_size, 1))<br/><br/># we will need these for plots and generated images<br/>samp_imgs = {}<br/>dloss = []<br/>gloss = []<br/>dacc = []<br/><br/># this loop will train in batches manually for every epoch<br/>for epoch in range(epochs):<br/>  # training the discriminator first &gt;&gt;<br/>  # batch of valid images<br/>  idx = np.random.randint(0, x_train.shape[0], batch_size)<br/>  imgs = x_train[idx]<br/>  <br/>  # noise batch to generate fake images<br/>  noise = np.random.uniform(0, 1, (batch_size, ltnt_dim))<br/>  gen_imgs = <strong>generator</strong>.predict(noise)<br/><br/>  # gradient descent on the batch<br/>  d_loss_real = <strong>discriminator</strong>.train_on_batch(imgs, valid)<br/>  d_loss_fake = <strong>discriminator</strong>.train_on_batch(gen_imgs, fake)<br/>  d_loss = 0.5 * np.add(d_loss_real, d_loss_fake)<br/><br/>  # next we train the generator with the discriminator frozen &gt;&gt;<br/>  # noise batch to generate fake images<br/>  noise = np.random.uniform(0, 1, (batch_size, ltnt_dim))<br/><br/>  # gradient descent on the batch<br/>  g_loss = <strong>gen_dis</strong>.train_on_batch(noise, valid)<br/>  <br/>  # save performance<br/>  dloss.append(d_loss[0])<br/>  dacc.append(d_loss[1])<br/>  gloss.append(g_loss)<br/><br/>  # print performance every sampling interval<br/>  if epoch % sample_interval == 0:<br/>    print ("%d [D loss: %f, acc.: %.2f%%] [G loss: %f]" % <br/>           (epoch, d_loss[0], 100*d_loss[1], g_loss))<br/><br/>    # use noise to generate some images<br/>    noise = np.random.uniform(0, 1, (2, ltnt_dim))<br/>    gen_imgs = <strong>generator</strong>.predict(noise)<br/>    samp_imgs[epoch] = gen_imgs    </pre>
+<p>This produces output similar to the following:</p>
+<pre>0 [D loss: 0.922930, acc.: 21.48%] [G loss: 0.715504]<br/>400 [D loss: 0.143821, acc.: 96.88%] [G loss: 4.265501]<br/>800 [D loss: 0.247173, acc.: 91.80%] [G loss: 4.752715]<br/>.<br/>.<br/>.<br/>11200 [D loss: 0.617693, acc.: 66.80%] [G loss: 1.071557]<br/>11600 [D loss: 0.611364, acc.: 66.02%] [G loss: 0.984210]<br/>12000 [D loss: 0.622592, acc.: 62.50%] [G loss: 1.056955]</pre>
+<p>This might look different in your system because this is all based on <strong>random</strong> noise. This randomness aspect will most likely take your model in a different direction. However, what you will see is that your generator's loss should decrease gradually, and if the generator is working properly, the accuracy should be getting closer to random change, that is, close to 50%. If your discriminator is always 100%, then your generator is not good enough, and if your discriminator is around 50% accuracy, then your generator might be too good or your discriminator too weak. </p>
+<p>Now, let's plot a couple of things; the learning curves (losses and accuracy), and the samples generated across epochs.</p>
+<p>The following code will plot the learning curves:</p>
+<pre>import matplotlib.pyplot as plt<br/><br/>fig, ax1 = plt.subplots(figsize=(10,6))<br/>ax1.set_xlabel('Epoch')<br/>ax1.set_ylabel('Loss')<br/>ax1.plot(range(epochs), gloss, '-.', color='#dc267f', alpha=0.75, <br/>         label='Generator')<br/>ax1.plot(range(epochs), dloss, '-.', color='#fe6100', alpha=0.75, <br/>         label='Discriminator')<br/>ax1.legend(loc=1)<br/>ax2 = ax1.twinx()<br/>ax2.set_ylabel('Discriminator Accuracy') <br/>ax2.plot(range(epochs), dacc, color='#785ef0', alpha=0.75, <br/>         label='Accuracy')<br/>ax2.legend(loc=4)<br/>fig.tight_layout() <br/>plt.show()</pre>
+<p>This generates the plot shown in the following diagram: </p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/54e97377-4afd-4ae0-bec1-940d89686a15.png" style="width:40.50em;height:24.17em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.4 - Loss of generator and discriminator across epochs. Accuracy across epochs for an MLP-based GAN</div>
+<p>As the plot indicates, the loss of the discriminator is initially low, as also indicated by the accuracy. However, as epochs advance, the generator gets better (loss decreases) and accuracy slowly decreases.</p>
+<p><em>Figure 14.5</em> shows a couple of images at every sampled epoch that were produced from random noise:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/0692c795-14c9-40d4-a63e-9c561043e645.png" style="width:42.50em;height:31.67em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.5 - GAN-generated images across epochs</div>
+<p>As you can see, the initial images look noisy, while the later images have more detail and familiar shapes. This would confirm the decrease in the discriminator accuracy since these images can easily pass as real. <em>Figure 14.5</em> was produced using the following code:</p>
+<pre>import matplotlib.pyplot as plt<br/><br/>fig, axs = plt.subplots(6, 10, figsize=(10,7.5))<br/>cnt = sample_interval<br/>for i in range(6):<br/>  for j in [0, 2, 4, 6, 8]:<br/>    img = samp_imgs[cnt]<br/>    axs[i,j].imshow(img[0,:,:,0], cmap='gray')<br/>    axs[i,j].axis('off')<br/>    axs[i,j].set_title(cnt)<br/>    axs[i,j+1].imshow(img[1,:,:,0], cmap='gray')<br/>    axs[i,j+1].axis('off')<br/>    axs[i,j+1].set_title(cnt)<br/>    cnt += sample_interval<br/>plt.show()</pre>
+<p>Let's consider a few takeaways from this model:</p>
+<ul>
+<li>The model, as it has been presented, has room for improvements if we make the model larger where needed.</li>
+<li>If what we need is a good generator, we can extend the generator, or change it into a convolutional one (next section).</li>
+<li>If we want, we could save the <kbd>discriminator</kbd> and retrain it (fine-tune it) for the classification of digits. </li>
+<li>If we want, we could use the <kbd>generator</kbd> to augment the dataset with as many images as we want.</li>
+</ul>
+<p>In spite of the <em>decent</em> quality of the MLP-based GAN, we can appreciate that the shapes might not be as well defined as original samples. However, convolutional GANs can help. </p>
+<p>Let's proceed and change the MLP-based model into a convolutional one.</p>
+<h2 id="uuid-962fb9d7-8e60-4a9a-a968-23c24a33e84a">A convolutional model</h2>
+<p>The convolutional approach to a GAN was made popular by Radford, A., <em>et al.</em> (2015). The proposed model was called <strong>Deep Convolutional GAN</strong> (<span><strong>DCGAN</strong>)</span>. The primary goal is to make a series of convolutional layers learn feature representations to produce <em>fake</em> images or to <em>distinguish</em> between valid or fake images.</p>
+<p>Moving forward, we will be <strong>intentionally</strong> using a different name for the discriminator network, which we will call <strong>critic</strong>. Both terms are used in the literature. However, there is a new trend to use the term <em>critic</em> and the old term may go away at some point. Regardless, you should know that both terms refer to the same thing: a network that is tasked with determining whether input is valid (from the original dataset) or fake (from an adversarial generator).</p>
+<p>We will be implementing the model depicted in the following diagram: </p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/0ef4b620-6eac-4a91-9886-7b8fa5c1bb55.png" style="width:41.83em;height:29.42em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.6 - CNN-based GAN architecture</div>
+<p>This model has something new never before <span>seen </span>in this book: <kbd>Conv2DTranspose</kbd>. This type of layer is exactly like the traditional convolutional layer, <kbd>Conv2D</kbd>, except that it works in the exact opposite direction. While a <kbd>Conv2D</kbd> layer learns filters (feature maps) that split the input into filtered information, a <kbd>Conv2DTranspose</kbd> layer takes filtered information and joins it together.</p>
+<div class="packt_infobox">Some people refer to <kbd>Conv2DTranspose</kbd> as <em>deconvolution</em>. However, I personally think it is incorrect to do so since <em>deconvolution</em> is a mathematical operation significantly different from what <kbd>Conv2DTranspose</kbd> does. Either way, you need to remember that if you read <em>deconvolution</em> in the context of CNNs, it means <kbd>Conv2DTranspose</kbd>.</div>
+<p>The remainder of the elements in the model are things that we have already discussed previously. The full code, which omits comments, is the following:</p>
+<pre>from tensorflow.keras.models import Model<br/>from tensorflow.keras.layers import Dense, Activation, Input, Conv2DTranspose, Flatten<br/>from tensorflow.keras.layers import BatchNormalization, Dropout, Reshape, Conv2D<br/>from tensorflow.keras.optimizers import Adam<br/>from tensorflow.keras.datasets import mnist<br/>import numpy as np<br/>import matplotlib.pyplot as plt<br/><br/>img_dims = 28<br/>img_chnl = 1 <br/>ltnt_dim = 100<br/><br/>(x_train, y_train), (x_test, y_test) = mnist.load_data()<br/><br/>x_train = x_train.astype('float32') / 255.<br/>x_test = x_test.astype('float32') / 255.<br/><br/>x_train = np.expand_dims(x_train, axis=3)<br/>x_test = np.expand_dims(x_test, axis=3)</pre>
+<p>Next we define the generator as follows:</p>
+<pre># building the generator convolutional network<br/>inpt_noise = Input(shape=(ltnt_dim,))<br/>gl1 = Dense(7*7*256, activation='relu')(inpt_noise)<br/>gl2 = BatchNormalization()(gl1)<br/>gl3 = <strong>Reshape</strong>((7, 7, 256))(gl2)<br/>gl4 = <strong>Conv2DTranspose</strong>(128, (5, 5), strides=(1, 1), padding='same', <br/>                      activation='relu')(gl3)<br/>gl5 = BatchNormalization()(gl4)<br/>gl6 = <strong>Conv2DTranspose</strong>(64, (5, 5), strides=(2, 2), padding='same', <br/>                      activation='relu')(gl5)<br/>gl7 = BatchNormalization()(gl6)<br/>gl8 = <strong>Conv2DTranspose</strong>(1, (5, 5), strides=(2, 2), padding='same', <br/>                      activation='sigmoid')(gl7)<br/><strong>generator</strong> = Model(inpt_noise, gl8)<br/>gnrtr_img = generator(inpt_noise)<br/>generator.summary()  # print to verify dimensions</pre>
+<p>Then we define the critic networks as follows:</p>
+<pre># building the critic convolutional network<br/>inpt_img = Input(shape=(img_dims,img_dims,img_chnl))<br/>dl1 = Conv2D(64, (5, 5), strides=(2, 2), padding='same', <br/>             activation='relu')(inpt_img)<br/>dl2 = Dropout(0.3)(dl1)<br/>dl3 = Conv2D(128, (5, 5), strides=(2, 2), padding='same', <br/>             activation='relu')(dl2)<br/>dl4 = Dropout(0.3)(dl3)<br/>dl5 = Flatten()(dl4)<br/>dl6 = Dense(1, activation='sigmoid')(dl5)<br/><strong>critic</strong> = Model(inpt_img, dl6)<br/>validity = <strong>critic</strong>(gnrtr_img)<br/><strong>critic</strong>.summary()   # again, print for verification</pre>
+<p>Next we put things together and set the parameters of the model as follows:</p>
+<pre>optimizer = Adam(0.0002, 0.5)<br/><br/><strong>critic</strong>.compile(loss='binary_crossentropy', optimizer=optimizer, <br/>               <strong>metrics=['accuracy'])</strong><br/><br/><strong>critic.trainable</strong> = False<br/><br/><strong>gen_crt</strong> = Model(inpt_noise, validity)<br/><strong>gen_crt</strong>.compile(loss='binary_crossentropy', optimizer=optimizer)<br/><br/>epochs = 12001<br/>batch_size=64<br/>sample_interval=400</pre>
+<p>Then we train using the following cycle:</p>
+<pre>valid = np.ones((batch_size, 1))<br/>fake = np.zeros((batch_size, 1))<br/><br/>samp_imgs = {}<br/>closs = []<br/>gloss = []<br/>cacc = []<br/>for epoch in range(epochs):<br/>  idx = np.random.randint(0, x_train.shape[0], batch_size)<br/>  imgs = x_train[idx]<br/><br/>  noise = np.random.uniform(0, 1, (batch_size, ltnt_dim))<br/>  gen_imgs = generator.predict(noise)<br/>  c_loss_real = <strong>critic</strong>.train_on_batch(imgs, valid)<br/>  c_loss_fake = <strong>critic</strong>.train_on_batch(gen_imgs, fake)<br/>  c_loss = 0.5 * np.add(c_loss_real, c_loss_fake)<br/><br/>  noise = np.random.uniform(0, 1, (batch_size, ltnt_dim))<br/>  g_loss = <strong>gen_crt</strong>.train_on_batch(noise, valid)<br/>  <br/>  closs.append(c_loss[0])<br/>  cacc.append(c_loss[1])<br/>  gloss.append(g_loss)<br/><br/>  if epoch % sample_interval == 0:<br/>    print ("%d [C loss: %f, acc.: %.2f%%] [G loss: %f]" % <br/>           (epoch, d_loss[0], 100*d_loss[1], g_loss))<br/>  <br/>    noise = np.random.uniform(0, 1, (2, ltnt_dim))<br/>    gen_imgs = generator.predict(noise)<br/>    samp_imgs[epoch] = gen_imgs    </pre>
+<p>About 70% of the preceding code is the same as before. However, the convolutional network design was new. The code would print summaries for both the generator and critic. Here is the summary for the generator:</p>
+<pre>Model: "Generator"<br/>_________________________________________________________________<br/>Layer (type)                   Output Shape       Param # <br/>=================================================================<br/>input_1 (InputLayer)           [(None, 100)]      0 <br/>_________________________________________________________________<br/>dense_1 (Dense)                (None, 12544)      1266944 <br/>_________________________________________________________________<br/>batch_normalization_1 (Batch   (None, 12544)      50176 <br/>_________________________________________________________________<br/>reshape (Reshape)              (None, 7, 7, 256)  0 <br/>_________________________________________________________________<br/>conv2d_transpose_1 (Conv2DTran (None, 7, 7, 128)  819328 <br/>_________________________________________________________________<br/>batch_normalization_2 (Batch   (None, 7, 7, 128)  512 <br/>_________________________________________________________________<br/>conv2d_transpose_2 (Conv2DTr   (None, 14, 14, 64) 204864 <br/>_________________________________________________________________<br/>batch_normalization_3 (Batch   (None, 14, 14, 64) 256 <br/>_________________________________________________________________<br/>conv2d_transpose_3 (Conv2DTr   (None, 28, 28, 1)  1601 <br/>=================================================================<br/>Total params: 2,343,681<br/>Trainable params: 2,318,209<br/>Non-trainable params: 25,472</pre>
+<p>Here is the summary for the critic:</p>
+<pre>_________________________________________________________________<br/>Model: "Critic"<br/>_________________________________________________________________<br/>Layer (type)         Output Shape         Param # <br/>=================================================================<br/>input_2 (InputLayer) [(None, 28, 28, 1)]  0 <br/>_________________________________________________________________<br/>conv2d_1 (Conv2D)    (None, 14, 14, 64)   1664 <br/>_________________________________________________________________<br/>dropout_1 (Dropout)  (None, 14, 14, 64)   0 <br/>_________________________________________________________________<br/>conv2d_2 (Conv2D)    (None, 7, 7, 128)    204928 <br/>_________________________________________________________________<br/>dropout_2 (Dropout)  (None, 7, 7, 128)    0 <br/>_________________________________________________________________<br/>flatten (Flatten)    (None, 6272)         0 <br/>_________________________________________________________________<br/>dense_2 (Dense)      (None, 1)             6273 <br/>=================================================================<br/>Total params: 212,865<br/>Trainable params: 212,865<br/>Non-trainable params: 0</pre>
+<p><span>A sample output for the </span>training steps would look like the following<span>:</span></p>
+<pre>0 [C loss: 0.719159, acc.: 22.66%] [G loss: 0.680779]<br/>400 [C loss: 0.000324, acc.: 100.00%] [G loss: 0.000151]<br/>800 [C loss: 0.731860, acc.: 59.38%] [G loss: 0.572153]<br/>.<br/>.<br/>.<br/>11200 [C loss: 0.613043, acc.: 66.41%] [G loss: 0.946724]<br/>11600 [C loss: 0.613043, acc.: 66.41%] [G loss: 0.869602]<br/>12000 [C loss: 0.613043, acc.: 66.41%] [G loss: 0.854222]</pre>
+<p>From the training output, we can see that the convolutional network is able to reduce the loss of the generator faster than its MLP counterpart. It appears that for the remainder of the epochs, the critic learns slowly to be more robust against the generator of fake input. This can be more clearly observed by plotting the results using the following code:</p>
+<pre>import matplotlib.pyplot as plt<br/><br/>fig, ax1 = plt.subplots(figsize=(10,6))<br/><br/>ax1.set_xlabel('Epoch')<br/>ax1.set_ylabel('Loss')<br/>ax1.plot(range(epochs), gloss, '-.', color='#dc267f', alpha=0.75, <br/>         label='Generator')<br/>ax1.plot(range(epochs), closs, '-.', color='#fe6100', alpha=0.75, <br/>         label='Critic')<br/>ax1.legend(loc=1)<br/>ax2 = ax1.twinx() <br/><br/>ax2.set_ylabel('Critic Accuracy') <br/>ax2.plot(range(epochs), cacc, color='#785ef0', alpha=0.75, <br/>         label='Accuracy')<br/>ax2.legend(loc=4)<br/><br/>fig.tight_layout() <br/>plt.show()</pre>
+<p>The code produces the plot shown in <em>Figure 14.7</em>. From the diagram, we can appreciate the claims made on faster convergence to small losses and slow recovery of the critic's accuracy:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/0c37a8ce-3502-4c4a-8f69-986f32a2abaf.png" style="width:44.58em;height:26.58em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.7 - Learning curves for CNN-based GANs</div>
+<p>We can also display the samples generated as the convolutional GAN was being trained. The results are shown in <em>Figure 14.8</em>. These results are consistent with a poor-quality generator trained under 2,000 epochs. After 5,000 epochs, the generator is able to produce well-defined numerals that can easily pass as valid:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/4b8424b6-2de1-4879-a650-d6d4318e39dd.png" style="width:32.58em;height:24.25em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.8 - Samples generated during training</div>
+<p>For reference, we can compare <em>Figure 14.5</em> and <em>Figure 14.8</em> for the MLP-based and convolutional-based approach, respectively. Such a comparison can offer insights on the fundamental differences between a general-purpose GAN (MLP-based) or a GAN specialized in spatial relationships (CNN-based). </p>
+<p>Now, we would like to discuss briefly the generative abilities that <strong>Variational Autoencoders</strong> (<strong>VAEs</strong>) and GANs bring to the table.</p>
+<h1 id="uuid-ed023dee-efb0-412c-8d8a-95c04eefc46f">Comparing GANs and VAEs</h1>
+<p>In <a href="c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml">Chapter 9</a>, <em>Variational Autoencoders</em>, we discussed VAEs as a mechanism for dimensionality reduction that aims to learn the parameters of the distribution of the input space, and effect reconstruction based on random draws from the latent space using the learned parameters. This offered a number of advantages we already discussed in <a href="c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml">Chapter 9</a><span>, </span><em>Variational Autoencoders</em>, such as the following:</p>
+<ul>
+<li>The ability to reduce the effect of noisy inputs, since it learns the distribution of the input, not the input itself</li>
+<li>The ability to generate samples by simply querying the latent space</li>
+</ul>
+<p>On the other hand, GANs can also be used to generate samples, like the VAE. However, the learning of both is quite different. In GANs, we can think of the model as having two major parts: a critic and a generator. In VAEs, we also have two networks: an encoder and a decoder. </p>
+<p>If we were to make any connection between the two, it would be that the decoder and generator play a very similar role in VAEs and GANs, respectively. However, an encoder and a critic have very different goals. An encoder will learn to find a rich latent representation, usually with very few dimensions compared to the input space. Meanwhile, a critic does not aim to find any representations, but to solve a growing complex binary classification problem.</p>
+<p>We could make a case that the critic is certainly learning features from the input space; however, the claim that features in the deepest layers are similar in both the critic and encoder requires more evidence. </p>
+<p>One thing we can do to make a comparison is to take the deep VAE model shown in <a href="c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml">Chapter 9</a>,<span> </span><em>Variational Autoencoders</em><span>,</span> <em>Figure 14.7</em>, train it, and draw some random samples from the generator in the VAE, and do the same for the convolutional GAN.</p>
+<p>We can start by displaying the samples from the convolutional GAN and executing the following code immediately after the last piece of code in the previous section, which contains the trained GAN. Here is the code:</p>
+<pre>import matplotlib.pyplot as plt<br/>import numpy as np<br/><br/>plt.figure(figsize=(10,10))<br/>samples = np.random.<strong>uniform</strong>(<strong>0.0, 1.0</strong>, size=(400,ltnt_dim))<br/>imgs = <strong>generator</strong>.predict(samples)<br/>for cnt in range(20*20):<br/>  plt.subplot(20,20,cnt+1)<br/>  img = imgs[cnt]<br/>  plt.imshow(img[:,:,0], cmap='gray')<br/>  plt.xticks([])<br/>  plt.yticks([])<br/>plt.show()</pre>
+<p>This code will produce 400 numerals from random noise! The plot is shown in <em>Figure 14.9</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/b787b620-e438-4ddd-b25c-8715396e7cee.png" style="width:34.17em;height:33.33em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.9 - 400 numerals produced by a convolutional GAN</div>
+<p>Recall that these numerals were produced after 12,000 epochs. The quality seems relatively good. Most of these numerals could actually fool a human being into thinking they were really written by a human.</p>
+<p>Now, we want to take a look at the quality of the numerals generated with a VAE. For this, you will need to go to <a href="c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml">Chapter 9</a>, <em>Variational Autoencoders</em>, and use the code provided to implement the deep VAE and train it for, say, 5,000 epochs. After training it, you can use the decoder to generate samples from random noise by choosing random parameters. </p>
+<p>Here is the code you should use <em>once</em> the training of the VAE is complete:</p>
+<pre>import matplotlib.pyplot as plt<br/>import numpy as np<br/><br/>plt.figure(figsize=(10,10))<br/>samples = np.random.<strong>normal(0.0, 1.0</strong>, size=(400,ltnt_dim))<br/>imgs = <strong>decoder</strong>.predict(samples)<br/>for cnt in range(20*20):<br/>  plt.subplot(20,20,cnt+1)<br/>  img = imgs[cnt]<strong>.reshape((28,28))</strong><br/>  plt.imshow(img, cmap='gray')<br/>  plt.xticks([])<br/>  plt.yticks([])<br/>plt.show()</pre>
+<p>A couple of visible differences is that the VAE assumes that the parameters of the latent space follow a normal distribution; also, the output needs to be reshaped to 28x28, as opposed to the GAN, which gives the output already in its correct shape thanks to the 2D convolutional output layer. The output of this code is shown in <em>Figure 14.10</em>:</p>
+<div class="CDPAlignCenter CDPAlign packt_figref"><img src="assets/84984cdc-549e-4db3-ad8c-921d787020f6.png" style="width:29.08em;height:28.42em;"/></div>
+<div class="CDPAlignCenter CDPAlign packt_figref">Figure 14.10 - 400 samples of numerals generated by the decoder of a VAE using random noise</div>
+<p>As you can see from the diagram, some of these numerals look very good; some might say too good. They look smooth, well-rounded, and perhaps we can say noise-free. The numerals produced by the VAE lack the distinctive quality of looking noisy compared to the ones produced by the GAN. However, this can be a good thing or a bad thing depending on what you want to do.</p>
+<p>Say that you want to have clean-looking samples that might be easily identified as <em>fake,</em> then a VAE is the best choice. Now, say that we want samples that can easily fool a human into thinking they are not produced by a machine; here, perhaps a GAN fits better.</p>
+<p>Regardless of these differences, both can be used to augment your datasets if you need to have more data.</p>
+<h1 id="uuid-1fd37186-786c-4a67-944e-eb9012029f7b">Thinking about the ethical implications of GANs</h1>
+<p>Some ethical thoughts about generative models have already been provided in <a href="c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml">Chapter 9</a>, <em>Variational Autoencoders</em>. However, a second round of thoughts is in order given the adversarial nature of GANs. That is, there is an implicit demand from a GAN to <em>trick </em>a critic in a min-max game where the generator needs to come out victorious (or the critic as well). This concept generalized to adversarial learning provides the means to <em>attack</em> existing machine learning models. </p>
+<p>Very successful computer vision models such as VGG16 (a CNN model) have been attacked by models that perform adversarial attacks. There are <em>patches</em> that you can print, put on a t-shirt, cap, or any object, and as soon as the patch is present in the input to the models being attacked, they are fooled into thinking that the existing object is a completely different one (Brown, T. B., et al. (2017)). Here is an example of an adversarial patch that tricks a model into thinking that a banana is a toaster: <a href="https://youtu.be/i1sp4X57TL4">https://youtu.be/i1sp4X57TL4</a>.</p>
+<p>Now that these types of adversarial attacks are known to exist, researchers have found vulnerabilities in their current systems. Therefore, it has become almost an obligation for us, the deep learning practitioners, to make sure our models are robust against adversarial attacks. This is particularly important for systems that involve sensitive information, or systems that make decisions that affect human life.</p>
+<p>For example, a deep learning model that is deployed in an airport to assist security efforts needs to be tested so as to avoid a person wearing a t-shirt with a printed adversarial patch aiming to avoid being recognized as a person in a restricted area. This is critical for the security of the population. However, a deep learning system to automatically tune the audio of a person singing might not be particularly critical.</p>
+<p>What is required from you is to look into testing your models for adversarial attacks. There are several resources online being updated frequently that you can easily find if you search for them. If you come to find a vulnerability in a deep learning model, you should report it to the creators immediately, for the well-being of our society. </p>
+<h1 id="uuid-050ccf51-424a-4113-979f-6f2b46175e2b">Summary</h1>
+<p>This advanced chapter showed you how to create GAN networks. You learned the major components of <span>GANs</span>, a generator and a critic, and their role in the learning process. You learned about adversarial learning in the context of breaking models and making them robust against attacks. You coded an MLP-based and a convolutional-based GAN on the same dataset and observed the differences. At this point, you should feel confident explaining why adversarial training is important. You should be able to code the necessary mechanisms to train a generator and a discriminator of a GAN. You should feel confident about coding a GAN and comparing it to a VAE to generate images from a learned latent space. You should be able to design generative models, considering the societal implications and the responsibilities that come with using generative models.</p>
+<p>GANs are very interesting and have yielded amazing research and applications. They have also exposed the vulnerabilities of other systems. The present state of deep learning involves combinations of AEs, GANs, CNNs, and RNNs, using specific components of each, and gradually increasing the potential of applications of deep learning across different fields. The world of deep learning is exciting right now, and you are now ready to embrace it and dive deeper into whatever area you feel you like. <a href="216a275e-ae7e-451c-a8c6-f31eac314d3f.xhtml">Chapter 15</a>, <em>Final Remarks on the Future of Deep Learning</em>, will present brief comments on how we see the future of deep learning. It attempts to use some kind of <em>prophetic</em> voice about the things to come. But before you go, quiz yourself with the following questions.</p>
+<h1 id="uuid-4256c19b-1705-4d2c-9f96-22409949da3b">Questions and answers</h1>
+<ol>
+<li><strong>Who is the adversary in a GAN?</strong></li>
+</ol>
+<p style="padding-left: 60px">The generator. It acts as a model whose sole purpose is to make the critic fail; it is the critic's adversary.</p>
+<ol start="2">
+<li><strong>Why is the generator model bigger than the critic? </strong></li>
+</ol>
+<p style="padding-left: 60px">This is not always the case. The models discussed here were more interesting as generators of data. However, we could use the critic and retrain it for classification, in which case, the critic model might be bigger.</p>
+<p class="mce-root"/>
+<p class="mce-root"/>
+<ol start="3">
+<li><strong>What is adversarial robustness?</strong></li>
+</ol>
+<p style="padding-left: 60px">It is a new field in deep learning tasked with researching ways to certify that deep learning models are robust against adversarial attacks.</p>
+<ol start="4">
+<li><strong>Which is better – a GAN or a VAE?</strong></li>
+</ol>
+<p style="padding-left: 60px">This depends on the application. GANs tend to produce more "interesting" results than VAEs, but VAEs are more stable. Also, it is often faster to train a GAN than a VAE.</p>
+<ol start="5">
+<li><strong>Are there any risks associated with GANs?</strong></li>
+</ol>
+<p style="padding-left: 60px">Yes. There is a known problem called <em>mode collapse</em>, which refers to the inability of a GAN to produce novel, different, results across epochs. It seems like the network gets stuck on a few samples that can cause sufficient confusion in the critic so as to produce a low loss, while having no diversity of generated data. This is still an open problem with no universal solution. A lack of diversity in a GAN's generator is an indication that it has collapsed. To find out more about mode collapse, read Srivastava, A., et al. (2017).</p>
+<h1 id="uuid-3877bf6b-fd91-47c2-b8c1-f5900ed3eefa">References</h1>
+<ul>
+<li>Abadi, M., and Andersen, D. G. (2016). <em>Learning to protect communications with adversarial neural cryptography</em>. <em>arXiv preprint</em> arXiv:1610.06918.</li>
+<li><span>Ilyas, A., Engstrom, L., Athalye, A., and Lin, J. (2018). <em>Black box adversarial attacks with limited queries and information</em>. <em>arXiv preprint</em> arXiv:1804.08598.</span></li>
+<li><span>Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair, S., and Bengio, Y. (2014). <em>Generative adversarial nets</em>. In <em>Advances in neural information processing systems</em> (pp. 2672-2680).<br/></span></li>
+<li><span>Sukhbaatar, S., and Fergus, R. (2016). <em>Learning multi-agent communication with backpropagation</em>. In <em>Advances in neural information processing systems</em> (pp. 2244-2252).</span></li>
+<li><span>Rivas, P., and Banerjee, P. (2020). <em>Neural-Based Adversarial Encryption of Images in ECB Mode with 16-bit Blocks</em>. In <em>International Conference on Artificial Intelligence</em>.</span></li>
+<li>Cohen, J. M., Rosenfeld, E., and Kolter, J. Z. (2019). <em>Certified adversarial robustness via randomized smoothing</em>. <em>arXiv preprint</em> arXiv:1902.02918.</li>
+<li>Radford, A., Metz, L., and Chintala, S. (2015). <em>Unsupervised representation learning with deep convolutional generative adversarial networks</em>. <em>arXiv preprint</em> arXiv:1511.06434.</li>
+<li>Brown, T. B., Mané, D., Roy, A., Abadi, M., and Gilmer, J. (2017). <em>Adversarial patch</em>. <em>arXiv preprint</em> arXiv:1712.09665.</li>
+<li>Srivastava, A., Valkov, L., Russell, C., Gutmann, M. U., and Sutton, C. (2017). <em>Veegan: Reducing mode collapse in GANs using implicit variational learning</em>. In <em>Advances in Neural Information Processing Systems</em> (pp. 3308-3318).</li>
+</ul>
+
+
+            </article>
+
+            
+        </section>
+    </body></html>

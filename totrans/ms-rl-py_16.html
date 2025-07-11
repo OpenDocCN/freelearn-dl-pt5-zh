@@ -1,0 +1,406 @@
+<html><head></head><body>
+		<div id="_idContainer1603">
+			<h1 id="_idParaDest-267"><em class="italic"><a id="_idTextAnchor276"/>Chapter 13</em>: Other Advanced Topics</h1>
+			<p>In this chapter, we'll cover several advanced topics of reinforcement learning (RL). First of all, we'll go deeper into distributed RL, in addition to what we covered in the previous chapters. This area is key to dealing with excessive data needs to train agents for sophisticated tasks. Curiosity-driven RL handles hard-exploration problems that are not solvable by traditional exploration techniques. Offline RL leverages offline data to obtain good policies. All of these are hot research areas that you will hear more about in the next few years.</p>
+			<p>So, in this chapter, you will learn about the following: </p>
+			<ul>
+				<li>Distributed RL</li>
+				<li>Curiosity-driven RL</li>
+				<li>Offline RL</li>
+			</ul>
+			<p>Let's get started!</p>
+			<h1 id="_idParaDest-268"><a id="_idTextAnchor277"/>Distributed reinforcement learning</h1>
+			<p>As we've already<a id="_idIndexMarker1165"/> mentioned in earlier chapters, training sophisticated RL agents requires massive amounts of data. While one critical area of research is to increase the sample efficiency in RL; the other, complementary direction is how to best utilize the compute power and parallelization and reduce the wall-clock time and cost of training. We've already covered, implemented, and used distributed RL algorithms and libraries in the earlier chapters. So, this section will be an extension of the previous discussions due to the importance of this topic. Here, we present additional material on state-of-the-art distributed RL architectures, algorithms, and libraries. With that, let's get started with SEED RL, an architecture designed for massive and efficient parallelization.</p>
+			<h2 id="_idParaDest-269"><a id="_idTextAnchor278"/>Scalable, efficient deep reinforcement learning – SEED RL</h2>
+			<p>Let's begin<a id="_idIndexMarker1166"/> the discussion by revisiting the Ape-X architecture, which is a milestone in scalable RL. The key contribution of Ape-X is to decouple learning from acting: The actors generate experiences, at their own pace, the learner learns from the experiences at its own pace, and the actors update their local copies of the neural network policy periodically. An illustration of this flow for Ape-X DQN is given in <em class="italic">Figure 13.1</em>:</p>
+			<div>
+				<div id="_idContainer1519" class="IMG---Figure">
+					<img src="image/B14160_13_1.jpg" alt="Figure 13.1 – Ape-X DQN architecture, revisited&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor279"/></p>
+			<p class="figure-caption">Figure 13.1 – Ape-X DQN architecture, revisited<a id="_idTextAnchor280"/></p>
+			<p>Now, let's unpack this architecture from a computational and data communication point of view:</p>
+			<ol>
+				<li>Actors, potentially hundreds of them, periodically pull <img src="image/Formula_13_001.png" alt=""/> parameters, the neural network policy, from a central learner. Depending on the size of the policy network, hundreds of thousands of numbers are pushed from the learner to the remote actors. This creates a big communication load between the learner and the actors, two orders of magnitude larger than what it would take to transfer actions and observations.</li>
+				<li>Once an actor receives the policy parameters, it uses it to infer actions for each step of the environment. In most settings, only the learner uses a GPU and the actors work on CPU nodes. So, in this architecture, a lot of inference has to be done on CPUs, which is much less efficient for this purpose compared to GPU inference.</li>
+				<li>Actors <a id="_idIndexMarker1167"/>switch between environment and inference steps, which have different compute requirements. Carrying out both steps on the same node either leads to computational bottlenecks (when it is a CPU node that has to do inference) or underutilization of resources (when it is a GPU node, the GPU capacity is wasted).</li>
+			</ol>
+			<p>To overcome these inefficiencies, the SEED RL architecture makes the following key proposal: <em class="italic">Moving the action inference to the learner.</em> So, an actor sends its observation to the central learner, where the policy parameters are, and receives an action back. This way, the inference time is reduced as it is done on a GPU rather than a CPU.</p>
+			<p>Of course, the story does not end here. What we have described so far leads to a different set of challenges:</p>
+			<ul>
+				<li>Since the actor needs to send the observation in each environment step to a remote learner to receive an action, this creates a <strong class="bold">latency</strong> issue that did not exist before.</li>
+				<li>While an actor waits for an action, it remains idle, causing <em class="italic">underutilization of the compute resources on the actor node</em>.</li>
+				<li>Passing individual observations to the learner GPU increases the total <em class="italic">communication overhead with the GPU</em>.</li>
+				<li>The GPU resources need to be tuned to handle both inference and learning.</li>
+			</ul>
+			<p>To overcome these challenges, SEED RL has the following structure:</p>
+			<ul>
+				<li>A very fast communication<a id="_idIndexMarker1168"/> protocol, called <strong class="bold">gRPC</strong>, to transfer the observations and actions between the actors and the learner.</li>
+				<li>Multiple environments are placed on a single actor to maximize utilization.</li>
+				<li>Observations are batched before being passed to the GPU to reduce the overhead.</li>
+			</ul>
+			<p>There is a fourth<a id="_idIndexMarker1169"/> challenge of tuning the resource allocation, but it is a tuning problem rather than being a fundamental architecture problem. As a result, SEED RL proposes an architecture that can do the following: </p>
+			<ul>
+				<li>Process millions of observations per second.</li>
+				<li>Reduce the cost of experiments, by up to 80%.</li>
+				<li>Decrease the wall-clock time by increasing the training speed by up to three times.</li>
+			</ul>
+			<p>The SEED RL architecture is illustrated in <em class="italic">Figure 13.2</em>, taken from the SEED RL paper, which compares it to IMPALA, which suffers from similar downsides as Ape-X:</p>
+			<div>
+				<div id="_idContainer1521" class="IMG---Figure">
+					<img src="image/B14160_13_2.jpg" alt="Figure 13.2 – A comparison of IMPALA and SEED architectures (source: Espeholt et al, 2020)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor281"/></p>
+			<p class="figure-caption">Figure 13.2 – A comparison of IMPALA and SEED architectures (source: Espeholt et al, 2020)</p>
+			<p>So far, so good. For<a id="_idIndexMarker1170"/> the implementation details, we refer you to <em class="italic">Espeholt et al, 2020</em> and the code repository associated with the paper.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The authors have open-sourced SEED RL on <a href="https://github.com/google-research/seed_rl">https://github.com/google-research/seed_rl</a>. The repo has implementations of the IMPALA, SAC, and the R2D2 agents. </p>
+			<p>We will cover the R2D2 agent momentarily and then run some experiments. But before we close this section, let's also provide you with one more resource.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">If you are interested in diving deeper into the engineering aspects of the architecture, gRPC is a great tool to have under your belt. It is a fast communication protocol that is used to connect microservices in many tech companies. Check it out at https://grpc.io.</p>
+			<p>Awesome job! You<a id="_idIndexMarker1171"/> are now up to date with the state of the art in distributed RL. Next, we'll cover a state-of-the-art model that is used in distributed RL architectures, R2D2. </p>
+			<h2 id="_idParaDest-270"><a id="_idTextAnchor282"/>Recurrent experience replay in distributed reinforcement learning </h2>
+			<p>One of the most <a id="_idIndexMarker1172"/>influential contributions to the recent RL literature, which set the state of the art in the classical <a id="_idIndexMarker1173"/>benchmarks at the time, is the <strong class="bold">Recurrent Replay Distributed DQN </strong>(<strong class="bold">R2D2</strong>) agent. The main contribution of <a id="_idIndexMarker1174"/>the R2D2 work is actually related to the effective use of <strong class="bold">recurrent neural networks</strong> (<strong class="bold">RNNs</strong>) in an RL agent, which is also<a id="_idIndexMarker1175"/> implemented in a distributed setting. The paper uses <strong class="bold">long-short term memory</strong> (<strong class="bold">LSTM</strong>) as the choice of RNN, which we'll also adapt here in our discussion. So, let's start with what the challenge is with training RNNs when it comes to initializing the recurrent state, and then talk about how the R2D2 agent addresses it.</p>
+			<h3>The initial recurrent state mismatch problem in recurrent neural networks</h3>
+			<p>In the previous <a id="_idIndexMarker1176"/>chapters, we<a id="_idIndexMarker1177"/> discussed the importance of carrying a memory of observations to uncover partially observable states. For example, rather than using a single frame in an Atari game, which will not convey information such as the speeds of the objects, basing the action on a sequence of past frames, from which the speed and so on can be derived, will lead to higher rewards. An effective way of processing sequence data, as we also mentioned, is using RNNs.</p>
+			<p>The idea behind an RNN is to pass the inputs of a sequence to the same neural network one by one, but then also pass information, a memory, and a summary of the past steps, from one step to the next, which is illustrated in <em class="italic">Figure 1<a id="_idTextAnchor283"/>3.3</em>: </p>
+			<div>
+				<div id="_idContainer1522" class="IMG---Figure">
+					<img src="image/B14160_13_3.jpg" alt="Figure 13.3 – A depiction of RNNs with a) compact, and b) unrolled representations&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.3 – A depiction of RNNs with a) compact, and b) unrolled representations</p>
+			<p>A key question here is what to use for the initial recurrent state, <img src="image/Formula_13_002.png" alt=""/>. Most commonly and <a id="_idIndexMarker1178"/>conveniently, the <a id="_idIndexMarker1179"/>recurrent state is initialized as all zeros. This is not a big problem when an actor steps through the environment and this initial recurrent state corresponds to the start of an episode. However, while training from stored samples that correspond to small sections of longer trajectories, such an initialization becomes a problem. Let's see why. </p>
+			<p>Consider the scenario illustrated in <em class="italic">Figure 13.4</em>. We are trying to train the RNN on a stored sample <img src="image/Formula_13_003.png" alt=""/>, so the observation is a sequence of four frames that are passed to the policy network. So,<img src="image/Formula_13_004.png" alt=""/> is the first frame and <img src="image/Formula_13_005.png" alt=""/> is the last and the most recent frame in the sampled <img src="image/Formula_13_006.png" alt=""/> sequence (and the argument is similar for <img src="image/Formula_13_007.png" alt=""/>). As we feed the inputs, the <img src="image/Formula_13_008.png" alt=""/>'s will be obtained and passed to the subsequent steps and we use zeros for <img src="image/Formula_13_009.png" alt=""/>: </p>
+			<div>
+				<div id="_idContainer1531" class="IMG---Figure">
+					<img src="image/B14160_13_4.jpg" alt="Figure 13.4 – Using a sequence of frames to obtain an action from an RNN&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure <a id="_idTextAnchor284"/>13.4 – Using a sequence of frames to obtain an action from an RNN</p>
+			<p>Now, remember<a id="_idIndexMarker1180"/> that the<a id="_idIndexMarker1181"/> role of a recurrent state <img src="image/Formula_13_010.png" alt=""/> is to summarize what happened up to step <img src="image/Formula_13_011.png" alt=""/>. When we use a vector of zeros for <img src="image/Formula_13_012.png" alt=""/> during training, to generate value function predictions and target values for the Q function, for example, it creates several problems, which are related but slightly different from each other:</p>
+			<ul>
+				<li>It does not any convey meaningful information about what happened before that timestep.</li>
+				<li>We use that same vector (of zeros) regardless of what happened before the sampled sequence, which leads to an overloaded representation.</li>
+				<li>A vector of zeros, since it is not an output of the RNN, is not a meaningful representation of the RNN anyway.</li>
+			</ul>
+			<p>As a result, the RNN gets "confused" about what to make of the hidden states in general and reduces its reliance on memory, which defeats the very purpose of using them.</p>
+			<p>One solution to this is to record the whole trajectory and process/replay it during training to <a id="_idIndexMarker1182"/>calculate the recurrent states for each step. This is also problematic because replaying <a id="_idIndexMarker1183"/>all sample trajectories of arbitrary lengths during training is a lot of overhead.</p>
+			<p>Next, let's see how the R2D2 agent addresses this issue.</p>
+			<h3>R2D2 solution to the initial recurrent state mismatch</h3>
+			<p>The <a id="_idIndexMarker1184"/>solution of the R2D2<a id="_idIndexMarker1185"/> agent is two-fold:</p>
+			<ul>
+				<li>Store the recurrent states from the rollouts.</li>
+				<li>Use a burn-in period.</li>
+			</ul>
+			<p>Let's look into these in more detail in the following sections.</p>
+			<h4>Storing the recurrent states from rollouts</h4>
+			<p>While an agent <a id="_idIndexMarker1186"/>steps through the environment, at the beginning of the episode, it initializes the recurrent state. Then it uses the recurrent policy network to take its actions at each step, and the recurrent states corresponding to each of those observations are also generated. The R2D2 agent sends these recurrent states along with the sampled experience to the replay buffer to later use them to initialize the network at training time instead of vectors of zeros.</p>
+			<p>In general, this significantly remedies the negative impact of using zero initialization. However, it is still not a perfect solution: The recurrent states stored in the replay buffer would be stale by the time they were used in training. This is because the network is constantly updated, whereas these states would carry a representation that was generated by an older <a id="_idIndexMarker1187"/>version of the network, such as what was used at the rollout time. This is called <strong class="bold">representational drift</strong>. </p>
+			<p>To mitigate<a id="_idIndexMarker1188"/> representational drift, R2D2 proposes an additional mechanism, which is to use a burn-in period at the beginning of the sequence.</p>
+			<h4>Using a burn-in period</h4>
+			<p>Using a <a id="_idIndexMarker1189"/>burn-in period works as follows: </p>
+			<ol>
+				<li value="1">Store a sequence that is longer than what we normally would. </li>
+				<li>Use the extra portion at the beginning of the sequence to unroll the RNN with the current parameters.</li>
+				<li>With that, produce an initial state that is not stale for after the burn-in portion.</li>
+				<li>Don't use the burn-in portion during the backpropagation. </li>
+			</ol>
+			<p>This is depicted in <em class="italic">Figure 13.5</em>:</p>
+			<div>
+				<div id="_idContainer1535" class="IMG---Figure">
+					<img src="image/B14160_13_5.jpg" alt="Figure 13.5 – Representation of R2D2's use of stored recurrent states with a two-step burn-in&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figu<a id="_idTextAnchor285"/>re 13.5 – Representation of R2D2's use of stored recurrent states with a two-step burn-in</p>
+			<p>So, for the example in the figure, the idea is that rather than using <img src="image/Formula_13_013.png" alt=""/>, which is generated under some old policy <img src="image/Formula_13_014.png" alt=""/>, do the following: </p>
+			<ol>
+				<li value="1">Use <img src="image/Formula_13_015.png" alt=""/> to initialize the recurrent state at training time. </li>
+				<li>Unroll the RNN with the current parameters <img src="image/Formula_13_016.png" alt=""/> over the burn-in portion to generate an <img src="image/Formula_13_017.png" alt=""/>.</li>
+				<li>This hopefully <a id="_idIndexMarker1190"/>recovers from the stale representation of <img src="image/Formula_13_018.png" alt=""/> and leads to a more accurate initialization than <img src="image/Formula_13_019.png" alt=""/> would.</li>
+				<li>This is more accurate in the sense that it is closer to what we would have obtained if we stored and unrolled the entire trajectory from the beginning till <img src="image/Formula_13_020.png" alt=""/> using <img src="image/Formula_13_021.png" alt=""/>.</li>
+			</ol>
+			<p>So, this was the R2D2 agent. Before we wrap up this section, let's discuss what the R2D2 agent has achieved.</p>
+			<h3>Key results from the R2D2 paper</h3>
+			<p>The R2D2 work has<a id="_idIndexMarker1191"/> really interesting insights, for which I highly recommend you read the full paper. However, for the completeness of our discussion, here is a summary:</p>
+			<ul>
+				<li>R2D2 quadruples the previous state of the art on Atari benchmarks that were set by Ape-X DQN, being the first agent to achieve a superhuman level of performance on 52 out of 57 games, and with a higher sample efficiency.</li>
+				<li>It achieves this using a single set of hyperparameters across all environments, which speaks to the robustness of the agent.</li>
+				<li>Interestingly, R2D2 improves the performance even in environments that are considered fully observable, which you would not expect using a memory to help. The authors explain this with the high representation power of LSTM.</li>
+				<li>Storing the recurrent states and using a burn-in period are both greatly beneficial, while the impact of the former is greater. These approaches can be used together, which is the most effective, or individually.</li>
+				<li>Using zero start states decreases an agent's capability to rely on the memory.</li>
+			</ul>
+			<p>For your information, in three out of the five environments in which the R2D2 agent could not exceed human-level performance, it can actually achieve it by modifying the parameters. The remaining two environments, Montezuma's Revenge and Pitfall, are notorious hard-exploration problems, to which we will return in the latter sections of the chapter.</p>
+			<p>With that, let's wrap up our discussion here and go into some hands-on work. In the next section, we are going to use the SEED RL architecture with an R2D2 agent. </p>
+			<h2 id="_idParaDest-271"><a id="_idTextAnchor286"/>Experimenting with SEED RL and R2D2</h2>
+			<p>In this<a id="_idIndexMarker1192"/> section, we'll give a short <a id="_idIndexMarker1193"/>demo of the SEED RL repo and how to use it to train agents. Let's start with setting up the environment.</p>
+			<h3>Setting up the environment</h3>
+			<p>The SEED RL<a id="_idIndexMarker1194"/> architecture<a id="_idIndexMarker1195"/> uses multiple libraries, such as TensorFlow and gRPC, that interact in rather sophisticated ways. To save us from most of the setup, the maintainers of SEED RL use Docker containers to train RL agents.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">Docker and container technology are among the fundamental tools behind today's internet services. If you are into machine learning engineering and/or are interested in serving your models in a production environment, it is a must to know. A quick bootcamp on Docker by Mumshad Mannambeth is available at <a href="https://youtu.be/fqMOX6JJhGo">https://youtu.be/fqMOX6JJhGo</a>.</p>
+			<p>The setup instructions are available on the SEED RL GitHub page. In a nutshell, they are as follows:</p>
+			<ol>
+				<li value="1">Install Docker on your machine.</li>
+				<li>Enable running Docker as a non-root user.</li>
+				<li>Install <strong class="source-inline">git</strong>.</li>
+				<li>Clone the SEED repository.</li>
+				<li>Start your training for the environments defined in the repo using the <strong class="source-inline">run_local.sh</strong> script, as follows:<p class="source-code"><strong class="bold">./run_local.sh [Game] [Agent] [Num. actors] </strong></p><p class="source-code"><strong class="bold">./run_local.sh atari r2d2 4</strong></p></li>
+			</ol>
+			<p>A few additions to this setup may be needed if your NVIDIA GPU is not recognized by the SEED container: </p>
+			<ul>
+				<li>Install the NVIDIA Container Toolkit at <a href="https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html">https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html</a>. </li>
+				<li>Install NVIDIA Modprobe, for example for Ubuntu, using <strong class="source-inline">sudo apt-get install nvidia-modprobe</strong>.</li>
+				<li>Reboot your workstation.</li>
+			</ul>
+			<p>Once your <a id="_idIndexMarker1196"/>setup <a id="_idIndexMarker1197"/>is successful, you should see that your agent starts training on a tmux terminal, as shown in <em class="italic">Figure 13.6</em>:</p>
+			<div>
+				<div id="_idContainer1545" class="IMG---Figure">
+					<img src="image/B14160_13_6.jpg" alt="Figure 13.6 – SEED RL training on a tmux terminal&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.6 – S<a id="_idTextAnchor287"/>EED RL training on a tmux terminal</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">Tmux is a terminal multiplexer, basically a window manager within the terminal. For a quick demo on how to use tmux, check out <a href="https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/">https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/</a>.</p>
+			<p>Now you have SEED, a state-of-the-art RL framework, running on your machine! You can plug in your custom environments for training by following the Atari, Football, or DMLab example folders.</p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">The R2D2 agent is also available at DeepMind's ACME library, along with many other agents: <a href="https://github.com/deepmind/acme">https://github.com/deepmind/acme</a>.</p>
+			<p>Next, we'll discuss curiosity-driven RL.</p>
+			<h1 id="_idParaDest-272"><a id="_idTextAnchor288"/>Curiosity-driven reinforcement learning</h1>
+			<p>When we discussed<a id="_idIndexMarker1198"/> the R2D2 agent, we mentioned that there were only a few Atari games left in the benchmark set that the agent could not exceed the human performance in. The remaining challenge for the agent was to solve <strong class="bold">hard-exploration </strong>problems, which have very sparse and/or misleading rewards. Later work that came out of Google DeepMind addressed those challenges as well, with agents called <strong class="bold">Never Give Up </strong>(<strong class="bold">NGU</strong>) and <strong class="bold">Agent57</strong> reaching <a id="_idIndexMarker1199"/>superhuman-level performance in all of the 57 games used in the benchmarks. In this section, we are going to discuss these agents and the methods they used for effective exploration.</p>
+			<p>Let's dive in by describing the concepts of hard-exploration and <strong class="bold">curiosity-driven learning</strong>.</p>
+			<h2 id="_idParaDest-273"><a id="_idTextAnchor289"/>Curiosity-driven learning for hard-exploration problems</h2>
+			<p>Let's consider <a id="_idIndexMarker1200"/>the simple grid world illustrated in <em class="italic">Figure 13.7</em>:</p>
+			<div>
+				<div id="_idContainer1546" class="IMG---Figure">
+					<img src="image/B14160_13_7.jpg" alt="Figure 13.7 – A hard-exploration grid-world problem&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption"><a id="_idTextAnchor290"/>Figure 13.7 – A hard-exploration grid-world problem</p>
+			<p>Assume the following setting in this grid world:</p>
+			<ul>
+				<li>There are 102 total states, 101 for the grid world and 1 for the cliff surrounding it.</li>
+				<li>The agent starts in the far left of the world and its goal is to reach the trophy on the far right.</li>
+				<li>Reaching the trophy has a reward of 1,000, falling off the cliff has a reward of -100, and there's a -1 reward for each time step that passes to encourage quick exploration.</li>
+				<li>An episode <a id="_idIndexMarker1201"/>terminates when the trophy is reached, the agent falls off the cliff, or after 1,000 time steps.</li>
+				<li>The agent has five actions available to it at every time step: to stay still, or to go up, down, left, or right.</li>
+			</ul>
+			<p>If you train an agent in the current setting, even with the most powerful algorithms we have covered, such as PPO, R2D2, and so on, the resulting policy will likely be suicidal:</p>
+			<ul>
+				<li>It is very difficult to stumble upon the trophy through random actions, so the agent may never discover that there is a trophy with a high reward in this grid world.</li>
+				<li>Waiting until the end of the episode results in a total reward of -1000.</li>
+				<li>In this dark world, the agent may decide to commit suicide as early as possible to avoid prolonged suffering.</li>
+			</ul>
+			<p>Even with the most powerful algorithms, the weak link in this approach is the strategy of exploration through random actions. The probability of stumbling upon the optimal set of moves is <img src="image/Formula_13_022.png" alt=""/>.</p>
+			<p class="callout-heading">Tip</p>
+			<p class="callout">To find the expected number of steps it will take for the agent to reach the trophy through random actions, we can use the following equation:</p>
+			<div>
+				<div id="_idContainer1548" class="IMG---Figure">
+					<img src="image/Formula_13_023.jpg" alt=""/>
+				</div>
+			</div>
+			<p class="callout">where <img src="image/Formula_13_024.png" alt=""/> is the expected number of steps it will take for the agent to reach the trophy when in state <img src="image/Formula_13_025.png" alt=""/>. We need to generate these equations for all states (it will be slightly different for <img src="image/Formula_13_026.png" alt=""/>) and solve the resulting system of equations.</p>
+			<p>When we <a id="_idIndexMarker1202"/>discussed the Machine Teaching approach previously, we mentioned that the human teacher can craft the reward function to encourage the agent to go right in the world. The downside of this approach is that it may not be feasible to manually craft the reward function in more complex environments. In fact, the winning strategy may not even be known by the teacher to guide the agent.</p>
+			<p>Then the question becomes how can we encourage the agent to explore the environment efficiently? One good answer is to reward the agent for the states it visited for the first time, for example, with a reward of +1 in our grid world. Enjoying discovering the world could make a good motivation for the agent to avoid suicide, which will also lead to winning the trophy eventually.</p>
+			<p>This approach is called <strong class="bold">curiosity-driven learning</strong>, which involves giving an <strong class="bold">intrinsic reward</strong> to the agent based on the <em class="italic">novelty</em> of its observations. The reward takes the following form:</p>
+			<div>
+				<div id="_idContainer1552" class="IMG---Figure">
+					<img src="image/Formula_13_027.jpg" alt=""/>
+				</div>
+			</div>
+			<p>where <img src="image/Formula_13_028.png" alt=""/> is the extrinsic reward assigned by the environment at time <img src="image/Formula_13_029.png" alt=""/>, <img src="image/Formula_13_030.png" alt=""/> is the intrinsic reward for the novelty of the observation at time <img src="image/Formula_08_016.png" alt=""/>, and <img src="image/Formula_13_032.png" alt=""/> is a hyperparameter to tune the relative importance of exploration.</p>
+			<p>Before we discuss<a id="_idIndexMarker1203"/> the NGU and Agent57 agents, let's look into some practical challenges in curiosity-driven RL. </p>
+			<h2 id="_idParaDest-274"><a id="_idTextAnchor291"/>Challenges in curiosity-driven reinforcement learning</h2>
+			<p>The grid world<a id="_idIndexMarker1204"/> example we provided above has one of the simplest possible settings. On the other hand, our expectation of RL agents is to solve many sophisticated exploration problems. That, of course, comes with challenges. Let's discuss a few of them here.</p>
+			<h3>Assessing novelty when observations are in continuous space and/or are high-dimensional</h3>
+			<p>When we have discrete observations, it is simple to assess whether an observation is novel or not: We can simply count how many times the agent has seen each observation. When the observation is in continuous space, such as images, however, it gets complicated as it is not possible to simply count them. A similar challenge is when the number of dimensions of the observation space is too big, as it is in an image.</p>
+			<h3>Noisy TV problem</h3>
+			<p>An interesting failure state for curiosity-driven exploration is to have a source of noise in the environment, such as a noisy TV that displays random frames in a maze. </p>
+			<div>
+				<div id="_idContainer1558" class="IMG---Figure">
+					<img src="image/B14160_13_8.jpg" alt="Figure 13.8 – Noisy TV problem illustrated in OpenAI's experiments (source OpenAI et al. 2018)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.8 – Noisy TV problem illustrated in OpenAI's experiments (source OpenAI et al. 2018)</p>
+			<p>The agent then gets stuck in front of the noisy TV (like a lot of people do) to do meaningless <a id="_idIndexMarker1205"/>exploration rather than actually discovering the maze.</p>
+			<h3>Life-long novelty</h3>
+			<p>The intrinsic reward, as we described above, is given based on the novelty of the observations within an episode. However, we want our agent to avoid making the same discoveries again and again in different episodes. In other words, we need a mechanism to assess <em class="italic">life-long novelty</em> for effective exploration.</p>
+			<p>There are different ways of addressing these challenges. Next, we will review how the NGU and the Agent57 agents address them, leading to their state-of-the-art performance in the classic RL benchmarks.</p>
+			<h2 id="_idParaDest-275"><a id="_idTextAnchor292"/>Never Give Up</h2>
+			<p>The NGU agent <a id="_idIndexMarker1206"/>effectively brings together some key exploration strategies. Let's take a look at this in the following sections.</p>
+			<h3>Obtaining embeddings for observations</h3>
+			<p>The NGU agent<a id="_idIndexMarker1207"/> obtains embeddings from observations in such a way that it handles the two challenges together regarding a) high-dimensional observation space, and b) noise in observations. Here is how: Given an <img src="image/Formula_13_033.png" alt=""/> triplet sampled from the environment, where <img src="image/Formula_13_034.png" alt=""/> is the observation and <img src="image/Formula_13_035.png" alt=""/> is the action at time <img src="image/Formula_13_036.png" alt=""/>, it trains the neural network to predict action from the two <a id="_idIndexMarker1208"/>consecutive observations. This is illustrated in <em class="italic">Figure 13.9</em>:</p>
+			<div>
+				<div id="_idContainer1563" class="IMG---Figure">
+					<img src="image/B14160_13_9.jpg" alt="Figure 13.9 – NGU agent embedding network&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.9 – NGU agen<a id="_idTextAnchor293"/>t embedding network</p>
+			<p>The embeddings, the <img src="image/Formula_13_037.png" alt=""/>-dimensional representations of the images coming out of the <img src="image/Formula_13_038.png" alt=""/> embedding network, denoted as <img src="image/Formula_13_039.png" alt=""/>, is what the agent will use to assess the novelty of the observations later.</p>
+			<p>If you are wondering why there is this fancy setup to obtain some lower-dimensional representations of image observations, it is to address the noisy TV problem. Noise in the observations is not useful information while predicting the action that led the environment from emitting observation <img src="image/Formula_13_040.png" alt=""/> to <img src="image/Formula_13_041.png" alt=""/> in the next step. In other words, actions taken by the agent would not explain the noise in the observations. Therefore, we don't expect a network that predicts the action from observations to learn representations carrying the noise, at least not dominantly. So, this is a clever way of denoising the <a id="_idIndexMarker1209"/>observation representations.</p>
+			<p>Let's next see how these representations are used.</p>
+			<h3>Episodic novelty module</h3>
+			<p>In order to <a id="_idIndexMarker1210"/>assess how novel an observation <img src="image/Formula_13_042.png" alt=""/> is<a id="_idIndexMarker1211"/> compared to the previous observations in the episode and calculate an episodic intrinsic reward <img src="image/Formula_13_043.png" alt=""/>, the NGU agent does the following:</p>
+			<ol>
+				<li value="1">Stores the embeddings from the observations encountered in an episode in a memory <img src="image/Formula_08_077.png" alt=""/></li>
+				<li>Compares <img src="image/Formula_13_045.png" alt=""/> to <img src="image/Formula_13_046.png" alt=""/>-nearest embeddings in <img src="image/Formula_13_047.png" alt=""/></li>
+				<li>Calculates an intrinsic reward that is inversely proportional to the sum of the similarities between <img src="image/Formula_13_048.png" alt=""/> and its <img src="image/Formula_13_049.png" alt=""/> neighbors</li>
+			</ol>
+			<p>This idea is illustrated in <em class="italic">Figure 13.10</em>:</p>
+			<div>
+				<div id="_idContainer1577" class="IMG---Figure">
+					<img src="image/B14160_13_10.jpg" alt="Figure 13.10 – NGU episodic novelty module&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.10 – NGU episodic novelty module</p>
+			<p>To avoid the<a id="_idIndexMarker1212"/> somewhat crowded notation, we'll<a id="_idIndexMarker1213"/> leave the details of the calculation to the paper, but this should give you the idea.</p>
+			<p>Finally, let's discuss how the NGU agent assesses life-long novelty.</p>
+			<h3>Life-long novelty module with random distillation networks</h3>
+			<p>During <a id="_idIndexMarker1214"/>training, RL <a id="_idIndexMarker1215"/>agents <a id="_idIndexMarker1216"/>collect experiences across many parallel processes and over many episodes, leading to billions of observations in some applications. Therefore, it is not quite straightforward to tell whether an observation is a novel one among all.</p>
+			<p>A clever way to address that is to use <strong class="bold">Random Network Distillation </strong>(<strong class="bold">RND</strong>), which the NGU agent does. RND involves two networks: a random network and a predictor network. Here is how they work: </p>
+			<ol>
+				<li value="1">The random network is randomly initialized at the beginning of the training. Naturally, it leads to an arbitrary mapping from observations to outputs. </li>
+				<li>The predictor network tries to learn this mapping, which is what the random network does, throughout the training.</li>
+				<li>The predictor network's error will be low on previously encountered observations and high on novel ones.</li>
+				<li>The higher the prediction error is, the larger the intrinsic reward will be.</li>
+			</ol>
+			<p>The RND<a id="_idIndexMarker1217"/> architecture<a id="_idIndexMarker1218"/> is<a id="_idIndexMarker1219"/> illustrated in <em class="italic">Figure 13.11</em>:</p>
+			<div>
+				<div id="_idContainer1578" class="IMG---Figure">
+					<img src="image/B14160_13_11.jpg" alt="Figure 13.11 – RND architecture in the NGU agent&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.11 – RND architecture in the <a id="_idTextAnchor294"/>NGU agent</p>
+			<p>The NGU agent uses this error to obtain a multiplier, <img src="image/Formula_13_050.png" alt=""/>, to scale <img src="image/Formula_13_051.png" alt=""/>. More specifically,</p>
+			<div>
+				<div id="_idContainer1581" class="IMG---Figure">
+					<img src="image/Formula_13_052.jpg" alt=""/>
+				</div>
+			</div>
+			<p>where <img src="image/Formula_13_053.png" alt=""/> and <img src="image/Formula_13_054.png" alt=""/> are the mean and standard deviation of the prediction network errors. So, to obtain a multiplier greater than 1 for an observation, the error, the "surprise," of the predictor network should be greater than the average error it makes.</p>
+			<p>Now, let's put everything together.</p>
+			<h3>Combining the intrinsic and extrinsic rewards</h3>
+			<p>After obtaining<a id="_idIndexMarker1220"/> an episodic <a id="_idIndexMarker1221"/>intrinsic reward and a <a id="_idIndexMarker1222"/>multiplier based on life-long novelty for an observation, the combined intrinsic reward at time <img src="image/Formula_13_055.png" alt=""/> is calculated as follows:</p>
+			<div>
+				<div id="_idContainer1585" class="IMG---Figure">
+					<img src="image/Formula_13_056.jpg" alt=""/>
+				</div>
+			</div>
+			<p>where <img src="image/Formula_13_057.png" alt=""/> is a hyperparameter to cap the multiplier. Then the episode reward is a weighted sum of the intrinsic and extrinsic rewards:</p>
+			<div>
+				<div id="_idContainer1587" class="IMG---Figure">
+					<img src="image/Formula_13_058.jpg" alt=""/>
+				</div>
+			</div>
+			<p>This is it! We have covered some of the key ideas behind the NGU agent. There are more details to it, such as how to set the <img src="image/Formula_13_059.png" alt=""/> values across parallelized actors and then use it to parametrize the value function network.</p>
+			<p>Before we wrap up our discussion on curiosity-driven learning, let's briefly talk about an extension to the NGU agent, Agent57. </p>
+			<h2 id="_idParaDest-276"><a id="_idTextAnchor295"/>Agent57 improvements</h2>
+			<p>Agent57 extends<a id="_idIndexMarker1223"/> the NGU agent to set the new state of the art. The main improvements are as follows: </p>
+			<ul>
+				<li>It trains separate value function networks for intrinsic and extrinsic rewards and then combines them.</li>
+				<li>It trains a population of policies, for which the sliding-window <strong class="bold">upper confidence bound</strong> (<strong class="bold">UCB</strong>) method<a id="_idIndexMarker1224"/> is used to the pick <img src="image/Formula_13_060.png" alt=""/> and discount factor <img src="image/Formula_13_061.png" alt=""/> while prioritizing one policy over the other.</li>
+			</ul>
+			<p>With that, we conclude our discussion on curiosity-driven RL, which is key to solving hard-exploration problems in RL. Having said that, exploration strategies in RL is a broad topic. For a more comprehensive review of the topic, I suggest you read Lilian Weng's blog post (<em class="italic">Weng</em>,<em class="italic"> 2020</em>) on this and then dive into the papers referred to in the blog.</p>
+			<p>Next, we'll discuss another important area: offline RL.</p>
+			<h1 id="_idParaDest-277"><a id="_idTextAnchor296"/>Offline reinforcement learning</h1>
+			<p><strong class="bold">Offline RL</strong> is <a id="_idIndexMarker1225"/>about training agents using data recorded during some prior interactions of an agent (likely non-RL, such as a human agent) with the environment, as opposed to directly interacting with it. It is <a id="_idIndexMarker1226"/>also called <strong class="bold">batch RL</strong>. In this section, we look into some of the key components of offline RL. Let's get started with an overview of how it works.</p>
+			<h2 id="_idParaDest-278"><a id="_idTextAnchor297"/>An overview of how offline reinforcement learning works</h2>
+			<p>In offline RL, the <a id="_idIndexMarker1227"/>agent does not directly interact with the environment to explore and learn a policy. <em class="italic">Figure 13.12</em> contrasts this to on-policy and off-policy settings:</p>
+			<div>
+				<div id="_idContainer1591" class="IMG---Figure">
+					<img src="image/B14160_13_12.jpg" alt="Figure 13.12 – Comparison of on-policy, off-policy, and offline deep RL (adapted from Levine, 2020)&#13;&#10;"/>
+				</div>
+			</div>
+			<p class="figure-caption">Figure 13.12 – Comparison of on-policy, off-policy, a<a id="_idTextAnchor298"/>nd offline deep RL (adapted from <em class="italic">Levine, 2020</em>)</p>
+			<p>Let's unpack what this figure illustrates:</p>
+			<ul>
+				<li>In on-policy RL, the agent collects a batch of experiences with each policy. Then, it uses this batch to update the policy. This cycle repeats until a satisfactory policy is obtained.</li>
+				<li>In off-policy RL, the agent samples experiences from a replay buffer to periodically improve the policy. The updated policy is then used in the rollouts to generate new experience, which gradually replaces the old experience in the replay buffer. This cycle repeats until a satisfactory policy is obtained.</li>
+				<li>In offline RL, there is some behavior policy <img src="image/Formula_13_062.png" alt=""/> interacting with the environment and collecting experience. This behavior policy does not have to belong to an RL agent. In fact, in most cases, it is either human behavior, a rule-based decision mechanism, a classical controller, and so on. The experience recorded from these interactions is what the RL agent will use to learn a policy, hopefully improving the behavior policy. So, in offline RL, the RL agent does not interact with the environment.</li>
+			</ul>
+			<p>One of the obvious questions in your mind could be why we cannot just put the offline data into <a id="_idIndexMarker1228"/>something like a replay buffer and use a DQN agent or similar. This is an important point, so let's discuss it.</p>
+			<h2 id="_idParaDest-279"><a id="_idTextAnchor299"/>Why we need special algorithms for offline learning</h2>
+			<p>Interacting with the <a id="_idIndexMarker1229"/>environment for an RL agent is necessary to observe the consequences of its actions in different states. Offline RL, on the other hand, does not let the agent interact and explore, which is a serious limitation. Here are some examples to illustrate this point:</p>
+			<ul>
+				<li>Let's say we have data from a human driving a car in town. The maximum speed the driver reached as per the logs is 50 mph. The RL agent might infer from the logs that increasing the speed reduces the travel time and may come up with a policy that suggests driving at 150 mph in town. Since the agent never observed its possible consequences, it does not have a lot of chance to correct its approach.</li>
+				<li>While using a value-based method, such as DQN, the Q network is initialized randomly. As a result, some <img src="image/Formula_13_063.png" alt=""/> values will be very high just by chance, suggesting a policy driving the agent to <img src="image/Formula_13_064.png" alt=""/> and then taking action <img src="image/Formula_13_065.png" alt=""/>. When the agent is able to explore, it can evaluate the policy and correct such bad estimates. In offline RL, it cannot.</li>
+			</ul>
+			<p>So, the core of the problem here is the <strong class="bold">distributional shift</strong>, that is, the discrepancy between the behavior policy and the resulting RL policy.</p>
+			<p>So, hopefully, you are convinced that offline RL requires some special algorithms. Then the next question<a id="_idIndexMarker1230"/> is, is it worth it? Why should we bother when we can happily obtain superhuman-level performance with all the clever approaches and models we've discussed so far? Let's see why.</p>
+			<h2 id="_idParaDest-280"><a id="_idTextAnchor300"/>Why offline reinforcement learning is crucial</h2>
+			<p>The very reason<a id="_idIndexMarker1231"/> that video games are the most common testbed for RL is we can collect the amount of data needed for training. When it comes to training RL policies for real-world applications, such as robotics, autonomous driving, supply chain, finance, and so on, we need simulations of these processes to be able to collect the necessary amounts of data and wildly explore various policies. <em class="italic">This is arguably the single most important challenge in real-world RL</em>. </p>
+			<p>Here are some reasons why:</p>
+			<ul>
+				<li>Building a high-fidelity simulation of a real-world process is often very costly and could take years.</li>
+				<li>High-fidelity simulations are likely to require a lot of compute resources to run, making it hard to scale them for RL training.</li>
+				<li>Simulations could quickly become stale if the environment dynamics change in a way that is not parametrized in the simulation.</li>
+				<li>Even when the fidelity is very high, it may not be high enough for RL. RL is prone to overfitting to errors, quirks, and assumptions of the (simulation) environment it interacts with. So, this creates a sim-to-real gap.</li>
+				<li>It could be costly or unsafe to deploy RL agents that might have overfit to the simulation.</li>
+			</ul>
+			<p>As a result, a simulation is a rare beast to run into in businesses and organizations. Do you know what we have in abundance? Data. We have processes that generate a lot of data: </p>
+			<ul>
+				<li>Manufacturing environments have machine logs.</li>
+				<li>Retailers have data on their past pricing strategies and their results.</li>
+				<li>Trading firms have logs of their buy and sell decisions.</li>
+				<li>We have, and can obtain, a lot of car-driving videos.</li>
+			</ul>
+			<p>Offline RL has the potential to drive automation for all those processes and create<a id="_idIndexMarker1232"/> huge real-world value.</p>
+			<p>After this long but necessary motivation, it is finally time to go into a specific offline RL algorithm.</p>
+			<h2 id="_idParaDest-281"><a id="_idTextAnchor301"/>Advantage weighted actor-critic</h2>
+			<p>Offline<a id="_idIndexMarker1233"/> RL is a hot area of research and there are many algorithms that have been proposed. One common theme is to make sure that the learned policy stays close to the behavior policy. A common measure to assess the discrepancy is KL divergence:</p>
+			<div>
+				<div id="_idContainer1596" class="IMG---Figure">
+					<img src="image/Formula_13_066.jpg" alt=""/>
+				</div>
+			</div>
+			<p>On the other hand, different from the other approaches, <strong class="bold">advantage weighted actor-critic</strong> (<strong class="bold">AWAC</strong>) exhibits the following traits:</p>
+			<ul>
+				<li>It does not try to fit a model to explicitly learn <img src="image/Formula_13_067.png" alt=""/>.</li>
+				<li>It implicitly punishes the distributional shift.</li>
+				<li>It uses dynamic programming a train to <img src="image/Formula_13_068.png" alt=""/> function for data efficiency.</li>
+			</ul>
+			<p>To this end, AWAC optimizes the following objective function:</p>
+			<div>
+				<div id="_idContainer1599" class="IMG---Figure">
+					<img src="image/Formula_13_069.jpg" alt=""/>
+				</div>
+			</div>
+			<p>which leads to the following policy update step:</p>
+			<div>
+				<div id="_idContainer1600" class="IMG---Figure">
+					<img src="image/Formula_13_070.jpg" alt=""/>
+				</div>
+			</div>
+			<p>where <img src="image/Formula_13_071.png" alt=""/> is a hyperparameter and <img src="image/Formula_13_072.png" alt=""/> is a normalization quantity. The key idea here is to encourage<a id="_idIndexMarker1234"/> actions <a id="_idIndexMarker1235"/>with a higher advantage. </p>
+			<p class="callout-heading">Info</p>
+			<p class="callout">One of the key contributions of AWAC is that the policy that is trained from offline data can then later be fine-tuned effectively by interacting with the environment if that opportunity exists.</p>
+			<p>We defer the details of the algorithm to the paper (by <em class="italic">Nair et al, 2020</em>), and the implementation to the RLkit repo at <a href="https://github.com/vitchyr/rlkit">https://github.com/vitchyr/rlkit</a>. </p>
+			<p>Let's wrap up our discussion on offline RL with benchmark datasets and the corresponding repos.</p>
+			<h2 id="_idParaDest-282"><a id="_idTextAnchor302"/>Offline reinforcement learning benchmarks</h2>
+			<p>As offline RL is taking<a id="_idIndexMarker1236"/> off, researchers from DeepMind and UC Berkeley have created benchmark datasets and repos so that offline RL algorithms can be compared to each other in a standardized way. These will serve as the "Gym" for offline RL, if you will:</p>
+			<ul>
+				<li><em class="italic">RL Unplugged</em> by DeepMind includes datasets from Atari, Locomotion, DeepMind Control Suite environments, as well as real-world datasets. It is available at <a href="https://github.com/deepmind/deepmind-research/tree/master/rl_unplugged">https://github.com/deepmind/deepmind-research/tree/master/rl_unplugged</a>.</li>
+				<li><em class="italic">D4RL</em> by UC Berkeley's <strong class="bold">Robotics and AI Lab</strong> (<strong class="bold">RAIL</strong>) includes datasets from various environments such as Maze2D, Adroit, Flow, and CARLA. It is available at <a href="https://github.com/rail-berkeley/d4rl">https://github.com/rail-berkeley/d4rl</a>.</li>
+			</ul>
+			<p>Great work! You<a id="_idIndexMarker1237"/> are now up to speed with one of the key emerging fields – offline RL.</p>
+			<h1 id="_idParaDest-283"><a id="_idTextAnchor303"/>Summary</h1>
+			<p>In this chapter, we covered several advanced topics that are very hot areas of research. Distributed RL is key to be able to scale RL experiments efficiently. Curiosity-driven RL makes solving hard-exploration problems possible through effective exploration strategies. And finally, offline RL has the potential to transform how RL is used for real-world problems by leveraging the data logs already available for many processes.</p>
+			<p>With this chapter, we conclude the part of our book on algorithmic and theoretical discussions. The remaining chapters will be more applied, starting with robotics applications in the next chapter.</p>
+			<h1 id="_idParaDest-284"><a id="_idTextAnchor304"/>References</h1>
+			<ul>
+				<li><a href="https://arxiv.org/abs/1910.06591">https://arxiv.org/abs/1910.06591</a></li>
+				<li><a href="https://lilianweng.github.io/lil-log/2020/06/07/exploration-strategies-in-deep-reinforcement-learning.html">https://lilianweng.github.io/lil-log/2020/06/07/exploration-strategies-in-deep-reinforcement-learning.html</a></li>
+				<li><a href="https://deepmind.com/blog/article/Agent57-Outperforming-the-human-Atari-benchmark">https://deepmind.com/blog/article/Agent57-Outperforming-the-human-Atari-benchmark</a></li>
+				<li><a href="https://openai.com/blog/reinforcement-learning-with-prediction-based-rewards/">https://openai.com/blog/reinforcement-learning-with-prediction-based-rewards/</a></li>
+				<li><a href="https://youtu.be/C3yKgCzvE_E">https://youtu.be/C3yKgCzvE_E</a></li>
+				<li><a href="mailto:https://medium.com/@sergey.levine/decisions-from-data-how-offline-reinforcement-learning-will-change-how-we-use-ml-24d98cb069b0">https://medium.com/@sergey.levine/decisions-from-data-how-offline-reinforcement-learning-will-change-how-we-use-ml-24d98cb069b0</a></li>
+				<li><a href="https://offline-rl-neurips.github.io/">https://offline-rl-neurips.github.io/</a></li>
+				<li><a href="https://github.com/vitchyr/rlkit/tree/master/rlkit">https://github.com/vitchyr/rlkit/tree/master/rlkit</a></li>
+				<li><a href="https://arxiv.org/pdf/2005.01643.pdf">https://arxiv.org/pdf/2005.01643.pdf</a></li>
+				<li><a href="https://arxiv.org/abs/2006.09359">https://arxiv.org/abs/2006.09359</a></li>
+				<li><a href="https://offline-rl.github.io/">https://offline-rl.github.io/</a></li>
+				<li><a href="https://bair.berkeley.edu/blog/2020/09/10/awac/">https://bair.berkeley.edu/blog/2020/09/10/awac/</a></li>
+			</ul>
+		</div>
+	</body></html>
