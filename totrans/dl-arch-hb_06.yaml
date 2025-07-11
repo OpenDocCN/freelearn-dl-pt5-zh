@@ -874,16 +874,22 @@
   id: totrans-83
   prefs: []
   type: TYPE_NORMAL
+  zh: 最后，GPT-3 模型在 2020 年推出。它类似于之前的进展，主要变化是增加了模型各个组件的规模，并且通过不同的方式来规定任务条件，以适应不同类型的文本示例。我们这里不会深入讨论这一点。尽管
+    GPT-2 在零-shot 设置中表现良好，且不需要对下游任务进行微调，但只有通过微调，该模型才能在多个文本语言数据集上超越以前的基准。GPT-3 的庞大规模彻底消除了微调的需求，在没有任何微调的情况下超越了之前的基准。然而，该模型需要专门的机器进行训练，个人或小型组织难以直接使用。目前，它是
+    OpenAI API 服务的一部分。GPT-3 展示了在许多不同任务中的广泛适用性，无需任何微调，其中一些最引人注目的应用包括为任何编程语言生成代码、讲故事和制作非常逼真的聊天机器人。这三项改进推动了许多基于语言任务的数据集的性能限制，使其达到更高水平，并且作为机器学习普适性组件的一个例子，展示了
+    transformers 的巨大学习潜力，只受到硬件资源的限制。
 - en: Next, we will discuss a slightly different form of a decoder model that is worth
     mentioning, called the **XLNet** model.
   id: totrans-84
   prefs: []
   type: TYPE_NORMAL
+  zh: 接下来，我们将讨论一种略有不同的解码器模型，值得一提的是 **XLNet** 模型。
 - en: Diving into the XLNet model
   id: totrans-85
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 深入了解 XLNet 模型
 - en: If you and a friend were given the prompt “_ _ is a city,” would you both separately
     predict “New York” to fill in the blanks? This is one of the flaws of MLM objectives
     of the encoder-only transformers as they learn by predicting on multiple tokens
@@ -897,6 +903,8 @@
   id: totrans-86
   prefs: []
   type: TYPE_NORMAL
+  zh: 如果你和你的朋友被给出提示“_ _ 是一座城市”，你们两个会分别预测填入空白的是“纽约”吗？这是编码器-仅 transformers 的 MLM 目标的一个缺陷，因为它们通过一次预测多个标记来学习。然而，标准的自回归模型由于其自回归的特性，只预测未来并且一次只预测一个标记，因此不会受到这个问题的影响。编码器-仅
+    transformers 具有双向序列支持，这有助于提高性能。XLNet 主要基于这样一个思想：使自回归模型以双向方式关注数据，就像编码器-仅模型一样，同时保持自回归模型预测单一输出的优势。
 - en: The way XLNet achieves the best of both worlds is by conditioning the decoder-only
     transformer during MLM pre-training. The idea is to pre-train the model on all
     permutations of the token’s sequence order by using the masking mechanism. Standard
@@ -911,14 +919,18 @@
   id: totrans-87
   prefs: []
   type: TYPE_NORMAL
+  zh: XLNet通过在MLM预训练期间调节解码器单独的变换器来实现双赢。其思路是通过使用掩蔽机制，预训练模型在所有标记序列顺序的排列上进行训练。标准自回归模型在预训练时按“1-2-3-4”的顺序使用来预测第五个标记，但在XLNet中，可以将顺序改为“3-4-1-5”来预测第二个标记。XLNet还引入了另一个额外的查询线性层隐藏状态，并添加了一个额外的单一固定可学习嵌入，将与每个标记嵌入一起穿过注意力层，作为与原始基于标记的内容流一起的额外流路径。这个额外路径被称为查询流。整个过程称为掩蔽的双流注意力层，如*图
+    6.8*所示。
 - en: '![Figure 6.8 – XLNet workflow](img/B18187_06_008.jpg)'
   id: totrans-88
   prefs: []
   type: TYPE_IMG
+  zh: '![图 6.8 – XLNet 工作流](img/B18187_06_008.jpg)'
 - en: Figure 6.8 – XLNet workflow
   id: totrans-89
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 6.8 – XLNet 工作流
 - en: The forward propagation mechanism of the content-based stream for any given
     position of a sequence ordering has the capability to attend to the content of
     its own position and the positions before it while the query-based stream for
@@ -944,38 +956,48 @@
   id: totrans-90
   prefs: []
   type: TYPE_NORMAL
+  zh: 内容基于流的前向传播机制对于序列排序中的任意位置具有能够关注其自身位置和之前位置的内容的能力，而基于查询的流对于序列排序中的任意位置仅具有关注其之前位置内容的能力。*图
+    6.8* (**a**) 显示了在模型中实际位置 1 的内容流的注意力操作如何能够关注其他位置的所有标记，因为“3-2-4-1”排序方式将位置 1 排列为最后一个标记。*图
+    6.8* (**b**) 显示了如何通过位置 1 的标记内容来更新额外的查询流路径数据（表示为**g**），并且**g**组件作为查询来获取下一个**g**作为注意力层的输出。如果模型的第四个位置需要更新，内容流中将仅关注第二和第三个位置的内容，因为根据排列后的序列顺序，第一个位置是未来的标记。基于此概念动态应用掩蔽机制，以防止每个位置的**h**和**g**在定义之前关注排列序列中的内容位置。注意，*图
+    6.8* (**c**) 中的**w**组件表示共享于所有位置的单一权重嵌入，适用于查询流。在预训练过程中，查询流作为最终分类输出路径，适用于MLM目标，其中最终的**h**组件会被忽略。然而，在传递到微调阶段时，查询流组件和基于查询的线性层隐藏状态会被丢弃或完全忽略。
 - en: The novel way of enabling the bidirectional context of the data while leveraging
     the benefits of a single-word prediction-based language modeling objective during
     pre-training led to improved performance on downstream supervised learning tasks.
   id: totrans-91
   prefs: []
   type: TYPE_NORMAL
+  zh: 通过在预训练期间利用单词预测的语言建模目标，同时使数据的双向上下文得以实现的创新方法，提升了下游监督学习任务的性能。
 - en: Discussing additional advancements for a decoder-only transformer model
   id: totrans-92
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: 讨论解码器单独的变换器模型的其他进展
 - en: 'Since the advent of GPT, there have not been any highly impactful changes to
     the base decoder-only architecture. Most of the work focuses on three things:'
   id: totrans-93
   prefs: []
   type: TYPE_NORMAL
+  zh: 自GPT问世以来，基础的解码器架构没有发生任何具有重大影响的变化。大多数工作集中在以下三个方面：
 - en: Applying transformers to different problem types
   id: totrans-94
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将transformer应用于不同的任务类型
 - en: Scaling up the model size to hundreds of billions of parameters
   id: totrans-95
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 将模型规模扩大到数千亿个参数
 - en: Focusing on engineering solutions so that a huge model is feasible to be trained
     on the available hardware resources
   id: totrans-96
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 专注于工程解决方案，以使得一个巨大的模型可以在现有的硬件资源上进行训练
 - en: One of the most notable works utilizing decoder-only transformers for other
     problem types is the DALL-E model from the OpenAI team. Transformers were used
     in both the first and second versions of DALL-E to autoregressively predict a
@@ -985,6 +1007,7 @@
   id: totrans-97
   prefs: []
   type: TYPE_NORMAL
+  zh: 其中一个最著名的工作是利用解码器transformer处理其他任务类型的DALL-E模型，由OpenAI团队开发。在DALL-E的第一版和第二版中，transformers被用来自回归地预测一个紧凑的图像嵌入，给定文本输入和一些其他特定于实现的输入。这些图像嵌入随后通过其他机制转换成实际的图像嵌入。
 - en: For model scaling, GPT-3 showed that the model capacity can still be increased
     along with the performance. First to mention is **Megatron**, which focused on
     making the transformer architecture more efficient with engineering strategies
@@ -1009,6 +1032,9 @@
   id: totrans-98
   prefs: []
   type: TYPE_NORMAL
+  zh: 对于模型扩展，GPT-3展示了随着模型容量的增加，性能也可以得到提升。首先提到的是**Megatron**，该模型通过工程策略使transformer架构更加高效，实现了并行化，并且能够使用512个GPU进行训练，使其比GPT-2大了5.6倍。GPT-3超越了Megatron，但另一个名为**BLOOM**的模型使用Megatron作为基础，将其扩展到176B，匹配了GPT-3的175B模型规模。最值得注意的并不是它比GPT-3更大，而是BLOOM开创了一个新范式——开源，这意味着研究人员和机构的集体工作和贡献也可以在大规模上训练出高效且具有优异表现的模型。过去，这些庞大的模型一直是大型企业独占的，因为它们需要极其庞大的硬件资源。除此之外，另一个在2022年发布的模型**PaLM**将GPT的规模扩展到了5400亿个参数，超过了其他所有较小的GPT变体模型的性能。**PaLM
+    2**通过在多个任务上提供增强的性能，超越了其前身，包括英语和多语言理解、推理和代码生成。它通过优化计算扩展法则、利用多样的多语言数据集以及实施架构改进实现了这一目标。PaLM
+    2在多语言能力、分类、问答和翻译任务中表现突出，展示了其广泛的适用性。该模型还结合了控制令牌来减少毒性，并为负责任的发展和部署提供了指导原则。
 - en: When selecting a transformer model for a specific task, it’s crucial to take
     a balanced approach, considering several factors in addition to performance metrics.
     Model size and resource requirements play a significant role in determining the
@@ -1019,6 +1045,7 @@
   id: totrans-99
   prefs: []
   type: TYPE_NORMAL
+  zh: 在为特定任务选择变换器模型时，采取平衡的方法至关重要，除了性能指标外，还需要考虑多个因素。模型的大小和资源需求在确定所选模型的可行性和适用性方面起着重要作用。尽管像GPT-3这样的大型模型展现了令人印象深刻的能力，但它们的资源需求可能并不适合所有情况，特别是对于计算资源有限的个人或小型组织。
 - en: It’s essential to weigh the trade-offs between model size, performance, and
     resource requirements when choosing a transformer for a particular task. In some
     cases, smaller models may provide adequate performance while being more efficient
@@ -1030,11 +1057,13 @@
   id: totrans-100
   prefs: []
   type: TYPE_NORMAL
+  zh: 在为特定任务选择变换器模型时，权衡模型的大小、性能和资源需求是至关重要的。在某些情况下，小型模型可能提供足够的性能，同时更高效且更环保。此外，尽管模型的规模不如一些最知名的模型（如GPT-3），但通过微调通常可以提高模型在特定领域任务中的表现。最终，最佳选择取决于特定任务的独特需求和限制，以及可用于模型训练和部署的资源。
 - en: Summary
   id: totrans-101
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 总结
 - en: Transformers are versatile NNs capable of capturing relationships of any data
     modality without explicit data-specific biases in the architecture. Instead of
     a neural network architecture capable of ingesting different data modalities directly,
@@ -1051,6 +1080,7 @@
   id: totrans-102
   prefs: []
   type: TYPE_NORMAL
+  zh: 变换器是多功能的神经网络（NN），能够捕捉任何数据模态之间的关系，而无需在架构中引入显式的数据特定偏见。与其说是一个能够直接处理不同数据模态的神经网络架构，不如说是需要仔细考虑数据输入结构，并设计合适的训练任务目标，才能成功构建一个高效的变换器。即使对于当前的最先进（SOTA）架构，预训练的好处仍然适用。预训练这一过程是“迁移学习”概念的一部分，迁移学习将在监督学习和无监督学习章节中有更详细的讨论。目前，变换器可以执行数据生成和监督学习任务，并且越来越多的研究在探索变换器应用于未开发的细分任务和数据模态。期待未来几年中，变换器作为技术进步的前沿，带来更多深度学习的创新。
 - en: 'By now, you have gained the knowledge needed to appropriately choose and design
     a neural network architecture according to your data and requirements. Most of
     the architectures and concepts presented in *Chapters 2* to *6* are tricky to
