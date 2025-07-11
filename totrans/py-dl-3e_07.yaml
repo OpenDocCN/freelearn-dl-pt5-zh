@@ -1,11 +1,15 @@
 - en: '7'
+  id: totrans-0
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: '7'
 - en: The Attention Mechanism and Transformers
+  id: totrans-1
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 注意力机制与Transformer
 - en: In [*Chapter 6*](B19627_06.xhtml#_idTextAnchor185), we outlined a typical **natural
     language processing** (**NLP**) pipeline, and we introduced **recurrent neural
     networks** (**RNNs**) as a candidate architecture for NLP tasks. But we also outlined
@@ -22,38 +26,56 @@
     and even image generation models such as Stable Diffusion ([https://stability.ai/stable-diffusion](https://stability.ai/stable-diffusion)).
     This is the second chapter in our arc dedicated to NLP and the first of three
     chapters dedicated to transformers.
+  id: totrans-2
   prefs: []
   type: TYPE_NORMAL
+  zh: 在[*第6章*](B19627_06.xhtml#_idTextAnchor185)中，我们概述了一个典型的**自然语言处理**（**NLP**）流程，并介绍了**递归神经网络**（**RNNs**）作为NLP任务的候选架构。但我们也概述了它们的缺点——它们本质上是顺序的（即不可并行化），并且由于其内部序列表示的局限性，无法处理更长的序列。在本章中，我们将介绍**注意力机制**，它使**神经网络**（**NN**）可以直接访问整个输入序列。我们将简要讨论RNN中的注意力机制，因为它最初是作为RNN的扩展引入的。然而，本章的主角将是**Transformer**——一种完全依赖于注意力的最新神经网络架构。Transformer在过去10年中成为最重要的神经网络创新之一。它们是所有近期**大型语言模型**（**LLMs**）的核心，例如ChatGPT（[https://chat.openai.com/](https://chat.openai.com/)），甚至是图像生成模型，如Stable
+    Diffusion（[https://stability.ai/stable-diffusion](https://stability.ai/stable-diffusion)）。这是我们专注于NLP的章节中的第二章，也是三章中专门讨论Transformer的第一章。
 - en: 'This chapter will cover the following topics:'
+  id: totrans-3
   prefs: []
   type: TYPE_NORMAL
+  zh: 本章将涵盖以下主题：
 - en: Introducing **sequence-to-sequence** (**seq2seq**) models
+  id: totrans-4
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 介绍**序列到序列**（**seq2seq**）模型
 - en: Understanding the attention mechanism
+  id: totrans-5
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 理解注意力机制
 - en: Building transformers with attention
+  id: totrans-6
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: 使用注意力机制构建 Transformer
 - en: Technical requirements
+  id: totrans-7
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 技术要求
 - en: 'We’ll implement the example in this chapter using Python, PyTorch, and the
     Hugging Face Transformers library ([https://github.com/huggingface/transformers](https://github.com/huggingface/transformers)).
     If you don’t have an environment set up with these tools, fret not—the example
     is available as a Jupyter notebook on Google Colab. You can find the code examples
     in the book’s GitHub repository: [https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter07](https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter07).'
+  id: totrans-8
   prefs: []
   type: TYPE_NORMAL
+  zh: 我们将使用Python、PyTorch和Hugging Face Transformers库（[https://github.com/huggingface/transformers](https://github.com/huggingface/transformers)）来实现本章的示例。如果你还没有配置这些工具的环境，不用担心——该示例作为Jupyter笔记本在Google
+    Colab上提供。你可以在本书的GitHub仓库中找到代码示例：[https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter07](https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter07)。
 - en: Introducing seq2seq models
+  id: totrans-9
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 介绍seq2seq模型
 - en: In [*Chapter 6*](B19627_06.xhtml#_idTextAnchor185), we outlined several types
     of recurrent models, depending on the input/output combinations. One of them is
     indirect many-to-many, or **seq2seq**, where an input sequence is transformed
@@ -65,14 +87,20 @@
     Not only is the output of a different length but there is no direct correspondence
     between the elements of the input and output sequences. One output element corresponds
     to a combination of two input elements.
+  id: totrans-10
   prefs: []
   type: TYPE_NORMAL
+  zh: 在 [*第6章*](B19627_06.xhtml#_idTextAnchor185) 中，我们概述了几种类型的递归模型，取决于输入/输出的组合。其中一种是间接的多对多任务，或
+    **seq2seq**，其中一个输入序列被转换成另一个不同的输出序列，输出序列的长度不一定与输入序列相同。seq2seq 任务的一种类型是机器翻译。输入序列是一个语言中的句子的单词，而输出序列是同一句子翻译成另一种语言的单词。例如，我们可以将英语序列
+    *tourist attraction* 翻译成德语 *Touristenattraktion*。输出不仅长度不同，而且输入和输出序列的元素之间没有直接对应关系。一个输出元素对应于两个输入元素的组合。
 - en: Another type of indirect many-to-many task is conversational chatbots such as
     ChatGPT, where the initial input sequence is the first user query. After that,
     the whole conversation so far (including both user queries and bot responses)
     serves as an input sequence for the newly generated bot responses.
+  id: totrans-11
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一种间接的多对多任务是会话聊天机器人，例如 ChatGPT，其中初始输入序列是用户的第一个查询。之后，整个对话（包括用户的查询和机器人的回复）都作为新生成的机器人的回复的输入序列。
 - en: 'In this section, we’ll focus on encoder-decoder seq2seq models (*Sequence to
     Sequence Learning with Neural Networks*, [https://arxiv.org/abs/1409.3215;](https://arxiv.org/abs/1409.3215;)
     *Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine
@@ -81,36 +109,57 @@
     solving indirect many-to-many tasks such as these. The following is a diagram
     of the seq2seq model, where an input sequence `[A, B, C, <EOS>]` is decoded into
     an output sequence `[W, X, Y,` `Z, <EOS>]`:'
+  id: totrans-12
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一部分，我们将重点介绍编码器-解码器的 seq2seq 模型（*使用神经网络的序列到序列学习*，[https://arxiv.org/abs/1409.3215](https://arxiv.org/abs/1409.3215);
+    *使用 RNN 编码器-解码器进行统计机器翻译的短语表示学习*，[https://arxiv.org/abs/1406.1078](https://arxiv.org/abs/1406.1078)），该模型首次于2014年提出。它们使用
+    RNN 的方式特别适用于解决间接的多对多任务，例如这些任务。以下是 seq2seq 模型的示意图，其中输入序列 `[A, B, C, <EOS>]` 被解码为输出序列
+    `[W, X, Y, Z, <EOS>]`：
 - en: '![Figure 7.1 – A seq2seq model (inspired by https://arxiv.org/abs/1409.3215)](img/B19627_07_1.jpg)'
+  id: totrans-13
   prefs: []
   type: TYPE_IMG
+  zh: '![图 7.1 – 一个 seq2seq 模型（灵感来源于 https://arxiv.org/abs/1409.3215）](img/B19627_07_1.jpg)'
 - en: Figure 7.1 – A seq2seq model (inspired by [https://arxiv.org/abs/1409.3215](https://arxiv.org/abs/1409.3215))
+  id: totrans-14
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 7.1 – 一个 seq2seq 模型（灵感来源于 [https://arxiv.org/abs/1409.3215](https://arxiv.org/abs/1409.3215)）
 - en: 'The model consists of two parts:'
+  id: totrans-15
   prefs: []
   type: TYPE_NORMAL
+  zh: 该模型由两部分组成：
 - en: '`<EOS>`—end-of-sequence—token is reached. Let’s assume that the input is a
     textual sequence using word-level tokenization. Then, we’ll use word-embedding
     vectors as the encoder input at each step, and the `<EOS>` token signals the end
     of a sentence. The encoder output is discarded and has no role in the seq2seq
     model, as we’re only interested in the hidden encoder state.'
+  id: totrans-16
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`<EOS>`—序列结束—标记已到达。假设输入是使用词级别标记化的文本序列。那么，我们将在每一步使用词嵌入向量作为编码器输入，`<EOS>` 标记表示句子的结束。编码器的输出会被丢弃，在
+    seq2seq 模型中没有作用，因为我们只关心隐藏的编码器状态。'
 - en: '`<GO>` input signal. The encoder is also an RNN (LSTM or GRU). The link between
     the encoder and the decoder is the most recent encoder’s internal state vector,
     ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/550.png)
     (also known as the `<EOS>` becomes the most probable symbol, the decoding is finished.'
+  id: totrans-17
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '`<GO>` 输入信号。编码器也是一个 RNN（LSTM 或 GRU）。编码器和解码器之间的联系是编码器最新的内部状态向量， ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/550.png)（也称为
+    `<EOS>`，成为最可能的符号，解码完成）。'
 - en: An example of an autoregressive model
+  id: totrans-18
   prefs: []
   type: TYPE_NORMAL
+  zh: 自回归模型的示例
 - en: 'Let’s assume that we want to translate the English sentence *How are you today?*
     into Spanish. We’ll tokenize it as `[how, are, you, today, ?, <EOS>]`. An autoregressive
     model will start with an initial sequence `[<GO>]`. Then, it will generate the
@@ -119,8 +168,12 @@
     produce the next element and extend the sequence again: `[<GO>, ¿, cómo]`. We’ll
     repeat the same steps until the decoder predicts the `<EOS>` token: `[<GO>, ¿,
     cómo, estás, hoy, ?, <``EOS>]`.'
+  id: totrans-19
   prefs: []
   type: TYPE_NORMAL
+  zh: 假设我们想将英语句子*How are you today?*翻译成西班牙语。我们将其标记为`[how, are, you, today, ?, <EOS>]`。一个自回归模型将从初始序列`[<GO>]`开始。然后，它会生成翻译的第一个词，并将其附加到现有的输入序列中：`[<GO>,
+    ¿]`。新的序列将作为解码器的输入，以便生成下一个元素并再次扩展序列：`[<GO>, ¿, cómo]`。我们将重复相同的步骤，直到解码器预测出`<EOS>`标记：`[<GO>,
+    ¿, cómo, estás, hoy, ?, <EOS>]`。
 - en: 'The training of the model is supervised, as it needs to know both the input
     sequence and its corresponding target output sequence (for example, the same text
     in multiple languages). We feed the input sequence to the encoder, generate the
@@ -133,14 +186,21 @@
     target values `[t+1,...]` given target values `[...,t]`. We can think of this
     in the following way: the decoder input is the target sequence, while its output
     (target values) is the same sequence but shifted one position to the right.'
+  id: totrans-20
   prefs: []
   type: TYPE_NORMAL
+  zh: 该模型的训练是有监督的，因为它需要知道输入序列及其对应的目标输出序列（例如，多个语言中的相同文本）。我们将输入序列送入编码器，生成思维向量，![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/550.png)，并利用它启动解码器的输出序列生成。训练解码器使用一种叫做`[W,
+    X, Y]`的过程，但当前解码器生成的输出序列是`[W, X, Z]`。通过教师强制法，在步骤*t+1*时，解码器的输入将是*Y*而不是*Z*。换句话说，解码器学习在给定目标值`[...,t]`的情况下生成目标值`[t+1,...]`。我们可以这样理解：解码器的输入是目标序列，而其输出（目标值）是同一序列，但向右移动了一个位置。
 - en: 'To summarize, the seq2seq model solves the problem of varying input/output
     sequence lengths by encoding the input sequence into a fixed-length state vector,
     **v**, and then using this vector as a base to generate the output sequence. We
     can formalize this by saying that it tries to maximize the following probability:'
+  id: totrans-21
   prefs: []
   type: TYPE_NORMAL
+  zh: 总结来说，seq2seq模型通过将输入序列编码为固定长度的状态向量**v**，然后使用这个向量作为基础来生成输出序列，从而解决了输入/输出序列长度变化的问题。我们可以通过以下方式形式化这一过程：它尝试最大化以下概率：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:mi mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
     mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
@@ -148,11 +208,21 @@
     mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:munderover><mml:mrow><mml:mi
     mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
     mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:math>](img/561.png)'
+  id: totrans-22
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∏</mml:mo><mml:mrow><mml:mi>t</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:munderover><mml:mrow><mml:mi
+    mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:math>](img/561.png)'
 - en: 'This is equivalent to the following:'
+  id: totrans-23
   prefs: []
   type: TYPE_NORMAL
+  zh: 这等价于以下表达式：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:mi mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
     mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi
@@ -164,11 +234,25 @@
     mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
     mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
     mathvariant="normal">''</mml:mi></mml:mrow></mml:msup><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/562.png)'
+  id: totrans-24
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi
+    mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi></mml:mrow></mml:mfenced><mml:mi mathvariant="normal">P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>…</mml:mo><mml:mi
+    mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">''</mml:mi></mml:mrow></mml:msup><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/562.png)'
 - en: 'Let’s look at the elements of this formula in more detail:'
+  id: totrans-25
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们更详细地看一下这个公式的各个元素：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
     mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/563.png):
     The conditional probability where ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -178,28 +262,47 @@
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/565.png)
     is the output sequence with length *T’*'
+  id: totrans-26
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
+    mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/563.png)：条件概率，其中![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/564.png)
+    是长度为*T*的输入序列，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow></mml:mfenced](img/565.png)
+    是长度为*T’*的输出序列。'
 - en: '**v**: The fixed-length encoding of the input sequence (the thought vector)'
+  id: totrans-27
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '**v**：输入序列的固定长度编码（思维向量）。'
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
     mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
     mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:mi>y</mml:mi><mml:mn>1</mml:mn><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi><mml:mi>‘</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/566.png):
     The probability of an output word ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:math>](img/567.png)
     given prior words *y*, as well as the thought vector, **v**'
+  id: totrans-28
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
+    mathvariant="normal">P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi><mml:mo>,</mml:mo><mml:mi>y</mml:mi><mml:mn>1</mml:mn><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi><mml:mi>‘</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/566.png):
+    给定先前的词 *y* 以及思想向量 **v**，输出词 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msup><mml:mrow><mml:mi>T</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub></mml:math>](img/567.png)
+    的概率。'
 - en: The original seq2seq paper introduces a few tricks to enhance the training and
     performance of the model. For example, the encoder and decoder are two separate
     LSTMs. In the case of machine translations, this makes it possible to train different
     decoders for different languages with the same encoder.
+  id: totrans-29
   prefs: []
   type: TYPE_NORMAL
+  zh: 原始的 seq2seq 论文介绍了一些技巧，用于增强模型的训练和性能。例如，编码器和解码器是两个独立的 LSTM。在机器翻译的情况下，这使得可以使用相同的编码器为不同语言训练不同的解码器。
 - en: 'Another improvement is that the input sequence is fed to the decoder in reverse.
     For example, `[A,B,C]` -> `[W,X,Y,Z]` would become `[C,B,A]` -> `[W,X,Y,Z]`. There
     is no clear explanation of why this works, but the authors have shared their intuition:
@@ -213,34 +316,51 @@
     sequence elements suppress the available information for the older elements. In
     the next section, we’ll introduce an elegant way to solve this issue once and
     for all.'
+  id: totrans-30
   prefs: []
   type: TYPE_NORMAL
+  zh: 另一个改进是输入序列以反向方式输入到解码器。例如，`[A,B,C]` -> `[W,X,Y,Z]` 将变成 `[C,B,A]` -> `[W,X,Y,Z]`。没有明确的解释说明为什么这样有效，但作者分享了他们的直觉：由于这是一个逐步模型，如果序列按正常顺序排列，源句子中的每个源词将远离其在输出句子中的对应词。如果我们反转输入序列，输入/输出词之间的平均距离不会改变，但第一个输入词会非常接近第一个输出词。这有助于模型在输入和输出序列之间建立更好的通信。然而，这一改进也展示了
+    RNN（即使是 LSTM 或 GRU）隐藏状态的不足——较新的序列元素会抑制较老元素的可用信息。在下一节中，我们将介绍一种优雅的方式来彻底解决这个问题。
 - en: Understanding the attention mechanism
+  id: totrans-31
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
+  zh: 理解注意力机制
 - en: In this section, we’ll discuss several iterations of the attention mechanism
     in the order that they were introduced.
+  id: totrans-32
   prefs: []
   type: TYPE_NORMAL
+  zh: 在这一节中，我们将按引入的顺序讨论注意力机制的几个迭代版本。
 - en: Bahdanau attention
+  id: totrans-33
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
+  zh: Bahdanau 注意力
 - en: 'The first attention iteration (*Neural Machine Translation by Jointly Learning
     to Align and Translate*, [https://arxiv.org/abs/1409.0473](https://arxiv.org/abs/1409.0473)),
     known as **Bahdanau** attention, extends the seq2seq model with the ability for
     the decoder to work with all encoder hidden states, not just the last one. It
     is an addition to the existing seq2seq model, rather than an independent entity.
     The following diagram shows how Bahdanau attention works:'
+  id: totrans-34
   prefs: []
   type: TYPE_NORMAL
+  zh: 第一次注意力迭代（*Neural Machine Translation by Jointly Learning to Align and Translate*，
+    [https://arxiv.org/abs/1409.0473](https://arxiv.org/abs/1409.0473)），被称为**巴赫达瑙**注意力，扩展了
+    seq2seq 模型，使解码器能够与所有编码器隐藏状态进行交互，而不仅仅是最后一个状态。它是对现有 seq2seq 模型的补充，而不是一个独立的实体。下图展示了巴赫达瑙注意力的工作原理：
 - en: '![Figure 7.2 – The attention mechanism](img/B19627_07_2.png)'
+  id: totrans-35
   prefs: []
   type: TYPE_IMG
+  zh: '![图 7.2 – 注意力机制](img/B19627_07_2.png)'
 - en: Figure 7.2 – The attention mechanism
+  id: totrans-36
   prefs: []
   type: TYPE_NORMAL
+  zh: 图 7.2 – 注意力机制
 - en: 'Don’t worry—it looks scarier than it is. We’ll go through this diagram from
     top to bottom: the attention mechanism works by plugging an additional **context
     vector**, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
@@ -252,50 +372,84 @@
     at step *t-1* but also of the context vector ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/570.png):'
+  id: totrans-37
   prefs: []
   type: TYPE_NORMAL
+  zh: 别担心——它看起来比实际更复杂。我们将从上到下解析这个图：注意力机制通过在编码器和解码器之间插入一个额外的**上下文向量**，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/568.png)，来实现。隐藏的解码器状态
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/569.png)
+    在时间 *t* 上，现在不仅是隐藏状态和解码器输出的函数，还包含上下文向量 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/570.png)：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>f</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/571.png)'
+  id: totrans-38
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>f</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/571.png)'
 - en: 'Each decoder step has a unique context vector, and the context vector for one
     decoder step is just *a weighted sum of all encoder hidden states*. In this way,
     the encoder can access all input sequence states at each output step *t*, which
     removes the necessity to encode all information of the source sequence into a
     fixed-length thought vector, as the regular seq2seq model does:'
+  id: totrans-39
   prefs: []
   type: TYPE_NORMAL
+  zh: 每个解码步骤都有一个独特的上下文向量，而一个解码步骤的上下文向量只是*所有编码器隐藏状态的加权和*。通过这种方式，编码器可以在每个输出步骤 *t* 中访问所有输入序列状态，这消除了像常规
+    seq2seq 模型那样必须将源序列的所有信息编码为一个固定长度的思维向量的必要性：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
     stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/572.png)'
+  id: totrans-40
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/572.png)'
 - en: 'Let’s discuss this formula in more detail:'
+  id: totrans-41
   prefs: []
   type: TYPE_NORMAL
+  zh: 让我们更详细地讨论这个公式：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/570.png):
     The context vector for a decoder output step *t* out of *T’* total output steps'
+  id: totrans-42
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/570.png)：解码器输出步骤*t*（总共有*T’*个输出步骤）的上下文向量'
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png):
     The hidden state vector of encoder step *i* out of *T* total input steps'
+  id: totrans-43
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png)：编码器步骤*i*（总共有*T*个输入步骤）的隐藏状态向量'
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/575.png):
     The scalar weight associated with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png)
     in the context of the current decoder step *t*'
+  id: totrans-44
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/575.png)：与当前解码器步骤*t*中![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png)相关的标量权重'
 - en: Note that ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/577.png)
     is unique for both the encoder and decoder steps—that is, the input sequence states
     will have different weights depending on the current output step. For example,
@@ -308,16 +462,29 @@
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png)
     at step *t*.
+  id: totrans-45
   prefs: []
   type: TYPE_NORMAL
+  zh: 请注意，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/577.png)
+    对于编码器和解码器步骤都是唯一的——也就是说，输入序列的状态将根据当前的输出步骤具有不同的权重。例如，如果输入和输出序列的长度为 10，那么权重将由一个 10×10
+    的矩阵表示，共有 100 个权重。这意味着注意力机制将根据输出序列的当前状态，将解码器的注意力集中在输入序列的不同部分。如果![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/575.png)
+    很大，那么解码器将非常关注在步骤 *t* 时的![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png)。
 - en: 'But how do we compute the weights ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/575.png)?
     First, we should mention that the sum of all ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/581.png)
     weights for a decoder at step *t* is 1\. We can implement this with a softmax
     operation on top of the attention mechanism:'
+  id: totrans-46
   prefs: []
   type: TYPE_NORMAL
+  zh: 那么，我们如何计算权重![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/575.png)
+    呢？首先，我们需要提到，对于解码器的每个步骤 *t*，所有![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/581.png)
+    权重的总和为 1。我们可以通过在注意力机制之上执行 softmax 操作来实现这一点：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>p</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow><mml:mrow><mml:mrow><mml:munderover><mml:mo
@@ -327,8 +494,18 @@
     mathvariant="normal">f</mml:mi><mml:mi mathvariant="normal">t</mml:mi><mml:mi
     mathvariant="normal">m</mml:mi><mml:mi mathvariant="normal">a</mml:mi><mml:mi
     mathvariant="normal">x</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/582.png)'
+  id: totrans-47
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>p</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>p</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mi
+    mathvariant="normal">s</mml:mi><mml:mi mathvariant="normal">o</mml:mi><mml:mi
+    mathvariant="normal">f</mml:mi><mml:mi mathvariant="normal">t</mml:mi><mml:mi
+    mathvariant="normal">m</mml:mi><mml:mi mathvariant="normal">a</mml:mi><mml:mi
+    mathvariant="normal">x</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/582.png)'
 - en: 'Here, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/583.png)
     is an alignment score, which indicates how well the input sequence elements around
     position *i* match (or align with) the output at position *t*. This score (represented
@@ -344,14 +521,31 @@
     yet), as well as the encoder state ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png):'
+  id: totrans-48
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里，![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/583.png)
+    是一个对齐分数，表示输入序列中位置 *i* 附近的元素与位置 *t* 的输出匹配（或对齐）的程度。这个分数（由权重 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/584.png))
+    基于前一个解码器状态 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/585.png)（我们使用
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/585.png)，因为我们还没有计算
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/587.png)），以及编码器状态
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png)：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>a</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/589.png)'
+  id: totrans-49
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>a</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/589.png)'
 - en: 'Here, *a* (not alpha) is a differentiable function, which is trained with backpropagation
     together with the rest of the system. Different functions satisfy these requirements,
     but the authors of the paper chose the so-called **additive attention**, which
@@ -360,8 +554,14 @@
     and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/591.png)
     with the help of vector addition. It exists in two flavors:'
+  id: totrans-50
   prefs: []
   type: TYPE_NORMAL
+  zh: 这里，*a*（而非 alpha）是一个可微分函数，通过反向传播与系统的其他部分一起训练。不同的函数满足这些要求，但论文的作者选择了所谓的**加性注意力**，它通过向量加法将![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/457.png)和![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/591.png)结合起来。它有两种变体：
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>a</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
@@ -370,8 +570,17 @@
     separators="|"><mml:mrow><mml:mi mathvariant="bold">W</mml:mi><mml:mfenced open="["
     close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>;</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>](img/592.png)'
+  id: totrans-51
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>a</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi mathvariant="normal">⊤</mml:mi></mml:mrow></mml:msup><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>n</mml:mi><mml:mi>h</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi mathvariant="bold">W</mml:mi><mml:mfenced open="["
+    close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>;</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>](img/592.png)'
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>a</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
@@ -381,8 +590,18 @@
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/593.png)'
+  id: totrans-52
   prefs: []
   type: TYPE_IMG
+  zh: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>a</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:mi mathvariant="normal">⊤</mml:mi></mml:mrow></mml:msup><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>n</mml:mi><mml:mi>h</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/593.png)'
 - en: In the first formula, **W** is a weight matrix, applied over the concatenated
     vectors ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/457.png)
@@ -400,6 +619,7 @@
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/574.png).
     In both cases, the alignment model can be represented as a simple **feedforward
     network** (**FFN**) with one hidden layer.
+  id: totrans-53
   prefs: []
   type: TYPE_NORMAL
 - en: 'Now that we know the formulas for ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -407,6 +627,7 @@
     mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/570.png)
     and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/575.png),
     let’s replace the latter with the former:'
+  id: totrans-54
   prefs: []
   type: TYPE_NORMAL
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
@@ -418,14 +639,17 @@
     stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mi>e</mml:mi><mml:mi>x</mml:mi><mml:mi>p</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mfrac><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:math>](img/602.png)'
+  id: totrans-55
   prefs: []
   type: TYPE_IMG
 - en: 'As a conclusion, let’s summarize the attention algorithm in a step-by-step
     manner as follows:'
+  id: totrans-56
   prefs: []
   type: TYPE_NORMAL
 - en: Feed the encoder with the input sequence and compute the set of hidden states,
     H = {h 1, h 2…h T}.
+  id: totrans-57
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -440,6 +664,7 @@
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/605.png),
     as the initial hidden state.
+  id: totrans-58
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -449,6 +674,7 @@
     mathvariant="normal">f</mml:mi><mml:mi mathvariant="normal">t</mml:mi><mml:mi
     mathvariant="normal">m</mml:mi><mml:mi mathvariant="normal">a</mml:mi><mml:mi
     mathvariant="normal">x</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/606.png).
+  id: totrans-59
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -457,9 +683,14 @@
     mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:msubsup><mml:mo
     stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msubsup><mml:mrow><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/607.png).
+  id: totrans-60
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
+  zh: 计算上下文向量 ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:msubsup><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msubsup><mml:mrow><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/607.png)。
 - en: Compute the hidden state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mtext>RNN</mml:mtext></mml:mrow><mml:mrow><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>r</mml:mi></mml:mrow></mml:msub><mml:mfenced
@@ -495,17 +726,21 @@
     where ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>y</mml:mi></mml:mrow></mml:msub></mml:math>](img/615.png)
     is a weight matrix.
+  id: totrans-61
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Repeat *steps 2* to *5* until the end of the sequence.
+  id: totrans-62
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Next, we’ll discuss a slightly improved version of Bahdanau attention.
+  id: totrans-63
   prefs: []
   type: TYPE_NORMAL
 - en: Luong attention
+  id: totrans-64
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -518,15 +753,19 @@
     as opposed to ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/617.png)
     in Bahdanau attention. To better understand this, let’s compare the two algorithms:'
+  id: totrans-65
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.3 – Left: Bahdanau attention; right: Luong attention](img/B19627_07_3.jpg)'
+  id: totrans-66
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.3 – Left: Bahdanau attention; right: Luong attention'
+  id: totrans-67
   prefs: []
   type: TYPE_NORMAL
 - en: 'We’ll go through a step-by-step execution of Luong attention:'
+  id: totrans-68
   prefs: []
   type: TYPE_NORMAL
 - en: Feed the encoder with the input sequence and compute the set of encoder hidden
@@ -538,6 +777,7 @@
     open="{" close="}" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/619.png).
+  id: totrans-69
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -550,6 +790,7 @@
     and the previous decoder’s output ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/611.png)
     (not the context vector, though).'
+  id: totrans-70
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -561,6 +802,7 @@
     mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/624.png).
     Besides additive attention, the Luong attention paper also proposes two types
     of **multiplicative attention**:'
+  id: totrans-71
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -569,6 +811,7 @@
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/625.png):
     **Dot product** without any parameters. In this case, the vectors **s** and **h**
     (represented as column and row matrices) need to have the same sizes.'
+  id: totrans-72
   prefs:
   - PREF_IND
   - PREF_UL
@@ -580,6 +823,7 @@
     Here, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/627.png)
     is a trainable weight matrix of the attention layer.'
+  id: totrans-73
   prefs:
   - PREF_IND
   - PREF_UL
@@ -589,6 +833,7 @@
     the dot product acts as a similarity measure between vectors. Therefore, if the
     vectors are similar (that is, aligned), the result of the multiplication will
     be a large value and the attention will be focused on the current *t,i* relationship.
+  id: totrans-74
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
@@ -598,6 +843,7 @@
     mathvariant="normal">m</mml:mi><mml:mi mathvariant="normal">a</mml:mi><mml:mi
     mathvariant="normal">x</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/606.png):
     Compute the weights.'
+  id: totrans-75
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -606,6 +852,7 @@
     stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msubsup><mml:mrow><mml:msub><mml:mrow><mml:mi>α</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/607.png):
     Compute the context vector.'
+  id: totrans-76
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -635,30 +882,37 @@
     where ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>y</mml:mi></mml:mrow></mml:msub></mml:math>](img/615.png)
     is a weight matrix.'
+  id: totrans-77
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Repeat *steps 2* to *6* until the end of the sequence.
+  id: totrans-78
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: Next, we’ll use Bahdanau and Luong attention as a stepping stone to a generic
     attention mechanism.
+  id: totrans-79
   prefs: []
   type: TYPE_NORMAL
 - en: General attention
+  id: totrans-80
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'Although we’ve discussed the attention mechanism in the context of seq2seq
     with RNNs, it is a general **deep learning** (**DL**) technique in its own right.
     To understand it, let’s start with the following diagram:'
+  id: totrans-81
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.4 – General attention](img/B19627_07_4.jpg)'
+  id: totrans-82
   prefs: []
   type: TYPE_IMG
 - en: Figure 7.4 – General attention
+  id: totrans-83
   prefs: []
   type: TYPE_NORMAL
 - en: It starts with a query, **q**, executed against a database of key-value pairs,
@@ -677,9 +931,11 @@
     mathvariant="bold">q</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/639.png),
     we can also represent them as a matrix, **Q**. Hence, these are often abbreviated
     as **Q**, **K**, and **V**.
+  id: totrans-84
   prefs: []
   type: TYPE_NORMAL
 - en: Differences between general attention and Bahdanau/Luong attention
+  id: totrans-85
   prefs: []
   type: TYPE_NORMAL
 - en: Unlike general attention, the keys **K** and the values **V** of Bahdanau and
@@ -697,15 +953,18 @@
     executed against the database of key-value pairs, where the keys/values are the
     hidden states ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/643.png).
+  id: totrans-86
   prefs: []
   type: TYPE_NORMAL
 - en: 'General attention uses a multiplicative, rather than additive, mechanism (like
     Luong attention). Here’s how it works:'
+  id: totrans-87
   prefs: []
   type: TYPE_NORMAL
 - en: The starting point is one of the input query vectors, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">q</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/644.png).
+  id: totrans-88
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -722,6 +981,7 @@
     mathvariant="bold">k</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/647.png).
     As we mentioned in the *Bahdanau attention* section, the dot product acts as a
     similarity measure, and it makes sense to use it on this occasion.'
+  id: totrans-89
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -737,6 +997,7 @@
     mathvariant="bold">k</mml:mi></mml:mrow><mml:mrow><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mfrac></mml:math>](img/648.png):
     Compute the final weights of each value vector against the query with the help
     of softmax.'
+  id: totrans-90
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -745,6 +1006,7 @@
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">k</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:math>](img/649.png):'
+  id: totrans-91
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -767,21 +1029,26 @@
     mathvariant="bold">k</mml:mi></mml:mrow><mml:mrow><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mfrac><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">k</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:math>](img/650.png)'
+  id: totrans-92
   prefs: []
   type: TYPE_IMG
 - en: 'To better understand the attention mechanism, we’ll use the numerical example
     displayed in the following diagram:'
+  id: totrans-93
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.5 – An attention example with a four-dimensional query executed
     against a key-value store with four vectors](img/B19627_07_5.jpg)'
+  id: totrans-94
   prefs: []
   type: TYPE_IMG
 - en: Figure 7.5 – An attention example with a four-dimensional query executed against
     a key-value store with four vectors
+  id: totrans-95
   prefs: []
   type: TYPE_NORMAL
 - en: 'Let’s track it step by step:'
+  id: totrans-96
   prefs: []
   type: TYPE_NORMAL
 - en: Execute a four-dimensional query vector, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -789,6 +1056,7 @@
     mathvariant="bold">q</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mfenced
     open="[" close="]" separators="|"><mml:mrow><mml:mn>0.6,1.2</mml:mn><mml:mo>,</mml:mo><mml:mo>-</mml:mo><mml:mn>1.2,1.8</mml:mn></mml:mrow></mml:mfenced></mml:math>](img/651.png),
     against a key-value store of four four-dimensional vectors.
+  id: totrans-97
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -821,10 +1089,12 @@
     \ xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi\
     \ mathvariant=\"bold\">q</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi\
     \ mathvariant=\"bold\">k</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>2.4</mml:mn></mml:math>](img/657.png),"
+  id: totrans-98
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: and it should have the largest influence over the final result.
+  id: totrans-99
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
@@ -841,6 +1111,7 @@
     xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">k</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/660.png)
     is even higher compared to the ratio of the input alignment scores.
+  id: totrans-100
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -862,15 +1133,18 @@
     and the input query, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">q</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/666.png).
+  id: totrans-101
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
 - en: I hope that this example has helped you understand the attention mechanism,
     as this is one of the major DL innovations in the past 10 years. Next, we’ll discuss
     an even more advanced attention version.
+  id: totrans-102
   prefs: []
   type: TYPE_NORMAL
 - en: Transformer attention
+  id: totrans-103
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -879,18 +1153,22 @@
     Don’t worry—you don’t need to know about transformers yet, as **transformer attention**
     (**TA**) is an independent self-sufficient building block of the entire model.
     It is displayed in the following diagram:'
+  id: totrans-104
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.6 – Scaled dot product (multiplicative) TA (inspired by https://arxiv.org/abs/1706.03762)](img/B19627_07_6.jpg)'
+  id: totrans-105
   prefs: []
   type: TYPE_IMG
 - en: Figure 7.6 – Scaled dot product (multiplicative) TA (inspired by [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762))
+  id: totrans-106
   prefs: []
   type: TYPE_NORMAL
 - en: 'The TA uses dot product (multiplicative) similarity and follows the general
     attention procedure we introduced in the *General attention* section (as we have
     already mentioned, it is not restricted to RNN models). We can define it with
     the following formula:'
+  id: totrans-107
   prefs: []
   type: TYPE_NORMAL
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
@@ -907,11 +1185,13 @@
     mathvariant="bold">Q</mml:mi><mml:msup><mml:mrow><mml:mi mathvariant="bold">K</mml:mi></mml:mrow><mml:mrow><mml:mi
     mathvariant="normal">⊤</mml:mi></mml:mrow></mml:msup></mml:mrow><mml:mrow><mml:msqrt><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>k</mml:mi></mml:mrow></mml:msub></mml:msqrt></mml:mrow></mml:mfrac></mml:mrow></mml:mfenced><mml:mi
     mathvariant="bold">V</mml:mi></mml:math>](img/667.png)'
+  id: totrans-108
   prefs: []
   type: TYPE_IMG
 - en: 'In practice, we’ll compute the TA function over a set of queries simultaneously,
     packed in a matrix **Q** (the keys **K**, the values **V**, and the result are
     also matrices). Let’s discuss the steps of the formula in more detail:'
+  id: totrans-109
   prefs: []
   type: TYPE_NORMAL
 - en: 'Match the queries, **Q**, against the database (keys **K**) with matrix multiplication
@@ -940,6 +1220,7 @@
     mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mo>×</mml:mo><mml:mi>n</mml:mi></mml:mrow></mml:msup></mml:math>](img/675.png),
     where one row contains the alignment scores of a single query against all keys
     of the database:'
+  id: totrans-110
   prefs:
   - PREF_OL
   type: TYPE_NORMAL
@@ -969,12 +1250,14 @@
     mathvariant="bold-italic">m</mi><mi mathvariant="bold-italic">n</mi></mrow></msub></mtd></mtr></mtable></mfenced><mo
     stretchy="true">⏟</mo></munder><mrow><mi mathvariant="bold">Q</mi><msup><mi mathvariant="bold">K</mi><mi
     mathvariant="normal">⊤</mi></msup></mrow></munder></mrow></mrow></math>](img/676.png)'
+  id: totrans-111
   prefs: []
   type: TYPE_IMG
 - en: In other words, we can match multiple queries against multiple database keys
     in a single matrix-matrix multiplication. For example, in the context of translation,
     we can compute the alignment scores of all words of the target sentence over all
     words of the source sentence in the same way.
+  id: totrans-112
   prefs: []
   type: TYPE_NORMAL
 - en: 2. Scale the alignment scores with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -989,10 +1272,12 @@
     the dot product grows large in magnitude and pushes the softmax in regions with
     extremely small gradients. This, in turn, leads to the vanishing gradients problem,
     hence the need to scale the results.
+  id: totrans-113
   prefs: []
   type: TYPE_NORMAL
 - en: '3. Compute the attention scores with the softmax operation along the rows of
     the matrix (we’ll talk about the **mask** operation later):'
+  id: totrans-114
   prefs: []
   type: TYPE_NORMAL
 - en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi
@@ -1019,10 +1304,12 @@
     mathvariant="normal">x</mi><mo>(</mo><mo>[</mo><msub><mi>e</mi><mrow><mi mathvariant="bold-italic">m</mi><mn>1</mn></mrow></msub><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt><mo>,</mo></mrow></mrow></mtd><mtd><mrow><msub><mi>e</mi><mrow><mi
     mathvariant="bold-italic">m</mi><mn>2</mn></mrow></msub><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mrow></mtd></mtr></mtable></mtd><mtd><mo>⋯</mo></mtd><mtd><mrow><mrow><msub><mi>e</mi><mrow><mi
     mathvariant="bold-italic">m</mi><mi mathvariant="bold-italic">n</mi></mrow></msub><mo>/</mo><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt><mo>]</mo><mo>)</mo></mrow></mrow></mtd></mtr></mtable></mfenced></mrow></mrow></math>](img/681.png)'
+  id: totrans-115
   prefs: []
   type: TYPE_IMG
 - en: '4. Compute the final attention vector by multiplying the attention scores with
     the values **V**:'
+  id: totrans-116
   prefs: []
   type: TYPE_NORMAL
 - en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi
@@ -1057,16 +1344,20 @@
     mathvariant="bold-italic">n</mi><msub><mi mathvariant="bold-italic">d</mi><mi
     mathvariant="bold-italic">v</mi></msub></mrow></msub></mtd></mtr></mtable></mfenced><mo>=</mo><mi
     mathvariant="bold">A</mi><mo>∈</mo><msup><mi mathvariant="double-struck">R</mi><mrow><mi>m</mi><mo>×</mo><msub><mi>d</mi><mi>v</mi></msub></mrow></msup></mrow></mrow></math>](img/682.png)'
+  id: totrans-117
   prefs: []
   type: TYPE_IMG
 - en: 'The full TA uses a collection of such attention blocks and is known as **multi-head
     attention** (**MHA**), as displayed in the following diagram:'
+  id: totrans-118
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.7 – MHA (inspired by https://arxiv.org/abs/1706.03762)](img/B19627_07_7.jpg)'
+  id: totrans-119
   prefs: []
   type: TYPE_IMG
 - en: Figure 7.7 – MHA (inspired by https://arxiv.org/abs/1706.03762)
+  id: totrans-120
   prefs: []
   type: TYPE_NORMAL
 - en: Instead of a single attention function with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -1080,20 +1371,24 @@
     xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>v</mml:mi></mml:mrow></mml:msub></mml:math>](img/687.png)-dimensional
     output for each head. Next, we concatenate the head outputs and linearly project
     them to produce the final attention result.
+  id: totrans-121
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-122
   prefs: []
   type: TYPE_NORMAL
 - en: By linear projection, we mean applying an FC layer. That is, initially we branch
     the **Q**/**K**/**V** matrices with the help of separate FC operations. In the
     end, we use an FC layer to combine and compress the concatenated head outputs.
     In this case, we follow the terminology used in the original paper.
+  id: totrans-123
   prefs: []
   type: TYPE_NORMAL
 - en: 'MHA allows each head to attend to different elements of the sequence. At the
     same time, the model combines the outputs of the heads in a single cohesive representation.
     More precisely, we can define this with the following formula:'
+  id: totrans-124
   prefs: []
   type: TYPE_NORMAL
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
@@ -1113,6 +1408,7 @@
     mathvariant="bold">h</mml:mi><mml:mi mathvariant="bold">e</mml:mi><mml:mi mathvariant="bold">a</mml:mi><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">d</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:msup><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi></mml:mrow></mml:msup></mml:math>](img/688.png)'
+  id: totrans-125
   prefs: []
   type: TYPE_IMG
 - en: Here, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
@@ -1126,9 +1422,11 @@
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>Q</mml:mi></mml:mrow></mml:msubsup><mml:mo>,</mml:mo><mml:mi
     mathvariant="bold">K</mml:mi><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>K</mml:mi></mml:mrow></mml:msubsup><mml:mo>,</mml:mo><mml:mi
     mathvariant="bold">V</mml:mi><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi></mml:mrow></mml:msubsup></mml:mrow></mml:mfenced></mml:math>](img/689.png).
+  id: totrans-126
   prefs: []
   type: TYPE_NORMAL
 - en: 'Let’s look at this in more detail, starting with the heads:'
+  id: totrans-127
   prefs: []
   type: TYPE_NORMAL
 - en: Each head receives the linearly projected versions of the initial **Q**, **K**,
@@ -1155,12 +1453,14 @@
     and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi></mml:mrow></mml:msubsup><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
     mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>v</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/698.png).
+  id: totrans-128
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Once **Q**, **K**, and **V** are transformed, we can compute the attention of
     each head using the regular attention block we described at the beginning of this
     section.
+  id: totrans-129
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1171,6 +1471,7 @@
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">h</mml:mi><mml:mi
     mathvariant="bold">e</mml:mi><mml:mi mathvariant="bold">a</mml:mi><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">d</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/700.png).
+  id: totrans-130
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1201,28 +1502,34 @@
     as an input for a variety of downstream tasks. Its purpose is similar to the static
     word2vec embedding, but it is much more expressive and makes it possible to solve
     more complex tasks with greater accuracy.'
+  id: totrans-131
   prefs: []
   type: TYPE_NORMAL
 - en: 'We can illustrate how self-attention works with the following diagram, which
     shows the multi-head self-attention of the word *economy* (different colors represent
     different attention heads):'
+  id: totrans-132
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.8 – Multi-head self-attention of the word “economy” (generated by
     https://github.com/jessevig/bertviz)](img/B19627_07_8.jpg)'
+  id: totrans-133
   prefs: []
   type: TYPE_IMG
 - en: Figure 7.8 – Multi-head self-attention of the word “economy” (generated by https://github.com/jessevig/bertviz)
+  id: totrans-134
   prefs: []
   type: TYPE_NORMAL
 - en: We can see that the strongest link to *economy* comes from the word *market*,
     which makes sense because the two words form a phrase with a unique meaning. However,
     we can also see that different heads attend to different, further, parts of the
     input sequence.
+  id: totrans-135
   prefs: []
   type: TYPE_NORMAL
 - en: 'As a conclusion to this section, let’s outline the advantages of the attention
     mechanism compared to the way RNNs process sequences:'
+  id: totrans-136
   prefs: []
   type: TYPE_NORMAL
 - en: '**Direct access to the elements of the sequence**: An RNN encodes the information
@@ -1231,6 +1538,7 @@
     representational power—it can only preserve meaningful information for a sequence
     with a maximum length of around 100 tokens before the newest tokens start erasing
     the information of the older ones.'
+  id: totrans-137
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1238,6 +1546,7 @@
     elements. On one hand, this imposes a strict limit on the maximum sequence length.
     On the other hand, it makes it possible, as of the time of writing book, to have
     transformer-based LLMs, which can process sequences of more than 32,000 tokens.
+  id: totrans-138
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
@@ -1247,6 +1556,7 @@
     multiplication operations, which are **embarrassingly parallel**. This makes it
     possible to train LLMs with billions of trainable parameters over large training
     datasets.'
+  id: totrans-139
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1254,12 +1564,15 @@
     of the sequence elements, the attention mechanism, with its direct access, does
     not. However, we’ll introduce a workaround to that limitation in the *Transformer*
     *encoder* section.
+  id: totrans-140
   prefs: []
   type: TYPE_NORMAL
 - en: This concludes our theoretical introduction to TA. Next, let’s implement it.
+  id: totrans-141
   prefs: []
   type: TYPE_NORMAL
 - en: Implementing TA
+  id: totrans-142
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -1267,15 +1580,18 @@
     attention* section. The code in this section is part of the larger transformer
     implementation, which we’ll discuss throughout the chapter. We won’t include the
     full source code, but you can find it in the book’s GitHub repo.
+  id: totrans-143
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-144
   prefs: []
   type: TYPE_NORMAL
 - en: This example is based on [https://github.com/harvardnlp/annotated-transformer](https://github.com/harvardnlp/annotated-transformer).
     Let’s also note that PyTorch has native transformer modules (the documentation
     is available at [https://pytorch.org/docs/stable/generated/torch.nn.Transformer.html](https://pytorch.org/docs/stable/generated/torch.nn.Transformer.html)).
     Still, in this section, we’ll implement TA from scratch to understand it better.
+  id: totrans-145
   prefs: []
   type: TYPE_NORMAL
 - en: 'We’ll start with the implementation of regular scaled dot product attention.
@@ -1294,15 +1610,19 @@
     mathvariant="bold">K</mml:mi></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup><mml:mtext>/</mml:mtext><mml:msqrt><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>k</mml:mi></mml:mrow></mml:msub></mml:msqrt></mml:mrow></mml:mfenced><mml:mi
     mathvariant="bold">V</mml:mi></mml:math>](img/701.png), where `query`, `key`,
     and `value`:'
+  id: totrans-146
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE0]'
+  id: totrans-147
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE0]'
 - en: The `attention` function includes `dropout`, as it is part of the full transformer
     implementation. Once again, we’ll leave the `mask` parameter and its purpose for
     later. Let’s also note a novel detail—the use of the `@` operator (`query @ key.transpose(-2,
     -1)` and `p_attn @ value`), which, as of Python 3.5, is reserved for matrix multiplication.
+  id: totrans-148
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, let’s continue with the MHA implementation. As a reminder, the implementation
@@ -1325,49 +1645,64 @@
     mathvariant="bold">d</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:msup><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi></mml:mrow></mml:msup></mml:math>](img/702.png)
     . Here, hea d i = Attention(Q W i Q,'
+  id: totrans-149
   prefs: []
   type: TYPE_NORMAL
 - en: K W i K, V W i V).
+  id: totrans-150
   prefs: []
   type: TYPE_NORMAL
 - en: 'We’ll implement it as a subclass of `torch.nn.Module`, called `MultiHeadedAttention`.
     We’ll start with the constructor:'
+  id: totrans-151
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE1]'
+  id: totrans-152
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE1]'
 - en: Note that we use the `clones` function (implemented on GitHub) to create four
     identical FC `self.fc_layers` instances. We’ll use three of them for the `self.attn`
     property.
+  id: totrans-153
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, let’s implement the `MultiHeadedAttention.forward` method. Please bear
     in mind that the declaration should be indented, as it is a property of the `MultiHeadedAttention`
     class:'
+  id: totrans-154
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE2]'
+  id: totrans-155
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE2]'
 - en: 'We iterate over the `query`/`key`/`value` tensors and their reference projection,
     `self.fc_layers`, and produce `query`/`key`/`value` projections with the following
     snippet:'
+  id: totrans-156
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE3]'
+  id: totrans-157
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE3]'
 - en: Then, we apply regular attention over the projections using the attention function
     we first defined. Next, we concatenate the outputs of the multiple heads, and
     finally, we feed them to the last FC layer (`self.fc_layers[-1]`) and return the
     results.
+  id: totrans-158
   prefs: []
   type: TYPE_NORMAL
 - en: Now that we’ve discussed the TA, let’s continue with the transformer model itself.
+  id: totrans-159
   prefs: []
   type: TYPE_NORMAL
 - en: Building transformers with attention
+  id: totrans-160
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -1376,14 +1711,17 @@
     RNNs, relies solely on the attention mechanism (*Attention Is All You Need*, [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)).
     The following diagram shows two of the most popular transformer flavors, **post-ln**
     and **pre-ln** (or **post-normalization** and **pre-normalization**):'
+  id: totrans-161
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.9 – Left: the original (post-normalization, post-ln) transformer;
     right: pre-normalization (pre-ln) transformer (inspired by https://arxiv.org/abs/1706.03762)](img/B19627_07_9.jpg)'
+  id: totrans-162
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.9 – Left: the original (post-normalization, post-ln) transformer;
     right: pre-normalization (pre-ln) transformer (inspired by https://arxiv.org/abs/1706.03762)'
+  id: totrans-163
   prefs: []
   type: TYPE_NORMAL
 - en: It looks scary, but fret not—it’s easier than it seems. In this section, we’ll
@@ -1393,9 +1731,11 @@
     the seq2seq model, it has two components—an **encoder** and a **decoder**. We’ll
     start with the encoder (the left-hand component of both sections of the preceding
     diagram).
+  id: totrans-164
   prefs: []
   type: TYPE_NORMAL
 - en: Transformer encoder
+  id: totrans-165
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -1410,12 +1750,14 @@
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msqrt><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:msqrt></mml:math>](img/708.png).
     They are initialized randomly and are trained with the whole model (this is opposed
     to initializing them with an algorithm such as word2vec).
+  id: totrans-166
   prefs: []
   type: TYPE_NORMAL
 - en: The next step adds positional information to the existing embedding vector.
     This is necessary because the attention mechanism doesn’t preserve the order of
     sequence elements. This step modifies the embedding vectors in a way that implicitly
     encodes that information within them.
+  id: totrans-167
   prefs: []
   type: TYPE_NORMAL
 - en: The original transformer implementation uses **static positional encoding**,
@@ -1425,10 +1767,12 @@
     for each position of the sequence but is constant with regard to the elements
     of the sequence. Because of this, we can precompute the positional encodings only
     once and use them subsequently.
+  id: totrans-168
   prefs: []
   type: TYPE_NORMAL
 - en: An alternative way to encode positional information is with relative position
     representations
+  id: totrans-169
   prefs: []
   type: TYPE_NORMAL
 - en: (*Self-Attention with Relative Position Representations*, [https://arxiv.org/abs/1803.02155](https://arxiv.org/abs/1803.02155)).
@@ -1437,11 +1781,13 @@
     different position in relation to the rest of the elements. Therefore, the relative
     position encoding is computed dynamically for each token. This encoding is applied
     to the **K** and **V** matrices as an additional part of the attention formula.
+  id: totrans-170
   prefs: []
   type: TYPE_NORMAL
 - en: 'The rest of the encoder is composed of a stack of *N=6* identical blocks that
     come in two flavors: post-ln and pre-ln. Both types of blocks share the following
     sublayers:'
+  id: totrans-171
   prefs: []
   type: TYPE_NORMAL
 - en: A multi-head self-attention mechanism, like the one we described in the *Transformer
@@ -1451,6 +1797,7 @@
     come after it in the sequence. This is opposed to a regular RNN, which only has
     access to the tokens that came before the current one. Each position in an encoder
     block can attend to all positions in the previous encoder block.
+  id: totrans-172
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1459,10 +1806,12 @@
     the same time, the embeddings of its context act as the key-value store **K**/**V**.
     The output vector of the multi-head self-attention operation serves as input for
     the rest of the model.
+  id: totrans-173
   prefs:
   - PREF_IND
   type: TYPE_NORMAL
 - en: MHA and activation functions
+  id: totrans-174
   prefs: []
   type: TYPE_NORMAL
 - en: The MHA produces *h* attention vectors for each of the *h* attention heads for
@@ -1470,13 +1819,16 @@
     them. The whole attention block doesn’t have an explicit activation function.
     But let’s recall that the attention block ends with a non-linearity, softmax.
     The dot product of the key-value vectors is an additional
+  id: totrans-175
   prefs: []
   type: TYPE_NORMAL
 - en: non-linearity. In that strict sense, the attention block doesn’t need additional
     activation.
+  id: totrans-176
   prefs: []
   type: TYPE_NORMAL
 - en: 'A simple FC FFN, which is defined by the following formula:'
+  id: totrans-177
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1486,6 +1838,7 @@
     mathvariant="bold">x</mml:mi><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
     mathvariant="normal">b</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/709.png)'
+  id: totrans-178
   prefs: []
   type: TYPE_IMG
 - en: The network is applied to each sequence element, **x**, separately. It uses
@@ -1500,6 +1853,7 @@
     However, more recent models use one of its variations, such as **sigmoid linear
     units** (**SiLUs**). The role of the FFN is to process the MHA output in a way
     that better fits the input for the next block.
+  id: totrans-179
   prefs: []
   type: TYPE_NORMAL
 - en: 'The difference between pre-ln and post-ln blocks lies in the position of the
@@ -1508,21 +1862,25 @@
     of that connection and its own output. The normalization layers in the post-ln
     transformer lie after the attention and the FFN, respectively. Therefore, the
     output of each post-ln sublayer is as follows:'
+  id: totrans-180
   prefs: []
   type: TYPE_NORMAL
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:mtext>LayerNorm</mml:mtext><mml:mfenced separators="|"><mml:mrow><mml:mtext>x</mml:mtext><mml:mo>+</mml:mo><mml:mtext>SubLayer</mml:mtext><mml:mfenced
     separators="|"><mml:mrow><mml:mtext>x</mml:mtext></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>](img/714.png)'
+  id: totrans-181
   prefs: []
   type: TYPE_IMG
 - en: 'In contrast, the pre-ln blocks (the right section of *Figure 7**.9*), in the
     two encoder normalization layers lie before the attention and the FFN, respectively.
     Therefore, the output of each pre-ln sublayer is this:'
+  id: totrans-182
   prefs: []
   type: TYPE_NORMAL
 - en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
     display="block"><mml:mi mathvariant="bold">x</mml:mi><mml:mo>+</mml:mo><mml:mtext>SubLayer</mml:mtext><mml:mfenced
     separators="|"><mml:mrow><mml:mtext>LayerNorm</mml:mtext><mml:mfenced separators="|"><mml:mrow><mml:mtext>x</mml:mtext></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>](img/715.png)'
+  id: totrans-183
   prefs: []
   type: TYPE_IMG
 - en: The difference between the two flavors manifests itself during training. Without
@@ -1538,45 +1896,58 @@
     from **representation collapse**, where the hidden representation in deeper blocks
     (those closer to the end of the NN) will be similar and thus contribute little
     to model capacity. In practice, both types of blocks are in use.
+  id: totrans-184
   prefs: []
   type: TYPE_NORMAL
 - en: So far, so good with the encoder. Next, let’s build upon our attention implementation
     by building the encoder as well.
+  id: totrans-185
   prefs: []
   type: TYPE_NORMAL
 - en: Implementing the encoder
+  id: totrans-186
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: 'In this section, we’ll implement the post-ln encoder, which is composed of
     several different submodules. Let’s start with the main class, `Encoder`:'
+  id: totrans-187
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE4]'
+  id: totrans-188
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE4]'
 - en: It stacks `N` instances of `EncoderBlock` (`self.blocks`), followed by a `LayerNorm`
     normalization, `self.norm`. Each instance serves as input to the next, as the
     definition of the `forward` method shows. In addition to the regular input, `x`,
     `forward` also takes as input a `mask` parameter. However, it is only relevant
     to the decoder part, so we won’t focus on it here.
+  id: totrans-189
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, let’s see the implementation of the `EncoderBlock` class:'
+  id: totrans-190
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE5]'
+  id: totrans-191
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE5]'
 - en: 'Each encoder block consists of multi-head self-attention (`self.self_attn`)
     and FFN (`self.ffn`) sublayers (`self.sublayers`). Each sublayer is wrapped by
     its residual connection, `SublayerConnection` class and instantiated with the
     familiar `clone` function:'
+  id: totrans-192
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE6]'
+  id: totrans-193
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE6]'
 - en: The `SublayerConnection.forward` method takes as input the data tensor, `x`,
     and `sublayer`, which is an instance of either `MultiHeadedAttention` or `PositionwiseFFN`
     (it matches the sublayer definition ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -1584,6 +1955,7 @@
     separators="|"><mml:mrow><mml:mtext>x</mml:mtext><mml:mo>+</mml:mo><mml:mtext>SubLayer</mml:mtext><mml:mfenced
     separators="|"><mml:mrow><mml:mtext>x</mml:mtext></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>](img/716.png)
     from the *Transformer* *encoder* section).
+  id: totrans-194
   prefs: []
   type: TYPE_NORMAL
 - en: 'The only component we haven’t defined yet is `PositionwiseFFN`, which implements
@@ -1593,16 +1965,21 @@
     mathvariant="bold">x</mml:mi><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:msub><mml:mrow><mml:mi
     mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/717.png).
     We’ll use SiLU activation. Let’s add this missing piece:'
+  id: totrans-195
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE7]'
+  id: totrans-196
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE7]'
 - en: This concludes our implementation of the encoder. Next, let’s focus our attention
     on the decoder.
+  id: totrans-197
   prefs: []
   type: TYPE_NORMAL
 - en: Transformer decoder
+  id: totrans-198
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -1620,6 +1997,7 @@
     new output of the encoder will initiate the next token generation step of the
     decoder, and so on. In effect, the target token sequence is the same as the input
     token sequence, shifted by one (similar to the seq2seq decoder).
+  id: totrans-199
   prefs: []
   type: TYPE_NORMAL
 - en: 'The decoder uses the same embedding vectors and positional encoding as the
@@ -1627,6 +2005,7 @@
     consists of three sublayers and each sublayer employs residual connections, dropout,
     and normalization. As with the encoder, the blocks come in post-ln and pre-ln
     flavors. The sublayers are as follows:'
+  id: totrans-200
   prefs: []
   type: TYPE_NORMAL
 - en: 'A masked multi-head self-attention mechanism. The encoder’s self-attention
@@ -1641,6 +2020,7 @@
     setting −∞ on all such values in the input of the attention softmax. We can see
     the mask component in *Figure 7**.6* of the *Transformer attention* section and
     the result of the mask operation here:'
+  id: totrans-201
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1658,6 +2038,7 @@
     open="[" close="]" separators="|"><mml:mrow><mml:mtable><mml:mtr><mml:mtd><mml:mtable><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mn>11</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:mo>-</mml:mo><mml:mi>∞</mml:mi></mml:mtd><mml:mtd><mml:mo>-</mml:mo><mml:mi>∞</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mn>21</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mn>22</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:mo>-</mml:mo><mml:mi>∞</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mn>31</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mn>32</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mn>33</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr></mml:mtable></mml:mtd><mml:mtd><mml:mo>⋯</mml:mo></mml:mtd><mml:mtd><mml:mtable><mml:mtr><mml:mtd><mml:mo>-</mml:mo><mml:mi>∞</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mo>-</mml:mo><mml:mi>∞</mml:mi></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mo>-</mml:mo><mml:mi>∞</mml:mi></mml:mtd></mml:mtr></mml:mtable></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mo>⋮</mml:mo></mml:mtd><mml:mtd><mml:mo>⋱</mml:mo></mml:mtd><mml:mtd><mml:mo>⋮</mml:mo></mml:mtd></mml:mtr><mml:mtr><mml:mtd><mml:mtable><mml:mtr><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi
     mathvariant="bold-italic">m</mml:mi><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mn>3</mml:mn></mml:mrow></mml:msub></mml:mtd></mml:mtr></mml:mtable></mml:mtd><mml:mtd><mml:mo>⋯</mml:mo></mml:mtd><mml:mtd><mml:msub><mml:mrow><mml:mi>e</mml:mi></mml:mrow><mml:mrow><mml:mi
     mathvariant="bold-italic">m</mml:mi><mml:mi mathvariant="bold-italic">n</mml:mi></mml:mrow></mml:msub></mml:mtd></mml:mtr></mml:mtable></mml:mrow></mml:mfenced></mml:math>](img/718.png)'
+  id: totrans-202
   prefs: []
   type: TYPE_IMG
 - en: A regular attention (not self-attention) mechanism, where the queries come from
@@ -1665,35 +2046,44 @@
     This allows every position in the decoder to attend all positions in the original
     input sequence. This mimics the typical encoder-decoder attention mechanisms,
     which we discussed in the *Introducing seq2seq* *models* section.
+  id: totrans-203
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: FFN, which is similar to the one in the encoder.
+  id: totrans-204
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The decoder ends with an FC layer, followed by a softmax operation, which produces
     the most probable next word of the sentence.
+  id: totrans-205
   prefs: []
   type: TYPE_NORMAL
 - en: We can train the full encoder-decoder model using the teacher-forcing process
     we defined in the *Introducing seq2seq* *models* section.
+  id: totrans-206
   prefs: []
   type: TYPE_NORMAL
 - en: Next, let’s implement the decoder.
+  id: totrans-207
   prefs: []
   type: TYPE_NORMAL
 - en: Implementing the decoder
+  id: totrans-208
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: 'In this section, we’ll implement the decoder in a similar pattern to the encoder.
     We’ll start with the implementation of the main module, `Decoder`:'
+  id: totrans-209
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE8]'
+  id: totrans-210
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE8]'
 - en: It consists of `N` instances of `DecoderBlock` (`self.blocks`). As we can see
     in the `forward` method, the output of each `DecoderBlock` instance serves as
     input to the next. These are followed by the `self.norm` normalization (an instance
@@ -1703,19 +2093,24 @@
     `DecoderBlock` instances. `encoder_states` represents the encoder output and is
     the link between the encoder and the decoder. In addition, the `source_mask` parameter
     provides the mask of the decoder self-attention.
+  id: totrans-211
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, let’s implement the `DecoderBlock` class:'
+  id: totrans-212
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE9]'
+  id: totrans-213
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE9]'
 - en: 'This implementation follows the `EncoderBlock` pattern but is adapted to the
     decoder: in addition to self-attention (`self_attn`), we also have encoder attention
     (`encoder_attn`). Because of this, we instantiate three `sublayers` instances
     (instances of the familiar `SublayerConnection` class): for self-attention, encoder
     attention, and the FFN.'
+  id: totrans-214
   prefs: []
   type: TYPE_NORMAL
 - en: We can see the combination of multiple attention mechanisms in the `DecoderBlock.forward`
@@ -1723,99 +2118,124 @@
     (`x`) and key-value combination from the encoder output (`encoder_states`). In
     this way, regular attention establishes the link between the encoder and the decoder.
     On the other hand, `self_attn` uses `x` for the query, key, and value.
+  id: totrans-215
   prefs: []
   type: TYPE_NORMAL
 - en: This concludes the decoder implementation. We’ll proceed with building the full
     transformer model in the next section.
+  id: totrans-216
   prefs: []
   type: TYPE_NORMAL
 - en: Putting it all together
+  id: totrans-217
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'We now have implementations of the encoder and the decoder. Let’s combine them
     in the full `EncoderDecoder` class:'
+  id: totrans-218
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE10]'
+  id: totrans-219
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE10]'
 - en: It combines `encoder`, `decoder`, `source_embeddings`, and `target_embeddings`.
     The `forward` method takes the source sequence and feeds it to `encoder`. Then,
     `decoder` takes its input from the preceding output step (`x=self.target_embeddings(target)`),
     the encoder states (`encoder_states=encoder_output)`, and the source and target
     masks. With these inputs, it produces the predicted next token (word) of the sequence,
     which is also the return value of the `forward` method.
+  id: totrans-220
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, we’ll implement the `build_model` function, which instantiates all the
     classes we implemented to produce a single transformer instance:'
+  id: totrans-221
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE11]'
+  id: totrans-222
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE11]'
 - en: Besides the familiar `MultiHeadedAttention` and `PositionwiseFFN`, we also create
     a `position` variable (an instance of the `PositionalEncoding` class). This class
     implements the static positional encoding we described in the *Transformer encoder*
     section (we won’t include the full implementation here).
+  id: totrans-223
   prefs: []
   type: TYPE_NORMAL
 - en: 'Now, let’s focus on the `EncoderDecoder` instantiation: we are already familiar
     with `encoder` and `decoder`, so there are no surprises there. But the embeddings
     are a tad more interesting. The following code instantiates the source embeddings
     (but this is also valid for the target ones):'
+  id: totrans-224
   prefs: []
   type: TYPE_NORMAL
 - en: '[PRE12]'
+  id: totrans-225
   prefs: []
   type: TYPE_PRE
+  zh: '[PRE12]'
 - en: 'We can see that they are a sequential list of two components:'
+  id: totrans-226
   prefs: []
   type: TYPE_NORMAL
 - en: An instance of the `Embeddings` class, which is simply a combination of `torch.nn.Embedding`
     further multiplied by ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msqrt><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:msqrt></mml:math>](img/719.png)
     (we’ll omit the class definition here)
+  id: totrans-227
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Positional encoding `c(position)`, which adds the static positional data to
     the embedding vector
+  id: totrans-228
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: Once we have the input data preprocessed in this way, it can serve as input
     to the core part of the encoder-decoder.
+  id: totrans-229
   prefs: []
   type: TYPE_NORMAL
 - en: In the next section, we’ll discuss the major variants of the transformer architecture.
+  id: totrans-230
   prefs: []
   type: TYPE_NORMAL
 - en: Decoder-only and encoder-only models
+  id: totrans-231
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
 - en: 'So far, we’ve discussed the full encoder-decoder variant of the transformer
     architecture. But in practice, we are going to mostly use two of its variations:'
+  id: totrans-232
   prefs: []
   type: TYPE_NORMAL
 - en: '**Encoder-only**: These models use only the encoder part of the full transformer.
     Encoder-only models are bidirectional, following the properties of encoder self-attention.'
+  id: totrans-233
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '**Decoder-only**: These models use only the decoder part of the transformer.
     Decoder-only models are unidirectional, following the properties of the decoder’s
     masked self-attention.'
+  id: totrans-234
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: I know that these dry definitions sound vague, but don’t worry—in the next two
     sections we’ll discuss one example of each type to make it clear.
+  id: totrans-235
   prefs: []
   type: TYPE_NORMAL
 - en: Bidirectional Encoder Representations from Transformers
+  id: totrans-236
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -1826,17 +2246,21 @@
     pure BERT model doesn’t solve any specific problem). The following diagram shows
     generic pre-ln and post-ln encoder-only models with softmax outputs (which also
     apply to BERT):'
+  id: totrans-237
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.10 – Left: post-ln encoder-only model; right: pre-ln encoder-only
     model](img/B19627_07_10.jpg)'
+  id: totrans-238
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.10 – Left: post-ln encoder-only model; right: pre-ln encoder-only
     model'
+  id: totrans-239
   prefs: []
   type: TYPE_NORMAL
 - en: BERT model sizes
+  id: totrans-240
   prefs: []
   type: TYPE_NORMAL
 - en: BERT comes in two variations![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
@@ -1850,32 +2274,39 @@
     has 24 encoder blocks, each with 16 attention heads, 1,024-dimensional attention
     vectors, and a total of 340M parameters. The models use WordPiece tokenization
     and have a 30,000-token vocabulary.
+  id: totrans-241
   prefs: []
   type: TYPE_NORMAL
 - en: 'Let’s start with the way BERT represents its input data, which is an important
     part of its architecture. We can see an input data representation in the following
     diagram:'
+  id: totrans-242
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.11 – BERT input embeddings as the sum of the token embeddings, the
     segmentation embeddings, and the position embeddings (source: https://arxiv.org/abs/1810.04805)](img/B19627_07_11.jpg)'
+  id: totrans-243
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.11 – BERT input embeddings as the sum of the token embeddings, the
     segmentation embeddings, and the position embeddings (source: https://arxiv.org/abs/1810.04805)'
+  id: totrans-244
   prefs: []
   type: TYPE_NORMAL
 - en: 'Because BERT is encoder-only, it has two special modes of input data representation
     so that it can handle a variety of downstream tasks:'
+  id: totrans-245
   prefs: []
   type: TYPE_NORMAL
 - en: A single sequence (for example, in classification tasks, such as **sentiment
     analysis**, or **SA**)
+  id: totrans-246
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: A pair of sequences (for example, machine translation or **question-answering**
     (**QA**) problems)
+  id: totrans-247
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -1891,6 +2322,7 @@
     Selecting another token besides `[CLS]` excludes this token from the attention
     formula, which introduces unfair bias against it and results in an incomplete
     sequence.
+  id: totrans-248
   prefs: []
   type: TYPE_NORMAL
 - en: If the input data is a pair of sequences, we pack them together in a single
@@ -1900,50 +2332,61 @@
     the token embeddings, the segmentation embeddings, and the position embeddings.
     Here, the token and position embeddings serve the same purpose as they do in the
     regular transformer.
+  id: totrans-249
   prefs: []
   type: TYPE_NORMAL
 - en: Now that we are familiar with the input data representation, let’s continue
     with the training.
+  id: totrans-250
   prefs: []
   type: TYPE_NORMAL
 - en: BERT training
+  id: totrans-251
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: 'BERT training is a two-step process (this is also valid for other transformer-based
     models):'
+  id: totrans-252
   prefs: []
   type: TYPE_NORMAL
 - en: '**Pre-training**: Train the model with unlabeled data over different pre-training
     tasks'
+  id: totrans-253
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '**Fine-tuning**: A form of **transfer learning** (**TL**), where we initialize
     the model with the pre-trained parameters and fine-tune them over a labeled dataset
     of a specific downstream task'
+  id: totrans-254
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: 'We can see the pre-training on the left side and the fine-tuning on the right
     side of the following diagram:'
+  id: totrans-255
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.12 – Left: pre-training; right: fine-tuning (source: https://arxiv.org/abs/1810.04805)](img/B19627_07_12.jpg)'
+  id: totrans-256
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.12 – Left: pre-training; right: fine-tuning (source: https://arxiv.org/abs/1810.04805)'
+  id: totrans-257
   prefs: []
   type: TYPE_NORMAL
 - en: Here, **Tok N** represents the one-hot-encoded input tokens, **E** represents
     the token embeddings, and **T** represents the model output vector. The topmost
     labels represent the different tasks we can use the model for in each of the training
     modes.
+  id: totrans-258
   prefs: []
   type: TYPE_NORMAL
 - en: 'The authors of the paper pre-trained the model using two unsupervised training
     tasks: **masked language modeling** (**MLM**) and **next sentence** **prediction**
     (**NSP**).'
+  id: totrans-259
   prefs: []
   type: TYPE_NORMAL
 - en: We’ll start with MLM, where the model is presented with an input sequence and
@@ -1952,15 +2395,18 @@
     the word as is (10% of the time). This is necessary because the vocabulary of
     the downstream tasks doesn’t have the `[MASK]` token. On the other hand, the pre-trained
     model might expect it, which could lead to unpredictable behavior.
+  id: totrans-260
   prefs: []
   type: TYPE_NORMAL
 - en: Next, let’s continue with NSP. The authors argue that many important downstream
     tasks, such as question answering or **natural language inference** (**NLI**),
     are based on understanding the relationship between two sentences, which is not
     directly captured by language modeling.
+  id: totrans-261
   prefs: []
   type: TYPE_NORMAL
 - en: NLI
+  id: totrans-262
   prefs: []
   type: TYPE_NORMAL
 - en: 'NLI determines whether a sentence, which represents a **hypothesis**, is either
@@ -1968,6 +2414,7 @@
     given another sentence, called a **premise**. For example, given the premise *I
     am running*, we have the following hypothesis: *I am sleeping* is false; *I am
     listening to music* is undetermined; *I am training* is true.'
+  id: totrans-263
   prefs: []
   type: TYPE_NORMAL
 - en: The authors of BERT propose a simple and elegant unsupervised solution to pre-train
@@ -1979,6 +2426,7 @@
     actual next sentence that follows *A* (labeled as `is_next`). In the other 50%,
     *B* is a random sentence from the corpus (`not_next`). As we mentioned, the model
     outputs `is_next`/`not_next` labels on the `[CLS]` corresponding input.
+  id: totrans-264
   prefs: []
   type: TYPE_NORMAL
 - en: Next, let’s focus on the fine-tuning task, which follows the pre-training task
@@ -1987,26 +2435,33 @@
     unmodified input and output and fine-tune all the parameters in an end-to-end
     fashion. Therefore, the model that we use in the fine-tuning phase is the same
     model that we’ll use in the actual production environment.
+  id: totrans-265
   prefs: []
   type: TYPE_NORMAL
 - en: Let’s continue with some of the downstream tasks we can solve with BERT.
+  id: totrans-266
   prefs: []
   type: TYPE_NORMAL
 - en: BERT downstream tasks
+  id: totrans-267
   prefs:
   - PREF_H3
   type: TYPE_NORMAL
 - en: 'The following diagram shows how to solve several different types of tasks with
     BERT:'
+  id: totrans-268
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.13 – BERT applications for diﬀerent tasks (source: https://arxiv.org/abs/1810.04805)](img/B19627_07_13.jpg)'
+  id: totrans-269
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.13 – BERT applications for diﬀerent tasks (source: [https://arxiv.org/abs/1810.04805](https://arxiv.org/abs/1810.04805))'
+  id: totrans-270
   prefs: []
   type: TYPE_NORMAL
 - en: 'Let’s discuss them:'
+  id: totrans-271
   prefs: []
   type: TYPE_NORMAL
 - en: The top-left scenario illustrates how to use BERT for sentence-pair classification
@@ -2015,6 +2470,7 @@
     model result. For example, in an NLI task, the goal is to predict whether the
     second sentence is an entailment, a contradiction, or neutral with respect to
     the first one.
+  id: totrans-272
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -2022,6 +2478,7 @@
     tasks, such as SA. This is very similar to sentence-pair classification. In both
     cases, we’ll extend the encoder with an FC layer and a binary softmax, with *N*
     possible classes (*N* is the number of classes for each task).
+  id: totrans-273
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
@@ -2030,19 +2487,23 @@
     which contains the answer, the goal is to predict the text span (start and end)
     of the answer within this passage. The model outputs the probability for each
     token of sequence *B* to be either the start or the end of the answer.
+  id: totrans-274
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The bottom-right scenario illustrates how to use BERT for **named entity recognition**
     (**NER**), where each input token is classified as some type of entity.
+  id: totrans-275
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: This concludes our section dedicated to the BERT model. Next, let’s focus on
     decoder-only models.
+  id: totrans-276
   prefs: []
   type: TYPE_NORMAL
 - en: Generative Pre-trained Transformer
+  id: totrans-277
   prefs:
   - PREF_H2
   type: TYPE_NORMAL
@@ -2051,56 +2512,69 @@
     [https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf](https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf)).
     This is the first of a series of GPT models, released by OpenAI, which led to
     the now-famous GPT-3 and GPT-4.
+  id: totrans-278
   prefs: []
   type: TYPE_NORMAL
 - en: GPT model size
+  id: totrans-279
   prefs: []
   type: TYPE_NORMAL
 - en: GPT has 12 decoder layers, each with 12 attention heads, and 768-dimensional
     attention vectors. The FFN is 3,072-dimensional. The model has a total of 117
     million parameters (weights). GPT uses BPE tokenization and has a token vocabulary
     size of 40,000.
+  id: totrans-280
   prefs: []
   type: TYPE_NORMAL
 - en: 'We can see the GPT decoder-only architecture in the following diagram:'
+  id: totrans-281
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.14 – Left: post-ln decoder-only model; right: pre-ln decoder-only
     model; different outputs for the pre-training and fine-tuning training steps](img/B19627_07_14.jpg)'
+  id: totrans-282
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.14 – Left: post-ln decoder-only model; right: pre-ln decoder-only
     model; different outputs for the pre-training and fine-tuning training steps'
+  id: totrans-283
   prefs: []
   type: TYPE_NORMAL
 - en: Note
+  id: totrans-284
   prefs: []
   type: TYPE_NORMAL
 - en: We discuss the decoder-only architecture in the context of the original GPT
     paper, but it applies to the broad class of decoder-only models.
+  id: totrans-285
   prefs: []
   type: TYPE_NORMAL
 - en: 'It is derived from the decoder we discussed in the *Transformer decoder* section.
     The model takes as input token embeddings and adds static positional encoding.
     This is followed by a stack of *N* decoder blocks. Each block has two sublayers:'
+  id: totrans-286
   prefs: []
   type: TYPE_NORMAL
 - en: '**Masked multi-head self-attention**: Let’s put emphasis on the masked part.
     It determines the main properties of the decoder-only model—it is unidirectional
     and autoregressive. This is opposed to bidirectional encoder-only models.'
+  id: totrans-287
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: '**FFN**: This sublayer has the same purpose as in the encoder-decoder model.'
+  id: totrans-288
   prefs:
   - PREF_UL
   type: TYPE_NORMAL
 - en: The sublayers contain the relevant residual links, normalization, and dropout.
     The decoder comes in pre-ln and post-ln flavors.
+  id: totrans-289
   prefs: []
   type: TYPE_NORMAL
 - en: The model ends with an FC layer, followed by a softmax operation, which can
     be adapted to suit the specific task at hand.
+  id: totrans-290
   prefs: []
   type: TYPE_NORMAL
 - en: The main difference between this decoder and the one in the full encoder-decoder
@@ -2110,6 +2584,7 @@
     to the encoder, except for masked self-attention. Hence, the main difference between
     the encoder-only and decoder-only models is that they are bidirectional and unidirectional,
     respectively.
+  id: totrans-291
   prefs: []
   type: TYPE_NORMAL
 - en: 'As with BERT, the training of GPT is a two-step process, which consists of
@@ -2132,6 +2607,7 @@
     and the model parameters, *θ*: ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
     xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="normal">P</mml:mi><mml:mfenced
     separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>θ</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/727.png).'
+  id: totrans-292
   prefs: []
   type: TYPE_NORMAL
 - en: 'Let’s illustrate the pre-training with an example. We’ll assume that our input
@@ -2148,25 +2624,31 @@
     `![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>N</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/730.png)``]:`
     `![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>N</mml:mi></mml:mrow></mml:msub></mml:math>](img/736.png)``}`.
     We can see the same scenario displayed in the following diagram:'
+  id: totrans-293
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.15 – GPT pre-training to predict the next word of the same input/output
     sequence](img/B19627_07_15.jpg)'
+  id: totrans-294
   prefs: []
   type: TYPE_IMG
 - en: Figure 7.15 – GPT pre-training to predict the next word of the same input/output
     sequence
+  id: totrans-295
   prefs: []
   type: TYPE_NORMAL
 - en: 'Next, let’s discuss the supervised fine-tuning step, which is similar to BERT
     fine-tuning. The following diagram illustrates how the tasks of sequence classification
     and NLI work in GPT:'
+  id: totrans-296
   prefs: []
   type: TYPE_NORMAL
 - en: '![Figure 7.16 – GPT fine-tuning; top: text classification; bottom: NLI](img/B19627_07_16.jpg)'
+  id: totrans-297
   prefs: []
   type: TYPE_IMG
 - en: 'Figure 7.16 – GPT fine-tuning; top: text classification; bottom: NLI'
+  id: totrans-298
   prefs: []
   type: TYPE_NORMAL
 - en: In both cases, we have special `[START]` and `[EXTRACT]` tokens. The `[EXTRACT]`
@@ -2175,14 +2657,17 @@
     rather than the start. Again, the reason for this is that the decoder is unidirectional
     and only has full access to the input sequence at its end. The NLI task concatenates
     the premise and the entailment, separated by a special `[``DELIM]` token.
+  id: totrans-299
   prefs: []
   type: TYPE_NORMAL
 - en: This concludes our introduction to GPT—the prototypical example of a decoder-only
     model. With this, we’ve introduced the three major transformer architectures—encoder-decoder,
     encoder-only, and decoder-only. This is also a good place to conclude the chapter.
+  id: totrans-300
   prefs: []
   type: TYPE_NORMAL
 - en: Summary
+  id: totrans-301
   prefs:
   - PREF_H1
   type: TYPE_NORMAL
@@ -2191,9 +2676,11 @@
     Next, we gradually introduced the TA mechanism, before discussing the full encoder-decoder
     transformer architecture. Finally, we focused on encoder-only and decoder-only
     transformer variants.
+  id: totrans-302
   prefs: []
   type: TYPE_NORMAL
 - en: In the next chapter, we’ll focus on LLMs, and we’ll explore the Hugging Face
     transformers library.
+  id: totrans-303
   prefs: []
   type: TYPE_NORMAL
