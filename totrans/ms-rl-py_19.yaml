@@ -1,0 +1,1056 @@
+- en: '*Chapter 15*: Supply Chain Management'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Effective supply chain management is a challenge for many businesses, yet it
+    is key to their profitability and competitiveness. The difficulty in this area
+    comes from a complex set of dynamics affecting supply and demand, the business
+    constraints around handling these dynamics, and a level of great uncertainty throughout.
+    **Reinforcement learning** (**RL**) provides us with a key set of capabilities
+    to address such sequential decision-making problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we focus in particular on two important problems: inventory
+    and routing optimization. For the former, we go into the details of creating the
+    environment, understanding the variance in the environment, and hyperparameter
+    tuning to effectively solve it using RL. For the latter, we describe a realistic
+    vehicle-routing problem of a gig driver working to deliver online meal orders.
+    We then proceed to show why conventional neural networks are limiting while solving
+    problems of varying sizes, and how pointer networks can overcome this.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is going to be a fun journey. We will cover the following topics in this
+    chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing inventory procurement decisions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Modeling routing problems
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing inventory procurement decisions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the most important decisions that almost all manufacturers, distributors,
+    and retailers need to make all the time is how much inventory to carry to reliably
+    satisfy customer demand while minimizing the costs. Effective inventory management
+    is key to the profitability and survival of most companies, especially given the
+    razor-thin margins and increased customer expectations in today's competitive
+    landscape. In this section, we use RL to address this challenge and optimize inventory
+    procurement decisions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The need for inventory and the trade-offs in its management
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When you walk into a supermarket, you see items stacked on top of each other.
+    There are probably more of those items in the depot of the supermarket, more still
+    at the warehouse of the distributors, and even more at the sites of the manufacturers.
+    If you think about it, there are those huge piles of products just sitting somewhere,
+    waiting to be demanded by customers at some future time. If that sounds like a
+    waste of resources, it largely is. On the other hand, companies have to carry
+    some level of inventory, because of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The future is uncertain. Customer demand, manufacturing capacity, transportation
+    schedules, and raw material availability are all subject to unfolding in unplanned
+    ways at some point.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is impossible to operate in a perfect just-in-time manner, and manufacture
+    and deliver an item to customers right at the moment they demand it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Since carrying inventory is mostly unavoidable, the question is then how much.
+    Answering it involves a tricky tradeoff:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Minimizing the chance of being unable to fulfill customer demand that loses
+    profit, and more importantly, loyalty that will be hard to gain back.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Minimizing the inventory, as it has costs in terms of capital, labor, time,
+    material, maintenance, and warehouse rent, and can lead to spoiled or obsolete
+    items and organizational overhead.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'So, how would you handle it? Would you make your customer satisfaction an absolute
+    priority or prefer to keep your inventory under control? Well, this balancing
+    act requires careful planning and the use of advanced methods, which not all companies
+    have the means to do. As a result, most prefer to be "on the safe side" and carry
+    more inventory than they need to, which helps to hide the lack of planning and
+    associated issues. This phenomenon is commonly illustrated as a "sea of inventory"
+    as in *Figure 15.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.1 – A sea of inventory hides many problems'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 15.1 – A sea of inventory hides many problems
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is where RL could come to the rescue and optimize your inventory decisions
+    in the face of uncertainty. Next, we start building our solution by discussing
+    the components of an inventory optimization problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Components of an inventory optimization problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are multiple factors that affect the dynamics of an inventory flow and
+    what the best replenishment policy will look like for a given item:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **price** of the item at which it is sold is a key factor.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The **cost of purchase** of the item is another key factor, which, together
+    with the price, determines how much gross profit the business makes per item.
+    This in turn affects how costly it is to lose a unit of customer demand.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The **inventory holding cost** is the sum of all costs associated with carrying
+    a single unit of inventory over a single time step (a day, week, or month, and
+    so on). This includes things such as storage rent, the cost of capital, and any
+    maintenance costs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Loss of customer goodwill** is the monetary cost associated with customer
+    dissatisfaction due to a single unit of lost demand. After all, this reduces customer
+    loyalty and affects future sales. Although dissatisfaction is usually a qualitative
+    measure, businesses need to estimate the monetary equivalent of it to be able
+    to use it in decision-making.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Customer demand** for the item in a single time step is one of the main factors
+    affecting the decision.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Vendor lead time** (**VLT**) is the lag between the placement of an order
+    with a vendor till its arrival in the inventory. Not surprisingly, VLT is a key
+    factor affecting when to place an order for some anticipated demand.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Capacity** limitations, such as how many items can be ordered in a single
+    batch, along with the firm''s storage capacity, will restrict the actions that
+    the agent can take.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'These are the main factors that we will consider in our setting here. In addition,
+    we will focus on the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Single item scenario
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Stochastic customer demand with a Poisson distribution, which will have a deterministic
+    and fixed mean over a given episode
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Deterministic factors other than demand
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This makes our case tractable while maintaining sufficient complexity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a real-life setting, most dynamics involve uncertainties. For example, there
+    could be defects in the arrived inventory; the price could change with how obsolete
+    an item becomes; there could be a loss in the existing inventory due to weather;
+    there could be items that need to be returned. Estimating the characteristics
+    of all these factors and creating a simulation model of the process is a real
+    challenge, placing a barrier in front of the adaptation of RL as a tool for such
+    problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What we have described is a complex optimization problem, for which there is
+    no tractable optimal solution. However, the single-step version of it, called
+    the **newsvendor problem**, is well studied and widely used. It is a great simplification
+    to develop an intuition about the problem, and it will also help us obtain a near-optimal
+    benchmark for the multi-step case. Let's look into it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Single-step inventory optimization – the newsvendor problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When an inventory optimization problem involves the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A single time step (so no VLT; deterministic arrival of inventory)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A single item
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A known price, cost of purchase, and cost of unsold inventory
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A known (and conveniently Gaussian) demand distribution
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Then the problem is called the newsvendor problem, for which we can obtain
+    a closed-form solution. It describes a newspaper vendor who aims to plan how many
+    copies to purchase for the day, at a unit cost ![](img/Formula_15_001.png), to
+    sell at a unit price ![](img/Formula_15_002.png), and return the unsold copies
+    at the end of the day at a unit price ![](img/Formula_15_003.png). We then define
+    the following quantities:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The cost of underage, ![](img/Formula_15_004.png), is the profit lost due to
+    a single unit of missed demand: ![](img/Formula_15_005.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The cost of overage, ![](img/Formula_15_006.png), is the cost of an unsold
+    unit: ![](img/Formula_15_007.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To find the optimal ordering quantity, we then calculate a critical ratio,
+    ![](img/Formula_15_008.png), as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_15_009.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, let''s unpack how this critical ratio changes with respect to the costs
+    of underage and overage:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As ![](img/Formula_15_010.png) gets higher, ![](img/Formula_15_011.png) increases.
+    Higher ![](img/Formula_15_012.png) and ![](img/Formula_15_013.png) means it is
+    costlier to miss customer demand. This suggests being more aggressive in replenishing
+    the inventory to avoid leaving money on the table.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As ![](img/Formula_15_014.png) gets higher, ![](img/Formula_15_015.png) decreases,
+    and this means it is costlier to have unsold inventory. This suggests that we
+    should be conservative in how much we carry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It turns out that ![](img/Formula_15_016.png) gives us what percentage of the
+    demand scenarios should be covered to optimize the expected profit at the end
+    of the day. In other words, let's say the demand has a probability distribution
+    function ![](img/Formula_15_017.png), and a **cumulative distribution function**
+    (**CDF**) ![](img/Formula_15_018.png). The optimal order size is given by ![](img/Formula_15_019.png),
+    where ![](img/Formula_15_020.png) is the inverse of the CDF.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's experiment with this in an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Newsvendor example
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Assume that the price of an expensive item is ![](img/Formula_15_021.png), which
+    is sourced at ![](img/Formula_15_022.png). The item cannot be returned to the
+    supplier if unsold, and it becomes waste. So, we have ![](img/Formula_15_023.png).
+    In this case, the cost of underage is ![](img/Formula_15_024.png), and the cost
+    of overage is ![](img/Formula_15_025.png), which give us a critical ratio ![](img/Formula_15_026.png)
+    This suggests that the order size has an 80% chance of covering the demand. Assuming
+    that the demand has a normal distribution with a mean of 20 items and a standard
+    deviation of 5 items, the optimal order size is around 24 items.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can calculate and plot the optimal order size using the `calc_n_plot_critical_ratio`
+    function defined in the `Newsvendor plots.ipynb` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter15/Newsvendor plots.ipynb
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And you should see the output as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Figure 15.2* illustrates the probability distribution of the demand, the CDF,
+    and the value the critical ratio corresponds to for this problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.2 – Optimal order size for the example newsvendor problem'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 15.2 – Optimal order size for the example newsvendor problem
+  prefs: []
+  type: TYPE_NORMAL
+- en: This was to give you an intuition into what the solution looks like for a single-step
+    inventory optimization problem. Now, a multi-step problem involves a bunch of
+    other complexities, which we described in the previous section. For example, the
+    inventory arrives with a lag, and the leftover inventory is carried to the next
+    step with a holding cost incurred. Well, this is sequential decision-making under
+    uncertainty, which is the forte of RL. So, let's use it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Simulating multi-step inventory dynamics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we create a simulation environment for the multi-step inventory
+    optimization problem we described.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The rest of this chapter closely follows the problems and environments defined
+    in *Balaji et al., 2019*, for which the code is available at [https://github.com/awslabs/or-rl-benchmarks](https://github.com/awslabs/or-rl-benchmarks).
+    We suggest you read the paper for more details on RL approaches to classical stochastic
+    optimization problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before we start describing the environment, let''s discuss several considerations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We would like to create a policy not for a specific product-demand scenario,
+    but a broad range of scenarios. Therefore, for each episode, we randomly generate
+    the environment parameters, as you will see.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This randomization increases the variance in the gradient estimates, which makes
+    learning more challenging compared to static scenarios.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With this, let's go into the details of the environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Event calendar
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In order to correctly apply the step function for the environment, we need
+    to understand when each event takes place. Let''s take a look:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the beginning of each day, the inventory replenishment order is placed. Based
+    on the lead time, we record this as "in-transit" inventory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Next, the items scheduled for the current day arrive. If the lead time is zero,
+    what is ordered at the beginning of the day arrives right away. If the lead time
+    is one day, yesterday's order arrives, and so on.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After the shipment is received, the demand materializes throughout the day.
+    If there is not enough inventory to meet the demand, the actual sales will be
+    lower than the demand, and there will be a loss of customer goodwill.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At the end of the day, we deduct the sold items (not the total demand) from
+    the inventory and update the state accordingly.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Lastly, if the lead time is nonzero, we update the in-transit inventory (that
+    is, we shift the inventory set to arrive on t + 2 to t + 1).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, let's code what we have described.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Coding the environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You can find the complete code for the environment in our GitHub repo at [https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python/blob/master/Chapter15/inventory_env.py](https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python/blob/master/Chapter15/inventory_env.py).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we only describe some of the critical parts of the environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As mentioned earlier, each episode will sample certain environment parameters
+    to be able to obtain a policy that can work across a broad set of price, demand,
+    and other scenarios. We set the maximum values for those parameters, from which
+    we will later generate episode-specific parameters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We use a 5-day lead time, which will be important to determine the observation
+    space (which can be considered equivalent to state space for this problem, so
+    we use the terms interchangeably).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The price, cost, holding cost, loss of goodwill, and expected demand are part
+    of the state space, which we assume is also visible to the agent. In addition,
+    we need to keep track of the on-hand inventory, along with the in-transit inventory
+    if the lead-time is nonzero:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that for a lead time of 5, we have one dimension for the on-hand inventory
+    and four dimensions (from ![](img/Formula_15_027.png) to ![](img/Formula_15_028.png))
+    for the in-transit inventory. As you will see, by adding the in-transit inventory
+    to the state at the end of the step calculation, we can avoid keeping track of
+    the in-transit inventory that will arrive at ![](img/Formula_15_029.png) (in more
+    general terms, we don't need ![](img/Formula_15_030.png), ![](img/Formula_15_031.png)
+    being the lead time).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We normalize the action to be between ![](img/Formula_15_032.png), where 1
+    means ordering at the order limit:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'One of the very important steps is to normalize the observations. Normally,
+    the agent may not know the bounds of the observations to normalize them. Here,
+    we assume that the agent has that information, so we conveniently do it within
+    the environment class:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The episode-specific environment parameters are generated within the `reset`
+    function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'And we implement the `step` function as we described in the previous section.
+    First, we parse the initial state and received action:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we determine how much we can buy while observing the capacity, add what
+    is bought to the inventory if there is no lead time, and sample the demand:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The reward will be the revenue, from which we subtract the purchase cost, the
+    inventory holding cost, and the cost of lost customer goodwill:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Lastly, we update the inventory levels by shifting the in-transit inventory
+    by a day, adding what is bought at the beginning of the day to the in-transit
+    inventory if the VLT is nonzero:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'At the end, we return the normalized observations and scaled reward to the
+    agent:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Take your time to understand how the inventory dynamics are reflected in the
+    step function. Once you are ready, let's move to developing a benchmark policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developing a near-optimal benchmark policy
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'An exact solution to this problem is not available. Yet, a near-optimal approximation
+    is obtained similar to the newsvendor policy, with two modifications:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The aggregate demand over ![](img/Formula_15_033.png) time steps is taken into
+    account, instead of a single step.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We also add the loss of goodwill to the cost of underage in addition to the
+    per-unit profit.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The reason this is still approximate is that the formula treats multiple steps
+    as a single step and aggregates the demand and supply, meaning that it assumes
+    the demand arrived in a step, and can be backlogged and satisfied in one of the
+    subsequent steps over the ![](img/Formula_15_034.png) step horizon. Still, this
+    gives us a near-optimal solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is how we can code this benchmark policy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice that after we calculate the critical ratio, we do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We find the optimal aggregate supply for ![](img/Formula_15_035.png) steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then, we subtract the on-hand inventory and in-transit inventory for the next
+    ![](img/Formula_15_036.png) time steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, we place the order to cover this deficit, capped by the limit on a
+    single order.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, let's look into how we can train an RL agent to solve this problem and
+    how the RL solution compares to this benchmark.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A reinforcement learning solution for inventory management
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are several factors to take into account while solving this problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Due to the randomizations in the environment, there is a high variance in the
+    rewards across episodes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This requires us to use higher-than-normal batch and minibatch sizes to better
+    estimate the gradients and have more stable updates to the neural network's weights.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Selecting the winning model is also a problem in the presence of high variance.
+    This is because if the number of test/evaluation episodes are not large enough,
+    there is a chance of declaring a policy as the best just because we happen to
+    evaluate it in a few lucky configurations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To handle these challenges, we can adapt the following strategy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Do limited hyperparameter tuning with a limited computation budget to identify
+    a set of good hyperparameters.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train the model with one or two of the best sets of hyperparameters. Save the
+    best models along the way.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When you observe that the trend of the reward curve is dominated by the noise,
+    increase the batch and minibatch sizes for finer estimation of the gradients and
+    denoising the model performance metrics. Again, save the best model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Depending on your compute budget, repeat this multiple times and pick the winning
+    model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: So, let's implement these steps in Ray/RLlib to obtain our policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initial hyperparameter sweep
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We use Ray''s Tune library to do the initial hyperparameter tuning. There are
+    two functions we will utilize:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`tune.grid_search()` does a grid search over the specified set of values.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tune.choice()` does a random search within the specified set.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For each trial, we also specify the stopping criteria. In our case, we would
+    like to run a trial for a million time steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the code for an example search:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To calculate the total tuning budget, we do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Take the cross-product of all grid searches, since each possible combination
+    has to be tried by definition.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Multiply that cross-product with `num_samples`. That gives the total number
+    of trials that will take place. With the preceding code, we will have 20 trials.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: During each trial, each `choice` function will select a parameter uniformly,
+    at random, from the corresponding set.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A given trial stops when the stopping criteria have been satisfied.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Whey you execute this, you will see the search progressing. It will look like
+    *Figure 15.3*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.3 – Hyperparameter tuning with Ray''s Tune'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 15.3 – Hyperparameter tuning with Ray's Tune
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some trials will error out unless you are deliberate about the hyperparameter
+    combinations that will form to prevent numerical issues. You can then select the
+    best performing combinations for further training, as illustrated in *Figure 15.4*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.4 – A sample performance of a good set of hyperparameters obtained
+    in the search'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 15.4 – A sample performance of a good set of hyperparameters obtained
+    in the search
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's now do the extensive training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extensive training of the model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We now kick off a long training run using the selected hyperparameter set (or
+    with multiple sets – in my case, the winning set in the previous exercise did
+    not perform well, but the second set did):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter15/train_inv_policy.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once you set the hyperparameters, you can kick off the training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'One thing to note here is the size of the batch and minibatch: normally, the
+    PPO default in RLlib is `"train_batch_size": 4000` and `"sgd_minibatch_size":
+    128`. However, learning suffers with such small batches, given the variance in
+    the environment and rewards. So, the tuning model picked higher batch and minibatch
+    sizes.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now for the training. At this point, you can develop a logic to adjust various
+    hyperparameters based on the training progress. For simplicity, we will manually
+    observe the progress and then stop when the learning stalls or destabilizes. After
+    that point, we can further train with increased batch sizes to obtain better gradient
+    estimates in the final stages, such as `"train_batch_size": 200000` and `"sgd_minibatch_size":
+    32768`. This is what such a training process looks like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.5 – Training started with a batch size of 20k and continued with
+    a batch'
+  prefs: []
+  type: TYPE_NORMAL
+- en: size of 200k to reduce the noise
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 15.5 – Training started with a batch size of 20k and continued with a
+    batch size of 200k to reduce the noise
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The fine-tuning with a higher batch size helps us denoise the rewards and identify
+    truly high-performing models. We can then compare the benchmark and RL solutions.
+    After 2,000 test episodes, the benchmark performance looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And we can see the RL model performance here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Our RL model's performance is within 10% of the near-optimal benchmark solution.
+    We can decrease the gap with further trials and training, but in the presence
+    of such noise, it is a challenging and time-consuming undertaking. Note that *Balaji
+    et al., 2019* report metrics that slightly improve the benchmarks, so it is doable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this, we conclude our discussion on this problem. Great work! We have taken
+    a realistic and noisy supply-chain problem from its initial form, modeled it using
+    RL, and solved it via PPO on RLlib!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we describe two additional supply chain problems that can be solved via
+    RL. Due to space limitations, we won't be able to solve them here, but refer you
+    to [https://github.com/awslabs/or-rl-benchmarks/](https://github.com/awslabs/or-rl-benchmarks/)
+    for more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, let's discuss how you can model and solve a routing optimization problem
+    using RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Modeling routing problems
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Routing problems are among the most challenging and well studied problems in
+    combinatorial optimization. In fact, there are quite a few researchers who have
+    dedicated their entire careers to this area. Recently, RL approaches to routing
+    problems have emerged as an alternative to the traditional operations research
+    methods. We start with a rather sophisticated routing problem, which is about
+    the pick-up and delivery of online meal orders. The RL modeling of this problem,
+    on the other hand, will not be that complex. We will later extend our discussion
+    to more advanced RL models in line with the recent literature in this area.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pick-up and delivery of online meal orders
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Consider a gig driver (our agent) who works for an online platform, similar
+    to Uber Eats or Grubhub, to pick up orders from restaurants and deliver to customers.
+    The goal of the driver is to collect as many tips as possible by delivering many
+    expensive orders. Here are some more details about this environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are multiple restaurants in the city, which are the pick-up locations
+    for the orders.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Orders associated with one of these restaurants dynamically arrive on the delivery
+    company's app.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The driver has to accept an order to be able to pick it up and deliver.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If an accepted order is not delivered within a certain time limit since the
+    order creation, a high penalty is incurred.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If an open order is not accepted by the driver, it disappears after a while,
+    which implies that it is taken by competitive drivers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The driver can accept as many orders as they want but can physically carry only
+    a limited number of picked-up orders.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Different parts of the city generate orders at different rates and different
+    sizes. For example, one region could be generating frequent and expensive orders,
+    making it attractive for the driver.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Traveling unnecessary distances results in costs of time, fuel, and opportunity
+    to the driver.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Given this environment, at each time step, the driver takes one of the following
+    actions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Accept one of the open orders.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Move one step toward a restaurant associated with a particular order (for pick-up).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Move one step toward a customer location (for delivery).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Wait and do nothing.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Move one step toward one of the restaurants (not to pick up an existing order
+    but with the hope that a good, expensive order could be placed soon from that
+    restaurant).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The agent observes the following state to make their decision:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The coordinates of the driver, the restaurants, and the customers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The driver used and available capacity
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Order statuses (open, accepted, picked up, and inactive/delivered/not created)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Order-restaurant associations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The time elapsed since order creation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The reward (tip) associated with each order
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For more information, this environment is available at [https://github.com/awslabs/or-rl-benchmarks/blob/master/Vehicle%20Routing%20Problem/src/vrp_environment.py](https://github.com/awslabs/or-rl-benchmarks/blob/master/Vehicle%20Routing%20Problem/src/vrp_environment.py).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Balaji et al., 2019* show that the RL solution to this problem outperforms
+    a **mixed-integer** **programming** (**MIP**)-based approach. This is a rather
+    surprising result, since MIP models can find the optimal solution in theory. The
+    reason the MIP solution is outperformed in this case is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It solves a myopic problem for an existing situation while the RL agent learns
+    to anticipate future events and plan accordingly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It uses a limited budget, as MIP solutions can take a really long time. RL inference,
+    on the other hand, happens almost instantaneously once a policy is trained.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The reported RL performance for such a complex problem is quite encouraging.
+    On the other hand, the way we modeled the problem has limitations since it relies
+    on a fixed state and action space size. In other words, if the state and action
+    space are designed to handle a maximum of *N* number of orders/restaurants, the
+    trained agent cannot be used for larger problems. On the other hand, MIP models
+    can take any size of input (although large problems can take a really long time
+    to solve).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recent research in the field of deep learning has provided us with pointer networks
+    to handle dynamic-size combinatorial optimization problems. Let's look into this
+    next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pointer networks for dynamic combinatorial optimization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A pointer network uses a content-based attention mechanism to point to one
+    of its inputs, where the number of inputs can be anything. To explain this better,
+    consider a traveling salesperson problem where the goal is to visit all the nodes
+    located on a 2D plane, exactly once, and come back to the initial node at the
+    end, and do so at the minimum total distance. A sample problem and its solution
+    is illustrated in *Figure 15.6*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.6 – Solution to a traveling salesperson problem'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '(source: https://en.wikipedia.org/wiki/Travelling_salesman_problem)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 15.6 – Solution to a traveling salesperson problem (source: [https://en.wikipedia.org/wiki/Travelling_salesman_problem](https://en.wikipedia.org/wiki/Travelling_salesman_problem))'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Each node in this problem is represented by its ![](img/Formula_15_037.png)
+    coordinates. A pointer network has the following attributes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uses a recurrent neural network to obtain an embedding ![](img/Formula_15_038.png)
+    from ![](img/Formula_15_039.png) of an input node ![](img/Formula_15_040.png)
+    in the encoder, and similarly ![](img/Formula_15_041.png) in the decoder at the
+    ![](img/Formula_15_042.png) step of the decoding.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Calculates attention on the input node ![](img/Formula_15_043.png) while decoding
+    the ![](img/Formula_15_044.png) step as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_15_045.jpg)![](img/Formula_15_046.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_15_047.png) and ![](img/Formula_15_048.png) are learnable
+    parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The input node ![](img/Formula_15_049.png) with the highest attention ![](img/Formula_15_050.png)
+    becomes the ![](img/Formula_15_051.png) node to visit on the route.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This attention approach is completely flexible and can point to a particular
+    input node without any assumptions on the total number of input nodes. This mechanism
+    is illustrated in *Figure 15.7*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 15.7 – A pointer network (source: Vinyals et al., 2017)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_15_7.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 15.7 – A pointer network (source: Vinyals et al., 2017)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Later work (*Nazari et al., 2018*) adapted pointer networks for use inside a
+    policy-based RL model and obtained very promising results in fairly complex problems
+    compared to open source routing optimizers. The details of pointer networks and
+    how they are used in the context of RL deserves further space and discussion,
+    which we defer to the papers we cite at the end of the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we conclude our discussion on RL applications for supply chain problems.
+    Let's summarize what we have covered to close the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we covered two important classes of problems in supply chain
+    management: inventory optimization and vehicle routing. These are both very complex
+    problems, and RL has recently emerged as a competitive tool to address them. In
+    this chapter, for the former problem, we provided you with a detailed discussion
+    on how to create the environment and solve the corresponding RL problem. The challenge
+    in this problem was the high variance across episodes, which we mitigated through
+    a careful hyperparameter tuning procedure. For the latter problem, we described
+    a realistic case of a gig driver who delivers meal orders that dynamically arrive
+    from customers. We discussed how the model can be made more flexible to work with
+    varying node sizes via pointer networks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will discuss yet another exciting set of applications
+    around personalization, marketing, and finance. See you there!
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*ORL: Reinforcement Learning Benchmarks for Online Stochastic Optimization
+    Problems*, Balaji, Bharathan, et al. (2019): [http://arxiv.org/abs/1911.10641](http://arxiv.org/abs/1911.10641)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Pointer Networks*, Vinyals, Oriol, et al. (2017): [http://arxiv.org/abs/1506.03134](http://arxiv.org/abs/1506.03134)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Reinforcement Learning for Solving the Vehicle Routing Problem*, Nazari, M,
+    et al. (2018): [http://arxiv.org/abs/1802.04240](http://arxiv.org/abs/1802.04240)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,1827 @@
+- en: '8'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Improving Training Performance with MXNet
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In previous chapters, we have leveraged MXNet capabilities to solve computer
+    vision and `GluonCV` and `GluonNLP`. We trained these models using different approaches:
+    *from scratch*, *transfer learning*, and *fine-tuning*. In this chapter, we will
+    focus on improving the performance of the training process itself and accelerating
+    how we can obtain those results.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To achieve the objective of optimizing the performance of our training loops,
+    MXNet contains different features. We have already briefly used some of those
+    features such as the concept of **lazy evaluation**, which was introduced in [*Chapter
+    1*](B16591_01.xhtml#_idTextAnchor016). We will revisit it in this chapter, in
+    combination with automatic parallelization. Moreover, we will optimize how to
+    access data efficiently, leveraging Gluon DataLoaders in different contexts (CPU,
+    GPU) to perform data transforms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moreover, we will explore how to combine multiple GPUs to accelerate training,
+    making use of techniques such as data parallelization for optimal performance.
+    We will also explore how we can use different data types with `MXNet` to dynamically
+    optimize the different data formats.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, using problems already explored in the book, we will apply all these
+    techniques with examples. For our computer vision task, we will choose image segmentation,
+    and for our NLP task, we will choose translating text from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specifically, this chapter is structured with the following recipes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing training optimization features
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing training for image segmentation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing training for translating text from English to German
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Apart from the technical requirements specified in the *Preface*, the following
+    technical requirements apply:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensure that you have completed the *Installing MXNet, Gluon, GluonCV and GluonNLP*
+    recipe from [*Chapter 1*](B16591_01.xhtml#_idTextAnchor016).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ensure that you have completed [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098)
+    and [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ensure that you have completed [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code for this chapter can be found at the following GitHub URL: [https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch08](https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch08).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, you can access each recipe directly from Google Colab. For example,
+    the code for the first recipe of this chapter can be found here: [https://colab.research.google.com/github/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch08/8_1_Introducing_training_optimization_features.ipynb](https://colab.research.google.com/github/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch08/8_1_Introducing_training_optimization_features.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing training optimization features
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we saw how we could leverage *MXNet*, *GluonCV*, and
+    *GluonNLP* to retrieve pre-trained models in certain datasets (such as **ImageNet**,
+    **MS COCO**, or **IWSLT2015**) and use them for our specific tasks and datasets.
+    Furthermore, we used transfer learning and fine-tuning techniques to improve the
+    performance on those tasks/datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will introduce (and revisit) several concepts and features
+    that will optimize our training loops, after which we will analyze the trade-offs
+    involved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Similar to the previous chapters, in this recipe, we will be using some matrix
+    operations and linear algebra, but it will not be hard at all, as you will find
+    lots of examples and code snippets to facilitate your learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will work through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Working with lazy evaluation and automatic parallelization
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Optimizing DataLoaders: GPU preprocessing and CPU threads'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training with `Float32`, `Float16`, and Automatic Mixed Precision
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training with multiple GPUs and data parallelization
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Working with lazy evaluation and automatic parallelization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the *NumPy and MXNet NDArrays* recipe of [*Chapter 1*](B16591_01.xhtml#_idTextAnchor016),
+    we introduced lazy evaluation, the strategy that MXNet follows when computing
+    operations. This strategy is optimal for large compute loads, where the actual
+    calculation is deferred until the values are actually needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, by not executing the computation of the operations until they are
+    needed, MXNet can also parallelize some of those computations, meaning the data
+    involved is not sequentially processed. This process is done automatically and
+    is very useful when sharing data across multiple hardware resources such as CPUs
+    and GPUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a toy example, we can run some experiments with matrix multiplication. Our
+    first experiment will run the generation of four matrices and then a combination
+    of multiplications among them. After each computation, we will force the computation
+    to be finalized (by adding calls to the `wait_to_read()` function). We will compute
+    the results for two configurations. The initial configuration will be to force
+    MXNet to work with one thread (`NaiveEngine`). With this configuration, the computation
+    took this long:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The second configuration tested will be MXNet in its usual, default configuration
+    (`ThreadedEnginePerDevice`, with four CPU threads). With this configuration, the
+    computation took this long:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, forcing each computation to be finalized before moving to the
+    next one (`wait_to_read()` calls) is counter-productive when working in a multi-threading
+    configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our second experiment will be very similar; however, this time, we will remove
+    all calls to the `wait_to_read()` function. We will only ensure that all calculations
+    for the multiplication of the matrices are finalized before computing the time
+    taken. For the initial configuration (*NaiveEngine*), the computation takes the
+    following amount of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, this is a very similar duration to only working with one thread,
+    as all computations are sequential.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With our second configuration (*ThreadedEnginePerDevice*, with four CPU threads),
+    the computation for this second experiment took the following amount of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The results show that when using multiple threads (the default automatic configuration
+    for MXNet), we achieved a ~20% improvement (improvements can be even higher with
+    different workloads more suited for multi-threading).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please note how in the code, we used the `mx.nd.waitall()` function to verify
+    that all computations had been strictly completed before computing the time these
+    operations took.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing DataLoaders – GPU preprocessing and CPU threads
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the *Understanding image datasets – loading, managing, and visualizing the
+    fashion MNIST dataset* recipe of [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    we introduced **Gluon DataLoader**, an efficient mechanism to generate batch sizes
+    to feed into our models for training and evaluation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DataLoader has two important roles to play in our data preprocessing. On the
+    one hand, as we have explored in previous chapters, our models are optimized for
+    parallel data processing, meaning that we can ingest several samples (for example,
+    images for an image segmentation task) at the same time in the same *batch* and
+    it will be processed in parallel by the *GPU*. This parameter is called *batch
+    size*. On the other hand, samples typically need to be preprocessed in order to
+    maximize the performance of the model (for example, images are resized and its
+    values allocated to `[0,` `1]` from `[0,` `255]`). These operations are time-consuming
+    and optimizing them can save large amounts of time and compute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s analyze the effect of the preprocessing of the data in the GPU, compared
+    to the general, default behavior of using the CPU. As a baseline, let’s compute
+    how long it takes to just load the dataset using only the CPU. We select the validation
+    split of a segmentation dataset, and the result is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'However, when loading the dataset, we typically apply certain `transform` operations
+    that maximize our network performance. The usual transform operations including
+    image resizing, cropping, transforming to tensors, and normalizing can be defined
+    in MXNet with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With these transform operations applied when processing the validation split
+    of a segmentation dataset using only the CPU, the processing time is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, the processing time has increased by more than 50%, from ~24s
+    to ~39s. However, when we leverage the GPU for the data preprocessing, the processing
+    time is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the GPU-based preprocessing operations have an overhead that
+    is almost negligible (<5%).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, performing the preprocessing in the GPU has another advantage:
+    the data can be kept stored in the GPU for our models to process, whereas when
+    preprocessing with the CPU, we need to send a copy of the data to the GPU memory,
+    which can take a significant amount of time. If we actually measure our end-to-end
+    preprocessing pipeline, combining the data preprocessing with the copy operation
+    to the GPU memory, these are the results. With the CPU only, the end-to-end processing
+    time is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, the copy time is significant, taking the whole pipeline more
+    than 1 minute. However, the result when using the GPU is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This shows a significant improvement (<40%) in the time it took for the full
+    preprocessing. In summary, this was due to two factors: the fact that the preprocessing
+    operations are faster in the GPU, and secondly, that the data needs to be copied
+    to the GPU at the end of the process so that our models (which are also stored
+    in the GPU) process the data efficiently.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The most important drawback of this approach is the need to keep the full dataset
+    in the GPU. Typically, GPU memory space is optimized for each batch that you use
+    for training or inference, not the whole dataset. This is the reason why this
+    approach typically finishes with the processed data being copied back out of the
+    GPU memory space and into the CPU memory space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, there are situations where keeping the data in the GPU memory space
+    might be the right approach – for example, when you are experimenting with datasets,
+    and maybe loading several datasets and testing different preprocessing pipelines.
+    In these situations you want fast turn-around times for your experiments and,
+    therefore, speed is the right variable to optimize for. Moreover, sometimes you
+    are not working with the full training/validation/test splits of a dataset, but
+    just a part of it (again, for example, for experiments). In these cases, optimizing
+    for speed makes sense as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For other, more production-oriented environments, the right approach is to
+    preprocess in GPU memory space but keep the data (copying back) in CPU memory
+    space. In this scenario, the results vary slightly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the preprocessing step being done in the GPU is still a significant
+    increase (~50%) in performance, even taking into account the necessary data movements
+    from the CPU to the GPU and back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we will take a deeper look at how we can leverage two important parameters
+    that Gluon DataLoader takes as input: the number of workers and the batch size.
+    The number of workers is the number of threads that DataLoader will launch in
+    parallel (multi-threading) for data preprocessing. Batch size, as mentioned, is
+    the number of samples that will be processed in parallel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These parameters are directly related to the number of cores the CPU has, and
+    can be optimized to use the available HW for maximum performance. To find out
+    how many cores our CPU has, Python provides a very simple API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the environment selected, the number of cores available is shown as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Combining the usage of the CPU and the GPU, we can compute the best performance
+    taking into account different values for the number of workers and the batch size.
+    The results for the selected environment are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 8.1 – Runtim\uFEFFe(s) versus Batch Size for different computation\
+    \ regimes (CPU/GPU and number of workers)](img/B16591_08_1.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.1 – Runtime(s) versus Batch Size for different computation regimes
+    (CPU/GPU and number of workers)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From *Figure 8**.1*, we can conclude three important aspects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A GPU preprocessing pipeline (data processing plus memory storage) is much faster
+    (+50% runtime improvement), even when copying back the data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When combining both the GPU and CPU, as we are only working with one GPU in
+    this environment, it bottlenecks when we copy the data back to the CPU, as it’s
+    done per sample (not per batch).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If working only with a CPU, adding workers improves the processing time. However,
+    the limit is the number of threads. Adding more workers than threads (four in
+    our case) will give no improvement in performance. An increase in the batch size
+    yields better performance until a given number (8 in our case) and won’t improve
+    performance further than that.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: When working with the GPU, the MXNet Gluon DataLoader only supports the value
+    `0` (zero) for the number of workers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training with Float32, Float16, and automatic mixed precision
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous recipes, we have seen how to optimize our training loops by
+    using different approaches to optimize the CPU and the GPU for maximum performance
+    for a given model. In this recipe, we will explore how our data inputs, our model
+    parameters, and the different arithmetic calculations around them are computed,
+    and how we can optimize them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First of all, let’s understand how computations work. The default data type
+    for the data inputs and the model parameters is `Float32`, as can be verified
+    (see the recipe code), which yields the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This output indicates, as expected, that the data type of our data inputs and
+    our model parameters is `Float32` (single-precision). But what does this mean?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Float32` indicates two things: on the one hand, that it is a data type that
+    supports decimal numbers using a floating radix point, and on the other hand,
+    that 32 bits are used to store a single number in this format. The most important
+    features of this format are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to represent large numbers, from 10-45 to 10+38
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Variable precision
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Using `Float32` as the data type has numerous advantages, mostly connected
+    to its variable precision. However, the training process is an iterative optimization
+    process, for which many of the calculations involved do not require the precision
+    of the `Float32` data type. We could afford, in a controlled way, to trade off
+    some precision if it allowed us to speed up the training process. One of the ways
+    we can achieve that balanced trade-off is with the `Float16` data type (half-precision).
+    Similarly to `Float32`, the most important features of `Float16` are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to represent large numbers, from 2-24 to 2+16
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Variable precision
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As an example of the loss of precision, we can display the approximated value
+    of 1/3 in both formats with this code excerpt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This yields the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, none of the representations are exact, with `Float32` yielding
+    higher precision as expected, and `Float16` having more limited accuracy, but
+    potentially enough for some use cases (such as model training, as we will prove
+    shortly).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As mentioned, this loss of accuracy is a trade-off, where we obtain large speed
+    gains in our training loops. To enable `Float16` (half-precision) for our training
+    loops, we need to apply certain changes to our code. First of all, we need to
+    update our model parameters to `Float16`, which we can do with one simple line
+    of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After this, when our model is going to process the data and ground truth, these
+    need to be updated to `Float16` too, so in our training loop, we add the following
+    lines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With these changes, we can now run an experiment to compare the performance
+    of both training loops. For example, we are going to fine-tune a DeepLabv3 pre-trained
+    model in an image segmentation task (see the *Improving performance for segmenting
+    images* recipe of [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148)). For `Float32`,
+    we obtain the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For `Float16`, these are the results we obtained:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Unfortunately, for `Float16`, although our training time took ~1/3rd than the
+    `Float32` training loop, it did not converge. This is due to several reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Limited support for large numbers, as any integer larger than `65519` is represented
+    as infinity
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Limited support for small numbers, as any positive decimal number smaller than
+    `1e-7` is represented as `0` (zero)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Thankfully, MXNet offers a solution that automatically combines the best of
+    both worlds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying `Float32` (single-precision) where it is necessary
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Applying `Float16` (half-precision) where it is not, for runtime optimization
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This approach is called **Automatic Mixed Precision** (**AMP**), and in order
+    to enable it, we just need to make a few changes in our code. First of all, before
+    creating our model, we need to initialize the library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, after initializing our trainer/optimizer, we need to link it with AMP:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And finally, in order to prevent underflow or overflow, we need to enable `Float16`
+    data type. This is done quite conveniently in the training loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we apply these changes and repeat the previous experiment for `Float16`
+    (now with AMP enabled), we obtain the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, we obtained very similar results for the validation loss in a
+    much shorter amount of time (~33%).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As the memory footprint of our training loop is now approximately half of what
+    it was before, we can typically either double the size of our model (more layers
+    and larger resolutions), or double our batch size, as the GPU memory consumed
+    will be the same in this case compared to a full `Float32` training loop. Running
+    the same experiment with a double batch size yields the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, increasing the batch size has an excellent effect on the performance
+    of our training loop, with a much lower validation loss, and still benefiting
+    from a significantly smaller amount of training time (~33%).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, typically, as a **Machine Learning Engineer** (**MLE**) or **Data
+    Scientist** (**DS**), we will work with large amounts of data and large models,
+    running training loops expected to last for hours or days. Therefore, it is very
+    common for MLEs/DSs at work to start training loops just before the end of the
+    working day, leaving the training running in the background, and coming back the
+    next working day to analyze and evaluate the results. In such an environment,
+    it is actually a better strategy to optimize performance given an expected training
+    time. With MXNet, we can optimize our training parameters for this as well. For
+    example, we could adjust the training time by doubling the number of epochs. In
+    this case, the experiment yields the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared to a vanilla `Float32` training loop, these results are excellent.
+    However, let’s not forget that the actual results depend on the specific task,
+    datasets, model, hyperparameters, and so on. You are encouraged to try different
+    options and hyperparameters with toy training loops to find the solution that
+    works best for each case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training with multiple GPUs and data parallelization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this recipe, we will leverage having multiple GPUs in our environment to
+    optimize our training further. MXNet and Gluon allow us to update our training
+    loops to include multiple GPUs very easily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a high-level perspective, there are two paradigms to leverage multiple
+    GPUs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Model parallelization**: The model is split into parts and each part is deployed
+    to a specific GPU. This paradigm is very useful when the model does not fit in
+    a single GPU.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data parallelization**: The data batches are split into parts and each part
+    is deployed to a specific GPU that can perform a forward and a backward pass using
+    that data fully.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will work exclusively with data parallelization as it is the most common
+    use case, yielding high speed-ups, and is also the most convenient given the simplicity
+    of its approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to apply data parallelization, we will need to make modifications
+    to our training loop, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Setting the context**: The context is now a list, where each element is a
+    specific GPU context.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Initializing our model in those contexts**: In data parallelization, each
+    GPU will store a copy of all the model parameters.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Adapting hyperparameters**: Batch size is typically set to the largest possible
+    without filling up the GPU memory. When working with several GPUs in parallel,
+    this number can typically be multiplied by the number of GPUs in the context.
+    However, this also has a side effect on the learning rate, which must be multiplied
+    by the same number to keep gradient updates in the same range.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Distributing the data**: Each GPU must have a slice of each batch and run
+    the forward and backward passes with it.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Computing the losses and updating the gradients**: Each GPU will compute
+    the losses associated with their slice of each batch. MXNet automatically combines
+    the losses and computes the gradients that are distributed to each GPU to update
+    their model copy.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Displaying results**: Statistics such as the training loss and the validation
+    loss are typically computed and accumulated during each batch and visualized at
+    the end of each epoch.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s see some examples of how to apply each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, to set the context in an environment with four GPUs is very easy
+    with MXNet and just requires one line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Initializing the model and custom layers is as easy as that. For our environment,
+    this is how we can initialize a Deeplabv3 network with a `ResNet-101` backbone:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To update the hyperparameters, we just need to compute the number of GPUs in
+    the context and update the previously computed batch size and learning rates.
+    For our example, this simply means adding/modifying some lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order to distribute the data evenly across every GPU, MXNet and Gluon have
+    a very convenient function, `split_and_load()`, which automatically allocates
+    the data according to the number of GPUs in the context. For our environment,
+    this is done as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To compute the losses and update the gradients, the data distributed in each
+    GPU is processed in parallel using a loop. As MXNet provides automatic parallelization,
+    the calls are not blocking and each GPU computes its outputs and losses independently.
+    Furthermore, MXNet combines those losses to generate the full gradient updates,
+    and redistributes this to each GPU, and all of this is done automatically. We
+    can achieve all this with just a few lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Lastly, in order to display the loss computations, each GPU loss needs to be
+    processed and combined. Using automatic parallelization, this can be achieved
+    with just one line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: With these simple steps, we have been able to modify our training loop to support
+    multiple GPUs, and we are now ready to measure the performance increase of these
+    changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a reminder, using one GPU, we reached the following performance (with a
+    batch size of four):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In our environment, with 4 GPUs, we could increase the batch size to 16, the
+    results of which would be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, we have been able to reduce the time spent in training to ~25%
+    (the expected reduction when going from 1 GPU to 4 GPUs, with some expected loss
+    due to the data distribution) while maintaining our validation scores (even slightly
+    improving them).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we take a deeper look at how MXNet and Gluon can help us optimize
+    our training loops. We have leveraged our HW (CPUs and GPUs) to address each of
+    the steps in the training loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We revisited how lazy evaluation and automatic parallelization mechanisms work
+    together to optimize all MXNet-based flows.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We leveraged all our CPU threads to load data and optimized that process further
+    via preprocessing in GPU. We also compared the trade-offs between speed and memory
+    optimizations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We analyzed different data types and combined the accuracy and precision of
+    `Float32` with the speed-ups of `Float16` where possible, using AMP.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We increased the performance of our training loops by using multiple GPUs (assuming
+    our HW has these devices available).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We compared each of these scenarios by running two experiments, comparing the
+    performance before a specific optimization to the performance afterward, emphasizing
+    potential trade-offs that have to be taken into account when using these optimizations.
+    In the recipes that follow, we will apply all these optimization techniques concurrently
+    to optimize two familiar tasks: **image segmentation** and **text translation**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'All the optimization features shown in this recipe have been thoroughly described
+    in the research literature. The following are some introductory links to start
+    understanding each of the features in depth:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Lazy evaluation and automatic** **parallelization:** [https://cljdoc.org/d/org.apache.mxnet.contrib.clojure/clojure-mxnet-linux-cpu/1.4.1/doc/ndarray-imperative-tensor-operations-on-cpu-gpu#lazy-evaluation-and-automatic-parallelization](https://cljdoc.org/d/org.apache.mxnet.contrib.clojure/clojure-mxnet-linux-cpu/1.4.1/doc/ndarray-imperative-tensor-operations-on-cpu-gpu#lazy-evaluation-and-automatic-parallelization)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Gluon** **DataLoaders:** [**https:**//mxnet.apache.org/versions/master/api/python/docs/tutorials/getting-started/crash-course/5-datasets.html](https://mxnet.apache.org/versions/master/api/python/docs/tutorials/getting-started/crash-course/5-datasets.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**AMP:** [https://medium.com/apache-mxnet/simplify-mixed-precision-training-with-mxnet-amp-dc2564b1c7b0](https://medium.com/apache-mxnet/simplify-mixed-precision-training-with-mxnet-amp-dc2564b1c7b0)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Training with multiple** **GPUs:** [https://mxnet.apache.org/versions/1.7/api/python/docs/tutorials/getting-started/crash-course/6-use_gpus.html](https://mxnet.apache.org/versions/1.7/api/python/docs/tutorials/getting-started/crash-course/6-use_gpus.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing training for image segmentation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipe, we saw how we could leverage MXNet and Gluon to optimize
+    the training of our models with a variety of different techniques. We understood
+    how we can jointly use lazy evaluation and automatic parallelization for parallel
+    processing. We saw how to improve the performance of our DataLoaders by combining
+    preprocessing in the CPU and GPU, and how using half-precision (`Float16`) in
+    combination with AMP can halve our training times. Lastly, we explored how to
+    take advantage of multiple GPUs to further reduce training times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can revisit a problem we have been working with throughout the book:
+    **image segmentation**. We have worked on this task in recipes from previous chapters.
+    In the *Segmenting objects semantically with MXNet Model Zoo – PSPNet and DeepLabv3*
+    recipe in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), we learned how to use
+    pre-trained models from GluonCV Model Zoo, and introduced the task and the datasets
+    that we will be using in this recipe: **MS COCO** and the **Penn-Fudan Pedestrian**
+    dataset. Furthermore, in the *Improving performance for segmenting images* recipe
+    in [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148)*, Optimizing Models with Transfer
+    Learning and Fine-Tuning* we compared the different approaches that we could take
+    when dealing with a target dataset, training our models from scratch, or leveraging
+    the existing knowledge of pre-trained models and adjusting it for our task using
+    the different modalities of transfer learning and fine-tuning.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will apply all these optimization techniques for the specific
+    task of training an image segmentation model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Similar to previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all, as you will find lots of examples
+    and code snippets to facilitate your learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be looking at the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting our current preprocessing and training pipeline
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Applying training optimization techniques
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Analyzing the results
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting our current preprocessing and training pipeline
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the *Improving performance for segmenting images* recipe in [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148),
+    we processed the data with the following approach:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loaded the data from storage into the *CPU* *memory space*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Preprocessed the data using the *CPU*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Used the **default parameters** to process the data during training
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This was a valid approach to compare the different training alternatives available
+    to us (training from scratch, pre-trained models, transfer learning, and fine-tuning)
+    without adding complexity to the experiments. For example, this approach worked
+    quite well to introduce and evaluate the technique of fine-tuning directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Following the aforementioned approach on the dataset selected for this recipe
+    (*Penn-Fudan Pedestrian*), the CPU-based preprocessing took the following amount
+    of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, when combined with the necessary step of reloading the data in
+    batches and copying it to the GPU, we obtain the following performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the preprocessing, the next step is the training process. As described,
+    we will evaluate the effect of our training optimizations directly by using the
+    technique of fine-tuning. In combination with this approach, we will use the following
+    hyperparameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In these conditions, the training process duration and performance achieved
+    were as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, we got an excellent validation performance (~0.09) in a little
+    over 10 minutes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The evolution of the training loss and the validation loss across each epoch
+    looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.2 – Revisiting training: training loss versus validation loss](img/B16591_08_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.2 – Revisiting training: training loss versus validation loss'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 8**.2*, we can see the evolution of the training and validation
+    loss. As explored throughout the chapters, we select the model that provide the
+    minimal validation loss (in this case, this was achieved in the last epoch, epoch
+    10).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the training is completed, we can verify the overall performance in the
+    test split of our dataset. From a quantitative point of view, these are the results
+    we obtained:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, we got excellent results by training for just a limited number
+    of epochs (10 in this case).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, this is what we have:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.3 – Revisiting training: GroundTruth example and Prediction post-training](img/B16591_08_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.3 – Revisiting training: GroundTruth example and Prediction post-training'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected, the results show how the model has learned to focus on the people
+    in the foreground, avoiding the ones in the background.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying training optimization techniques
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the *Introducing training optimization features* recipe at the beginning
+    of this chapter, we showed how different optimization techniques could improve
+    the performance of the different steps we take when training a machine learning
+    model, including preprocessing the data and training and evaluating the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will show how, with MXNet and Gluon and just a few lines
+    of code, we can easily apply all the techniques we’ve been introduced to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As shown in the first recipe of this chapter, MXNet applies by default the best
+    policy (`ThreadedEnginePerDevice`) to optimize lazy evaluation and automatic parallelization,
+    taking into account the number of CPU threads available, so there is no need for
+    us to apply any changes here (please note that this technique is also applied
+    automatically when working with multiple GPUs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We also showed how we could optimize our data preprocessing pipeline by combining
+    the usage of CPU threads and GPUs, taking into account the number of devices available
+    for each, and optimizing accordingly. For this experiment, specific HW was chosen
+    with the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order to use this optimization technique, we had to apply some changes to
+    our code. Specifically, we define the GPUs available for use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, in our preprocessing pipeline, we now need a specific step that
+    takes the data from CPU memory space and copies it to GPU memory space:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As discussed in the first recipe of this chapter, in a typical production-oriented
+    environment, we do not want to keep the data in the GPU, occupying precious GPU
+    memory. It is usual to optimize the batch size for the GPU memory available, and
+    to load the data from the CPU memory space into the GPU memory space in batches
+    using *MXNet Gluon DataLoaders*. Therefore, for our GPU-based preprocessing pipeline
+    to be complete, we need a final step to copy the data back into the CPU memory
+    space:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With these code changes, our optimal preprocessing pipeline is ready, and we
+    can continue with the next optimization technique: applying `Float16` optimizations,
+    including AMP.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in the first recipe of this chapter, in order to enable this technique,
+    we just need a few changes in our code. First of all, we initialize the library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Secondly, we attach the trainer/optimizer to the library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And lastly, due to the limitations of the `Float16` data type, there is a risk
+    of gradients over/under-flowing; therefore, we need to adjust (scale) the loss
+    accordingly, which can be done automatically with these lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: With these three simple changes, we have updated our training loop to work efficiently
+    with the `Float16` data type (when appropriate).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Please note in the preceding code snippet how we are now working with a list
+    of losses, instead of a single instance. This is due to our next and last training
+    optimization technique: working with *multiple GPUs*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we will see, working with multiple GPUs optimally implies working with them
+    in parallel, and therefore, computing losses and executing the training backward
+    pass in parallel, yielding the losses list described in the previous paragraph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to work with multiple GPUs in parallel, we need to define the new
+    context as a list (seen before for preprocessing, and shown here again for convenience):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we now have multiple GPUs, we can increase our batch size to optimally use
+    the available GPU memory space:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, when reading from Gluon DataLoaders, we need to split the batches
+    of data across the GPUs. Thankfully, Gluon also provides a function that simplifies
+    that action. We just need the following lines of code to be added (for each training
+    and validation batch):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As mentioned, this split across GPUs allows us to compute in parallel the model
+    outputs and the losses associated with those outputs (a measure of the difference
+    between the actual outputs and the expected outputs). This can be achieved with
+    the following lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And lastly, we compute the backward pass used to update the weights of our
+    model (combined with the scaled loss of AMP):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: With these minimal code changes, we now have an optimal preprocessing and training
+    pipeline and can run our experiments to analyze the performance changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing the results
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous sections, we revisited the previous performance of our preprocessing
+    and training pipelines, and we reviewed how we had to apply the necessary changes
+    for our training optimization techniques, specifically for our image segmentation
+    task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our preprocessing pipeline steps are now the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Load the data from storage into CPU memory space.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Preprocess the data using the GPU.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Copy back the data to CPU memory space.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use the optimized parameters to process the data during training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For our experiments, we are going to use the technique of fine-tuning directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Applying the approach described earlier on the dataset selected for this recipe
+    (*Penn-Fudan Pedestrian*), the preprocessing took the following amount of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'An end-to-end preprocessing pipeline must take into account the process of
+    batching using the *Gluon DataLoader* to load the data – in our case, into multiple
+    GPUs as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared to the initial section of this recipe (where the preprocessing took
+    `0.4` seconds), we can see how, even with the added overhead of copying back the
+    data to the CPU memory space, we have improved the preprocessing performance by
+    >2 times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the preprocessing, the next step is the training process. As described,
+    we will evaluate the effect of our training optimizations using the technique
+    of fine-tuning directly. In combination with this approach, we use the following
+    hyperparameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Please note how, by adding multiple GPUs to the training process, we can increase
+    the batch size (multiplied by the number of GPUs), and we can also increase the
+    learning rate (from 0.1 to 0.5). In these conditions, the training process duration
+    and performance achieved were as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As can be seen, we got excellent validation performance (~0.09) in less than
+    1 minute. When comparing with the results obtained in the recipe, we can see how
+    there was a minimal decrease in the loss (a positive change that we will confirm
+    with our performance analysis shortly), but the largest improvement by far was
+    a >10x decrease in the training time. This improvement is due to all the training
+    optimization techniques that we have applied. In a nutshell, each of the optimizations
+    provided the following improvements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Using 4 GPUs**: Provided a 4x decrease in time'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Using Float16 and AMP**: Provided a 2x decrease (8x combined)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Preprocessing the datasets**: Provided a 1.25x decrease (>10x combined)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The evolution of the training loss and the validation loss across each epoch
+    was the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.4 – Optimized training: training loss versus validation loss](img/B16591_08_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.4 – Optimized training: training loss versus validation loss'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 8**.4*, we can see the evolution of the training and validation
+    losses. As explored throughout the chapters so far, we select the model that provided
+    the minimal validation loss (in this case, achieved in the last epoch, epoch 10).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After training is completed, we can verify the overall performance in the test
+    split of our dataset. From a quantitative point of view, these are the results
+    we obtained:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, we got excellent results just by training for a limited number
+    of epochs (10 in this case). We can also confirm that the minimal improvement
+    in the validation loss provided a minimal improvement in our test metrics (compared
+    with 0.96/0.91 in our initial experiment).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.5 – Optimized training: GroundTruth example and Prediction post-training](img/B16591_08_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.5 – Optimized training: GroundTruth example and Prediction post-training'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected, the results show how the model has learned to focus on the different
+    people in the foreground, avoiding the ones in the background.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we applied the different training optimization techniques seen
+    in the first recipe of this chapter, leveraging our HW (CPUs and GPUs) to address
+    each of the steps in the training loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We revisited how lazy evaluation and automatic parallelization mechanisms worked
+    together to optimize all MXNet-based flows.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We leveraged all our CPU threads to load data and optimized that process further
+    via preprocessing in the GPU. We also compared the trade-offs between speed and
+    memory optimizations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We analyzed different data types and combined the accuracy and precision of
+    `Float32` with the speed-ups of `Float16` where possible, using AMP.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We increased the performance of our training loops by using multiple GPUs (assuming
+    our HW has these devices available).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We compared each of these scenarios applied specifically to the task of image
+    segmentation, running two experiments. In the first experiment, we did not apply
+    any of the training optimization techniques described in the previous recipe,
+    following the approach seen in previous chapters of the book. In the second experiment,
+    we applied all the techniques in parallel, trying to optimize as much as we could.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This proved quite useful, delivering similar algorithmic performance, with 10x
+    improvement in training time (from 10 minutes to 1 minute). This was mostly due
+    to using multiple GPUs (4x decrease), leveraging `Float16` AMP (2x decrease),
+    and the optimized preprocessing (1.25x decrease).
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have described, implemented, executed, and evaluated several training optimization
+    techniques. However, there are even more advanced techniques that can be leveraged
+    to achieve the optimal training loop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One such technique is **learning rate schedules**. Throughout the book, we
+    have been working with constant learning rates. However, there are multiple advantages
+    of using a dynamically adjusted learning rate. Some of them are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Warmup**: When working with pre-trained models, it’s not advisable to start
+    with a large learning rate. The initial epochs must be used for the gradients
+    to start adjusting. This can be thought of as a way of *adjusting the model from
+    the source task to the target task*, retaining and leveraging the knowledge from
+    the previous task, so smaller learning rates are recommended.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Decay**: In optimal training loops, as the model learns the expected representation
+    of inputs to outputs, the objective of the training is to produce finer and finer
+    improvements. Smaller learning rates achieve better performance at these stages
+    (smaller and more stable weight updates). Therefore, a decaying learning rate
+    is preferred after a few epochs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Dive into Deep Learning* provides great insights on how to implement these
+    techniques in MXNet: [https://d2l.ai/chapter_optimization/lr-scheduler.html.](https://d2l.ai/chapter_optimization/lr-scheduler.html)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing training for translating text from English to German
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the first recipe of this chapter, we saw how we could leverage MXNet and
+    Gluon to optimize the training of our models, applying different techniques. We
+    understood how to jointly use lazy evaluation and automatic parallelization for
+    parallel processing and improved the performance of our DataLoaders by combining
+    preprocessing in the CPU and GPU. We saw how using half-precision (`Float16`)
+    in combination with AMP can halve our training times, and explored how to take
+    advantage of multiple GPUs for further reduced training times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can revisit a problem we have been working with throughout the book,
+    that of **translating text from English to German**. We have worked with translation
+    tasks in recipes in previous chapters. In the *Translating text from Vietnamese
+    to English* recipe from [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121), we introduced
+    the task of translating text, while also learning how to use pre-trained models
+    from GluonCV Model Zoo. Furthermore, in the *Improving performance for translating
+    English to German* recipe from [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148),
+    we introduced the datasets that we will be using in this recipe: *WMT2014* and
+    *WMT2016*, and compared the different approaches that we could take when dealing
+    with a target dataset, training our models from scratch or leveraging past knowledge
+    from pre-trained models and adjusting it for our task, using the different modalities
+    of transfer learning and fine-tuning.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, in this recipe, we will apply all these optimization techniques for
+    the specific task of training an *English-to-German text* *translation model*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As in previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be difficult to understand at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will work through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting our current preprocessing and training pipeline
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Applying training optimization techniques
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Analyzing the results
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting our current preprocessing and training pipeline
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the *Improving performance for translating English to German* recipe from
+    [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148), we processed the data with the
+    following approach:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loaded the data from storage into CPU memory space
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Preprocessed the data using CPU
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Used the default parameters to process the data during training
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This was a valid approach to compare the different training alternatives available
+    for us (training from scratch, pre-trained models, transfer learning, and fine-tuning)
+    without adding complexity to the experiments. For example, this approach worked
+    quite well to introduce and evaluate the technique of fine-tuning, which is the
+    technique that we have selected to work with in this recipe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Applying the approach described earlier on the dataset selected for this recipe
+    (*WMT2016*), the CPU-based preprocessing took the following amount of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, when combined with the necessary step of reloading the data in
+    batches and copying it to the GPU, we obtain the following performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After the preprocessing, the next step is the training process. As described,
+    we will evaluate the effect of our training optimizations using the technique
+    of fine-tuning directly. In combination with this approach, we use the following
+    hyperparameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In these conditions, the training process duration and performance achieved
+    were as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, we got an excellent validation performance (~1.4) for a training
+    time of ~3 hours.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The evolution of the training loss and the validation loss across each epoch
+    looked as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.6 – Revisiting training: training loss versus validation loss](img/B16591_08_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.6 – Revisiting training: training loss versus validation loss'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 8**.6*, we can see the evolution of the training and validation
+    loss. As explored throughout the chapters, we select the model that provide the
+    minimal validation loss (in this case, it was achieved in the first epoch, epoch
+    1).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the training is completed, we can verify the overall performance in the
+    test split of our dataset. From a quantitative point of view, these are the results
+    we obtained:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, we got excellent results just by training for a limited number
+    of epochs (10 in this case).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, we can also check how well our model is performing
+    by testing it with an example sentence. In our case, we chose `I learn new things
+    every day`, and the output obtained is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence obtained in the output (`Immer wieder erfährt ich Neues`)
+    means `I'm always learning new things`, and therefore, as can be seen from the
+    results, the text has been almost perfectly translated from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying training optimization techniques
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the *Introducing training optimization features* recipe at the beginning
+    of this chapter, we showed how different optimization techniques could improve
+    the performance of the different steps we take when training a machine learning
+    model, including preprocessing the data and training and evaluating the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will show how, with MXNet and Gluon and just a few lines
+    of code, we can easily apply all of the techniques we’ve been introduced to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As shown in the first recipe of this chapter, MXNet applies by default the best
+    policy (`ThreadedEnginePerDevice`) to optimize lazy evaluation and automatic parallelization,
+    taking into account the number of CPU threads available, so there is no need for
+    us to apply any changes here (please note that this technique is also applied
+    automatically when working with multiple GPUs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We have shown how we could optimize our data preprocessing pipeline by combining
+    the usage of CPU threads and GPUs, taking into account the number of devices available
+    for each and optimizing accordingly. For this experiment, specific HW was chosen
+    with the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order to apply this optimization technique, we had to apply some changes
+    to our code. Specifically, we defined the GPUs available for use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE63]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, in our preprocessing pipeline, we now need a specific step that
+    takes the data from the CPU memory space and copies it to the GPU memory space:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE64]'
+  prefs: []
+  type: TYPE_PRE
+- en: As discussed in the first recipe of this chapter, in a typical production-oriented
+    environment, we do not want to keep the data in the GPU as it occupies precious
+    GPU memory. It is usual to optimize the batch size for the GPU memory available,
+    and to load the data from the CPU memory space into the GPU memory space in batches
+    using MXNet Gluon DataLoaders. Therefore, for our GPU-based preprocessing pipeline
+    to be complete, we need a final step to copy the data back into the CPU memory
+    space. As introduced in the *Improving performance for translating English to
+    German* recipe from [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148), we are using
+    the `ShardedDataLoader` class from MXNet `GluonNLP` library. This class performs
+    that data transfer back to the CPU memory space automatically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as will be seen in our experiments, when working with multiple GPUs,
+    performance is better when working directly with MXNet Gluon DataLoaders, as these
+    are designed to be parallelized optimally afterward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With these code changes, our optimal preprocessing pipeline is ready, and we
+    can continue with the next optimization technique: applying `Float16` optimizations,
+    including AMP.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in the first recipe of this chapter, in order to enable this technique,
+    we just need a few changes in our code. First of all, we initialize the library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE65]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Secondly, we attach the trainer/optimizer to the library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE66]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the previous recipe, when dealing with images, we described how, due to the
+    risk of gradients over/under-flowing, there was a need to adjust (scale) the loss
+    accordingly. This is not necessary for our use case; therefore, we do not apply
+    **loss** **scaling** here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With these two simple changes, we have updated our training loop to work efficiently
+    with the `Float16` data type (when appropriate).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we can apply our next and last training optimization technique: working
+    with multiple GPUs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we will see, working with multiple GPUs optimally implies working with them
+    in parallel, and therefore, computing losses and executing the training backward
+    pass in parallel, yielding the losses list described in the previous paragraph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to work with multiple GPUs in parallel, we need to define the new
+    context as a list (seen before for preprocessing, and shown here again for convenience):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE67]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we now have multiple GPUs, we can increase our batch size to optimally use
+    the available GPU memory space:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE68]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, when reading from Gluon DataLoaders, we need to split the batches
+    of data across the GPUs. Thankfully, Gluon also provides a function that simplifies
+    that action. We just need the following lines of code to be added (for each training
+    and validation batch):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE69]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As mentioned, this split across the GPUs allows us to compute in parallel the
+    model outputs and the losses associated with those outputs (a measure of the difference
+    between the actual outputs and the expected outputs). This can be achieved with
+    the following lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE70]'
+  prefs: []
+  type: TYPE_PRE
+- en: Typically, in order to finalize our updates to work with multiple GPUs in the
+    training loop, we would need to apply further changes to our loss scaling. However,
+    as discussed, for our use case, this is not necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With these minimal code changes, we now have an optimal preprocessing and training
+    pipeline, and we can run the required experiments to analyze the performance changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing the results
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous sections, we revisited the previous performance of our preprocessing
+    and training pipelines and reviewed how we had to apply the necessary changes
+    for our training optimization techniques, specifically for our task of translating
+    text from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our preprocessing pipeline steps are now the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Load the data from storage into the CPU memory space.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Preprocess the data using the GPU (although as we will see, we will change this
+    to the CPU).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Copy back the data to the CPU memory space (won’t be necessary).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use the optimized parameters to process the data during training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For our experiments, we are going to use the technique of fine-tuning directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Following the aforementioned approach on the dataset selected for this recipe
+    (*WMT2016*), the GPU-based preprocessing took the following amount of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE71]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'An end-to-end preprocessing pipeline must take into account the process of
+    batching using the Gluon DataLoader to load the data (in our case, into multiple
+    GPUs), giving us the following performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE72]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared to the initial section of this recipe (where the preprocessing took
+    27 seconds), we can see how, in this case, preprocessing in the GPU has not been
+    effective. This is due to the nature of the text data, which is not as straightforward
+    to parallelize as it is with images, for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this scenario, a CPU-based preprocessing pipeline is best, avoiding the
+    Gluon NLP`ShardedDataLoader` class and using the `Gluon DataLoader` class instead
+    (which is better suited for parallelizing). Applying this pipeline, we get the
+    following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE73]'
+  prefs: []
+  type: TYPE_PRE
+- en: This gives us a minimal edge (2 seconds), but, as mentioned, this is the best
+    we can get with the usage of Gluon DataLoader and its parallelization capabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the preprocessing, the next step is the training process. As described,
+    we will evaluate the effect of our training optimizations using the technique
+    of fine-tuning directly. In combination with this approach, we use the following
+    hyperparameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE74]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Please note how by adding multiple GPUs to the training process, we can increase
+    the batch size (multiplied by the number of GPUs), and we can also increase the
+    learning rate (from 0.00003 to 0.0001). In these conditions, the training process
+    duration and achieved performance is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE75]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we can see, we got excellent validation performance (~1.4) with training
+    that took ~3 hours. When compared to the results obtained in the initial section
+    of this recipe, we can see how there was a minimal decrease in the loss (a positive
+    change, which we will confirm with our performance analysis shortly), but the
+    largest improvement by far has been a 5.5x decrease in the training time. This
+    improvement is due to all the training optimization techniques that we have applied.
+    In a nutshell, each of the optimizations provided the following improvements:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Using 4 GPUs**: Provided a 4x decrease (as expected).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Float16` without compromising algorithmic performance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Preprocessing the datasets**: In this case, there were negligible improvements.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The evolution of the training loss and the validation loss across each epoch
+    looked as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.7 – Optimized training: training loss versus validation loss](img/B16591_08_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 8.7 – Optimized training: training loss versus validation loss'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 8**.7*, we can see the evolution of the training and validation
+    losses. As explored throughout the chapters, we select the model that provided
+    the minimal validation loss (in this case, achieved in the first epoch).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After training is completed, we can verify the overall performance in the test
+    split of our dataset. From a quantitative point of view, these are the results
+    we obtained:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE76]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, we got excellent results just by training for a limited number
+    of epochs (5 in this case). We can also confirm how the minimal improvement in
+    the validation loss provided a minimal improvement in our test metrics (compared
+    to 27.05 as initially obtained).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, we can also check how well our model is performing
+    by testing it with an example sentence. In our case, we chose `I learn new things
+    every day`, and the output obtained is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE77]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence obtained in the output (`Ich lerne jedes Mal Neues`) means
+    `I learn something new every time`, and therefore, as can be seen from the results,
+    the text has been almost perfectly translated from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we applied the different training optimization techniques seen
+    in the first recipe of this chapter, leveraging our HW (CPUs and GPUs) to address
+    each of the steps in the training loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We revisited how lazy evaluation and automatic parallelization mechanisms work
+    together to optimize all MXNet-based flows.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We leveraged all our CPU threads to load data and tested to optimize that process
+    further via preprocessing in the GPU. In this case, it was shown how a CPU-based
+    preprocessing pipeline in combination with Gluon DataLoader was the optimal approach.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We analyzed different data types and combined the accuracy and precision of
+    `Float32` with the speed-ups of `Float16`, and where possible, AMP.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We increased the performance of our training loops by using multiple GPUs (assuming
+    our HW has these devices available).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We compared each of these scenarios applied specifically to the task of *translating
+    text from English to German*, running two experiments. In the first experiment,
+    we did not apply any of the training optimization techniques described, following
+    the approaches seen in previous chapters of the book. In the second experiment,
+    we applied all the techniques in parallel, trying to optimize as much as we could.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This proved quite useful, delivering similar algorithmic performance, with a
+    5.5x improvement in training time (from 3 hours to 30 minutes). This was mostly
+    due to using multiple GPUs (4x decrease) and leveraging `Float16` and AMP (1.4x
+    decrease), whereas the optimized preprocessing provided negligible improvements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have described, implemented, executed, and evaluated several training optimization
+    techniques. However, there are even more advanced techniques that can be leveraged
+    to achieve the optimal training loop.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One such technique is **Reinforcement Learning from Human Feedback** (**RLHF**),
+    where a *human-in-the-loop* process is introduced. In this process, after a model
+    has been trained, a person is presented with different options for output by the
+    model (for example, different potential translations) and they rank those responses
+    according to how they better represent the original sentence. These human inputs
+    are then used to train a reward model that scores the output of the model and
+    selects the one with the highest score. This technique has been proven to be extremely
+    powerful. As an example, **OpenAI** developed **ChatGPT** on top of the **GPT-3**
+    language model using RLHF.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To learn more about *ChatGPT* and *RLHF*, the following article is recommended:
+    [https://huyenchip.com/2023/05/02/rlhf.html](https://huyenchip.com/2023/05/02/rlhf.html).'
+  prefs: []
+  type: TYPE_NORMAL

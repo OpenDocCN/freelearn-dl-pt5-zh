@@ -1,0 +1,1088 @@
+- en: '17'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Managing Drift Effectively in a Dynamic Environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Drift is a significant factor in the performance deterioration of deployed deep
+    learning models over time, encompassing concept drift, data drift, and model drift.
+    Let’s understand the drift of a deployed model through a culinary-based analogy.
+    Imagine a deployed deep learning model as a skilled chef who aims to create dishes
+    that delight customers but excels in a particular cuisine. Concept drift occurs
+    when the taste preferences of the diner shift, which alters the relationships
+    between ingredients and popular dishes that can satisfy the diner’s palate. Data
+    drift, on the other hand, happens when the ingredients themselves change, such
+    as variations in flavor or availability. Finally, model metric monitoring alerts
+    happen most straightforwardly when the chef loses customers. In all cases, the
+    chef must adapt their dishes to maintain their success, just as deep learning
+    models need to be updated to account for concept drift, which deals with the changing
+    relationships between input and target variables, and data drift, which tackles
+    adjustments in the input data distribution and characteristics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Monitoring drift is crucial to ensuring the continued success of deep learning
+    models, just as a chef needs to keep track of their customers’ evolving preferences
+    and the changing nature of ingredients. As a sneak peek, only some use cases require
+    monitoring. In this chapter, we will delve into the techniques to measure and
+    detect drift, which will allow us to effectively monitor and send timely alerts
+    when drift is detected, and make necessary model maintenance adjustments. Drawing
+    parallels with our chef analogy, techniques to monitor drift can be likened to
+    a chef observing the reactions of their customers, reading reviews, or collecting
+    feedback to better understand their preferences and the quality of their ingredients.
+    By staying alert to any drift, both the chef and the deep learning model can adapt
+    and evolve, maintaining their expertise and delivering exceptional results in
+    a dynamic environment. Specifically, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the issues of drift
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring the types of drift
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring strategies to handle drift
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Detecting drift programmatically
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Comparing and contrasting the Evidently and Alibi-Detect libraries for drift
+    detection
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter will cover a practical example to test out data drift techniques.
+    We will be using Python 3.10 and, additionally, we will require the following
+    Python libraries to be installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`evidently`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`numpy`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`transformers==4.21.3`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`torch==1.12.0`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`syllables`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`audiomentations`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`datasets`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code files are available on GitHub: [https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_17](https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_17).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the issues of drift
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The most obvious issue of drift is the degradation of the accuracy. However,
+    there are more issues than you might initially notice, which include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Applicability**: The model’s ability to make accurate predictions on new,
+    unseen data may be compromised as data patterns and distributions shift. This
+    can result in reduced effectiveness in real-world scenarios and diminished value
+    for decision-making, which raises the likelihood of the model becoming less relevant
+    and practical to use.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Interpretability**: Understanding and explaining the model’s decisions can
+    become challenging, as the factors influencing its predictions may no longer align
+    with the current data landscape. This can hinder effective communication with
+    stakeholders and impede trust in the model’s predictions. Note that an originally
+    explainable model is still explainable as we can still produce accurate information
+    on how it used the input data, but it can become more difficult to interpret with
+    drifted data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Fairness**: Biases and disparities could emerge or worsen, raising fairness
+    concerns in the model’s output. This can lead to the unequal treatment of different
+    groups, perpetuating harmful disparities and posing ethical concerns in the model’s
+    application.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Stability**: Sensitivity to changes in input data may result in fluctuating
+    performance, impacting the model’s stability and consistency. Unstable models
+    can lead to unreliable results, making it difficult for decision-makers to rely
+    on the model’s outputs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These issues comprehensively highlight the challenges that can arise from drift
+    in data. By now, we know about the three high-level drift groups. This is useful,
+    but not enough to implement drift detection. Prior knowledge of the types of drift
+    that can impact your model will enable you to prepare your model for any deployment-related
+    concerns and implement drift monitoring, which brings us to the next topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the types of drift
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Drift is like a shift in the way things work with data. It happens when the
+    data changes, or the environment it comes from changes. This can sometimes happen
+    suddenly or quickly, sometimes slowly, or even in a recurring pattern. When it
+    comes to drift, it’s important to look at the big picture, not just a couple of
+    odd blips. Drift isn’t about those rare anomalies or one or two odd predictions;
+    it’s about changes that stick around, like a new pattern that stays. These persistent
+    shifts can mess up your model permanently, making it way less useful. It’s like
+    if your friend suddenly started speaking a different language occasionally, which
+    could lead to one-off confusion but not really be a problem. But if they started
+    speaking a different language all the time, it’d be a big problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, drift can be categorized into three main types: data drift, concept
+    drift, and model drift. While concept drift is related to the data and can be
+    argued to be part of data drift, concept and data drift are often considered separate
+    in the field. Let’s dive into each of the drift types sequentially, starting with
+    data drift.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring data drift types
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Data drift occurs when certain features of a current data batch differ from
+    those of a historical batch. It is essential to understand that data drift is
+    not limited to a single type of change. Many practitioners mistakenly focus only
+    on the most widely known type of characteristic change for data drift, which is
+    the shift in distribution. Distribution is a fundamental concept in statistics
+    that reveals how frequently various values of a variable appear in a dataset.
+    It helps us comprehend the nature of the data we are working with, but vaguely.
+    Some well-known distribution patterns include normal, uniform, skewed, exponential,
+    Poisson, binomial, and multinomial. Determining whether a change in distribution
+    is beneficial or harmful can be challenging because a change in distribution can
+    sometimes result in good consequences, while no change in distribution doesn’t
+    necessarily imply that performance won’t be degraded. The relationship between
+    distribution changes and model performance is not always straightforward, making
+    it difficult to assess the impact accurately. *So, it is advisable to always consider
+    other, more understandable, cross-validation-tested statistical data drift that
+    strongly correlates with performance metrics instead of data* *distribution drift.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: Statistical drift refers to changes in statistical characteristics, such as
+    mean, variance, correlation, or skewness, that can have a more direct impact on
+    model performance. This also means that the relationship between them is more
+    predictable, which allows for more targeted maintenance actions. Change between
+    statistical values can be measured through difference or ratio. For example, if
+    a deep learning model is trained to recognize handwritten digits, a statistical
+    drift in the mean intensity of the digits (for example, due to changes in lighting
+    conditions) could have a direct impact on the model’s accuracy. This approach
+    will enable us to better prepare for any potential negative impacts and maintain
+    the effectiveness of our data analysis. More broadly, the choice between these
+    two is part of the **data** **drift techniques**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, the prerequisite of drift being relevantly and reliably handled comes
+    down to the choice of the **data types** to apply distributional or statistical
+    drift methods. Some examples of the other data types are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Data characteristic drift**: Occurs when there are changes in the underlying
+    properties or attributes of the data. It’s important to remember that drift doesn’t
+    just cover actual model input or output data changes and can also cover external
+    descriptors or metadata associated with the input or output data. To make this
+    more concrete, let’s explore some example characteristics that can be monitored
+    and measured for drift:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Text**: The usage of certain words, phrases, sentiment, word count, and average
+    length of sentences'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Image**: Object orientation, lighting hue, color, size, and any styles'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Audio**: Sound or speaker pitch, tempo, timbre, tone, speaker gender, speaker
+    accents, speaker dialects, and speaking styles'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data quality drift**: Occurs when there are distribution changes in the quality
+    of the data being collected, such as missing values, data entry errors, or measurement
+    errors. These changes can impact the model’s ability to make accurate predictions.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Core data drift**: This involves the raw data of image, text, audio, and
+    any embedding data that is extracted from a deep learning model at any level.
+    This drift data type can be hard to interpret and it can be hard to find a correlation
+    with the metrics you care about. Drift in the unstructured raw data itself rarely
+    correlates with the metrics you care about. However, embedding data from the actual
+    deep learning model that was used for the prediction is more likely to show drift
+    values that are relevant to the metric you care about. As a standard, practitioners
+    usually choose the embeddings from the final layer output.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'While these data type categories cover what characteristics of the data drifted,
+    there are two higher-level data drift types that should be known. The higher-level
+    data drift types govern where the drift is measured, monitored, and detected,
+    which can be labeled as part of the **drift scenarios**. These are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Covariate drift** or input features drift, which involves shifts in the input
+    features while maintaining the same relationship with the target variable. This
+    can arise from changes in data collection methods, user behavior, or external
+    factors, challenging the model’s ability to generalize effectively. It can affect
+    the importance or relevance of certain features in predicting the target variable.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Electronics` to specific labels such as `Smartphones` constitute label drift
+    when underlying user-product relationships remain unchanged.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building upon our understanding of data drift, let’s now delve into the equally
+    important phenomenon of concept drift, which focuses on the evolving relationships
+    between input data and target variables in various use cases and scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring concept drift
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Concept drift is intimately tied to the specific use case and data characteristics.
+    Rather than adhering to predefined types, concept drift’s occurrence and impact
+    vary based on factors such as problem context, data attributes, temporal dynamics,
+    external influences, and adaptation strategies. Acknowledging this context dependency
+    is essential for tailoring effective concept drift detection and adaptation methods
+    that align with the nuances of each individual scenario. Let’s explore some examples
+    of concept drift:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Search engine algorithms**: A search engine’s ranking algorithm learns from
+    user behavior, but the user preferences evolve over time. What was once considered
+    relevant might not be anymore, causing a shift in the concept of relevance and
+    altering both the input data (queries) and target (rankings) relationships.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Online advertisement campaigns**: In online advertising, users’ click-through
+    behavior changes due to new trends or demographics. This leads to shifts in user
+    preferences, affecting both the input data (ad impressions) and the target (click-through
+    rates) relationships.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Medical diagnostics**: In medical diagnosis, patient profiles change as demographics
+    or health trends shift. This impacts the concept of “normal” and “abnormal” within
+    the data, altering both the input data (patient characteristics) and the target
+    (diagnosis) relationships.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, it’s time to explore the last drift type, called model drift.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring model drift
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Model drift simply deals with the shift in model evaluation metrics, which usually
+    require real and natural targets being provided later, system metrics, and business
+    metrics. This drift is the most straightforward to monitor and capture as it is
+    a drift that can be directly connected to metrics you care about.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we are ready to explore strategies to handle drift.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring strategies to handle drift
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Simply setting up drift monitoring for a deployed model isn’t enough to effectively
+    tackle all potential drift-related challenges. It’s crucial to ask yourself: does
+    the specific drift with the chosen data type impact the model’s performance in
+    the metrics that matter the most? At what point does drift become intolerable?
+    To properly address drift, start by pinpointing the drift metric and data type
+    that carries the most significance for your model and the business. If your model
+    has been developed correctly, it may possess generalizable properties, which is
+    the primary goal for most machine learning practitioners. This means that a well-developed
+    model should be able to handle drift effectively. When drift detection and alerts
+    are configured without proper consideration of their effects, it poses the risk
+    that drift alerts can be raised without an actual issue, which can result in wasted
+    time and resources that could have been used more productively elsewhere. *Figure
+    17**.1* shows the high-level methodology that encompasses the strategies we will
+    explore:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.1 – Drift-handling methodology](img/B18187_17_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 17.1 – Drift-handling methodology
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s start with a deep dive into the first strategy, which is to explore drift
+    detection methods and strategies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring drift detection strategies
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Not every drift type that can impact your model and the metrics you care about
+    requires monitoring. There are two primary ways to detect drift, which are the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Estimating future drift events based on manual insights and domain knowledge**:
+    This method doesn’t require any monitoring setup and depends on humans as the
+    alerting mechanism. Imagine an e-commerce platform that uses a deep learning model
+    to recommend products to its customers, with the goal of increasing product purchases.
+    Drift in customer preferences consistently happens during different seasons, such
+    as Halloween or Christmas. For instance, people might search for costumes in October
+    and gifts in December. Building on this domain knowledge, instead of measuring
+    and detecting drift, before each season arrives, you pre-emptively adjust the
+    model’s recommendations according to the expected season trend. This prevents
+    the need to measure and detect any change in preferences and ultimately can also
+    prevent any degradation in performance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Using automated programmatic measurements, monitoring, and detection of specific
+    traits or patterns**: Imagine you trained a deep learning model to identify whether
+    an email is spam and validated with real data. Through analysis, you find that
+    the average length of an email degrades the model’s performance. You don’t have
+    sufficient data to train the model to tackle this issue, deploy it, and decide
+    to monitor it if the email length changes. By tracking and comparing this programmatic
+    measurement of email length, you can effectively detect the drift and take subsequent
+    actions to improve the model’s performance. Programmatic data distribution drift
+    detection methods include statistical tests, distance metrics, and classification
+    models and will be explored further in the *Detecting drift* *programmatically*
+    section.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sometimes, both are required, and sometimes, only the first method is needed.
+    Having planned fixed dates on when you expect concept drift to occur and assigning
+    planned dates to mitigate them are more reasonable strategies than trying to detect
+    them. However, as mentioned, there are cases where you absolutely need to implement
+    drift monitoring and detection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the choice is to measure, monitor, and detect drift programmatically, it
+    is important to make sure that you set a big enough time interval to how you’re
+    measuring and detecting drift. You want to catch those shifts that are there to
+    stay, and those are the ones that can make your model struggle. This ensures we’re
+    not chasing after one-time anomalies but addressing substantial shifts that can
+    impact the reliability of our models. To that end, drift detection in production
+    should be configured to be run in batch mode and does not need real-time monitoring
+    and detection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For other metrics for monitoring a deployed deep learning model, the recommended
+    route is to use real-time predictions and monitoring and alerting functionalities
+    using NVIDIA Triton Inference Server, the Prometheus server, and Grafana. However,
+    for batch predictions, the recommended stack would be to use Apache Airflow for
+    scheduling a drift detection task to be executed regularly, a database such as
+    PostgreSQL to store drift measurements from Airflow tasks, and Grafana to connect
+    to PostgreSQL for monitoring batch drift and creating alerts. Notably, a database
+    is recommended over using Prometheus, being the more efficient choice, as Prometheus
+    requires more services to be set up, which can take up more resources. This can
+    be wasteful as Prometheus is set up to take up resources for real-time usage when
+    it’s not needed. Look into [https://github.com/evidentlyai/evidently/tree/v0.4.4/examples/integrations/airflow_batch_monitoring](https://github.com/evidentlyai/evidently/tree/v0.4.4/examples/integrations/airflow_batch_monitoring)
+    for a tutorial on how to set this up.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The prerequisite to setting the recommended batch predictions stack up is that
+    the input data used must be saved somewhere for an Airflow task to pick it up
+    in the future. The data can live in any format, and most typically for actual
+    business use cases, the input data should already live in a database such as PostgreSQL.
+    If drift is applied to the predictions, then either the predictions also need
+    to be saved in a database or it can be a task prior to the drift measurement under
+    the same directed acyclic graph in Airflow, which can be scheduled regularly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a follow-up, to ensure reliable drift monitoring and detection programmatically,
+    we need an additional step before setting it up, which is to analyze the impact
+    of drift.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing the impact of drift
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To mitigate the risk that drift alerts are raised without an actual issue, perform
+    a **drift impact analysis** on your chosen model before deployment. Drift impact
+    analysis is closely related to the adversarial performance analysis methods introduced
+    in [*Chapter 14*](B18187_14.xhtml#_idTextAnchor206), *Analyzing Adversarial Performance*.
+    The same strategy of using controllable augmentation or collecting real-world
+    data with the targeted data characteristic drift to perform an evaluation can
+    be adopted. So, re-explore that chapter and apply the same analysis methods with
+    drift in mind. The idea is to make sure any variation in the data type or types
+    you choose to monitor for drift correlates with the model performance metrics
+    in some way. In other words, perform correlation analysis, adversarial performance
+    analysis, or drift impact analysis at once! But do be aware of the issue where
+    correlation not being causation can lead to misleading conclusions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: When there are cases where you can’t augment the characteristics, it can be
+    crucial to monitor it after deployment and perform impact analysis then.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consequently, as a bonus, findings from adversarial performance analysis should
+    guide the establishment of an appropriate detection threshold, determined by pinpointing
+    the stage at which any additional metric degradation becomes unacceptable. Just
+    as a binary threshold must be finely calibrated to balance recall and precision
+    trade-offs for a binary classification model. This is part of the guardrail filter
+    component introduced in the *Governing deep learning model utilization* section
+    in the previous chapter, [*Chapter 16*](B18187_16.xhtml#_idTextAnchor238), *Governing
+    Deep Learning Models*. With guardrail filters implemented through data characteristic
+    thresholding, the risk of data drifting in extreme ways negatively will be decreased.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It’s important here to differentiate the two related approaches introduced that
+    help to combat performance degradation, which are guardrail filters with thresholds
+    and drift monitoring. Guardrail filters operate on a per-prediction request level
+    and drift operates at a higher level working with a batch of predictions made
+    in a specified time frame. The key mutually beneficial relationship between them
+    is that guardrail filters aid in eliminating extreme examples known to yield inaccurate
+    or unreliable results, thus reducing the likelihood and adverse effects of more
+    extreme drift. It can still be useful to measure and monitor the statistics of
+    the same data types even when extreme values are prevented through guardrail filters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another important aspect to consider is that deployed models can be vulnerable
+    to various types of drift. Sometimes, you can reliably analyze the impact of specific
+    characteristics on your desired metric, while in other cases, you might not be
+    able to, even if the characteristics are measurable. This inability could stem
+    from the lack of viable augmentations to simulate the characteristic or the insufficient
+    availability of natural data examples containing the targeted characteristic.
+    When you’re unable to reliably analyze the impact, you have two main options to
+    consider:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Set up monitoring of the statistics of the chosen data characteristics without
+    a detection component, allowing for future analysis once more data has been gathered
+    over time. Alternatively, consider implementing soft alerts that prompt post-deployment
+    analysis when extreme or unknown values emerge in the characteristic you suspect
+    could influence the model.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Apply data distribution drift-based monitoring and detection. Although it is
+    hard to predict the metric impact from distribution change, there is value in
+    using it as a more reliable arbitrary soft alert mechanism, similar to as described
+    in the previous point.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After crafting a detection strategy and verifying its impact, it’s time to consider
+    how we can tackle the potential issues caused by drift and determine the steps
+    to address any drift incidents that arise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring strategies to mitigate drift
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This falls within the domain of model maintenance, where we take action to
+    ensure our model stays on track and remains effective over time. Here are a few
+    techniques that can be used to tackle drift alerts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Retrain or fine-tune**: Regularly retrain or fine-tune the model with new
+    data, incorporating any changes in patterns or trends. This will help the model
+    adapt to evolving data dynamics and maintain its accuracy.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Prevent predictions of high-risk drift metric score ranges**: Don’t allow
+    data that lies in a high-risk range of characteristics or range of distribution
+    distances to be predicted. For example, face recognition systems should only predict
+    frontal, unobstructed faces without masks or glasses. This will result in targeted
+    prevention of drift, as the data you receive will always be in the expected range.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Manual human analysis**: This is where a human expert is involved in the
+    decision-making process when drift alerts are triggered. The expert can review
+    the situation, validate the model’s predictions in aggregate, and provide feedback
+    to improve the model’s performance over time. This approach helps maintain the
+    model’s accuracy and effectiveness while also providing valuable insights for
+    future improvements. This can be useful to handle new, unseen, non-numerical data
+    types properly, such as new words for text data or new label categories.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With proper drift impact analysis, drift detection strategy, and model maintenance
+    flow setup, you can now ensure that your deep learning model remains robust and
+    accurate even as the underlying data distribution evolves. By understanding how
+    changes in the data can affect your model’s performance, having a strategy in
+    place to identify and quantify drift, and establishing a clear process for model
+    updates and maintenance, you can proactively address issues, maintain model reliability,
+    and provide consistent and trustworthy results over time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will dive deeper into the topic of programmatic drift detection in the next
+    section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting drift programmatically
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: With a comprehensive understanding of drift types and their effects, we will
+    explore techniques for detecting drift programmatically, diving into the realms
+    of concept drift and data drift. Armed with these methods, you’ll be well equipped
+    to implement high-risk drift detection components. Let’s start with concept drift.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting concept drift programmatically
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Concept drift involves both the input data and the target data. This means
+    that we can effectively detect concept drift for a deployed model only when we
+    can get access to the real target labels in production. When you do have access
+    to them, you can adopt the following techniques to detect concept drift:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Check the similarity of production data to the reference training data**:
+    This should include both input and output data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Use model evaluation metrics as a proxy**: Evaluation metrics can signal
+    concept drift or data drift.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Use multivariate-based data drift detection and include both input and target
+    data**: This can be unreliable where detection can be data drift instead of concept
+    drift. But it doesn’t change the fact that something needs to be done, so it’s
+    fine.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, we will explore programmatic data drift detection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting data drift programmatically
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Detecting data drift programmatically involves two essential steps: quantifying
+    the type of change of data and applying a detection threshold based on reference
+    or training data and the current data. For statistical-based drift, detection
+    can be implemented with data statistical value thresholds identified during the
+    analysis. However, for distribution-based data drift, it can be hard and ambiguous
+    to define the threshold properly. In this section, we will focus on methods to
+    quantify the distribution change. To do that, one can employ either of the following
+    methods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`evidently`, along with its pros and cons:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '| **Statistical** **test type** | **Pros** | **Cons** | **Evidently** **implementation
+    info** |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| **Kolmogorov-** **Smirnov** (**K-S**) test | Non-parametric and distribution-free,
+    making it versatile. Fast to compute and interpret. | Less sensitive to differences
+    in tails of distributions. Assumes continuous and one-dimensional data. | Supports:
+    Numerical data typeThreshold: Score < 0.05Default: For numerical data, if <= 1,000
+    samples |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Chi-squared test | Works well for categorical data. Fast to compute and interpret.
+    | Requires data to be binned, which can be subjective. Assumes that observations
+    are independent. | Supports: Categorical data typeThreshold: Score < 0.05Default:
+    For categorical with > 2 labels, if <= 1,000 samples |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Z-test | Works well for large sample sizes. Fast to compute and interpret.
+    | Assumes normal distribution and known population variance. Not suitable for
+    small sample sizes. | Supports: Categorical data typeThreshold: Score < 0.05Default:
+    For binary categorical data, if <= 1,000 samples |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Anderson-Darling test | More sensitive to differences in tails of distributions
+    compared to the K-S test. Can be used for various distributions with proper scaling.
+    | Assumes continuous data. Computationally more complex than the K-S test. | Supports:
+    Numerical data typeThreshold: Score < 0.05Default: N/A |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Fisher’s exact test | Accurate even with small sample sizes. Suitable for
+    categorical data. | Computationally intensive, especially with large sample sizes.
+    Limited to 2x2 contingency tables. | Supports: Categorical data typeThreshold:
+    Score < 0.05Default: N/A |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Cramér-von Mises test | Sensitive to differences in both central and tail
+    regions of distributions. Non-parametric and distribution-free. | Computationally
+    more complex than the K-S test. Assumes continuous data. | Supports: Numerical
+    data typeThreshold: Score < 0.05Default: N/A |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| G-test (likelihood ratio test) | Suitable for categorical data. Asymptotically
+    equivalent to the Chi-squared test. | Requires large sample sizes for accurate
+    results. Assumes independent observations. | Supports: Categorical data typeThreshold:
+    Score < 0.05Default: N/A |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Epps-Singleton test | Sensitive to differences in the shape of distributions.
+    Robust against outliers. | Computationally complex. Assumes continuous data. |
+    Supports: Numerical data typeThreshold: Score < 0.05Default: N/A |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| T-test | Fast to compute and interpret. Applicable for comparing the means
+    of two groups. | Assumes normal distribution and equal variance. Not suitable
+    for small sample sizes when the normality assumption is not met. | Supports: Numerical
+    data typeThreshold: Score < 0.05Default: N/A |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: Table 17.1 – Statistical tests for distribution change
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`evidently` along with its pros and cons:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '| **Distance metric** | **Pros** | **Cons** | **Evidently** **implementation
+    info** |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Wasserstein distance | Captures the geometric differences between two distributions,
+    taking into account both the shape and location. Provides a natural and interpretable
+    metric for comparing distributions. | Computationally expensive, especially for
+    high-dimensional data. May not work well for discrete distributions or sparse
+    data. | Supports: Numerical data typeThreshold: Distance >= 0.1Default: For numerical
+    data, if > 1,000 samples |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| **Kullback-Leibler** (**KL**) divergence | Quantifies the difference between
+    two probability distributions by measuring the extra number of bits required to
+    encode one distribution using the other. Works well for continuous distributions
+    and has a strong theoretical foundation. | Asymmetric: KL(P &#124;&#124; Q) ≠
+    KL(Q &#124;&#124; P), which may affect the interpretation of the measure. May
+    be infinite if the support of the two distributions does not overlap, making it
+    less suitable for data drift detection. | Supports: Numerical and categorical
+    data typesThreshold: Distance >= 0.1 |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| **Jensen-Shannon** (**JS**) distance | Symmetric measure: JS(P &#124;&#124;
+    Q) = JS(Q &#124;&#124; P), making it more suitable for comparison. Bounded between
+    0 and 1, making it easier to interpret. Combines the strengths of KL divergence
+    and mutual information. | In some cases, JS distance might not be sensitive enough
+    to detect small differences between distributions. | Supports: Numerical and categorical
+    data typeThreshold: Distance >= 0.1Default: For categorical, if > 1,000 samples
+    |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: '| Hellinger distance | Bounded: Produces values between 0 and 1, providing
+    easier interpretation | Might not be sensitive enough to detect small differences
+    between distributions. | Supports: Numerical and categorical data typeThreshold:
+    Distance >= 0.1 |'
+  prefs:
+  - PREF_IND
+  type: TYPE_TB
+- en: Table 17.2 – Distance metrics for data drift
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Classification model to differentiate between the reference and the current
+    data**: A binary threshold needs to be set. Although this isn’t strictly a distribution
+    change measurement, it can be considered an approximated distribution change.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fortunately, the `evidently` library provides all these methods out of the box
+    with default thresholds. Evidently is an easy-to-use toolkit that provides metrics
+    monitoring, data drift detection, and data drift analysis functionalities for
+    machine learning models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a follow-up to the data distribution-based drift detection topic, either
+    of the methods introduced can be executed using either univariate or multivariate
+    approaches. The choice between these approaches depends on the complexity of the
+    data and the desired level of granularity in drift detection. Here are some suggestions
+    on when to choose each method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use univariate drift detection in the following cases:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The relationships between individual variables are not significant or not of
+    primary concern
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The goal is to detect drift at a granular level, focusing on each variable separately
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The data has a low dimensionality or a small number of variables, making it
+    less challenging to analyze each variable individually
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The computational resources or time available for analysis are limited, as univariate
+    methods are generally less computationally demanding than multivariate methods
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Use multivariate drift detection in the following cases:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The relationships between multiple variables are essential, and detecting drift
+    in these relationships is crucial for model performance
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The data has high dimensionality or many variables, making it challenging to
+    analyze each variable individually
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The goal is to capture a holistic view of the data drift, considering the interactions
+    between variables
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The computational resources and time available for analysis are sufficient,
+    as multivariate methods can be more computationally intensive than univariate
+    methods
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The meaning of individual variables is not defined, for example, embeddings
+    generated from deep learning models
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluate these factors to determine the appropriate method for detecting data
+    drift in machine learning models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One final step is to identify the detection threshold. As any distribution change
+    doesn’t necessarily mean a positive impact or negative impact, it’s hard to set
+    a threshold through any cross-validation techniques for your dataset. The idea
+    here is to set a reasonable large distribution change value that can at least
+    cause a change in impact. Fortunately, if you use the `evidently` library, it
+    provides default thresholds that allow us to truly treat this technique as an
+    arbitrary drift detector when you don’t have the means to analyze the metric impact.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will dive into a short practical implementation of programmatic data
+    distribution drift detection using the Python **evidently** library.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing programmatic data distribution drift detection using evidently
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One thing you are probably curious about is whether the absolute magnitude
+    of distribution matters in distribution drift computation. In this section, we
+    will explore a short tutorial on using evidently that demonstrates three things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Absolute magnitude matters as well in distribution drift measurements along
+    with relative magnitude
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A detected distribution drift or a highly drifted score doesn’t necessarily
+    result in degraded performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Distribution drift alignment with a drop in metric performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The tutorial will be based on the same model, dataset, and dataset characteristic
+    used in the *Executing adversarial performance analysis for speech recognition
+    models* section in [*Chapter 14*](B18187_14.xhtml#_idTextAnchor206), *Analyzing
+    Adversarial Performance*, which is about speech recognition. Let’s dive into it
+    in a step-by-step manner:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we will import the necessary libraries:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will load the dataset and the speech recognition model in the GPU:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will be using the word error rate performance metric here, so let’s use
+    the method from the Hugging Face `evaluate` library along with the method to compute
+    and return a list of the metric scores:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will be using a known characteristic that affects the metric performance
+    of the model, can be controlled through augmentation, and can be measured, which
+    is syllables per second. Let’s define the method that gets the augmented results
+    and calls the method to compute the metric scores:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To properly demonstrate the behavior of performance improvements even when
+    drift is detected, we will use a modified version of the dataset as the reference
+    baseline. Let’s obtain it by first extracting the original dataset info:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we obtain the audio dataset that is expanded three times its original
+    duration and prepare the DataFrame compatible with `evidently` library processing,
+    which effectively reduces the syllables per second by three times:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now that we have a reference dataset, we need a current dataset that simulates
+    new data that we receive with a deployed model. We will modify 90% of the reference
+    dataset to 10 syllables per second to show a more extreme case of distribution
+    change from normal to highly skewed distribution:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now that we have both a reference dataset and a current dataset, let’s obtain
+    the data drift report:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 17.2 – Data drift report by evidently](img/B18187_17_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 17.2 – Data drift report by evidently
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember that the default K-S test is used when the dataset has less than 1,000
+    columns, which reflects what was used here. Drift was detected with a 0.05 threshold
+    and the metric performance dropped significantly; this is the ideal situation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we’ll create a simulation in which the number of syllables pronounced
+    per second is tripled compared to the current data. We’ll use the original dataset
+    for this and get the `evidently` drift report:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will result in the report shown in *Figure 17**.3*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 17.3 – Evidently report with same distribution but different magnitude
+    still detected drift](img/B18187_17_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 17.3 – Evidently report with same distribution but different magnitude
+    still detected drift
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, the distribution pattern is visibly the same, but the absolute magnitude
+    of each group of syllables per second is much higher. The K-S test still managed
+    to detect this as drift as it uses cumulative distribution difference, showcasing
+    the versatility of distribution drift methods. With that, we have completed the
+    tutorial! `evidently` offers a broader range of metrics for measurement, including
+    data quality statistics and model evaluation metrics. It also includes built-in
+    support for monitoring data drift and detecting data types such as embeddings
+    and text. Be sure to explore these features separately. Additionally, consider
+    diving into each of the methods in detail to discover new behaviors of distribution
+    drift techniques that you never thought were possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other than Evidently, there is one more notable open source library that you
+    can use to handle drift programmatically, which is part of what we will discover
+    next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing and contrasting the Evidently and Alibi-Detect libraries for drift
+    detection
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we will compare and contrast two popular libraries for drift
+    detection in deep learning models: Evidently and Alibi-Detect. Both libraries
+    provide tools for monitoring and detecting drift in data, but they differ in terms
+    of their features. By understanding the strengths and weaknesses of each library,
+    you can choose the one that best suits your needs and requirements for drift detection
+    in your deep learning models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Evidently has the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Provides an easy-to-use toolkit for monitoring data drift, including built-in
+    support for various data types such as embeddings and text
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Offers a comprehensive set of metrics for measuring drift, including statistical
+    tests, distance metrics, and classification models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Supports both univariate and multivariate drift detection methods, allowing
+    for flexibility in handling different types of data and use cases
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Offers a simple and intuitive interface for generating drift detection reports
+    and visualizations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Supports general evaluation metrics and data quality metrics
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Alibi-Detect, on the other hand, has the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Python library that includes a wide range of drift detection, outlier detection,
+    and adversarial detection techniques
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Supports both online and offline detectors for tabular data, text, images, and
+    time series
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Claims to support TensorFlow and PyTorch models out of the box
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both Evidently and Alibi-Detect are powerful libraries for drift detection in
+    deep learning models. Depending on your specific needs and requirements, you can
+    choose either Evidently or Alibi-Detect as your preferred library for drift detection
+    in deep learning models. Under typical conditions, Evidently can serve as the
+    de facto library. However, as of the time of writing this book, if you’re dealing
+    with non-tabular data without available embedding models, require outlier detection,
+    or need a statistical test that Evidently doesn’t offer, Alibi-Detect is a more
+    suitable choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we explored the concept of drift, which affects the performance
+    of deployed deep learning models over time. We covered the three types of drift
+    – concept drift, data drift, and model drift – and discussed strategies to handle
+    them effectively. This included strategies to approach drift, including automatic
+    programmatic detection and manual domain expert predictions, strategies to quantify
+    drift, and strategies to mitigate drift effectively. We learned that statistical-based
+    drift should always be opted for over ambiguous data distribution drift. We also
+    learned that monitoring drift by batch in regular intervals is crucial in ensuring
+    the continued success of deep learning models. Finally, using the `evidently`
+    library, we demonstrated how to implement programmatic data distribution drift
+    detection in a practical tutorial and understood behaviors that can shape how
+    you think of data distribution drift methods. This knowledge can be applied across
+    various industries and applications, such as healthcare, finance, retail, and
+    manufacturing, where maintaining the accuracy and performance of deep learning
+    models is crucial for efficient decision-making and optimizing business processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter marks the completion of our deep dive into every component of the
+    deep learning life cycle. In the next chapter, we will explore how a paid-for
+    platform called DataRobot covers crucial components of the deep learning life
+    cycle in an easy-to-use user interface.
+  prefs: []
+  type: TYPE_NORMAL

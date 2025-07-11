@@ -1,0 +1,631 @@
+- en: Long Short-Term Memory Networks for Stock Forecasting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter will show you how to use **long short-term memory** (**LSTM**) models
+    to forecast stock prices. This type of model is particularly useful for time series-based
+    forecasting tasks. An LSTM model is a special type of **recurrent neural network**
+    (**RNN**). These models contain special characteristics that allow you to reuse
+    recent output as input. In this way, these types of models are often described
+    as having memory. We will begin by creating a simple baseline model for predicting
+    stock prices. From there, we will create a minimal LSTM model and we will dive
+    deeper into the advantages of this model type over our baseline model, as well
+    as explore how this model type is an improvement over a more traditional RNN.
+    Lastly, we will look at some ways to tune our model to further improve its performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding common methods for stock market prediction
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Preparing and preprocessing data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Configuring a data generator
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training and evaluating the model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Tuning hyperparameters to improve performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: You can find the code files used in this chapter at [https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R](https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding common methods for stock market prediction
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will learn about a different type of neural network called
+    an RNN. In particular, we will apply a type of RNN known as an LSTM model to predict
+    stock prices. Before we begin, let's first look at some common methods of predicting
+    stock prices to better understand the problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Predicting stock prices is a time-series problem. With most other machine learning
+    problems, variables can be split at random and used in training and test datasets,
+    but this is not possible when solving a time-series problem. The variables must
+    remain in order. The features to solve the problem can be found in the sequence
+    of events and, consequently, the chronology of how events occurred must be maintained
+    to generate meaningful predictions of what will happen next. While this places
+    a constraint on which methods can be used, it also provides an opportunity to
+    use some specific models that are well suited for these types of tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's start with some approaches that are relatively straightforward to create
+    a baseline model before creating our deep learning solution, which we can use
+    to compare results later. The first model that we will construct is an **Auto-Regressive Integrated
+    Moving Average** (**ARIMA**) model. Actually, the concepts from the name of this
+    model explain a lot about the particular challenges of modeling on time-series
+    data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **AR** in ARIMA stands for **auto-regressive** and refers to the fact that
+    the model inputs will be for a given observation and set number of lagged observations. The
+    **MA** in ARIMA stands for **moving average** and refers to the autoregressive
+    nature of the model, which states that the variables will include an observation
+    at a given point in time and a set of lagged variables. The moving average component
+    takes into account the mean value between a set of variables over time to capture
+    a more generalized value explaining a trend over time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **I** in ARIMA stands for **integrated**, which in this context means that
+    the entire time-series is considered as a whole. More specifically, it refers
+    to the idea that the solutions must be generalizable across the entire series
+    just as we strive for with other machine learning solutions. To aid with this,
+    with time-series problems we transform the data so that it is said to be stationary.
+    With ARIMA, we look at the differences between an observation and the observation
+    preceding it and then use these relative differences. By using the relative differences,
+    we can maintain a more generalized shape over the series, which helps to control
+    the mean and variance, which are important elements in forecasting predicted future
+    states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With this context, let''s now create an ARIMA model. To get started, we will
+    use the `quantmod` package to load stock information. The `getSymbols` function
+    from this package is a very convenient way to pull in stock price information
+    for any company within a set time frame from a number of sources. We set `auto.assign`
+    to `FALSE` since we will assign this ourselves. For our example, we will load
+    5 years of Facebook stock:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following code, we will read in the data as well as load all the libraries
+    we will be using:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running this code, we will see that we have an `FB` object in our environment
+    with an `xts` class type. This object class type is similar to a standard data
+    frame, but the row names are dates. Let's inspect a few rows of `xts` data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can view the first five rows from the `FB` object by using the following
+    line of code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, you will see the following output printed to your
+    console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/70d9271c-8576-4b59-b820-d60a5e88b5c6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can see from these selected rows that we have a number of stock price points
+    taken from the day, including the opening and closing price, as well as the highest
+    and lowest price for the stock during the day. The volume of stock traded is also
+    included. For our purposes, we will use the price at the close of trading.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We select just the closing prices from the data and store them in a new object
+    by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now use the `plot.xts` function to plot the stock data. Usually, plotting
+    this data would require the dates to be held in a column, but this plotting function
+    is a convenient way of plotting a time series without needing the dates present
+    within a column in the data frame. We can plot the full 5 years of Facebook closing
+    stock prices by running the following line of code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After we run this line of code, we will see the following plot generated in
+    our **Plots**tab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/bb32a7ae-6c0c-49c6-97c3-2b235c5e8ab9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now that we can see how stock prices for Facebook have changed over this time
+    frame, let''s build an ARIMA model. Afterward, we will create a forecast using
+    the ARIMA model and then plot these forecast values. We create our model, forecast,
+    and plot by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running the preceding code, we will see the following plot in the **Plots**
+    tab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/99086d54-705a-474e-824e-b11bfb521a46.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The ARIMA model did not find a pattern and instead offers an upper and lower
+    bound, within which prices are predicted, which is not very helpful. ARIMA is
+    a popular baseline model for forecasting time-series data that often performs
+    well. However, in this case, we can see that our ARIMA model doesn't appear to
+    provide much useful information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before continuing, we can add in the actual stock price values from this frame
+    to see whether the prices did fall within the bounds predicted by the ARIMA model.
+    To pull in the data and add it to our plot, we run the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After we run the preceding code, we will see the following plot in the **Plots**
+    tab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/aa240e84-9b4f-46b4-b891-351f51a51a53.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As noted, the values for these dates are outside the bounds of the ARIMA model.
+    We can see that we chose a difficult time-series dataset to model since the stock
+    price is on a downward trend and then begins to rise again. With this being said,
+    over the 5-year period, there is a general upward trend. Can we build a model
+    that learns this upward trend and reflects it properly in the predicted results?
+    Let's take what we have learned about the particular challenges of modeling time-series
+    data and see whether we can improve upon our baseline results using a deep learning
+    approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing and preprocessing data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When working with time-series data, there are a number of data type formats
+    to choose from and use for conversion. We have already used two of these formats,
+    of which there are three that are most widely used. Let's briefly review these
+    data types before moving on to our deep learning model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we wanted to add actual data as an overlay to our ARIMA model plot, we
+    used the `ts` function to create a time-series data object. For this object, the
+    index values must be integers. In the case of using the `autolayer` function with
+    the `arima` plot, a time-series data object is required. This is one of the more
+    simple time-series data types and it will look like a vector in your **Environment**
+    tab. However, this only works with regular time series.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another data type is `zoo`. The `zoo` data type will work with regular and irregular
+    time series, and zoo objects can also contain a number of different data types
+    as index values. The drawback of the `zoo` objects is that there is not much information
+    available in the **Environment** pane. The only detail provided is the date range.
+    At times, the `zoo` data works better for plotting, especially when overlaying
+    multiple time-series objects, which is what we will use it for later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The last time-series data type is `xts`. This data type is an extension of `zoo`.
+    Like `zoo`, the index values are dates. However, in addition, the data is stored
+    in a matrix and numerous attributes are present in the **Environment** pane, making
+    it easier to inspect the size and contents of the data object. This is generally
+    a good choice for working with time-series data, unless there are particular reasons
+    to use one of the other types that we have, and will, cover. Another benefit of
+    `xts` is that the default plot function uses different formatting to the base
+    plot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When we are working with time-series data, there is another part of preprocessing
+    in addition to data type conversion that is often useful for modeling: converting
+    our data to delta values rather than absolute values in order to make the data
+    stationary. In this case, we will also log transform the price values to further
+    control the outliers. When we are done with this process, we will need to remove
+    the missing value that we introduced as well. Let''s convert our combined stock
+    price data from the closing price to the daily change in the log value of the
+    closing price by running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, we have data that should be more stationary than the
+    data we were working with before. Let''s view what our data looks like now by
+    running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we run the preceding code, we will see the following plot generated in
+    the **Plots** pane:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/60ee2ff4-12f0-437c-8270-03c2b92ff69c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The values we are working with are far more constrained and the patterns from
+    one section appear as if they will generalize better to explain movement in a
+    different section. Even though we can see that the values are better scaled here,
+    we can also run a quick test to prove that the data is now stationary. To check
+    for stationarity, we can use the **Augmented Dickey-Fuller test**, which we can
+    run on our data using this line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, we will see the following output printed to the console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7b7bd7e7-f212-475c-80d1-11d854923f48.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Although the actual p-value isn't reported as output when running this function,
+    we can see that the p-value is small enough that we can accept the alternate hypothesis
+    that the data is stationary. With this preprocessing complete, we can now move
+    on to setting up our `train` and `test` sets for our deep learning model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring a data generator
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Similar to ARIMA, for our LSTM model, we would like the model to use lagging
+    historical data to predict actual data at a given point in time. However, in order
+    to feed this data forward to an LSTM model, we must format the data so that a
+    given number of columns contain all the lagging values and one column contains
+    the target value. In the past, this was a slightly tedious process, but now we
+    can use a data generator to make this task much simpler. In our case, we will
+    use a time-series generator that produces a tensor that we can use for our LSTM
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The arguments we will include when generating our data are the data objects
+    we will use along with the target. In this case, we can use the same data object
+    as values for both arguments. The reason this is possible has to do with the next
+    argument, called `length`, which configures the time steps to look back in order
+    to populate the lagging price values. Afterward, we define the sampling rate and
+    the stride, which determine the number of time steps between consecutive values
+    for the target values per row and the lagging values per sequence, respectively.
+    We also define the starting index value and the ending index value. We also need
+    to determine whether data should be shuffled or kept in chronological order and
+    whether the data should be in reverse chronological order or maintain its current
+    sort order. Finally, we select a batch size, which specifies how many time series
+    samples should be in each batch of the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this model, we will create our generated time-series data with a `length`
+    value of `3`, meaning that we will look back 3 days to predict a given day. We
+    will keep the sampling rate and stride at `1` to include all data. Next, we will
+    split the `train` and `test` sets with an index point of `1258`. We will not shuffle
+    or reverse the data, but rather maintain its chronological order and set the batch
+    size to `1` so that we model one price at a time. We create our `train` and `test`
+    sets using these values for our parameters via the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running this code, you will see two tensor objects in your **Environment**
+    pane. Now that we have configured our data generator and used it to create two
+    sequence tensors, we are ready to model our data using LSTM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training and evaluating the model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Our data is properly formatted and we can now train our model. For this task,
+    we are using LSTM. This is a particular type of RNN. These types of neural networks
+    are a good choice for time-series data because they are able to take time into
+    account during the modeling process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most neural networks are classified as **feedforward** **networks**. In these
+    model architectures, the signals start at the input node and are passed forward
+    to any number of hidden layers until they reach an output node. There is some
+    variation in feedforward networks. A multilayer perceptron model is composed of
+    all dense, fully connected layers while a convolutional neural network includes
+    layers that operate on particular parts of the input data before arriving at a
+    dense layer and subsequent output layer. In these types of models, the backpropagation
+    step passes back derivatives from the cost function, but this happens after the
+    entire feedforward pass is complete. RNNs differ in a very important way. Rather
+    than waiting until the entire forward pass is complete, a certain data point that
+    represents a point in time is fed forward and evaluated by the activation function
+    in a hidden layer unit. The output from this activation function is then fed back
+    into the node and calculated with the next time-based data element. In this way,
+    RNNs can use what they just learned to inform how to process the next data point.
+    We can see now why these work so well when we are considering data that includes
+    a time component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While RNNs are designed to work well for time-series data, they do have one
+    important limitation. The recurrent element of the model only takes into account
+    the time period that just preceded it and, during backpropagation, the signal
+    being passed back can decay when there are a large number of hidden layers. These
+    two model characteristics mean that a given node cannot use the information it
+    has learned on a distant time horizon, even though it may be useful. The LSTM
+    model solves this problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the LSTM model, there are two paths for data entering a node. One is the
+    same as in an RNN and contains the given time-based data point as well as the
+    output from the time point preceding it. However, if the output from the activation
+    function of this vector is greater than `0`, then it is passed forward. In the
+    next node, it goes on a separate path towards an activation function known as
+    the **forget gate**. If the data passes through this function with a positive
+    value, then it is combined with the output from the activation function that takes
+    the current state and immediate past output as input. In this way, we can see
+    how data from many time periods in the past can continue to be included as input
+    to nodes much further forward. Using this model design, we can overcome the limitations
+    of a traditional RNN. Let''s get started with training our model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we run the following line of code to initiate a Keras sequential model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this line of code, we will now add our LSTM layer. In our LSTM
+    layer, we will choose the number of units for our hidden layer and also define
+    our input shape, which is the length of the look-back defined earlier as one dimension
+    and `1` as the other. We will then add a dense layer with one unit, which will
+    be assigned our predicted price. To define our LSTM model, we use the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After defining our model, we next include the `compile` step. In this case,
+    we will use mean squared error (`mse`) as our loss function, since this is a regression
+    task, and we will use `adam` as our optimizer. We define the `compile` step and
+    view our model using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this block of code, you will see the following printed to your
+    console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/28154366-27a3-495a-951d-5ac1a97d1e3f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can now train our model. To train our model, we use the generated `train`
+    dataset. We will run our model for `100` rounds initially and just take one time
+    step every round. We will set the verbose argument to print the results of every
+    round. We train our LSTM model using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that the model has been trained, we can make our predictions. In the `predict`
+    step, we choose a given number of time steps for both the `train` and `test` data.
+    Afterward, we can compare these predictions with the actual values. We use our
+    LSTM model to predict stock prices by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running the preceding code, we now have our predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our next step will be to plot these together with the actual values to see
+    how well our model worked. This step will require converting our data between
+    a number of formats. Our first step will be to convert our vector of prediction
+    to an `xts` object. In order to do this, we need to define the index values. We
+    will use the `4` through `1203` index values for our `trainpredict` data. The
+    reason that we start at four is because we have three lagging values being used
+    to predict the value at the fourth index point. We will do the same for the test,
+    but we start at the `1263` index point. We create our `xts` data objects from
+    our predictions by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we add the values from these `xts` objects to our `closing_deltas` object.
+    Next, we plot our actual values, along with overlaying our predicted values. In
+    order to do this, we first add columns for all the NAs and then populate just
+    the rows that match the index points reflected in the prediction objects. We add
+    additional columns to our `closing_delta` and `xts` objects, reflecting the predictions
+    on the `train` and `test` sets by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have the predictions merged together with the actual data, we can
+    plot the results. We plot predictions as solid dark lines over the actual values
+    represented by light gray, dotted lines using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, you will see the following plot in your **Plots**
+    tab:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/555809c0-ce1e-4060-8386-589e250971cf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: While the predicted results are a little conservative, note how the model is
+    detecting the nuance at various time points. This model is finding more patterns
+    and resulting in output with more movement than our ARIMA model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition to plotting our data, we can also print the results of calling
+    the `evaluate_generator` function to calculate the error rate. To print the error
+    rate for our model, we run the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running the preceding code, we see the following error rate values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1fd80fda-9471-4c1b-bf3a-aeeaf1349cae.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The warnings printed in the console can be ignored. At the time of writing,
+    this is a known issue with TensorFlow through Keras. Our LSTM model so far is
+    fairly minimal. Let's take a look at tuning some hyperparameters next. We will
+    see what we can tune to try to achieve better performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tuning hyperparameters to improve performance
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To improve our model, we will now tune our hyperparameters. There are a number
+    of options for tuning our LSTM model. We will focus on adjusting the length value
+    when creating the time-series data with our data generator. In addition, we will
+    add additional layers, adjust the number of units in the layer, and modify our
+    optimizer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will do so using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get started, let''s switch the value that we pass to the `length` argument
+    in the `timeseries_generator` function from `3` to `10` so that our model has
+    a longer window of prices to use for forecasting calculations. To make this change,
+    we run the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have kept this code the same as we did earlier with just the one change to
+    `length`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we will make our LSTM model deeper by adding an additional LSTM layer,
+    dropout layer, and one additional dense layer. We will also change the input shape
+    to reflect the next `length` parameter in the generator. Lastly, we set `return_sequences`
+    to `True` in the first layer so that the signal can flow through to the additional
+    layers. Without setting this to `True`, you will get an error related to the expected
+    and actual dimensions of the data entering the second LSTM layer. We add additional
+    layers to our LSTM model by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Our last modification will be to make a change to the optimizer. In this case,
+    we will lower the learning rate for our optimizer. We do this to avoid any major
+    spikes in our predicted values. We can adjust our optimizer by running the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running the preceding code, the following will be printed to your console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f8a77053-d0f5-46d4-82b4-42f6894d5866.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Next, we can train our model as before using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After training our model, we can evaluate how well it performed and compare
+    this with our first model. We evaluate our model and print the results to our
+    console using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we run this code, we see the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d8a8d662-0e64-4421-b651-58c7fec386ff.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Our modifications have produced mixed results. While the loss value for the
+    `train` data is slightly worse, the error rate for the `test` data is improved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, we have walked through all the steps necessary to create an LSTM
+    model and have taken one pass at adjusting parameters to improve performance.
+    Creating deep learning models is often as much an art as it is a science, so we
+    encourage you to continue making adjustments and seeing whether you can further
+    improve on the model. You may want to try different optimizers other than `adam` or
+    experiment with including additional hidden layers. With these foundations in
+    place, you are ready to make additional changes or apply this approach to a different
+    dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we started by creating a baseline model to predict stock prices.
+    To do this, we used an ARIMA model. Based on this model, we explored some important
+    components of machine learning with time-series data, including using lagging
+    variable values to predict a current variable value and the importance of stationarity.
+    From there, we built a deep learning solution using Keras to assemble LSTM and
+    then tuned this model further. In the process, we observed that this deep learning
+    approach has some marked advantages compared to other traditional models, such
+    as ARIMA. In the next chapter, we will use a generative adversarial network to
+    create a synthetic face image.
+  prefs: []
+  type: TYPE_NORMAL

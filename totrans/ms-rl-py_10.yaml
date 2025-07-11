@@ -1,0 +1,1192 @@
+- en: '*Chapter 8*: Model-Based Methods'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: All of the deep **reinforcement learning** (**RL**) algorithms we have covered
+    so far were **model-free**, which means they did not assume any knowledge about
+    the transition dynamics of the environment but learned from sampled experiences.
+    In fact, this was a quite deliberate departure from the dynamic programming methods
+    to save us from requiring a model of the environment. In this chapter, we swing
+    the pendulum back a little bit and discuss a class of methods that rely on a model,
+    called **model-based methods**. These methods can lead to improved sample efficiency
+    by several orders of magnitude in some problems, making it a very appealing approach,
+    especially when collecting experience is as costly as in robotics. Having said
+    this, we still will not assume that we have such a model readily available, but
+    we will discuss how to learn one. Once we have a model, it can be used for decision-time
+    planning and improving the performance of model-free methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This important chapter includes the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing model-based methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Planning through a model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Learning a world model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unifying model-based and model-free approaches
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's get started.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The code for this chapter can be found at the book's GitHub repository, at [https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python](https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing model-based methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Imagine a scene in which you are traveling in a car on an undivided road and
+    you face the following situation. Suddenly, another car in the opposing direction
+    approaches you fast in your lane as it is passing a truck. Chances are your mind
+    automatically simulates different scenarios about how the next scenes might unfold:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other car might go back to its lane right away or drive even faster to pass
+    the truck as soon as possible.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Another scenario could be the car steering toward your right, but this is an
+    unlikely scenario (in a right-hand traffic flow).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The driver (possibly you) then evaluates the likelihood and risk of each scenario,
+    together with their possible actions too, and makes the decision to safely continue
+    the journey.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a less sensational example, consider a game of chess. Before making a move,
+    a player "simulates" many scenarios in their head and assesses the possible outcomes
+    of several moves down the road. In fact, being able to accurately evaluate more
+    possible scenarios after a move would increase the chances of winning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In both of these examples, the decision-making process involves picturing multiple
+    "imaginary" rollouts of the environment, evaluating the alternatives, and taking
+    an appropriate action accordingly. But how do we do that? We are able to do so
+    because we have a mental model of the world that we live in. In the car driving
+    example, drivers have an idea about possible traffic behaviors, how other drivers
+    might move, and how physics works. In the chess example, players know the rules
+    of the game, which moves are good, and possibly what strategies a particular player
+    might use. This "model-based" thinking is almost the natural way to plan our actions,
+    and different than a model-free approach that would not leverage such priors on
+    how the world works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Model-based methods, since they leverage more information and structure about
+    the environment, could be more sample-efficient than model-free methods. This
+    comes especially handy in applications where sample collection is expensive, such
+    as robotics. So, this is such an important topic that we cover in this chapter.
+    We will focus on two main aspects of model-based approaches:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How a model of the environment (or *world model*, as we will refer to it) can
+    be used in the optimal planning of actions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How such a model can be learned when one is not available
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the next section, we start with the former and introduce some of the methods
+    to use for planning when a model is available. Once we are convinced that learning
+    a model of the environment is worth it and we can indeed obtain good actions with
+    the optimal planning methods, we will discuss how such models can be learned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Planning through a model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we first define what it means to plan through a model in the
+    sense of optimal control. Then, we will cover several planning methods, including
+    the cross-entropy method and covariance matrix adaptation evolution strategy.
+    You will also see how these methods can be parallelized using the Ray library.
+    Now, let's get started with the problem definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the optimal control problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In RL, or in control problems in general, we care about the actions an agent
+    takes because there is a task that we want to be achieved. We express this task
+    as a mathematical objective so that we can use mathematical tools to figure out
+    the actions toward the task – and in RL, this is the expected sum of cumulative
+    discounted rewards. You of course know all this, as this is what we have been
+    doing all along, but this is a good time to reiterate it: We are essentially solving
+    an optimization problem here.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s assume that we are trying to figure out the best actions for a
+    problem with a horizon of ![](img/Formula_08_001.png) time steps. As examples,
+    you can think of the Atari games, Cartpole, a self-driving car, a robot in a grid
+    world, and more. We can define the optimization problem as follows (using the
+    notation in *Levine, 2019*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_08_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: All this says is how to find a sequence of actions, where ![](img/Formula_08_003.png)
+    corresponds to the action at time step ![](img/Formula_08_004.png), that maximizes
+    the score over a ![](img/Formula_08_005.png) steps. Note here that ![](img/Formula_08_006.png)
+    could be multi-dimensional (say ![](img/Formula_08_007.png)) if there are multiple
+    actions taken in each step (steering and acceleration/brake decisions in a car).
+    Let's also denote a sequence of ![](img/Formula_08_008.png) actions using ![](img/Formula_08_009.png).
+    So, our concern is to find such an ![](img/Formula_08_010.png) that maximizes
+    ![](img/Formula_08_011.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, there are different optimization and control styles we may pick.
+    Let's look into those next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Derivative-based and derivative-free optimization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'When we see an optimization problem, a natural reaction for solving it could
+    be "let''s take the first derivative, set it equal to zero," and so on. But don''t
+    forget that, most of the time, we don''t have ![](img/Formula_08_012.png) as a
+    closed-form mathematical expression that we can take the derivative of. Take playing
+    an Atari game, for example. We can evaluate what ![](img/Formula_08_013.png) is
+    for a given ![](img/Formula_08_014.png) by just playing it, but we would not be
+    able to calculate any derivatives. This matters when it comes to the type of optimization
+    approach we can use. In particular, note the following types:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Derivative-based methods** require taking the derivative of the objective
+    function to optimize it.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Derivative-free methods** rely on systematically and repeatedly evaluating
+    the objective function in search of the best inputs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Therefore, we will rely on the latter here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This was about what kind of optimization procedure we will use, which, at the
+    end, gives us some ![](img/Formula_08_015.png). Another important design choice
+    is about how to execute it, which we turn to next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Open-loop, closed-loop, and model predictive control
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s start explaining different types of control systems with an example:
+    Imagine that we have an agent that is a soccer player in a forward position. For
+    the sake of simplicity, let''s assume that the only goal of the agent is to score
+    a goal when it receives the ball. At the first moment of possessing the ball,
+    the agent can do either of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Come up with a plan to score, close their eyes and ears (that is, any means
+    of perception), and then execute the plan until the end (either scoring or losing
+    the ball).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Or, the agent can keep their means of perception active and modify the plan
+    with the latest information available from the environment as it happens.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The former would be an example of **open-loop control**, where no feedback from
+    the environment is used while taking the next action, whereas the latter would
+    be an example of **closed-loop control**, which uses environmental feedback. In
+    general, in RL, we have closed-loop control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using closed-loop control has the advantage of taking the latest information
+    into account when planning. This is especially advantageous if the environment
+    and/or controller dynamics are not deterministic, so a perfect prediction is not
+    possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, the agent can use feedback, the most recent observation from the environment
+    at time ![](img/Formula_08_016.png), in different ways. Specifically, the agent
+    can do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Choose the action from a policy ![](img/Formula_05_061.png) given ![](img/Formula_08_018.png),
+    that is, ![](img/Formula_08_019.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Resolve the optimization problem to find ![](img/Formula_08_020.png) for the
+    subsequent ![](img/Formula_08_021.png) time steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The latter is called **model predictive control** (**MPC**). To reiterate,
+    in MPC, the agent repeats the following loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Come up with an optimal control plan for the next ![](img/Formula_08_022.png)
+    steps.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Execute the plan for the first step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Proceed to the next step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Note that the way we posed the optimization problem so far does not give us
+    a policy ![](img/Formula_05_061.png) yet. Instead, we will search for a good ![](img/Formula_08_024.png)
+    using derivative-free optimization methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let''s discuss a very simple derivative-free method: random shooting.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Random shooting
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The random shooting procedure simply involves the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating a bunch of candidate action sequences uniformly at random, say ![](img/Formula_08_025.png)
+    of them.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate each of ![](img/Formula_08_026.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Take the action ![](img/Formula_08_027.png) that gives the best ![](img/Formula_08_028.png),
+    that is, ![](img/Formula_08_029.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: As you can tell, this is not a particularly sophisticated optimization procedure.
+    Yet, it can be used as a baseline to compare more sophisticated methods against.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Random search-based methods could be more effective than you might think. *Mania
+    et al.* outline such a method to optimize policy parameters in their paper "*Simple
+    random search provides a competitive approach to RL*," which, as is apparent from
+    its name, yields some surprisingly good results (*Mania et al., 2018*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make our discussion more concrete, let's introduce a simple example. But
+    before doing so, we need to set up the Python virtual environment that we will
+    use in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the Python virtual environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'You can install the packages we will need inside a virtual environment as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, we can proceed to our example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Simple cannon shooting game
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Some of us are old enough to have enjoyed the old *Bang! Bang!* game on Windows
+    3.1 or 95\. The game simply involves adjusting the shooting angle and velocity
+    of a cannonball to hit the opponent. Here, we will play something even simpler:
+    We have a cannon for which we can adjust the shooting angle (![](img/Formula_08_030.png)).
+    Our goal is to maximize the distance, ![](img/Formula_08_031.png), that the ball
+    covers on a flat surface with a fixed initial velocity ![](img/Formula_08_032.png).
+    This is illustrated in *Figure 8.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.1 – Simple cannon shooting game to maximize  by adjusting'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_08_001.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.1 – Simple cannon shooting game to maximize ![](img/Formula_08_033.png)
+    by adjusting ![](img/Formula_08_034.png)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, if you remember some high-school math, you will realize that there is
+    really no game here: The maximum distance can be reached by setting ![](img/Formula_08_035.png).
+    Well, let''s pretend that we don''t know it and use this example to illustrate
+    the concepts that we have introduced so far:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The action is ![](img/Formula_06_036.png), the angle of the cannon, which is
+    a scalar.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This is a single-step problem, that is, we just take one action and the game
+    ends. Therefore ![](img/Formula_08_037.png), and ![](img/Formula_08_038.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s now code this up:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We have access to the environment that will *evaluate the actions we consider
+    before we actually take them*. We don''t assume to know what the math equations
+    and all the dynamics defined inside the environment are. In other words, we can
+    call the `black_box_projectile` function to get ![](img/Formula_08_039.png) for
+    a ![](img/Formula_08_040.png) we pick and for a fixed initial velocity and gravity:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'For the random shooting procedure, we just need to generate ![](img/Formula_08_041.png)
+    actions uniformly randomly between ![](img/Formula_08_042.png) and ![](img/Formula_08_043.png),
+    for which we can use something like the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We also need a function to evaluate all the candidate actions and pick the
+    best one. For this, we will define a more general function that we will need later.
+    It will pick the best ![](img/Formula_08_044.png) **elites**, that is, the ![](img/Formula_08_045.png)
+    best actions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The loop to find the best action is then simple:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: That's it. The action to take is then at `best_action[0]`. To reiterate, we
+    have not done anything super interesting so far. This was just to illustrate the
+    concepts, and to prepare you for a more interesting method that is coming up next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cross-entropy method
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the cannon shooting example, we evaluated some number of actions we generated
+    in our search for the optimal action, which happens to be ![](img/Formula_08_046.png).
+    As you can imagine, we can be smarter in our search. For example, if we have a
+    budget to generate and evaluate ![](img/Formula_08_047.png) actions, why blindly
+    use them up with uniformly generated actions? Instead, we can do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generate some number of actions to begin with (this could be done uniformly
+    at random).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: See which region in the action space seems to be giving better results (in the
+    cannon shooting example, the region is around ![](img/Formula_08_048.png)).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Generate more actions in that part of the action space.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We can repeat this procedure to guide our search, which will lead to a more
+    efficient use of our search budget. In fact, this is what the **cross-entropy
+    method** (**CEM**) suggests!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our previous description of the CEM was a bit vague. A more formal description
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize a probability distribution ![](img/Formula_08_049.png) with parameter
+    ![](img/Formula_08_050.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Generate ![](img/Formula_08_051.png) samples (solutions, actions) from ![](img/Formula_08_052.png),
+    ![](img/Formula_08_053.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sort the solutions from the highest reward to the lowest, indexed as ![](img/Formula_08_054.png),
+    ![](img/Formula_08_055.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Pick the best ![](img/Formula_08_056.png) solutions, elites, ![](img/Formula_08_057.png)
+    and fit the distribution ![](img/Formula_08_058.png) to the elites.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Go back to *step 2* and repeat until a stopping criterion is satisfied.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The algorithm, in particular, identifies the best region of actions by fitting
+    a probability distribution to the best actions in the current iteration, from
+    which the next generation of actions is sampled. Due to this evolutionary nature,
+    it is considered an **evolution strategy** (**ES**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: The CEM could prove promising when the dimension of the search, that is the
+    action dimension times ![](img/Formula_08_059.png), is relatively small, say less
+    than 50\. Also note that CEM does not use the actual rewards in any part of the
+    procedure, saving us from worrying about the scale of the rewards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's implement the CEM for the cannon shooting example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Simple implementation of the cross-entropy method
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We can implement the CEM with some slight modifications to the random shooting
+    method. In our simple implementation here, we do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start with a uniformly generated set of actions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fit a normal distribution to the elites to generate the next set of samples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use a fixed number of iterations to stop the procedure.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This can be implemented as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you add some `print` statements to see the outcome from the execution of
+    this code, it will look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: You might be wondering why we need to fit the distribution instead of picking
+    the best action we have identified. Well, it does not make much sense for the
+    cannon shooting example where the environment is deterministic. However, when
+    there is noise/stochasticity in the environment, picking the best action that
+    we encountered would mean overfitting to the noise. Instead, we fit the distribution
+    to a set of elite actions to overcome that. You can refer to `Chapter08/rs_cem_comparison.py`
+    in the GitHub repo for the full code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The evaluation (and action generation) steps of the CEM can be parallelized,
+    which would reduce the wall-clock time to make a decision. Let's implement it
+    next and use the CEM in a more sophisticated example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Parallelized implementation of the cross-entropy method
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this section, we use the CEM to solve OpenAI Gym''s Cartpole-v0 environment.
+    This example will differ from the cannon shooting in the following ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The action space is binary, corresponding to left and right. So, we will use
+    a multivariate Bernoulli distribution as the probability distribution.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The maximum problem horizon is 200 steps. However, we will use MPC to plan for
+    a 10-step lookahead in each step and execute the first action in the plan.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use the Ray library for parallelization.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, let's look into some of the key components of the implementation. The full
+    code is available in the GitHub repo.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter08/cem.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start describing the code with the section that samples a sequence of
+    actions from a multivariate Bernoulli (for which we use NumPy''s `binomial` function),
+    ![](img/Formula_08_060.png), and executes it over the planning horizon to estimate
+    the reward:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `ray.remote` decorator will allow us to easily kick off a bunch of these
+    workers in parallel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The CEM runs in the following method of the `CEM` class we create:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We initialize the parameters of the Bernoulli distribution for a horizon of
+    `look_ahead` steps as `0.5`. We also determine the number of elites based on a
+    specified fraction of the total samples:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'For a fixed number of iterations, we generate and evaluate actions on parallel
+    rollout workers. Note how we copy the existing environment to the rollout workers
+    to sample from that point on. We refit the distribution to the elite set:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We finalize the plan based on the latest distribution parameters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Executing this code will solve the environment and you will see the cartpole
+    staying alive for the maximum horizon!
+  prefs: []
+  type: TYPE_NORMAL
+- en: That is how a parallelized CEM can be implemented using Ray. So far, so good!
+    Next, we will go a step further and use an advanced version of the CEM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Covariance matrix adaptation evolution strategy
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The **covariance matrix adaptation evolution strategy** (**CMA-ES**) is one
+    of the state-of-the-art black-box optimization methods. Its working principles
+    are similar to that of the CEM. On the other hand, the CEM uses a constant variance
+    throughout the search. The CMA-ES dynamically adapts the covariance matrix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We again use Ray to parallelize the search with the CMA-ES. But this time, we
+    defer the inner dynamics of the search to a Python library called `pycma`, which
+    is developed and maintained by Nikolaus Hansen, creator of the algorithm. You
+    already installed this package when you created the virtual environment for this
+    chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The documentation and the details of the `pycma` library are available at [https://github.com/CMA-ES/pycma](https://github.com/CMA-ES/pycma).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The main difference of the CMA-ES from the CEM implementation is its use of
+    the CMA library to optimize the actions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can find the full code in `Chapter08/cma_es.py` in our GitHub repo. It
+    solves the Bipedal Walker environment, and the output will look like the following
+    from the CMA library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should see your bipedal walker taking 50 to 100 steps out of the box! Not
+    bad!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's touch on another important class of search methods, known as **Monte
+    Carlo tree search** (**MCTS**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monte Carlo tree search
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A natural way of planning future actions is for us to first think about the
+    first step, then condition the second decision on the first one, and so on. This
+    is essentially a search on a decision tree, which is what MCTS does. It is a strikingly
+    powerful method that has seen broad adaptation in the AI community.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: MCTS is a powerful method that played a key role in DeepMind's victory against
+    Lee Sedol, a world champion and legend in the game of Go. Therefore, MCTS deserves
+    a broad discussion; and rather than cramming some content into this chapter, we
+    defer its explanation and implementation to the blog post at [https://int8.io/monte-carlo-tree-search-beginners-guide/](https://int8.io/monte-carlo-tree-search-beginners-guide/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section so far, we have discussed the different methods with which an
+    agent can plan through a model of an environment where we assumed such a model
+    exists. In the next section, we look into how the model of the world (that is,
+    the environment) that the agent is in can be learned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Learning a world model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the introduction to this chapter, we reminded you how we departed from dynamic
+    programming methods to avoid assuming that the model of the environment an agent
+    is in is available and accessible. Now, coming back to talking about models, we
+    need to also discuss how a world model can be learned when not available. In particular,
+    in this section, we discuss what we aim to learn as a model, when we may want
+    to learn it, a general procedure for learning a model, how to improve it by incorporating
+    the model uncertainty into the learning procedure, and what to do when we have
+    complex observations. Let's dive in!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding what model means
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'From what we have done so far, a model of the environment could be equivalent
+    to the simulation of the environment in your mind. On the other hand, model-based
+    methods don''t require the full fidelity of a simulation. Instead, what we expect
+    to get from a model is the next state given the current state and action. Namely,
+    when the environment is deterministic, a model is a function ![](img/Formula_08_061.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_08_062.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'If the environment is stochastic, we then need a probability distribution over
+    the next state, ![](img/Formula_08_063.png), to sample from:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_08_064.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Contrast this to a simulation model that often has explicit representations
+    of all the underlying dynamics, such as motion physics, customer behavior, and
+    market dynamics, depending on the type of environment. The model we learn will
+    be a black box and is often represented as a neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: A world model that we learn is not a replacement for a full simulation model.
+    A simulation model often has a much greater capability of generalization; and
+    it is also of a greater fidelity as it is based on explicit representations of
+    environment dynamics. On the other hand, a simulation can act as a world model,
+    as in the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that, for the rest of the section, we will use ![](img/Formula_08_065.png)
+    to represent the model. Now, let's discuss when we may want to learn a world model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Identifying when to learn a model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There could be various reasons for learning a world model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A model may not exist, even as a simulation. This means the agent is being trained
+    in the actual environment, which would not allow us to do imaginary rollouts for
+    planning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A simulation model may exist, but it could be too slow or computationally demanding
+    to be used in planning. Training a neural network as a world model can allow exploring
+    a much wider range of scenarios during the planning phase.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A simulation model may exist, but it may not allow rollouts from a particular
+    state onward. This could be because the simulation may not reveal the underlying
+    state and/or it may not allow the user to reset it to a desired state.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We may want to explicitly have a representation of the state/observation that
+    has a predictive power for the future states, which then removes the need for
+    having complex policy representations or even rollout-based planning for the agent.
+    This approach has biological inspirations and has proved to be effective, as described
+    by *Ha et al., 2018*. You can access an interactive version of the paper at [https://worldmodels.github.io/](https://worldmodels.github.io/),
+    which is a very good read on this topic.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we have identified several cases where learning a model might be necessary,
+    next, let's discuss how to actually do it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing a general procedure to learn a model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Learning a model of ![](img/Formula_08_066.png) (or ![](img/Formula_08_067.png)
+    for stochastic environments) is essentially a supervised learning problem: we
+    want to predict the next state from the current state and action. However, note
+    the following key points:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We don't start the process with data on hand like in a traditional supervised
+    learning problem. Instead, we need to generate the data by interacting with the
+    environment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We don't have a (good) policy to start interacting with the environment either.
+    After all, it is our goal to obtain one.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'So, what we need to do first is to initialize some policy. A natural choice
+    is to use a random policy so that we can explore the state-action space. On the
+    other hand, a pure random policy may not get us far in some hard exploration problems.
+    Consider training a humanoid robot for walking, for example. Random actions are
+    unlikely to make the robot walk, and we would not be able to obtain data to train
+    a world model for those states. This requires us to do planning and learning simultaneously,
+    so that the agent both explores and exploits. To that end, we can use the following
+    procedure (*Levine, 2019*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize a soft policy ![](img/Formula_08_068.png) to collect data tuples
+    ![](img/Formula_08_069.png) into a dataset ![](img/Formula_08_070.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train ![](img/Formula_08_071.png) to minimize ![](img/Formula_08_072.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Plan through ![](img/Formula_08_073.png) to choose actions.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Follow an MPC: execute the first planned action and observe the resulting ![](img/Formula_08_074.png).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Append the obtained ![](img/Formula_08_075.png) to ![](img/Formula_08_076.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Every ![](img/Formula_08_077.png) steps, go to *step 3*; every ![](img/Formula_07_242.png)
+    steps, go to *step 2*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This approach will eventually get you a trained ![](img/Formula_08_079.png),
+    which you can use with an MPC procedure at inference time. On the other hand,
+    as it turns out, the performance of an agent using this procedure is often worse
+    than what a model-free approach would do. In the next section, we look into why
+    this happens and how the problem can be mitigated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding and mitigating the impact of model uncertainty
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: When we train a world model as in the procedure we just described, we should
+    not expect to obtain a perfect one. This should not be surprising, but it turns
+    out that when we plan through such imperfect models using rather good optimizers
+    such as the CMA-ES, those imperfections hurt the agent performance badly. Especially
+    when we use high-capacity models such as neural networks, in the presence of limited
+    data, there will be lots of errors in the model, incorrectly predicting high-reward
+    states. To mitigate the impact of model errors, we need to take the uncertainty
+    in the model predictions into account.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Speaking of uncertainty in model predictions, there are two types, and we need
+    to differentiate between them. Let's do that next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Statistical (aleatoric) uncertainty
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Consider a predictive model that predicts the outcome of the roll of a six-sided
+    fair die. A perfect model will be highly uncertain about the outcome: any side
+    can come up with equal likelihood. This might be disappointing, but it is not
+    the model''s "fault." The uncertainty is due to the process itself and not because
+    the model is not correctly explaining the data it observes. This type of uncertainty
+    is called **statistical** or **aleatoric uncertainty**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Epistemic (model) uncertainty
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In another example, imagine training a predictive model to predict the outcome
+    of the roll of a six-sided die. We don't know whether the die is fair or not,
+    and in fact, this is what we are trying to learn from the data. Now, imagine that
+    we train the model just based on a single observation, which happens to be a 6\.
+    When we use the model to predict the next outcome, the model may predict a 6,
+    because it is all the model has seen. However, this would be based on very limited
+    data, so we would be highly uncertain about the model's prediction. This type
+    of uncertainty is called **epistemic** or **model uncertainty**. And it is this
+    type of uncertainty that is getting us into trouble in model-based RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's see some ways of dealing with model uncertainty in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mitigating the impact of model uncertainty
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Two common ways of incorporating model uncertainty into model-based RL procedures
+    are to use Bayesian neural networks and ensemble models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Bayesian neural networks
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: A Bayesian neural network assigns a distribution over each of the parameters
+    in ![](img/Formula_06_013.png) (the parameters of the network) rather than a single
+    number. This gives us a probability distribution, ![](img/Formula_08_081.png),
+    to sample a neural network from. With that, we can quantify the uncertainty over
+    the neural network parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that we used Bayesian neural networks in [*Chapter 3*](B14160_03_Final_SK_ePub.xhtml#_idTextAnchor059),
+    *Contextual Bandits*. Revisiting that chapter might refresh your mind on the topic.
+    A full tutorial is available from *Jospin et al., 2020*, if you want to dive deeper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this approach, whenever we are at the planning step, we sample from ![](img/Formula_08_082.png)
+    multiple times to estimate the reward for an action sequence ![](img/Formula_08_015.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using ensemble models with bootstrapping
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Another method to estimate uncertainty is to use bootstrapping, which is easier
+    to implement than a Bayesian neural network but also a less principled approach.
+    Bootstrapping simply involves training multiple (say 10) neural networks for ![](img/Formula_08_084.png),
+    each using data resampled from the original dataset with replacement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you need a quick refresher on bootstrapping in statistics, check out this
+    blog post by Trist''n Joseph: [https://bit.ly/3fQ37r1](https://bit.ly/3fQ37r1).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Similar to the use of Bayesian networks, this time, we average the reward given
+    by these multiple neural networks to evaluate an action sequence ![](img/Formula_08_085.png)
+    during planning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we conclude our discussion on incorporating model uncertainty into
+    model-based RL. Before we wrap up this section, let's touch on how to consume
+    complex observations to learn a world model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Learning a model from complex observations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Everything we have described so far can get a bit complicated to implement
+    when we have one or both of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Partially observable environments, so the agent sees ![](img/Formula_08_086.png)
+    rather than ![](img/Formula_08_087.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: High-dimensional observations, such as images.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We have an entire chapter coming up on partial observability in [*Chapter 11*](B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239),
+    *Generalization and Partial Observability*. In that chapter, we will discuss how
+    keeping a memory of past observations helps us uncover the hidden state in the
+    environment. A common architecture to use is the **long short-term memory** (**LSTM**)
+    model, which is a particular class of **recurrent neural network** (**RNN**) architectures.
+    Therefore, representing ![](img/Formula_08_088.png) using an LSTM would be a common
+    choice in the face of partial observability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When it comes to dealing with high-dimensional observations, such as images,
+    a common approach is to encode them in compact vectors. **Variational autoencoders**
+    (**VAEs**) are the choice when it comes to obtaining such representations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: A nice tutorial on VAEs by Jeremy Jordan is available at [https://www.jeremyjordan.me/variational-autoencoders/](https://www.jeremyjordan.me/variational-autoencoders/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the environment is both partially observable and emitting image observations,
+    we would then have to first convert images to encodings, use an RNN for ![](img/Formula_08_089.png)
+    that predicts the encoding that corresponds to the next observation, and plan
+    through this ![](img/Formula_08_071.png). *Ha et al., 2018,* used a similar approach
+    to deal with images and partial observability in their "*World Models*" paper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our discussion on learning a world model. In the next and final
+    section of this chapter, let's discuss how we can use the approaches we have described
+    so far to obtain a policy for an RL agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unifying model-based and model-free approaches
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we went from dynamic programming-based approaches to Monte Carlo and temporal-difference
+    methods in [*Chapter 5*](B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106), *Solving
+    the Reinforcement Learning Problem*, our motivation was that it is limiting to
+    assume that the environment transition probabilities are known. Now that we know
+    how to learn the environment dynamics, we will leverage that to find a middle
+    ground. It turns out that with a learned model of the environment, the learning
+    with model-free methods can be accelerated. To that end, in this section, we first
+    refresh our minds on Q-learning, then introduce a class of methods called **Dyna**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Refresher on Q-learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s start with remembering the definition of the action-value function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_08_091.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The expectation operator here is because the transition into the next state
+    is probabilistic, so ![](img/Formula_08_092.png) is a random variable along with
+    ![](img/Formula_08_093.png). On the other hand, if we know the probability distribution
+    of ![](img/Formula_08_094.png) and ![](img/Formula_08_095.png), we can calculate
+    this expectation analytically, which is what methods such as value iteration do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the absence of information on the transition dynamics, methods such as Q-learning
+    estimate the expectation from a single sample of ![](img/Formula_08_096.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_08_097.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Dyna algorithms are based on the idea that, rather than using a simple ![](img/Formula_08_098.png)
+    sampled from the environment, we can come up with a better estimation of the expectation
+    using a learned model of the environment by sampling many ![](img/Formula_08_099.png)
+    from it given ![](img/Formula_08_100.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far in our discussions, we have implicitly assumed that reward ![](img/Formula_06_142.png)
+    can be calculated once ![](img/Formula_08_102.png) is known. If that is not the
+    case, especially in the presence of partial observability, we may have to learn
+    a separate model for ![](img/Formula_08_103.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's more formally outline this idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dyna-style acceleration of model-free methods using world models
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The Dyna approach is a rather old one (*Sutton, 1990*) that aims to "integrate
+    learning, planning, and reacting." This approach has the following general flow
+    (*Levine, 2019*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: While in state ![](img/Formula_05_060.png), sample ![](img/Formula_05_044.png)
+    using ![](img/Formula_08_106.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Observe ![](img/Formula_08_107.png) and ![](img/Formula_08_108.png), and add
+    the tuple ![](img/Formula_08_109.png) to a replay buffer ![](img/Formula_08_110.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Update the world model ![](img/Formula_08_111.png) and optionally ![](img/Formula_08_112.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'For ![](img/Formula_08_113.png) to ![](img/Formula_08_114.png):'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Sample ![](img/Formula_05_010.png) from ![](img/Formula_08_116.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Choose some ![](img/Formula_05_059.png), either from ![](img/Formula_05_035.png),
+    from ![](img/Formula_08_119.png), or at random.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sample ![](img/Formula_08_120.png) and ![](img/Formula_08_121.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train on ![](img/Formula_08_122.png) with a model-free RL method (deep Q-learning).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Optionally, take further steps after ![](img/Formula_08_123.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: End For
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Go back to *step 1* (and ![](img/Formula_08_124.png)).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: That's it! Dyna is an important class of methods in RL, and now you know how
+    it works!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: RLlib has an advanced Dyna-style method implementation called **Model-Based
+    RL via Meta-Policy Optimization** or **MBMPO**. You can check it out at [https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo](https://docs.ray.io/en/releases-1.0.1/rllib-algorithms.html#mbmpo).
+    As of Ray 1.0.1, it is implemented in PyTorch, so go ahead and install PyTorch
+    in your virtual environment if you would like to experiment with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our chapter on model-based RL; and congratulations for reaching
+    this far! We only scratched the surface in this broad topic, but now you are equipped
+    with the knowledge to start using model-based methods for your problems! Let's
+    summarize what we have covered next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we covered model-based methods. We started the chapter by describing
+    how we humans use the world models we have in our brains to plan our actions.
+    Then, we introduced several methods that can be used to plan an agent's actions
+    in an environment when a model is available. These were derivative-free search
+    methods, and for the CEM and CMA-ES methods, we implemented parallelized versions.
+    As a natural follow-up to this section, we then went into how a world model can
+    be learned to be used for planning or developing policies. This section contained
+    some important discussions about model uncertainty and how learned models can
+    suffer from it. At the end of the chapter, we unified the model-free and model-based
+    approaches in the Dyna framework.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we conclude our discussion on model-based RL, we proceed to the next chapter
+    for yet another exciting topic: multi-agent RL. Take a break, and we will see
+    you soon!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Levine, Sergey. (2019). *Optimal Control and Planning*. CS285 Fa19 10/2/19\.
+    YouTube. URL: [https://youtu.be/pE0GUFs-EHI](https://youtu.be/pE0GUFs-EHI)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Levine, Sergey. (2019). *Model-Based Reinforcement Learning*. CS285 Fa19 10/7/19\.
+    YouTube. URL: [https://youtu.be/6JDfrPRhexQ](https://youtu.be/6JDfrPRhexQ)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Levine, Sergey. (2019). *Model-Based Policy Learning*. CS285 Fa19 10/14/19\.
+    YouTube. URL: [https://youtu.be/9AbBfIgTzoo](https://youtu.be/9AbBfIgTzoo).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Ha, David, and Jürgen Schmidhuber. (2018). *World Models*. arXiv.org, URL:
+    [https://arxiv.org/abs/1803.10122](https://arxiv.org/abs/1803.10122).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Mania, Horia, et al. (2018). *Simple Random Search Provides a Competitive Approach
+    to Reinforcement Learning*. arXiv.org, URL: [http://arxiv.org/abs/1803.07055](http://arxiv.org/abs/1803.07055)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Jospin, Laurent Valentin, et al. (2020). *Hands-on Bayesian Neural Networks
+    – a Tutorial for Deep Learning Users*. arXiv.org, [http://arxiv.org/abs/2007.06823](http://arxiv.org/abs/2007.06823).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Joseph, Trist''n. (2020). *Bootstrapping Statistics. What It Is and Why It''s
+    Used.* Medium. URL: [https://bit.ly/3fOlvjK](https://bit.ly/3fOlvjK).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Richard S. Sutton. (1991). *Dyna, an integrated architecture for learning,
+    planning, and reacting*. SIGART Bull. 2, 4 (Aug. 1991), 160–163\. DOI: [https://doi.org/10.1145/122344.122377](https://doi.org/10.1145/122344.122377)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,802 @@
+- en: '12'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Interpreting Neural Networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When trying to comprehend the reasons behind a model’s prediction, local per-sample
+    feature importance can be a valuable tool. This method enables you to focus your
+    analysis on a smaller part of the input data, resulting in a more targeted understanding
+    of key features that contributed to the model’s output. However, it is often still
+    unclear which patterns the models are using to identify highly important features.
+    This issue can be somewhat circumvented by reviewing more prediction explanations
+    from targeted samples meant to strategically discern the actual reason for the
+    prediction, which will also be introduced practically later in this chapter. However,
+    this method is limited to the available number of samples you must validate your
+    model against, and it can sometimes still be difficult to pinpoint the pattern
+    used concretely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Deep neural networks** (**DNNs**) learn low- to high-level features that
+    help the prediction layer discern the right label under the hood. When we use
+    local feature importance-based explanations on the input, we can’t know for sure
+    which low-, medium-, or high-level patterns contributed to the importance of the
+    input data. For images, this would range from low-level features, such as simple
+    shapes, to medium-level features, such as the silhouette shape of a human body,
+    all the way to a combination of patterns that build up to become a human face
+    or everyday objects. For text, this would range from low-level features such as
+    word embeddings, which represent the meaning of a word, to medium-level features
+    such as the semantic roles of words in a sentence that enable the meaning of the
+    text to be represented properly such as sentence embeddings, all the way to high-level
+    features we are more familiar with, such as topics and sentiment. Of course, these
+    are merely theoretical assumptions on what we think NNs are learning.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will explore a method that can help to clear all the ambiguity
+    in the features learned by a deep neural network, which is to visualize the patterns
+    an NN detects directly through input optimization. By visualizing the patterns
+    learned directly in combination with the filtering of activations, we can shed
+    light on the actual reasons a deep neural network makes its predictions. Specifically,
+    the following topics will be discussed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interpreting neurons
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finding neurons to interpret
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Interpreting learned image patterns
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Discovering the counterfactual explanation strategy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter includes practical implementation in the Python programming language.
+    To complete it, you will need to have a computer with the following libraries
+    installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`torchvision`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`torch`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`torch-lucent==0.1.8`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`matplotlib==3.3.0`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`captum`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pillow`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`numpy`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code files are present on GitHub: [https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_12](https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_12).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interpreting neurons
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Neurons in NN layers produce features that will be consumed by subsequent layers.
+    The features or activations produced are simply an indicator of how prominent
+    a learned pattern is in the input data. But have you ever wondered what the patterns
+    are? Decoding the actual patterns learned by the NN can further improve the transparency
+    needed to achieve the goals mentioned in the *Exploring the value of prediction
+    explanations* section of [*Chapter 11*](B18187_11.xhtml#_idTextAnchor172), *Explaining
+    Neural* *Network Predictions*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data is composed of many complicated patterns combined into a single sample.
+    Traditionally, to discern what a neuron is detecting, much input data has to be
+    evaluated and compared against other data so that a qualitative conclusion can
+    be made by humans, which is both time-consuming and hard to get right. This method
+    allows us to pinpoint the actual pattern that causes a high activation value visually,
+    without the disturbance of other highly correlated patterns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'More formally, feature visualization by optimization can be useful in the following
+    use cases:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Understanding the patterns associated with confusing labels without help from
+    a domain expert:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This is more prevalent in real-world audio data where the sound of the label
+    in the real data can often be mixed together with lots of noises
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This can also happen in image data
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not straightforward or possible to obtain real data to test any hypothesis
+    on what the NN learned that can’t be proven with gradient-based feature attribution
+    techniques on available data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The core of the neuron interpretation technique is **neural input optimization**,
+    which is a process that modifies the input data of the NN to activate highly on
+    the chosen neuron. Remember that during the training process, we optimize the
+    weights of the NNs toward reducing the loss value. In this technique, we randomly
+    initialize an input and optimize the input data to activate highly on chosen neurons,
+    effectively treating the input data as NN weights. Gradients can be naturally
+    computed to the input data stage, making it possible to update the input data
+    according to the computed gradients after applying a learning rate. This technique
+    also allows you to jointly optimize multiple neurons to activate highly and obtain
+    an image that shows the patterns of how two different neurons can coexist.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 12**.1* showcases the idea of low-level to medium-level and high-level
+    patterns in `efficientnet-b0` model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 12.1 – Example of optimized images from random filters in the efficientnet-b0
+    model](img/B18187_12_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 12.1 – Example of optimized images from random filters in the efficientnet-b0
+    model
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you look at the high-level filter patterns, the first optimized image on
+    a random filter looks somewhat like flowers, and the second image looks like leaf
+    patterns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, a main caveat with this technique is that the resulting optimized input
+    data may not represent all the real-life variations of a pattern associated with
+    a neuron. Even for a dynamic input data variable such as an image, which can be
+    optimized to present the pattern in diverse ways, the resulting optimized input
+    can still miss out on some representations of the pattern. A good approach to
+    tackle this caveat is to first obtain the initial optimized input data variant
+    and then execute subsequent optimizations and ensure the optimized input data
+    will be different from the initial variant. This can be done by jointly optimizing
+    an additional component – the negative cosine similarity between the initial optimized
+    input data and the current input data being optimized. This technique helps to
+    generate diverse input data examples. But before you can optimize the input data
+    and attempt to interpret a neuron, you need a strategy to choose the best neurons
+    to optimize input data against, which will be discussed in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding neurons to interpret
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'With millions and billions of neurons in today’s SoTA architectures, it’s impossible
+    to interpret every single neuron, and, frankly, a waste of time. The choice of
+    the neuron to explain should depend on your goal. The following list shows some
+    of the different goals and associated methods for choosing suitable neurons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Finding out what a certain prediction label or class pattern looks like**:
+    In this case, you should simply choose a neuron specific to the prediction of
+    the target label or class. This is usually done to understand whether the model
+    captured the desired patterns of the class well, or whether it learned irrelevant
+    features. This can also be useful in multilabel scenarios where multiple labels
+    always only exist together, and you want to decouple the labels to understand
+    the input patterns associated with a single label better.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Wanting to understand the latent reasons why a specific label can be predicted
+    in your dataset, or for all labels in general**: In this case, you should choose
+    the top most impactful neurons from the latent intermediate layers from a global
+    neuron importance score. Global neuron importance can be obtained by aggregating
+    the results of the integrated gradients method (introduced in [*Chapter 11*](B18187_11.xhtml#_idTextAnchor172),
+    *Explaining Neural Network Predictions*) applied to your validation dataset for
+    all neurons. The importance values for all neurons can then be ranked, and the
+    top neurons can be picked.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Finding out the breakdown reasons why a prediction was made on top of saliency-based
+    explanation techniques**: In this case, you should choose the neuron that has
+    the highest activation value and highest importance score. A neuron that is activated
+    highly does not necessarily mean that it is important for a certain prediction.
+    Additionally, a neuron that is important does not mean that the neuron is activated.
+    Using both the integrated gradients’ importance value and the activation values
+    to obtain the most important neuron will help to make sure the neurons you care
+    about are chosen. Additionally, you can further filter out more neurons if you
+    have a focus area based on the initial input data saliency map by only choosing
+    neurons that affect the chosen focus area.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Understanding the interactions between multiple labels or classes**: In scenarios
+    where the relationships between multiple labels or classes are important, you
+    can choose neurons that capture these interactions. Identify neurons that are
+    highly activated and have high importance scores when multiple labels or classes
+    are predicted together. Analyzing these neurons can help you understand how the
+    model captures the relationships between different labels or classes and may reveal
+    potential areas for improvement.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Investigating the robustness of the model to adversarial attacks**: In this
+    case, you should choose neurons that are sensitive to adversarial perturbations
+    in the input data. You can generate adversarial examples, with more info on how
+    to do so in [*Chapter 14*](B18187_14.xhtml#_idTextAnchor206), *Analyzing Adversarial
+    Performance*, and then compute the neuron importance scores using techniques such
+    as integrated gradients. By visualizing neurons that are most affected by adversarial
+    perturbations, you can gain insights into the model’s vulnerabilities and explore
+    potential defenses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Exploring the hierarchical structure of learned features**: In this case,
+    you should choose neurons from different layers of the NN to understand how the
+    model learns hierarchical features. Select neurons from early layers to investigate
+    low-level features, and from deeper layers to investigate high-level features.
+    You can also select multiple neurons to co-optimize the input data for high activation
+    to understand how multiple-neuron learned patterns can exist in the same input
+    data. Visualizing these neurons can help you understand the model’s internal representation
+    of the data and how it builds increasingly complex features. This can provide
+    insights into the model’s learning process and potential areas for improvement.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Analyzing the model’s generalization capabilities across different datasets**:
+    To understand how well the model generalizes to new data, you should choose neurons
+    that are consistently important across different datasets. Calculate the neuron
+    importance scores using techniques such as integrated gradients for different
+    datasets, and identify neurons that maintain high importance scores across all
+    datasets. By visualizing these neurons, you can gain insights into the model’s
+    generalization capabilities and identify potential areas for improvement.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we’ve established the method to choose a neuron for interpretation,
+    let’s start with a practical exploration of interpreting neurons with image input
+    data!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interpreting learned image patterns
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Interpreting NNs that take in image data enables a new paradigm in interpretation,
+    which is the capability to visualize exactly what a neuron is detecting. In the
+    case of audio input data, interpreting NNs would allow us to audibly represent
+    what a neuron is detecting, similar to how we visualize patterns in image data!
+    Choose neurons you want to understand based on your goal and visualize the patterns
+    it is detecting through iterative optimizing on image data to activate highly
+    for that neuron.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practically, however, optimizing image data based on a neuron has an issue where
+    the resulting image often produces high-frequency patterns that are perceived
+    to be noisy, uninterpretable, and unaesthetic. High-frequency patterns are defined
+    to be pixels that are high in intensity and change quickly from one to the next.
+    This is largely due to the mostly unconstrained range of values that a pixel can
+    be represented by, and pixels in isolation are not the semantic units we care
+    about. Zooming in on the resulting image might make it more interpretable, but
+    the interpretation effectiveness is diminished with the need to perform human
+    evaluation and extra work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This issue can be effectively mitigated practically through the following techniques:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Frequency penalization – example techniques are as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Randomly blurring the image during optimization using a bilateral filter, which
+    has the benefit of also preserving edge patterns
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Penalizing variation between neighboring pixels conservatively in the optimization
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Image augmentations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Image preprocessing – example techniques are as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data decorrelation
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fast Fourier transform
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s continue our journey here by going through a practical tutorial using
+    a pre-trained 121-layer densenet model on the ImageNet dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Explaining predictions with image input data and integrated gradients
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we will explorepredictions, explaining withpredictions, explaining
+    with a practical tutorial on explaining predictions from a CNN model that takes
+    in image input data with integrated gradients, providing some insight into the
+    reasons the model made its prediction. In this tutorial, we will discover what
+    answers we need that are missing from prediction explanations, which will set
+    us up for interpreting the CNN model. We’ll proceed as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will be using the `lucent` library for this tutorial, which provides methods
+    to interpret NNs through feature visualization by optimization. Additionally,
+    we will be using the `torch` library for the densenet model. We will also be using
+    the `captum` library to use the integrated gradients method. Let’s start by importing
+    all the necessary libraries:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will define the model class for the pre-trained densenet model that
+    we will use:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will be using the defined model class to load weights pre-trained on an
+    image dataset called `HAM10000` with seven different skin lesion classes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The seventh index of the prediction layer of the pre-trained model is trained
+    to predict melanoma, which is a type of skin cancer. Let’s take a look at a few
+    examples of melanoma from the `ISIC-2017` dataset and see what exactly the pre-trained
+    model is focusing on when predicting these images. We will be using the integrated
+    gradients method from the `captum` library. First, let’s define the preprocessing
+    needed to allow model inferencing, which converts a `numpy` image array into `torch`
+    tensors, resizes the image into the pre-trained image size, and normalizes it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The mean and standard deviation values are derived directly from the ImageNet
+    dataset and were used to pre-train the model, as prior to pre-training on the
+    `HAM10000` dataset, it was pre-trained on ImageNet. Additionally, the `224` dimension
+    is also adopted from the ImageNet pre-trained settings. As we need the intermediate
+    result after resizing separately, we defined the logic for resizing and normalization
+    separately.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Next, we will use the `glob` library to load all the melanoma images in the
+    provided dataset folder:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will be using the `captum` library implementation of integrated gradients
+    and noise tunneling to smooth out the resulting attribution noise. Let’s define
+    the instances needed to execute these components, along with defining the prediction
+    class index for the `Melanoma` target class that we are interested in:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can now loop through the first six images, apply the preprocessing, apply
+    the integrated gradients method from `captum`, and finally, visualize the original
+    image and the obtained input importance heat map:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will show visualizations presented in *Figure 12**.2*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 12.2 – Six real images of melanoma from the ISIC-2017 dataset along
+    with the gradient-based attribution of the model](img/B18187_12_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 12.2 – Six real images of melanoma from the ISIC-2017 dataset along with
+    the gradient-based attribution of the model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The model seems to be mainly focusing on the darker spots in the first five
+    examples, but the model still considers the surrounding skin, although with much
+    less focus. This might be a signal that the model can depend on the surrounding
+    skin slightly to predict melanoma. But this begs the question: Is the model identifying
+    the darkness of the skin for melanoma, or is it identifying some sort of pattern
+    under the hood, or is it both? For the last example, the model seems to be all
+    over the place and not really focusing on the dark spots. This could mean that
+    the skin has patterns that are related to melanoma that are not necessarily darker
+    in color. There are a few more questions that can’t really be answered through
+    these examples, which are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Is the model dependent on the color of the skin to predict melanoma? Or is it
+    really about the pattern?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What exactly are the patterns the model is detecting?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To answer these questions, we will use the `lucent` library to visualize the
+    patterns learned to predict melanoma confidently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practically visualizing neurons with image input data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we will continue with the previous tutorial to further explore
+    how to practically visualize neurons with image input data using optimization
+    techniques to gain insights into the patterns and behaviors learned by the CNN
+    model. This process involves choosing neurons to interpret, optimizing image data
+    for those neurons, and applying regularization techniques to generate visually
+    interpretable patterns. By visualizing the patterns learned by the model, we can
+    gain a better understanding of the model’s predictions and answer questions that
+    may not be apparent from traditional feature importance methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By following the steps outlined in this tutorial, you can visualize the patterns
+    learned by your deep neural network, gaining a deeper understanding of the model’s
+    predictions and the features that contribute to those predictions. This can help
+    to answer questions about the model’s dependence on certain features, such as
+    the color of the skin or the shape of the melanoma, and provide valuable insights
+    into the patterns and behaviors of the model. Let’s get started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let’s define the necessary variables. We want to visualize image patterns
+    for the `Melanoma` class, which is at the sixth prediction layer index, so we
+    must define the parameter we want to optimize as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, for the first iteration, we will be utilizing the `lucent` specifically,
+    CPPN consists of several convolutional layers with a compositional activation
+    function consisting of element-wise tangents, squaring, division, and concatenation.
+    This means that instead of optimizing the image directly, we optimize the parameters
+    of the CPPN convolutional network that generates the input image for the main
+    network. Backpropagation can be executed all the way through the generated input
+    image till the first layer of the CPPN network. The initial input image is a fixed
+    image comprising a circular region in the center of the image, with the values
+    at the center being close to zero and gradually increasing toward the edges of
+    the circle. However, with CPPN, the learning rate usually needs to be lower to
+    converge properly. Let’s define the CPPN configuration with a `224` image size
+    and the `Adam` optimizer with a lower-than-typical learning rate:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, let’s utilize the defined variables and visualize the patterns captured
+    by the melanoma part of the prediction layer using a GPU-configured model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The `thresholds` list component controls the number of optimization steps taken,
+    along with the intermediate step number to visualize the optimized image. Additionally,
+    a hidden component built into the `render_vis` method is the `transforms` component.
+    The `transforms` component adds minimal augmentations such as padding, jitter,
+    random scaling, and random rotating to reduce any random noise in the image being
+    optimized. The result from the previous code is shown in *Figure 12**.3*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 12.3 – Progress of optimizing the CPPN to generate an image that activates
+    highly for the melanoma class prediction](img/B18187_12_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 12.3 – Progress of optimizing the CPPN to generate an image that activates
+    highly for the melanoma class prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: A pretty good image of what seems to be the actual melanoma was able to be generated
+    from the process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s find out the melanoma probability of this image. We can do this by defining
+    the preprocessing methods needed to perform inference with this model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here, we predict the skin lesion classes of the final optimized image from
+    the process while disabling gradient computation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This results in a 100% probability of the image being predicted as melanoma!
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'However, the image alone does not make it apparent that all the diverse sets
+    of images can be recognized as melanoma. Some classes can be sufficiently represented
+    in a single image, but some labels can’t really be represented in a single picture.
+    Take a background class, for example: it is impossible to put every single background
+    visual in a single image. Here are some specific questions that could be useful
+    to answer based on the result:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Does the color of the skin matter?
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Does the shape of the melanoma matter, as the final generated image seems to
+    have similar melanoma patterns?
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Does the color of the melanoma patch matter? There are green patches with a
+    similar pattern to the red patch.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This is where the loss used to ensure diversity mentioned earlier can help
+    to provide more insight. Now, let’s utilize the diversity objective with the original
+    melanoma prediction layer index objective and optimize a batch of four input images
+    concurrently. The batch mode functionality is not supported for CPPN in `lucent`
+    and is only supported for the basic input image initialization `param` module:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Two additional points on the image initialization method are as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`fft` stands for Fast Fourier transform'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`decorrelate` applies SVD to the image input'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both techniques here are acknowledged in research to allow faster convergence,
+    reduce high-frequency images, and generate better-looking images.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The results are shown in *Figure 12**.4*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 12.4 – Four jointly optimized images to activate highly on the melanoma
+    neuron](img/B18187_12_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 12.4 – Four jointly optimized images to activate highly on the melanoma
+    neuron
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These are very funky-looking images. The non-black color portions are probably
+    simulating the skin. Let’s see the probability of the melanoma class for each
+    of these images to verify:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will result in the following array:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'They all have high probabilities for melanoma! From this, the following conclusion
+    can be argued:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The model does not depend a lot on the color of the skin to detect melanoma.
+    The most that skin color can provide will likely be in the range of around a 3%
+    probability boost.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The model depends on the underlying lower-level pattern mostly to detect melanoma.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The model doesn’t depend a lot on the color of the melanoma patch. The color
+    of the melanoma in the first generated image and real images was reddish. The
+    color of the melanoma patch in the batch-generated images was black.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The model can detect smaller melanoma signals from the real images used.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The results here are exemplary of how complementary each insight technique
+    is to the other. We will end this topic with some useful notes about the pattern
+    visualization of neurons through optimization techniques in general:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some problems are harder to converge than others, and some just don’t converge
+    at all. Be ready to experiment with multiple settings to see whether you can get
+    a resulting input that can activate highly on your chosen neuron, channel, or
+    entire layer. You can even choose multiple neurons to see how they interact!
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The loss can turn out to be extremely negative, and the more the input converges,
+    the more negative it gets. This is good, as the loss is defined as the negative
+    of the resulting activation value.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Regularization techniques are the key to allowing reasonable inputs to be generated
+    through optimization.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use both real data and diverse optimized data to understand the patterns your
+    model learned to detect. One optimized piece of data usually can’t represent the
+    entire range of patterns a neuron can detect.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this tutorial, we used the final classification layer, which made it easier
+    to find samples that activate highly toward the chosen neuron. If an intermediate
+    neuron is chosen, be sure to find the set of data with the highest activations
+    for the chosen neuron.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `lucent` library for `pytorch`-based models and the `lucid` library for
+    TensorFlow-based models are focused on image visualizations but can both be adapted
+    to other input variable types such as text. However, not much research has been
+    done there to figure out good regularization techniques for other variable types
+    to allow faster convergence.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Overall, the visualization of neurons through optimization techniques can provide
+    valuable insights into the patterns and behaviors of **machine learning** (**ML**)
+    models, but it requires experimentation and careful consideration of the inputs
+    and regularization techniques used. As a bonus here, with knowledge of how to
+    execute prediction explanations and NN interpretation, we will discover a useful
+    way to make explanations more effective in general with a method called counterfactual
+    explanations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Discovering the counterfactual explanation strategy
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Counterfactual explanation or reasoning is a method of understanding and explaining
+    anything in general by considering alternative and counterfactual scenarios or
+    “what-if” situations. In the context of prediction explanations, it involves identifying
+    changes in the input data that would lead to a different outcome. Ideally, the
+    minimal changes should be identified. In the context of NN interpretation, it
+    involves visualizing the opposite of the target label or intermediate latent features.
+    This approach makes sense to use because it closely aligns with how humans naturally
+    explain events and assess causality, which ultimately allows us to comprehend
+    the underlying decision-making process of the model better.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Humans tend to think in terms of cause and effect, and we often explore alternative
+    possibilities to make sense of events or decisions. For example, when trying to
+    understand why a certain decision was made, we may ask questions such as, “What
+    would have happened if we had chosen a different option?” or “What factors led
+    to this outcome?”. This kind of reasoning helps us identify the key elements that
+    influenced the decision and allows us to learn from the experience. Counterfactual
+    explanations for ML models follow a similar thought process. By presenting alternative
+    input instances that would have resulted in a different prediction, counterfactual
+    explanations help us understand which features of the input data are most critical
+    in the model’s decision-making process. This kind of explanation allows users
+    to grasp the model’s rationale more intuitively and can also help improve their
+    trust in the model’s predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Counterfactual reasoning complements feature importance and neuron visualization
+    techniques. Together, these methods can provide a more comprehensive understanding
+    of how the model arrives at its decisions. This, in turn, can help users better
+    assess the reliability of the model and make more informed decisions based on
+    its predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: NN interpretation is a form of a model understanding process that is different
+    from explaining the predictions made by a model. Both manual discovery of real
+    images and optimizing synthetic images to activate highly for the chosen neuron
+    to interpret are techniques that can be applied together to understand the NN.
+    Practically, the interpretation of NNs will be useful when you have goals to reveal
+    the appearance of a particular prediction label or class pattern, gain insight
+    into the factors contributing to the prediction of a specific label in your dataset
+    or all labels in general, and gain a detailed breakdown of the reasons behind
+    a prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There might be hiccups when trying to apply the technique in your use case,
+    so don’t be afraid to experiment with the parameters and components introduced
+    in this chapter in your goal to interpret your NN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will explore a different facet of insights that you can obtain from your
+    data and your model in the next chapter, which is about bias and fairness.
+  prefs: []
+  type: TYPE_NORMAL

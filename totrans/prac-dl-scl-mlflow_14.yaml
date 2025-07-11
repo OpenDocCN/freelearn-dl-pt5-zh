@@ -1,0 +1,732 @@
+- en: '*Chapter 9*: Fundamentals of Deep Learning Explainability'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Explainability is providing selective human-understandable explanations for
+    a decision provided by an automated system. In the context of this book, during
+    the full life cycle of **deep learning** (**DL**) development, explainability
+    should be emphasized as a first-class artifact, along with the other three pillars:
+    data, code, and model. This is because different stakeholders and regulators,
+    model developers, and final consumers of the model output may have different needs
+    to understand how the data is used and why the model produces certain predictions
+    or classifications. Without such understanding, it will be difficult to gain the
+    trust of the consumers of the model output or to diagnose what could have gone
+    wrong when model output results drift. This also means that explainability tools
+    should be employed not only for explaining prediction results from a deployed
+    model in production or during offline experimentation, but also for understanding
+    the data characteristics and differences between the datasets used in offline
+    model training and the ones encountered in online model operation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition, in many highly regulated industries, such as autonomous driving,
+    medical diagnosis, banking, and finance, there is also a legal mandate that demands
+    the **right to explanation** ([https://academic.oup.com/idpl/article/7/4/233/4762325](https://academic.oup.com/idpl/article/7/4/233/4762325))
+    for any individual to get an explanation for an output of the algorithm. Finally,
+    a recent survey showed that over 82% of CEOs believe that AI-based decisions must
+    be explainable to be trusted as enterprises accelerate their investment in developing
+    and deploying AI-based initiatives ([https://cloud.google.com/blog/topics/developers-practitioners/bigquery-explainable-ai-now-ga-help-you-interpret-your-machine-learning-models](https://cloud.google.com/blog/topics/developers-practitioners/bigquery-explainable-ai-now-ga-help-you-interpret-your-machine-learning-models)).
+    Therefore, it is important to learn the fundamentals of explainability and the
+    related tools so that we know when to use what tools for what audience to provide
+    a relevant, accurate, and consistent explanation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will be confident to know what a good explanation
+    is and what tools exist for different explainability purposes and will gain hands-on
+    experience in using two explainability toolboxes for explaining DL sentiment classification
+    models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the categories and audience of explainability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring the SHAP Explainability toolbox
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring the Transformers Interpret toolbox
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following requirements are necessary to complete the learning in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'SHAP Python library: [https://github.com/slundberg/shap](https://github.com/slundberg/shap)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Transformers Interpret Python library: [https://github.com/cdpierse/transformers-interpret](https://github.com/cdpierse/transformers-interpret)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Captum Python library: [https://github.com/pytorch/captum](https://github.com/pytorch/captum)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Code from the GitHub repository for this chapter: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter09](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter09)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the categories and audience of explainability
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As this chapter's opening texts imply, explainability for a DL system becomes
+    increasingly critical, sometimes even mandatory, in highly regulated industries
+    such as financial, legal, governmental, and medical application domains. An example
+    lawsuit partially due to the lack of ML explainability is the case of **B2C2 v
+    Quoine** ([https://www.scl.org/articles/12130-explainable-machine-learning-how-can-you-determine-what-a-party-knew-or-intended-when-a-decision-was-made-by-machine-learning](https://www.scl.org/articles/12130-explainable-machine-learning-how-can-you-determine-what-a-party-knew-or-intended-when-a-decision-was-made-by-machine-learning)),
+    where automated AI trading algorithms mistakenly placed an order with 250 times
+    the market price for bitcoin trading. The recent successful applications of DL
+    models in production stimulate active and abundant research and development in
+    the explainability area due to the need to understand why and how a DL model works.
+    You may have heard of the term **explainable artificial intelligence** (**XAI**),
+    which was started by the **US Defense Advanced Research Projects Agency** (**DARPA**)
+    in 2015 for its XAI program with the goal of enabling end users to better understand,
+    trust, and effectively manage AI systems ([https://onlinelibrary.wiley.com/doi/epdf/10.1002/ail2.61](https://onlinelibrary.wiley.com/doi/epdf/10.1002/ail2.61)).
+    However, the concept of explainability goes way back to the early days of expert
+    systems in the 1980s or even earlier ([https://wires.onlinelibrary.wiley.com/doi/full/10.1002/widm.1391](https://wires.onlinelibrary.wiley.com/doi/full/10.1002/widm.1391)),
+    and the recent surge of attention on the topic of explainability just highlights
+    how important it is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, what's an explanation? It turns out that this is still an active research
+    topic in the ML/DL/AI community. From a practical purpose, a precise definition
+    of explanation depends on who wants the explanations for what purpose at what
+    time across the ML/DL/AI life cycle ([https://dl.acm.org/doi/abs/10.1145/3461778.3462131](https://dl.acm.org/doi/abs/10.1145/3461778.3462131)).
+    So, explainability can be defined as *the capability to provide an audience-appropriate,
+    human-understandable interpretation of why and how a model provides certain predictions*.
+    This may also include the data explainability aspect, where and how the data was
+    used through provenance tracking, what the data characteristics are, or whether
+    it has changed due to unexpected events. For example, sales and marketing emails
+    changed due to an unexpected COVID outbreak ([https://www.validity.com/resource-center/disruption-in-email/](https://www.validity.com/resource-center/disruption-in-email/)).
+    Such data changes will unexpectedly change the distribution of model prediction
+    results. We need to take into account such data changes when explaining the model
+    drift. This means the complexity of the explanations needs to be tailored and
+    selective to the receiving audience without overwhelming information. For example,
+    a complex explanation with many technical jargons such as *activation* might not
+    work as well as a simple text summary with business-friendly terms. This further
+    shows that explainability is also a **Human-Computer Interface/Interaction** (**HCI**)
+    topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get the big picture of what the explainability categories and corresponding
+    audiences look like, we consider the eight dimensions of explanations shown in
+    *Figure 9.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.1 – Eight dimensions to understand explainability'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_001.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.1 – Eight dimensions to understand explainability
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 9.1*, the complexity of explainability can be understood
+    from eight dimensions. This is not necessarily an exhaustive categorization, but
+    rather a guide to understanding different perspectives from HCI, the full life
+    cycle of AI/ML/DL, and different technical approaches. In the following discussion,
+    we will highlight the dimensions and their inter-relationships that are most relevant
+    to DL applications, since the focus of this chapter is on DL explainability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Audience: who needs to know'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As pointed out recently by a study ([https://dl.acm.org/doi/abs/10.1145/3461778.3462131](https://dl.acm.org/doi/abs/10.1145/3461778.3462131)),
+    it is important to understand who needs to know what kind of explanations at what
+    stage across an AI project life cycle. This will also affect the explanation output
+    formats. An earlier study ([https://arxiv.org/pdf/1702.08608.pdf](https://arxiv.org/pdf/1702.08608.pdf))
+    also points out that depending on whether a domain expert is involved in a real
+    application task (for example, a medical doctor in a diagnosis of cancer), the
+    cost of validating an explanation could also be high since it requires an actual
+    human in a real work environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For current practical DL projects, we need to tailor our methods and presentations
+    of explanations depending on the target audience, such as data scientists, ML
+    engineers, business stakeholders, **User Experience (UX)** designers, or end users,
+    as there is no one-size-fits-all approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Stage: when to provide an explanation in the DL life cycle**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A **stage** usually refers to when the explanations can be provided during the
+    model development life cycle. For a model such as a decision tree, since it is
+    a white-box model, we say we can provide **ante-hoc** explainability. However,
+    currently, most DL models are mostly treated as black-box models even though self-explaining
+    DL models are being gradually developed with ante-hoc explainability ([https://arxiv.org/abs/2108.11761](https://arxiv.org/abs/2108.11761)).
+    Therefore, for current practical DL applications, **post-hoc** explainability
+    is needed. In addition, when the model development stages are in training, validation,
+    or production, the explainability scope can be global, cohort, or local, even
+    using the same post-hoc explainability tools ([https://towardsdatascience.com/a-look-into-global-cohort-and-local-model-explainability-973bd449969f](https://towardsdatascience.com/a-look-into-global-cohort-and-local-model-explainability-973bd449969f)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Scope: which prediction needs explanation'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Scope** refers to whether we can provide the explanation for all predictions,
+    a subset of the predictions, or just one specific prediction, even if we use the
+    same post-hoc tool for a black-box DL model. The most common global explainability
+    is to describe **feature importance** and allow users to know which feature is
+    the most impactful one for the overall model performance. Local explainability
+    is about **feature attribution** for a specific prediction instance. The difference
+    between feature attribution and feature importance is that feature attribution
+    not only quantifies the ranking and magnitude of the feature impact, but also
+    the direction of the impact (for example, whether a feature is positively or negatively
+    affecting the prediction).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many of the post-hoc tools for DL models are very good at local explainability.
+    Cohort explainability is useful for identifying potential model bias for some
+    specific groups such as age or race groups. For a DL model, if we want to have
+    a global explanation, we often need to use a surrogate model such as a decision
+    tree model to emulate the behavior of a DL model ([https://towardsdatascience.com/explainable-ai-xai-methods-part-5-global-surrogate-models-9c228d27e13a](https://towardsdatascience.com/explainable-ai-xai-methods-part-5-global-surrogate-models-9c228d27e13a)).
+    However, this approach does not always work well as it is very difficult to know
+    whether the surrogate model is approximating the predictions of the original black-box
+    model well enough. So, in practice, local explainability tools for DL models are
+    often used, such as **SHapley Additive exPlanations** (**SHAP**), which we will
+    explain in the method dimension.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Input data format: what is the format of the input data**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Input data format** refers to what kind of input data we are dealing with
+    when developing and using the model. While a simple model might only focus on
+    a single type of input data format such as text, many complex models might require
+    using a mix of structured tabular data plus unstructured data such as images or
+    texts. In addition, there is also a separate need to understand the input data
+    hidden bias (during model training and validation) or drifting (during production).
+    As such, this is quite a complex topic. The data explanation can also be used
+    for monitoring data outliers and drifting during production. This is applicable
+    to all types of ML/DL models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Output data format: what is the format of the output explanation**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Output explanation format** refers to how we present the explanations to
+    our target audience. Often, an image explanation might be a bar chart showing
+    the feature importance with the top few features and their scores, or a saliency
+    map that highlights the spatial support of a particular class in each image for
+    image-related ML problems. For a textual output, it could be an English sentence
+    to say why a credit application is rejected because of a few factors that are
+    understandable to the applicants. **Natural language processing (NLP)** model
+    explainability could also be through interactive exploration that uses salience
+    maps, attention, and other rich visualization (see examples in Google''s **Language
+    Interpretability Tool** (**LIT**): [https://ai.googleblog.com/2020/11/the-language-interpretability-tool-lit.html](https://ai.googleblog.com/2020/11/the-language-interpretability-tool-lit.html)).
+    As there is no silver bullet for explainability of these complex output formats,
+    it is critical to meet the needs, experiences, and expectations of the audience
+    that asks for the explanation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Problem type: what is the machine learning problem type**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Problem type** refers to all kinds of ML/AI problems broadly, but for practical
+    purposes, current commercially successful problems are mostly around classification,
+    regression, and clustering. Reinforcement learning and recommendation systems
+    also see increasingly successful adoption in the industry. DL models are now often
+    used in all these types of problems or are at least being evaluated as a potential
+    candidate model.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Objectives type: what is the motivation or goal to explain**'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Objectives type** refers to the motivation of using explainability in AI/ML
+    projects. It has been argued that the number one objective of explainability is
+    to gain trust by providing a sufficient understanding of the AI system behavior
+    and uncovering vulnerabilities, biases, and flaws of the system. An additional
+    motivation is to infer the causal relationship from the input and output prediction.
+    Other objectives include improving the model accuracy through a better understanding
+    of the inner workings of the AI/ML systems, and justifying the model behavior
+    and decisions through transparent explanations when potentially severe consequences
+    are involved. It is even possible to reveal unknown insights and rules that are
+    based on explanations (https://www.tandfonline.com/doi/full/10.1080/10580530.2020.1849465).
+    Overall, it is very desirable to break the black box so that when being used in
+    a real production system, the AI/ML models and systems can be used with confidence.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Method type: what is the specific post-hoc explanation method used'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Method type (post-hoc)** refers to post-hoc methods that are very relevant
+    to the DL models. There are two major categories of post-hoc methods: perturbation-based
+    and gradient-based. Recent work has started to unify these two approaches, although
+    it is not yet widely applicable for practical usage ( [https://teamcore.seas.harvard.edu/publications/towards-unification-and-robustness-perturbation-and-gradient-based](https://teamcore.seas.harvard.edu/publications/towards-unification-and-robustness-perturbation-and-gradient-based)).
+    The following is a brief discussion on these two types of methods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Perturbation-based methods leverage perturbations of individual instances to
+    construct interpretable local approximations using linear models to explain the
+    predictions. The most popular perturbation-based methods include **Local Interpretable
+    Model-Agnostic Explanations** (**LIME**), ([https://arxiv.org/pdf/1602.04938.pdf](https://arxiv.org/pdf/1602.04938.pdf)),
+    SHAP, and variants of LIME and SHAP such as BayesLIME and BayesSHAP, TreeSHAP,
+    and many more ([https://towardsdatascience.com/what-are-the-prevailing-explainability-methods-3bc1a44f94df](https://towardsdatascience.com/what-are-the-prevailing-explainability-methods-3bc1a44f94df)).
+    LIME can be used for tabular, image, and textual input data and is model agnostic.
+    That's to say, LIME can be used for any type of classifiers (tree-based or DL
+    models) regardless of the algorithms being used. SHAP uses principles from cooperative
+    game theory to identify the contribution of different features to the prediction
+    in order to quantify the impact of each feature. SHAP produces a so-called shapely
+    value, which is the average of all the marginal contributions to all possible
+    coalitions or combinations of different features. It works well for many types
+    of models, including DL models, although the computational time could be much
+    faster for tree-based models such as XGBoost or LightGBM ([https://github.com/slundberg/shap](https://github.com/slundberg/shap)).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Gradient-based methods, such as SmoothGrad ([https://arxiv.org/abs/1706.03825](https://arxiv.org/abs/1706.03825))
+    and Integrated Gradients ([https://towardsdatascience.com/understanding-deep-learning-models-with-integrated-gradients-24ddce643dbf](https://towardsdatascience.com/understanding-deep-learning-models-with-integrated-gradients-24ddce643dbf)),
+    leverages gradients computed with respect to input dimensions of individual instances
+    to explain model predictions. They can be applied to both image and textual input
+    data, although sometimes, textual input could suffer a manipulation or adversary
+    attack ([https://towardsdatascience.com/limitations-of-integrated-gradients-for-feature-attribution-ca2a50e7d269](https://towardsdatascience.com/limitations-of-integrated-gradients-for-feature-attribution-ca2a50e7d269)),
+    which will change the feature importance undesirably.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that there are additional types of methods such as counterfactual (https://christophm.github.io/interpretable-ml-book/counterfactual.html)
+    or prototype-based methods ([https://christophm.github.io/interpretable-ml-book/proto.html](https://christophm.github.io/interpretable-ml-book/proto.html)),
+    which we will not cover in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having discussed the many dimensions of explainability, it is important to
+    know that XAI is still an emerging area ([https://fairlyaccountable.org/aaai-2021-tutorial/doc/AAAI_slides_final.pdf](https://fairlyaccountable.org/aaai-2021-tutorial/doc/AAAI_slides_final.pdf))
+    and it is sometimes even difficult to find agreement among different explainability
+    methods when applying to the same dataset or models (see a recent study on the
+    topic of disagreement problems in explainable ML from the practitioners'' perspective:
+    [https://arxiv.org/abs/2202.01602](https://arxiv.org/abs/2202.01602)). In the
+    end, it does require some experimentation to find out which explainability provides
+    the human validated explanations that are meeting the requirements for a specific
+    prediction task in the real world.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next two sections of this chapter, we will focus on providing some hands-on
+    experiments using some popular and emerging toolkits to learn how to do explainability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the SHAP Explainability toolbox
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For our learning purpose, let''s review some popular explainability toolboxes
+    while experimenting with some examples. Based on the number of GitHub stars (16,000
+    as of April 2022, [https://github.com/slundberg/shap](https://github.com/slundberg/shap)),
+    SHAP is the most widely used and integrated open source model explainability toolbox.
+    It is also the foundation explanation tool that is integrated with MLflow. Here,
+    we would like to run a small experiment to get some hands-on experience on how
+    this works. Let''s use a sentimental analysis NLP model to explore how SHAP can
+    be used for explaining the model behavior:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Set up the virtual environment on your local environment after checking out
+    this chapter''s code from GitHub. Running the following command will create a
+    new virtual environment called `dl-explain`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will install SHAP and its related dependencies such as `matplotlib` in
+    this virtual environment. Once this virtual environment is created, activate this
+    virtual environment by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, we are ready to run the experiment with SHAP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can check out the `shap_explain.ipynb` notebook to follow through with
+    the exploration. The first step in this notebook is to import the relevant Python
+    libraries:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: These imports will allow us to use the Hugging Face transformers pipeline API
+    to get a pre-trained NLP model and SHAP functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We then create `dl_model` using the transformers pipeline API for `sentiment_analysis`.
+    Note this is a pretrained pipeline so we can use this without additional finetuning.
+    The default transformer model used in this pipeline is `distilbert-base-uncased-finetuned-sst-2-english`
+    (https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will produce a model ready to predict positive or negative sentiment for
+    an input sentence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Try this `dl_model` with two input sentences and see whether the output makes
+    sense:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will produce an output of the labels and probability scores for each sentence
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: It seems that the first sentence was predicted with a high probability to be
+    `POSITIVE`, and the second sentence was predicted with a high probability to be
+    `NEGATIVE`. Now, if we take a deep look at the first sentence, we may think the
+    model prediction was incorrect, as there is a subtle negative emotion in the second
+    part of the sentence (`no taste`). So, we want to know why the model made such
+    a prediction. This is where model explainability comes into play.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s use the SHAP API, `shap.Explainer`, to get the Shapley values for
+    the two sentences we are interested in explaining:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Once we have `shap_values`, we can visualize the Shapley values using different
+    visualization techniques. The first one is to use `shap.plot.text` to visualize
+    the first sentence''s Shapley values when the prediction label is `POSITIVE`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will produce the plot as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.2 – SHAP visualization for sentence 1 with a positive prediction'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_002.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.2 – SHAP visualization for sentence 1 with a positive prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen in *Figure 9.2*, the word `great` has a very large SHAP value
+    that dominates the influence of the final prediction, while the word `no` has
+    less effect on the final prediction. This results in the final prediction result
+    of `POSITIVE`. So, what about the second sentence with a `NEGATIVE` prediction?
+    Running the following command will produce a similar plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This command creates the following plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.3 – SHAP visualization for sentence 2 with a negative prediction'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_003.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.3 – SHAP visualization for sentence 2 with a negative prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 9.3*, the word `Not` has a strong influence on the
+    final prediction, while the word `good` has a very small influence, resulting
+    in the final prediction of a `NEGATIVE` sentiment. This makes a lot of sense,
+    which is a good explanation of the model's behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also visualize `shap_values` using different plots. A common one is
+    the bar plot, which plots the feature contribution to the final prediction. Running
+    the following command will produce a plot for the first sentence:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will produce a bar chart as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.4 – SHAP bar chart for sentence 1 with a positive prediction'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_004.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.4 – SHAP bar chart for sentence 1 with a positive prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 9.4*, the chart ranks the most important features
+    from top to bottom, where the top ones with a positive influence on the final
+    prediction are plotted on the positive side of the *x* axis, while the negative
+    contribution is plotted on the negative side of the *x* axis. The *x* axis is
+    the value of each token or word's SHAP value with a sign (+ or -). This clearly
+    shows the word `great` is a strong positive factor that impacts the final prediction,
+    while `have no taste` has some negative effect but not enough to change the direction
+    of the final prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Similarly, we can plot a bar chart for the second sentence as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will produce the following bar chart:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.5 – SHAP bar chart for sentence 2 with a negative prediction'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_005.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.5 – SHAP bar chart for sentence 2 with a negative prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 9.5*, the word `Not` has a strong contribution to
+    the final prediction, while the word `good` is second. These two words have the
+    opposite effect on the final prediction, but apparently, the word `Not` is much
+    stronger and has a much larger SHAP value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you have followed along with this example and seen the SHAP charts in your
+    notebook, congratulations! This means you have successfully run the SHAP Explainability
+    tool to explain the DL transformer model for the NLP text sentiment analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's further explore another popular explainability tool to see how they perform
+    different explanations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the Transformers Interpret toolbox
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As we already reviewed in the first section of this chapter, there are two
+    major methods: perturbation-based and gradient-based post-hoc explainability tools.
+    SHAP belongs to the perturbation-based family. Now, let''s look at a gradient-based
+    toolbox called **Transformers Interpret** ([https://github.com/cdpierse/transformers-interpret](https://github.com/cdpierse/transformers-interpret)).
+    This is a relatively new tool, but it is built on top of a unified model interpretability
+    and understanding library for PyTorch called **Captum** ([https://github.com/pytorch/captum](https://github.com/pytorch/captum)),
+    which provides a unified API to use either perturbation or gradient-based tools
+    ([https://arxiv.org/abs/2009.07896](https://arxiv.org/abs/2009.07896)). Transformers
+    Interpret further simplifies the API of Captum so that we can quickly explore
+    gradient-based explainability methods to get some hands-on experience.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get started, first make sure you already have the `dl-explain` virtual environment
+    set up and activated, as described in the previous section. Then, we can use the
+    same Hugging Face transformer sentiment analysis model to explore some NLP sentiment
+    classification examples. Then, we can perform the following steps to learn how
+    to use Transformers Interpret to do the model explanation. You may want to check
+    out the `gradient_explain.ipynb` notebook to follow the instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import relevant packages into the notebook as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will use Hugging Face's transformer model and tokenizer, as well as the
+    explainability function from `transformers_interpret`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create the model and the tokenizer using the same pre-trained model as previous
+    section, which is the `distilbert-base-uncased-finetuned-sst-2-english` model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now that we have the model and tokenizer, we can create an explainability variable
+    using the `SequenceClassificationExplainer` API.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create an explainer and give an example sentence to get the `word` attribution
+    from the explainer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can also get the prediction label before we check the `word` attributions
+    by running the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will produce a result of `Negative`, which means the prediction is a negative
+    sentiment. So, let's see how the explainer provides an explanation for this prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can just display the `word_attributions` value, or we can visualize it.
+    The value of `word_attributions` is as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 9.6 – Layered integrated gradient word attribution values with a negative
+    prediction'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_006.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.6 – Layered integrated gradient word attribution values with a negative
+    prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen from *Figure 9.6*, using the layered integrated gradient method,
+    which is the current explainer''s default method implemented in the Transformers
+    Interpret library, the word `not` contributed positively to the final prediction
+    result, which is a negative sentiment. This makes sense. Notice that several other
+    words, such as `to spend time on`, also have a strong positive influence on the
+    final prediction. Given the cross-attention mechanism, it seems the model is trying
+    to extract `not to spend time on` as the main attribution to the final prediction.
+    Note we can also visualize these `word` attributions as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will produce the follow plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.7 – Layered integrated gradient word attribution values with a negative
+    prediction'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_09_007.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 9.7 – Layered integrated gradient word attribution values with a negative
+    prediction
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen in *Figure 9.7*, it highlights the word importance of `not to
+    spend time on` to positively impact the final negative prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have experimented with both perturbation and gradient-based explainability
+    methods, we have successfully completed our hands-on exploration of using the
+    explainability tool for post-hoc local explanation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will summarize what we learned in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we reviewed explainability in AI/ML through an eight-dimension
+    categorization. Although this is not necessarily a comprehensive or exhaustive
+    overview, this does give us a big picture of who to explain to, different stages
+    and scopes to explain, various kinds of input and output formats of the explanation,
+    common ML problems and objectives types, and finally, different post-hoc explainability
+    methods. We then provided two concrete exercises to explore the SHAP and Transformers
+    Interpret toolboxes, which can provide perturbation and gradient-based feature
+    attribution explanations for NLP text sentiment DL models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This gives us a solid foundation for using explainability tools for DL models.
+    However, given the active development of XAI, this is only the beginning of using
+    XAI in DL models. Additional explainability toolboxes such as TruLens ([https://github.com/truera/trulens](https://github.com/truera/trulens)),
+    Alibi ([https://github.com/SeldonIO/alibi](https://github.com/SeldonIO/alibi)),
+    Microsoft Responsible AI Toolbox ([https://github.com/microsoft/responsible-ai-toolbox](https://github.com/microsoft/responsible-ai-toolbox)),
+    and IBM AI Explainability 360 Toolkit ([https://github.com/Trusted-AI/AIX360](https://github.com/Trusted-AI/AIX360))
+    are all in active development and worthy of investigation and future learning.
+    Additional links are also provided in the *Further reading* section to help you
+    continue to learn this topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know the fundamentals of explainability, in the next chapter, we
+    will learn how to implement explainability in the MLflow framework so that we
+    can provide a unified way to support explanation within the MLflow framework.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*New frontiers in Explainable AI*: [https://towardsdatascience.com/new-frontiers-in-explainable-ai-af43bba18348](https://towardsdatascience.com/new-frontiers-in-explainable-ai-af43bba18348)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Towards a Rigorous Science of Interpretable Machine Learning*: [https://arxiv.org/pdf/1702.08608.pdf](https://arxiv.org/pdf/1702.08608.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*The Toolkit Approach to Trustworthy AI*: [https://opendatascience.com/the-toolkit-approach-to-trustworthy-ai/](https://opendatascience.com/the-toolkit-approach-to-trustworthy-ai/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*A Framework for Learning Ante-hoc Explainable Models via Concepts*: [https://arxiv.org/abs/2108.11761](https://arxiv.org/abs/2108.11761)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Demystifying Post-hoc Explainability for ML models*: [https://spectra.mathpix.com/article/2021.09.00007/demystify-post-hoc-explainability](https://spectra.mathpix.com/article/2021.09.00007/demystify-post-hoc-explainability)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*A Look Into Global, Cohort and Local Model Explainability*: [https://towardsdatascience.com/a-look-into-global-cohort-and-local-model-explainability-973bd449969f](https://towardsdatascience.com/a-look-into-global-cohort-and-local-model-explainability-973bd449969f)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*What Are the Prevailing Explainability Methods?* [https://towardsdatascience.com/what-are-the-prevailing-explainability-methods-3bc1a44f94df](https://towardsdatascience.com/what-are-the-prevailing-explainability-methods-3bc1a44f94df)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Explainable Artificial Intelligence: Objectives, Stakeholders, and Future
+    Research Opportunities*: [https://www.tandfonline.com/doi/full/10.1080/10580530.2020.1849465](https://www.tandfonline.com/doi/full/10.1080/10580530.2020.1849465)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

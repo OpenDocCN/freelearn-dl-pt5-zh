@@ -1,0 +1,999 @@
+- en: '*Chapter 5*: Running DL Pipelines in Different Environments'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It is critical to have the flexibility of running a **deep learning** (**DL**)
+    pipeline in different execution environments such as local or remote, on-premises,
+    or in the cloud. This is because, during different stages of the DL development,
+    there may be different constraints or preferences to either improve the velocity
+    of the development or ensure security compliance. For example, it is desirable
+    to do small-scale model experimentation in a local or laptop environment, while
+    for a full hyperparameter tuning, we need to run the model on a cloud-hosted GPU
+    cluster to get a quick turn-around time. Given the diverse execution environments
+    in both hardware and software configurations, it used to be a challenge to achieve
+    this kind of flexibility within a single framework. MLflow provides an easy-to-use
+    framework to run DL pipelines at scale in different environments. We will learn
+    how to do that in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will first learn about the different DL pipeline execution
+    scenarios and their execution environments. We will also learn how to run the
+    different steps of the DL pipeline in different execution environments. Specifically,
+    we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An overview of different execution scenarios and environments
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running locally with local code
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running remote code in GitHub locally
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running local code remotely in the cloud
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running remotely in the cloud with remote code in GitHub
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will be comfortable setting up the DL pipelines
+    to run either locally or remotely with different execution environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following technical requirements are needed for completing the learning
+    in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The code in this chapter can be found at the following GitHub URL: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter05](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter05).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Installation of the Databricks **command-line interface** (**CLI**) tool to
+    access the Databricks platform remote execution of DL pipelines: [https://github.com/databricks/databricks-cli](https://github.com/databricks/databricks-cli).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to a Databricks instance (must be the Enterprise version, as the Community
+    version does not support remote execution) for learning how to run DL pipelines
+    remotely on a cluster in Databricks.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A full-fledged MLflow tracking server when running locally. This MLflow tracking
+    server setup is the same as in previous chapters.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An overview of different execution scenarios and environments
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In our previous chapters, we mainly focused on learning how to track DL pipelines
+    using MLflow''s tracking capabilities. Most of our execution environments are
+    in a local environment, such as a local laptop or desktop environment. However,
+    as we already know, the DL full life cycle consists of different stages where
+    we may need to run the DL pipelines either entirely, partially, or as a single
+    step in a different execution environment. Here are two typical examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When accessing data for model training purposes, it is not uncommon to require
+    the data to reside in an enterprise-security and privacy-compliant environment,
+    where both the computation and the storage cannot leave a compliant boundary.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When training a DL model, it is usually desirable to use a remote GPU cluster
+    to maximize the efficiency of model training, where a local laptop usually does
+    not have the required hardware capability.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both cases require a carefully defined execution environment that might be needed
+    in one or multiple stages of the DL lifecycle. Note that this is not just a requirement
+    to be flexible when moving from the development stage to a production environment,
+    where the execution hardware and software configuration could be understandably
+    different. It is also a requirement to be able to switch running environments
+    during development stages or in different production environments without making
+    major changes to the DL pipelines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we classify the different scenarios and execution environments into the
+    following four scenarios, based on the different combinations of the location
+    of the source code of DL pipelines and target execution environments, as shown
+    in the following table:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1 – Four different scenarios of DL pipeline source codes and target
+    execution environments'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_05_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.1 – Four different scenarios of DL pipeline source codes and target
+    execution environments
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5.1* describes how either in development or production environments,
+    we could encounter the possibilities of using either local or remote code to run
+    in a different execution environment. Let''s examine them one by one as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Local source code running in a local target environment**: This usually happens
+    at the development stage, where modest computing power in a local environment
+    is adequate to support quick prototyping or test runs for small changes in an
+    existing pipeline. This is mostly the scenario we have been using in previous
+    chapters for our MLflow experiments when learning how to track pipelines.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Local source code running in a remote target environment**: This usually
+    happens at the development stage or re-training of an existing DL model, where
+    a GPU or other types of hardware accelerators, such as **Tensor Processing Units**
+    (**TPUs**) or **field-programmable gate arrays** (**FPGAs**), are needed to perform
+    computational and data-intensive model training or debugging prior to merging
+    the GitHub repository (using local code change first).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Remote source code running in a local target environment**: This usually
+    happens when we don''t have any changes in the code but the data has changed,
+    either during the development stage or the production stage. For example, during
+    the DL development stage, we could change the data with newly augmented training
+    data either through some data augmentation techniques (for example, using **AugLy**
+    to augment existing training data: [https://github.com/facebookresearch/AugLy](https://github.com/facebookresearch/AugLy))
+    or newly annotated training data. During the production deployment step, we often
+    need to run a regression test to evaluate a to-be-deployed DL pipeline against
+    a hold-out regression testing dataset, so that we don''t deploy a degraded model
+    if the model performance accuracy metric does not meet the bar. In this case,
+    the hold-out testing dataset is not usually big, so the execution can be done
+    on the deployment server locally instead of launching to a remote cluster in a
+    Databricks server.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Remote source code running in a remote target environment**: This can happen
+    in the development stage or production stage, where we want to use a fixed version
+    of the DL pipeline code from GitHub to run in a remote GPU cluster to do model
+    training, hyperparameter tuning, or re-training. Such large-scale execution can
+    be time-consuming, and a remote GPU cluster could be very useful.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Given the four different scenarios, it would be desirable to have a framework
+    to be able to run the same DL pipeline with minimal configuration changes under
+    these conditions. Prior to the arrival of MLflow, it took quite a lot of engineering
+    and manual efforts to support these scenarios. MLflow provides an MLproject framework
+    that supports all these four scenarios through the following three configurable
+    mechanisms:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Entry points**: We can define one or multiple entry points to execute different
+    steps of a DL pipeline. For example, the following is an example to define a main
+    entry point:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The entry point''s name is `main`, which, by default, will be used when executing
+    an MLflow run without specifying an entry point for an MLproject. Under this `main`
+    entry point, there is a list of parameters. We can define the parameter''s type
+    and default value using a short syntax, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can also use a long syntax, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we define only one parameter, called `pipeline_steps`, using the short
+    syntax format with a `str` type and a default value of `all`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`yaml` configuration file or a Docker image to define the software and library
+    dependencies that can be used by the MLproject''s entry points. Note that a single
+    MLproject can either use a conda `yaml` file or a Docker image, but not both at
+    the same time. Depending on the DL pipeline dependencies, sometimes using a conda
+    .`yaml` file over a Docker image is preferred, since it is much more lightweight
+    and easier to make changes without requiring additional Docker image storage locations
+    and loading a large Docker image into memory in a resource-limited environment.
+    However, a Docker image does sometimes have advantages if there are any Java packages
+    (`.jar`) that are needed at runtime. If there are no such JAR dependencies, then
+    it is preferred to have a conda .`yaml` file to specify the dependencies. Furthermore,
+    as of MLflow version 1.22.0, running Docker-based projects on Databricks is not
+    yet supported by the MLflow command line. If there are indeed any Java package
+    dependencies, they can be installed using `yaml` configuration files to define
+    execution environment dependencies in this book.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Hardware dependencies**: We can use a cluster configuration JSON file to
+    define the execution target backend environment, be it a GPU, CPU, or other types
+    of clusters. This is only needed when the target backend execution environment
+    is non-local, either in a Databricks server or a **Kubernetes** (**K8s**) cluster.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Previously, we learned how to use MLproject to create a multiple-step DL pipeline
+    running in a local environment in [*Chapter 4*](B18120_04_ePub.xhtml#_idTextAnchor050),
+    *Tracking Code and Data Versioning*, for tracking purposes. Now, we are going
+    to learn how to use MLproject for supporting the different running scenarios outlined
+    previously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running locally with local code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s start with the first running scenario using the same **Natural Language
+    Processing (NLP)** text sentiment classification example as the driving use case.
+    You are advised to check out the following version of the source code from the
+    GitHub location to follow along with the steps and learnings: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/26119e984e52dadd04b99e6f7e95f8dda8b59238/chapter05](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/26119e984e52dadd04b99e6f7e95f8dda8b59238/chapter05).
+    Note that this requires a specific Git hash committed version, as shown in the
+    URL path. That means we are asking you to check out a specific committed version,
+    not the main branch.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start with the DL pipeline that downloads the review data to local storage
+    as a first execution exercise. Once you check out this chapter''s code, you can
+    type the following command line to execute the DL pipeline''s first step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: If we don't specify an entry point, it defaults to `main`. In this case, this
+    is our desired behavior since we want to run the `main` entry point to start the
+    parent DL pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The *dot* means the current local directory. This tells MLflow to use the code
+    in the current directory as the source to execute the project. If this command
+    line runs successfully, you should be able to see the first two lines of output
+    in the console as follows, which also reveal where the target execution environment
+    is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that the second output line shows `mlflow.projects.backend.local`, which
+    means the target running environment is local. You may wonder where we define
+    the local execution environment in our initial command line. It turns out that
+    by default, the value for the parameter called `--backend` (or `-b`) is `local`.
+    So, if we spell out the default values, the `mlflow run` command line will look
+    like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that we also need to specify `experiment-name` in the command line or through
+    an environment variable named `MLFLOW_EXPERIMENT_NAME` to define the experiment
+    in which this project will run. Alternatively, you can specify an `experiment-id`
+    parameter, or an environment variable named `MLFLOW_EXPERIMENT_ID`, to define
+    the experiment integer ID that already exists. You only need to define either
+    the ID or the name of the environment, but not both. It is common to define a
+    human-readable experiment name and then query the experiment ID for that experiment
+    in other parts of the code so that they will not be out of sync.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MLflow Experiment Name or ID for Running an MLproject
+  prefs: []
+  type: TYPE_NORMAL
+- en: To run an MLproject either using the CLI or the `mlflow.run` Python API, if
+    we don't specify `experiment-name` or `experiment-id` through either an environment
+    variable or a parameter assignment, it will default to the `Default` MLflow experiment.
+    This is not desirable, as we want to organize our experiments into clearly separated
+    experiments. In addition, once an MLproject starts running, any child runs will
+    not be able to switch to a different experiment name or ID. So, the best practice
+    will be always to specify an experiment name or an ID before launching an MLflow
+    project run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once you finish the run, you will see the output as in the following lines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that this is a nested MLflow run since we first launch a `main` entry
+    point that starts the whole pipeline (that''s why there is `mlflow.parentRunId`),
+    and then under this pipeline, we run one or multiple steps. Here, the step we
+    run is called `download_data`, which is another entry point defined in the MLproject,
+    but is invoked using the `mlflow.run` Python API, as follows, in the `main.py`
+    file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that this also specifies which code source to use (`local`, since we specified
+    a *dot*), and by default, a local execution environment. That''s why you should
+    be able to see the following lines in the console output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should also see a few other details of the run parameters for this entry
+    point. The last two lines of the command line output should look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you see this, you should feel proud that you have successfully run a pipeline
+    with one step to completion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While this is something we have done before without knowing some of the details,
+    the next section will allow us to run remote code in a local environment, where
+    you will see the increasing flexibility and power of MLproject.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running remote code in GitHub locally
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now, let''s see how we run remote code from a GitHub repository on a local
+    execution environment. This allows us to precisely run a specific version that
+    has been checked into the GitHub repository using the commit hash. Let''s use
+    the same example as before by running a single `download_data` step of the DL
+    pipeline that we have been using in this chapter. In the command line prompt,
+    run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice the difference between this command line and the one in the previous
+    section. Instead of a *dot* to refer to a local copy of the code, we are pointing
+    to a remote GitHub repository ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow))
+    and the folder name (`chapter05`) that contains the MLproject file we want to
+    reference. The `#` symbol denotes the relative path to the root folder, according
+    to MLflow''s convention (see details on the MLflow documentation at this website:
+    [https://www.mlflow.org/docs/latest/projects.html#running-projects](https://www.mlflow.org/docs/latest/projects.html#running-projects)).
+    We then define a version number by specifying the Git commit hash using the `-v`
+    parameter. In this case, it is this version we have in the GitHub repository:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/26119e984e52dadd04b99e6f7e95f8dda8b59238/chapter05](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/26119e984e52dadd04b99e6f7e95f8dda8b59238/chapter05)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hidden Bug of Running an MLflow Project with GitHub's Main Branch
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When we omit the `-v` parameter in the MLflow run, MLflow will assume we want
+    to use the default `main` branch of a GitHub project. However, MLflow''s source
+    code has a hardcoded reference to the `main` branch of a GitHub project as `origin.refs.master`,
+    requiring the existence of a `master` branch in the GitHub project. This does
+    not work in newer GitHub projects such as this book''s project, since the default
+    branch is called `main`, not `master` anymore, due to the recent changes introduced
+    by GitHub (see details here: [https://github.com/github/renaming](https://github.com/github/renaming)).
+    So, at the time of writing this book, in the MLflow version 1.22.0, there is no
+    way to run a default `main` branch of a GitHub project. We need to specifically
+    declare the Git commit hash version when running an MLflow project in the GitHub
+    repository.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, what happens when you use the code in a remote GitHub project repository
+    when running an MLflow project? It becomes clear when you see the first line of
+    the following console output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This means that MLflow, on behalf of the user, starts to clone the remote project
+    to a local temporary folder called `/var/folders/51/whxjy4r92dx18788yp11ycyr0000gp/T/tmpdyzaa1ye`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you navigate to this temporary folder, you will see that the entire project
+    content from GitHub has been cloned to this folder, not just the folder containing
+    the ML project you want to run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The rest of the console output is as we have seen when using the local code.
+    Once you finish the run with the `download_data` step, you should be able to find
+    the downloaded data in the temporary folder under `chapter05`, since we define
+    the local destination folder as a `./data` relative path in the ML project file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: MLflow automatically converts this to an absolute path, and it becomes a relative
+    path to the cloned project folder under `chapter05`, since that's where the MLproject
+    file resides.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This capability to reference a remote GitHub project and run it in a local environment,
+    whether this local environment is your laptop or a virtual machine in the cloud,
+    is powerful. This enables automation through **continuous integration and continuous
+    deployment** (**CI/CD**) since this can be directly invoked in a command line,
+    which can then be scripted into a CI/CD script. The tracking part is also precise,
+    since we have the Git commit hash logged in the MLflow tracking server, which
+    allows us to know exactly which version of the code was executed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note in both the scenarios we just covered, the execution environment is a local
+    machine where the MLflow run command was issued. The MLflow project runs to completion
+    *synchronously*, meaning it is a blocking call and it will run to completion and
+    show you the progress in the console output in real time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, there are additional running scenarios we need to support. For example,
+    sometimes the machine where we issue the MLflow project run command is not powerful
+    enough to support the computation we need, such as training a DL model with many
+    epochs. Another scenario could be if the data to be downloaded or accessed for
+    training is multiple gigabytes and you don't want to download it to your local
+    laptop for model development. This requires us to be able to run the code in a
+    remote cluster. Let's look at how we can do that in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running local code remotely in the cloud
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In previous chapters, we ran all our code in a local laptop environment, and
+    limited our DL fine-tuning step to only three epochs due to the limited power
+    of a laptop. This serves the purpose of getting the code running and testing quickly
+    in a local environment but does not serve to build an actual high-performance
+    DL model. We really need to run the fine-tuning step in a remote GPU cluster.
+    Ideally, we should only change some configuration and still issue the MLflow run
+    command line in a local laptop console, but the actual pipeline will be submitted
+    to a remote cluster in the cloud. Let's see how we can do this for our DL pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start with submitting code to run in a Databricks server. There are
+    three prerequisites:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**An Enterprise Databricks server**: You need to have access to an Enterprise-licensed
+    Databricks server or a free trial version of the Databricks server ([https://docs.databricks.com/getting-started/try-databricks.html#sign-up-for-a-databricks-free-trial](https://docs.databricks.com/getting-started/try-databricks.html#sign-up-for-a-databricks-free-trial))
+    in the cloud. The Community version of Databricks does not support this remote
+    execution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The Databricks CLI**: You need to set up the Databricks CLI where you issue
+    the MLflow project run commands. To install it, simply run the following command:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We also include this dependency in the `requirements.txt` file of `chapter05`
+    when you check out the code for this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`.databrickscfg` file in your local home folder. You don''t need both, but
+    if you do have both, the one defined using environment variables will take a higher
+    precedence when being picked up by the Databricks command line. The approach of
+    using environment variables and generating access tokens is described in the *Setting
+    up MLflow to interact with a remote MLflow server* section of [*Chapter 1*](B18120_01_ePub.xhtml#_idTextAnchor015),
+    *Deep Learning Life Cycle and MLOps Challenges*. Note these environment variables
+    can be set up in the command line directly or can be put into your `.bash_profile`
+    file if you are using a macOS or Linux machine.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here, we describe how we can use the Databricks command-line tool to generate
+    a `.databrickscfg` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Run the following command to set up the token configuration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Follow the prompt to fill in the remote Databricks host URL and the access
+    token:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now, if you check your local home folder, you should find a hidden file called
+    `.databrickscfg`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'If you open this file, you should be able to see something like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the last line indicates the remote job submission and execution API
+    version that the Databricks server is using.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that you have the access set up correctly, let''s see how we can run the
+    DL pipeline remotely in the remote Databricks server using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Since we are going to use the remote Databricks server, the local MLflow server
+    we set up before no longer works. This means that we need to disable and comment
+    out the following lines in the `main.py` file, which are only useful to the local
+    MLflow server setup (check out the latest version of the code for `chapter05`
+    from GitHub to follow the steps, at [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow.git](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow.git)):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Instead, we should use the following environment variable that can be defined
+    in a `.bash_profile` file or directly executed in the command line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will use the MLflow tracking server on the Databricks server. If you don't
+    specify this, it will default to a localhost but will fail since there is no localhost
+    version of MLflow on the remote Databricks server. So, make sure you have this
+    set up correctly. Now, we are ready to run our local code remotely.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, run the following command line to submit the local code to the remote
+    Databricks server to run. We will just start with the `download_data` step, as
+    follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'You will see this time that the command line has two new parameters: `-b databricks`,
+    which specifies the backend as a Databricks server, and `--backend-config cluster_spec.json`,
+    which details the cluster specification. The content of this `cluster_spec.json`
+    file is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This `cluster_spec.json` file is typically located in the same folder in which
+    the MLproject file is located and needs to be predefined so that the MLflow run
+    command can pick it up. The example we give here only defines a minimal set of
+    parameters needed to create a job cluster on Databricks using AWS's GPU virtual
+    machine as a single node, but you can create a much richer cluster specification
+    if necessary (see the following *Cluster Specification for Databricks* box for
+    more details).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cluster Specification for Databricks
+  prefs: []
+  type: TYPE_NORMAL
+- en: When submitting jobs to Databricks, it requires the creation of a new job cluster,
+    which is different from an interactive cluster that you already have, where you
+    can run an interactive job by attaching a notebook. A cluster specification is
+    defined by minimally specifying the Databricks runtime version, which in our current
+    example is `9.1.x-gpu-ml-scala2.12`, the number of worker nodes, and the node
+    type ID, as shown in our example. It is recommended to use the `g4dn.xlarge`)
+    for learning purposes. There are many other configurations that you can define
+    in this cluster specification, including storage and access permission, and `init`
+    scripts. The easiest way to generate a working cluster specification JSON file
+    is to use the Databricks portal UI to create a new cluster, where you can select
+    the Databricks runtime version, cluster node types, and other parameters ([https://docs.databricks.com/clusters/create.html](https://docs.databricks.com/clusters/create.html)).
+    Then, you can get the JSON representation of the cluster by clicking on the JSON
+    link on the top right of the **Create Cluster** UI page (see *Figure 5.2*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2 - An example of creating a cluster on Databricks'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_05_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.2 - An example of creating a cluster on Databricks
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Also notice that the `experiment-name` parameter in the preceding command no
+    longer just takes an experiment name string but needs to include an absolute path
+    in the Databricks workspace. This is different from the local MLflow tracking
+    server. This convention must be followed to make this remote job submission work.
+    Note that if you want to have several levels of subfolder structures, such as
+    the following, then each subfolder must already exist in the Databricks server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This means that the `rootPath`, `subfolder1,` and `subfolder2` folders must
+    already exist. If not, the command line will fail since it cannot create the parent
+    folder automatically on the Databricks server. That last string, `my_experiment_name`,
+    can be automatically created if it does not already exist since that''s the actual
+    experiment name that will host all the experiment runs. Note that, in this example,
+    we are using the command-line parameter to specify the experiment name, but it
+    is also possible to use the environment variable to specify it, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once this command is executed, you will see a much shorter console output message
+    this time compared with the previous run in a local environment. This is because
+    when executing code this way, it runs *asynchronous*, which means the job is submitted
+    to the remote Databricks server and immediately returns to the console without
+    waiting. Let''s look at the first three lines of the output:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The first line means that the experiment does not exist in the Databricks server,
+    so it is being created. If you run this a second time, this will not show up.
+    The second and third lines describe the process where MLflow packages the MLproject
+    as a `.tar.gz` file and uploads it to the Databricks file server. Note that, unlike
+    a GitHub project where it needs to check out the entire project from the repository,
+    here, it only needs to package the `chapter05` folder since that's where our MLproject
+    resides. This can be confirmed by looking at the job running logs in the Databricks
+    cluster, which we will explain (where to get the job URL and how to look for the
+    logs) in the next few paragraphs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Synchronous and Asynchronous Running of MLproject
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The official MLflow run CLI does not support a parameter to specify the running
+    of an MLflow project in asynchronous or synchronous mode. However, the MLflow
+    run Python API does have a parameter called `synchronous`, which by default is
+    set to be `True`. When using MLflow''s CLI to run an MLflow job using Databricks
+    as the backend, the default behavior is asynchronous. Sometimes, synchronous behavior
+    of the CLI run command is desirable during CI/CD automation when you need to make
+    sure the MLflow run completes successfully before moving to the next step. This
+    cannot be done with the official MLflow run CLI, but you can write a wrapper CLI
+    Python function to call MLflow''s Python API with synchronous mode set to `True`
+    and then use your own CLI Python command to run the MLflow job in synchronous
+    mode. Also, note that `mlflow.run()` is the high-level fluent (object-oriented)
+    API for the `mlflow.projects.run()` API. We use the `mlflow.run()` API extensively
+    in this book for consistency. For details on the MLflow run Python API, see the
+    official documentation page: [https://www.mlflow.org/docs/latest/python_api/mlflow.projects.html#mlflow.projects.run](https://www.mlflow.org/docs/latest/python_api/mlflow.projects.html#mlflow.projects.run).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next few lines of the output look similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: These lines describe that the job has been submitted to the Databricks server
+    and the job run ID and the job URL are shown in the last line (replace `???` with
+    your actual Databricks URL to make this work for you). Notice that the MLflow
+    run ID is `279456`, which is different from the ID you see in the job URL (`168339`).
+    This is because the job URL is managed by the Databricks job management system
+    and has a different way to generate and track each actual job.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Click the job URL link (`https://???.cloud.databricks.com#job/168339/run/1`)
+    and check the status of this job, which will show the progress and standard output
+    and error logs (see *Figure 5.3*). Usually, this page will take a few minutes
+    to start showing the running progress since it needs to create a brand new cluster
+    based on `cluster_spec.json` before it can start running the job.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.3 – MLflow run job status page with standard output'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_05_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.3 – MLflow run job status page with standard output
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5.3* shows the job was successfully finished (`chapter05` folder was
+    uploaded and extracted in the **Databricks File System** (**DBFS**). As mentioned
+    previously, only the MLproject we want to run was packaged, uploaded, and extracted
+    in the DBFS, not the entire project repository.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the same job status page, you will also find the standard errors section,
+    which shows the logs describing the pipeline step we wanted to run: `download_data`.
+    These are not errors but just informational messages. All Python logs are aggregated
+    here. See *Figure 5.4* for details:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4 – MLflow job information logged on the job status page'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_05_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.4 – MLflow job information logged on the job status page
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5.4* shows the log that''s very similar to what we see when we run
+    in the local interactive environment, but now these runs were executed in the
+    cluster we specified when we submitted the job. Note that the pipeline experiment
+    ID is `427565` in *Figure 5.4*. You should be able to find the successfully completed
+    MLflow DL pipeline runs in the integrated MLflow tracking server on the Databricks
+    server, using the experiment ID `427565` in the following URL pattern:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`https://[your databricks hostname]/#mlflow/experiments/427565`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you see the familiar tracking results as we have seen in previous chapters,
+    give yourself a big hug since you just completed a major learning milestone in
+    running local code in a remote Databricks cluster!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, we can run multiple steps of the DL pipeline using this approach
+    without changing any code in the individual step''s implementation. For example,
+    if we want to run both the `download_data` and `fine_tuning_model` steps of the
+    DL pipeline, we can issue the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output console will show the following short messages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can then go to the job URL page shown in the last line of the console output
+    and wait until it creates a new cluster and completes both steps. You should then
+    be able to find both steps in the experiment folder logged in the MLflow tracking
+    server, using the same experiment URL (since we use the same experiment name):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`https://[your databricks hostname]/#mlflow/experiments/427565`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how to run local code in a remote Databricks cluster, we will
+    learn how to run the code from a GitHub repository in a remote Databricks cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running remotely in the cloud with remote code in GitHub
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The most reliable way to reproduce a DL pipeline is to point to a specific version
+    of the project code in GitHub and then run it in the cloud without invoking any
+    local resources. This way, we know the exact version of the code as well as using
+    the same running environment defined in the project. Let's see how this works
+    with our DL pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a prerequisite and a reminder, the following three environment variables
+    need to be set up before you issue the MLflow run command to complete this section
+    of the learning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: We already know how to set up these environment variables from the last section.
+    There is potentially one more setup needed, which is to allow your Databricks
+    server to access your GitHub repository if it is non-public (see the following
+    *GitHub Token for Databricks to Access a Non-Public or Enterprise Project Repository*
+    box).
+  prefs: []
+  type: TYPE_NORMAL
+- en: GitHub Token for Databricks to Access a Non-Public or Enterprise Project Repository
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To allow Databricks to access the project repository in GitHub, there is another
+    token that''s needed. This can be generated by going to your personal GitHub page
+    (https://github.com/settings/tokens) and then following the steps described on
+    this page ([https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token)).
+    You can then follow the instructions on the Databricks documentation website to
+    set it up: [https://docs.databricks.com/repos.html#configure-your-git-integration-with-databricks](https://docs.databricks.com/repos.html#configure-your-git-integration-with-databricks).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s run the project using the specific version in the GitHub repository
+    for the full pipeline on the remote Databricks cluster:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will then see the output as brief as six lines. Let''s look at what the
+    important information on each line shows and how this works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first line shows where the content of the project repository was downloaded
+    to locally:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'If we go to the temporary directory shown in this message on the local machine
+    where we execute this command, we see that the entire repository is already downloaded
+    to this folder: `/var/folders/51/whxjy4r92dx18788yp11ycyr0000gp/T/tmpzcepn5h5`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next two lines show the project content was zipped and uploaded to a DBFS
+    folder on the Databricks server:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'If we use the local command-line tool of Databricks, we can list this `.tar.gz`
+    file as if it is a local file (but in fact, it is located remotely on the Databricks
+    server):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should see output similar to the following, which describes the attributes
+    of the file (size, owner/group ID, and whether it is a file or directory):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next line shows that it starts to run the `main` entry point for this GitHub
+    project:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note the difference when we run the local code (it was a *dot* after the project,
+    which means the current directory on the local system). Now, it lists the full
+    path of the GitHub repository location.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The last two lines are like the previous section''s output, where it lists
+    out the job URL:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'If we click the job URL in the last line of the console output, we will be
+    able to see the following content on that website (*Figure 5.5*):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.5 – MLflow run job status page using the code from the GitHub repository'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_05_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.5 – MLflow run job status page using the code from the GitHub repository
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5.5* shows the end status of this job. Notice that the title of the
+    page now says **MLflow Run for https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow#chapter05**,
+    instead of **MLflow Run for .** as shown in the previous section when using local
+    code to run.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The status of the job shows this was run successfully and you will also see
+    that the results are logged in the experiment page as before, with all three steps
+    finished. The model is also registered in the model registry as expected, in the
+    Databricks server under the following URL:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`https://[your_databricks_hostname]/#mlflow/models/dl_finetuned_model`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In summary, the mechanism of how this approach works is shown in the following
+    diagram (*Figure 5.6*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.6 – Summary view of running remote GitHub code in a remote Databricks
+    cluster server'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_05_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.6 – Summary view of running remote GitHub code in a remote Databricks
+    cluster server
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5.6* shows that there are three different locations (a machine where
+    we issue the MLflow run command, a remote Databricks server, and a remote GitHub
+    project). When an MLflow run command is issued, the remote GitHub project source
+    code is cloned to the machine where the MLflow run command was issued, and then
+    uploaded to the remote Databricks server with a job submitted to execute the multiple
+    steps of the DL pipeline. This is an asynchronous execution, and the status of
+    the job needs to be monitored based on the job URL created.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running an MLflow Project on Other Backends
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Right now, Databricks supports two types of remote running backend environments:
+    Databricks and K8s. However, as of MLflow version 1.22.0 ([https://www.mlflow.org/docs/latest/projects.html#run-an-mlflow-project-on-kubernetes-experimental](https://www.mlflow.org/docs/latest/projects.html#run-an-mlflow-project-on-kubernetes-experimental)),
+    running MLflow projects on K8s is still in experimental mode and is subject to
+    change. If you are interested in learning more about this, refer to the reference
+    in the *Further reading* section to explore an example provided. There are also
+    other third-party provided backends (also called community plugins) such as `hadoop-yarn`
+    ([https://github.com/criteo/mlflow-yarn](https://github.com/criteo/mlflow-yarn)).
+    Due to the availability of Databricks in all major cloud providers and its maturity
+    in supporting enterprise security-compliant production scenarios, this book currently
+    focuses on learning about running MLflow projects remotely in a Databricks server.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have learned how to run a DL pipeline in different execution
+    environments (local or remote Databricks clusters) using either local source code
+    or GitHub project repository code. This is critical not just for reproducibility
+    and flexibility in executing a DL pipeline, but also provides much better productivity
+    and future automation possibility using CI/CD tools. The power to run one or multiple
+    steps of a DL pipeline in remote resource-rich environments gives us the speed
+    to execute large-scale computation and data-intensive jobs that are typically
+    seen in production-quality DL model training and fine-tuning. This allows us to
+    do hyperparameter tuning or cross-validation of a DL model if necessary. We will
+    start to learn how to run large-scale hyperparameter tuning in the next chapter
+    as our natural next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'MLflow run projects parameters (for both command line and Python API): [https://www.mlflow.org/docs/latest/projects.html#running-projects](https://www.mlflow.org/docs/latest/projects.html#running-projects)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'MLflow run command line (CLI) documentation: [https://www.mlflow.org/docs/latest/cli.html#mlflow-run](https://www.mlflow.org/docs/latest/cli.html#mlflow-run)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'MLflow run projects on Databricks: [https://www.mlflow.org/docs/latest/projects.html#run-an-mlflow-project-on-databricks](https://www.mlflow.org/docs/latest/projects.html#run-an-mlflow-project-on-databricks)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'An example of running an MLflow project on K8s: [https://github.com/SameeraGrandhi/mlflow-on-k8s/tree/master/examples/LogisticRegression](https://github.com/SameeraGrandhi/mlflow-on-k8s/tree/master/examples/LogisticRegression)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Running MLflow projects on Azure: [https://docs.microsoft.com/en-us/azure/machine-learning/how-to-train-mlflow-projects](https://docs.microsoft.com/en-us/azure/machine-learning/how-to-train-mlflow-projects)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

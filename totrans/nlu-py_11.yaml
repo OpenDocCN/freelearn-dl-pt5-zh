@@ -1,0 +1,979 @@
+- en: '11'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Machine Learning Part 3 – Transformers and Large Language Models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will cover the currently best-performing techniques in **natural
+    language processing** (**NLP**) – **transformers** and **pretrained models**.
+    We will discuss the concepts behind transformers and include examples of using
+    transformers and **large language models** (**LLMs**) for text classification.
+    The code for this chapter will be based on the TensorFlow/Keras Python libraries
+    and the cloud services provided by OpenAI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The topics covered in this chapter are important because although transformers
+    and LLMs are only a few years old, they have become state-of-the-art for many
+    different types of NLP applications. In fact, LLM systems such as ChatGPT have
+    been widely covered in the press and you have undoubtedly encountered references
+    to them. You have probably even used their online interfaces. In this chapter,
+    you will learn how to work with the technology behind these systems, which should
+    be part of the toolkit of every NLP developer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overview of transformers and large language models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Bidirectional Encoder Representations from Transformers** (**BERT**) and
+    its variants'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using BERT – a classification example
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cloud-based LLMs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We’ll start by listing the technical resources that we’ll use to run the examples
+    in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The code that we will go over in this chapter makes use of a number of open
+    source software libraries and resources. We have used many of these in earlier
+    chapters, but we will list them here for convenience:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Tensorflow machine learning libraries: `hub`, `text`, and `tf-models`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Python numerical package, NumPy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Matplotlib plotting and graphical package
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The IMDb movie reviews dataset
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: scikit-learn’s `sklearn.model_selection` to do the training, validation, and
+    test split
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A BERT model from TensorFlow Hub: we’re using this one –`''small_bert/bert_en_uncased_L-4_H-512_A-8''`
+    – but you can use any other BERT model you like, bearing in mind that larger models
+    might take a long time to train'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that we have kept the models relatively small here so that they don’t require
+    an especially powerful computer. The examples in this chapter were tested on a
+    Windows 10 machine with an Intel 3.4 GHz CPU and 16 GB of RAM, without a separate
+    GPU. Of course, more computing resources will speed up your training runs and
+    enable you to use larger models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next section provides a brief description of the transformer and LLM technology
+    that we’ll be using.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overview of transformers and LLMs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Transformers and LLMs are currently the best-performing technologies for **natural
+    language understanding** (**NLU**). This does not mean that the approaches covered
+    in earlier chapters are obsolete. Depending on the requirements of a specific
+    NLP project, some of the simpler approaches may be more practical or cost-effective.
+    In this chapter, you will get information about the more recent approaches that
+    you can use to make that decision.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is a great deal of information about the theoretical aspects of these
+    techniques available on the internet, but here we will focus on applications and
+    explore how these technologies can be applied to solving practical NLU problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in [*Chapter 10*](B19005_10.xhtml#_idTextAnchor184), **recurrent neural
+    networks** (**RNNs**) have been a very effective approach in NLP because they
+    don’t assume that the elements of input, specifically words, are independent,
+    and so are able to take into account sequences of input elements such as the order
+    of words in sentences. As we have seen, RNNs keep the memory of earlier inputs
+    by using previous outputs as inputs to later layers. However, with RNNs, the effect
+    of earlier inputs on the current input diminishes quickly as processing proceeds
+    through the sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When longer documents are processed, because of the context-dependent nature
+    of natural language, even very distant parts of the text can have a strong effect
+    on the current input. In fact, in some cases, distant inputs can be more important
+    than more recent parts of the input. But when the data is a long sequence, processing
+    with an RNN means that the earlier information will not be able to have much impact
+    on the later processing. Some initial attempts to address this issue include **long
+    short-term memory** (**LSTM**), which allows the processor to maintain the state
+    and includes forget gates, and **gated recurrent units** (**GRUs**), a new and
+    relatively fast type of LSTM, which we will not cover in this book. Instead, we
+    will focus on more recent approaches such as attention and transformers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing attention
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Attention** is a technique that allows a network to learn where to pay attention
+    to the input.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initially, attention was used primarily in machine translation. The processing
+    was based on an encoder-decoder architecture where a sentence was first encoded
+    into a vector and then decoded into the translation. In the original encoder-decoder
+    idea, each input sentence was encoded into a fixed-length vector. It turned out
+    that it was difficult to encode all of the information in a sentence into a fixed-length
+    vector, especially a long sentence. This is because more distant words that were
+    outside of the scope of the fixed-length vector were not able to influence the
+    result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Encoding the sentence into a *set* of vectors, one per word, removed this limitation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As one of the early papers on attention states, “*The most important distinguishing
+    feature of this approach from the basic encoder-decoder is that it does not attempt
+    to encode a whole input sentence into a single fixed-length vector. Instead, it
+    encodes the input sentence into a sequence of vectors and chooses a subset of
+    these vectors adaptively while decoding the translation. This frees a neural translation
+    model from having to squash all the information of a source sentence, regardless
+    of its length, into a fixed-length vector.*” (Bahdanau, D., Cho, K., & Bengio,
+    Y. (2014). *Neural machine translation by jointly learning to align and translate*.
+    arXiv preprint arXiv:1409.0473.)
+  prefs: []
+  type: TYPE_NORMAL
+- en: For machine translation applications, it is necessary both to encode the input
+    text and to decode the results into the new language in order to produce the translated
+    text. In this chapter, we will simplify this task by using a classification example
+    that uses just the encoding part of the attention architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A more recent technical development has been to demonstrate that one component
+    of the attention architecture, RNNs, was not needed in order to get good results.
+    This new development is called **transformers**, which we will briefly mention
+    in the next section, and then illustrate with an in-depth example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying attention in transformers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Transformers are a development of the attention approach that dispenses with
+    the RNN part of the original attention systems. Transformers were introduced in
+    the 2017 paper *Attention is all you need* (Ashish Vaswani, et al., 2017\. *Attention
+    is all you need*. In the Proceedings of the 31st International Conference on Neural
+    Information Processing Systems (NIPS’17). Curran Associates Inc., Red Hook, NY,
+    USA, 6000-6010). The paper showed that good results can be achieved just with
+    attention. Nearly all research on NLP learning models is now based on transformers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A second important technical component of the recent dramatic increases in NLP
+    performance is the idea of pretraining models based on large amounts of existing
+    data and making them available to NLP developers. The next section talks about
+    the advantages of this approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Leveraging existing data – LLMs or pre-trained models
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: So far, in this book, we’ve created our own text representations (vectors) from
+    training data. In our examples so far, all of the information that the model has
+    about the language is contained in the training data, which is a very small sample
+    of the full language. But if models start out with general knowledge of a language,
+    they can take advantage of vast amounts of training data that would be impractical
+    for a single project. This is called the **pretraining** of a model. These pretrained
+    models can be reused for many projects because they capture general information
+    about a language. Once a pretrained model is available, it can be fine-tuned to
+    specific applications by supplying additional data
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next section will introduce one of the best-known and most important pretrained
+    transformer models, BERT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BERT and its variants
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As an example of an LLM technology based on transformers, we will demonstrate
+    the use of BERT, a widely used state-of-the-art system. BERT is an open source
+    NLP approach developed by Google that is the foundation of today’s state-of-the-art
+    NLP systems. The source code for BERT is available at [https://github.com/google-research/bert](https://github.com/google-research/bert).
+  prefs: []
+  type: TYPE_NORMAL
+- en: BERT’s key technical innovation is that the training is bidirectional, that
+    is, taking both previous and later words in input into account. A second innovation
+    is that BERT’s pretraining uses a masked language model, where the system masks
+    out a word in the training data and attempts to predict it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BERT also uses only the encoder part of the encoder-decoder architecture because,
+    unlike machine translation systems, it focuses only on understanding; it doesn’t
+    produce language.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another advantage of BERT, unlike the systems we’ve discussed earlier in this
+    book, is that the training process is unsupervised. That is, the text that it
+    is trained on does not need to be annotated or assigned any meaning by a human.
+    Because it is unsupervised, the training process can take advantage of the enormous
+    quantities of text available on the web, without needing to go through the expensive
+    process of having humans review it and decide what it means.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The initial BERT system was published in 2018\. Since then, the ideas behind
+    BERT have been explored and expanded into many different variants. The different
+    variants have various features that make them appropriate for addressing different
+    requirements. Some of these features include faster training times, smaller models,
+    or higher accuracy. *Table 11.1* shows a few of the common BERT variants and their
+    specific features. Our example will use the original BERT system since it is the
+    basis of all the other BERT versions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Acronym** | **Name** | **Date** | **Features** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| BERT | Bidirectional Encoder Representations from Transformer | 2018 | The
+    original BERT system. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| BERT-Base |  |  | A number of models released by the original BERT authors.
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| RoBERTa | Robustly Optimized BERT pre-training approach | 2019 | In this
+    approach, different parts of the sentences are masked in different epochs, which
+    makes it more robust to variations in the training data. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ALBERT | A Lite BERT | 2019 | A version of BERT that shares parameters between
+    layers in order to reduce the size of models. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| DistilBERT |  | 2020 | Smaller and faster than BERT with good performance
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| TinyBERT |  | 2019 | Smaller and faster than BERT-Base with good performance;
+    good for resource-restricted devices. |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 11.1 – BERT variations
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next section will go through a hands-on example of a BERT application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using BERT – a classification example
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this example, we’ll use BERT for classification, using the movie review dataset
+    we saw in earlier chapters. We will start with a pretrained BERT model and *fine-tune*
+    it to classify movie reviews. This is a process that you can follow if you want
+    to apply BERT to your own data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using BERT for specific applications starts with one of the pretrained models
+    available from TensorFlow Hub ([https://tfhub.dev/tensorflow](https://tfhub.dev/tensorflow))
+    and then fine-tuning it with training data that is specific to the application.
+    It is recommended to start with one of the small BERT models, which have the same
+    architecture as BERT but are faster to train. Generally, the smaller models are
+    less accurate, but if their accuracy is adequate for the application, it isn’t
+    necessary to take the extra time and computer resources that would be needed to
+    use a larger model. There are many models of various sizes that can be downloaded
+    from TensorFlow Hub.
+  prefs: []
+  type: TYPE_NORMAL
+- en: BERT models can also be cased or uncased, depending on whether they take the
+    case of text into account. Uncased models will typically provide better results
+    unless the application is one where the case of the text is informative, such
+    as **named entity recognition** (**NER**), where proper names are important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this example, we will work with the `small_bert/bert_en_uncased_L-4_H-512_A-8/1`
+    model. It has the following properties, which are encoded in its name:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Small BERT
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Uncased
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 4 hidden layers (L-4)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A hidden size of 512
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 8 attention heads (A-8)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This model was trained on Wikipedia and BooksCorpus. This is a very large amount
+    of text, but there are many pretrained models that were trained on much larger
+    amounts of text, which we will discuss later in the chapter. Indeed, an important
+    trend in NLP is developing and publishing models trained on larger and larger
+    amounts of text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The example that will be reviewed here is adapted from the TensorFlow tutorial
+    for text classification with BERT. The full tutorial can be found here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://colab.research.google.com/github/tensorflow/text/blob/master/docs/tutorials/classify_text_with_bert.ipynb#scrollTo=EqL7ihkN_862](https://colab.research.google.com/github/tensorflow/text/blob/master/docs/tutorials/classify_text_with_bert.ipynb#scrollTo=EqL7ihkN_862'
+  prefs: []
+  type: TYPE_NORMAL
+- en: )
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll start by installing and loading some basic libraries. We will be using
+    a Jupyter notebook (you will recall that the process of setting up a Jupyter notebook
+    was covered in detail in [*Chapter 4*](B19005_04.xhtml#_idTextAnchor085), and
+    you can refer to [*Chapter 4*](B19005_04.xhtml#_idTextAnchor085) for additional
+    details if necessary):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Our BERT fine-tuned model will be developed through the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing data.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Splitting the data into training, validation, and testing subsets.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Loading a BERT model from TensorFlow Hub.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Building a model by combining BERT with a classifier.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Fine-tuning BERT to create a model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Defining the loss function and metrics.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Defining the optimizer and number of training epochs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compiling the model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training the model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Plotting the results of the training steps over the training epochs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluating the model with the test data.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Saving the model and using it to classify texts.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The following sections will go over each of these steps in detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing the data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The first step is to install the data. We will use the NLTK movie review dataset
+    that we installed in [*Chapter 10*](B19005_10.xhtml#_idTextAnchor184). We will
+    use the `tf.keras.utils.text_dataset_from_directory` utility to make a TensorFlow
+    dataset from the movie review directory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: There are 2,000 files in the dataset, divided into two classes, `neg` and `pos`.
+    We print the class names in the final step as a check to make sure the class names
+    are as expected. These steps can be used for any dataset that is contained in
+    a directory structure with examples of the different classes contained in different
+    directories with the class names as directory names.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Splitting the data into training, validation, and testing sets
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The next step is to split the dataset into training, validation, and testing
+    sets. As you will recall from earlier chapters, the training set is used to develop
+    the model. The validation set, which is kept separate from the training set, is
+    used to look at the performance of the system on data that it hasn’t been trained
+    on during the training process. In our example, we will use a common split of
+    80% training 10% for validation, and 10% for testing. The validation set can be
+    used at the end of every training epoch, to see how training is progressing. The
+    testing set is only used once, as a final evaluation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Loading the BERT model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The next step is to load the BERT model we will fine-tune in this example, as
+    shown in the following code block. As discussed previously, there are many BERT
+    models to select from, but this model is a good choice to start with.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will also need to provide a preprocessor to transform the text inputs into
+    numeric token IDs before their input to BERT. We can use the matching preprocessor
+    provided by TensorFlow for this model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The code here specifies the model we’ll use and defines some convenience variables
+    to simplify reference to the model, the encoder, and the preprocessor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the model for fine-tuning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The following code defines the model we will use. We can increase the size
+    of the parameter to the `Dropout` layer if desired to make the model robust to
+    variations in the training data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In *Figure 11**.1*, we can see a visualization of the model’s layers, including
+    the text input layer, the preprocessing layer, the BERT layer, the dropout layer,
+    and the final classifier layer. The visualization was produced by the last line
+    in the code block. This structure corresponds to the structure we defined in the
+    preceding code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 11.1 – Visualizing the model structure](img/B19005_11_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 11.1 – Visualizing the model structure
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sanity checks such as this visualization are useful because, with larger datasets
+    and models, the training process can be very lengthy, and if the structure of
+    the model is not what was intended, a lot of time can be wasted in trying to train
+    an incorrect model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the loss function and metrics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We will use a cross-entropy function for the loss function. `losses.BinaryCrossEntropy`
+    loss function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: A classification application with several possible outcomes, such as an intent
+    identification problem where we have to decide which of 10 intents to assign to
+    an input, would use categorical cross-entropy. Similarly, since this is a binary
+    classification problem, the metric should be `binary accuracy`, rather than simply
+    `accuracy`, which would be appropriate for a multi-class classification problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the optimizer and the number of epochs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The optimizer improves the efficiency of the learning process. We’re using
+    the popular `Adam` optimizer here, and starting it off with a very small learning
+    rate (`3e-5`), which is recommended for BERT. The optimizer will dynamically adjust
+    the learning rate during training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that we have selected 15 epochs of training. For the first training run,
+    we’ll try to balance the goals of training on enough epochs to get an accurate
+    model and wasting time training on more epochs than needed. Once we get our results
+    from the first training run, we can adjust the number of epochs to balance these
+    goals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compiling the model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Using the classifier model in the call to `def build_classifier_model()`, we
+    can compile the model with the loss, metrics, and optimizer, and take a look at
+    the summary. It’s a good idea to check the model before starting a lengthy training
+    process to make sure the model looks as expected:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The summary of the model will look something like the following (we will only
+    show a few lines because it is fairly long):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The output here just summarizes the first two layers – input and preprocessing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next step is training the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the following code, we start the training process with a call to `classifier_model.fit(_)`.
+    We supply this method with parameters for the training data, the validation data,
+    the verbosity level, and the number of epochs (which we set earlier), as shown
+    in this code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the `classifier_model.fit()` method returns a `history` object, which
+    will include information about the progress of the complete training process.
+    We will use the `history` object to create plots of the training process. These
+    will provide quite a bit of insight into what happened during training, and we
+    will use this information to guide our next steps. We will see these plots in
+    the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training times for transformer models can be quite lengthy. The time taken depends
+    on the size of the dataset, the number of epochs, and the size of the model, but
+    this example should probably not take more than an hour to train on a modern CPU.
+    If running this example takes significantly longer than that, you may want to
+    try testing with a higher verbosity level (2 is the maximum) so that you can get
+    more information about what is going on in the training process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end of this code block, we also see the results of processing the first
+    epoch of training. We can see that the first epoch of training took `189` seconds.
+    The loss was `0.7` and the accuracy was `0.54`. The loss and accuracy after one
+    epoch of training are not very good, but they will improve dramatically as training
+    proceeds. In the next section, we will see how to show the training progress graphically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Plotting the training process
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After training is complete, we will want to see how the system’s performance
+    changes over training epochs. We can see this with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding code defines some variables and gets the relevant metrics (`binary_accuracy`
+    and `loss` for the training and validation data) from the model’s `history` object.
+    We are now ready to plot the progress of the training process. As usual, we will
+    use Matplotlib to create our plots:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In *Figure 11**.2*, we see the plot of the decreasing loss and increasing accuracy
+    over time as the model is trained. The dashed lines represent the training loss
+    and accuracy, and the solid lines represent the validation loss and accuracy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 11.2 – Accuracy and loss during the training process](img/B19005_11_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 11.2 – Accuracy and loss during the training process
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is most typical for the validation accuracy to be less than the training
+    accuracy, and for the validation loss to be greater than the training loss, but
+    this will not necessarily be the case, depending on how the data is split between
+    validation and training subsets. In this example, the validation loss is uniformly
+    lower than the training loss and the validation accuracy is uniformly higher than
+    the training accuracy. We can see from this plot that the system isn’t changing
+    after the first fourteen epochs. In fact, its performance is almost perfect.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consequently, it is clear that there isn’t any reason to train the system after
+    this point. In comparison, look at the plots around epoch `4`. We can see that
+    it would not be a good idea to stop training after four epochs because loss is
+    still decreasing and accuracy is still increasing. Another interesting observation
+    that we can see in *Figure 11**.2* around epoch `7` is that the accuracy seems
+    to decrease a bit. If we had stopped training at epoch `7`, we couldn’t tell that
+    accuracy would start to increase again at epoch `8`. For that reason, it’s a good
+    idea to keep training until we either see the metrics level off or start to get
+    consistently worse.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we have a trained model, and we’d like to see how it performs on previously
+    unseen data. This unseen data is the test data that we set aside during the training,
+    validation, and testing split.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating the model on the test data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'After the training is complete, we can see how the model performs on the test
+    data. This can be seen in the following output, where we can see that the system
+    is doing very well. The accuracy is nearly 100% and the loss is near zero:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is consistent with the system performance during training that we saw in
+    *Figure 11**.2*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It looks like we have a very accurate model. If we want to use it later on,
+    we can save it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Saving the model for inference
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The final step is to save the fine-tuned model for later use – for example,
+    if the model is to be used in a production system, or if we want to use it in
+    further experiments. The code for saving the model can be seen here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the code here, we show both saving the model and then reloading it from the
+    saved location.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in this section, BERT can be trained to achieve very good performance
+    by fine-tuning it with a relatively small (2,000-item) dataset. This makes it
+    a good choice for many practical problems. Looking back at the example of classification
+    with the multi-layer perceptron in [*Chapter 10*](B19005_10.xhtml#_idTextAnchor184),
+    we saw that the accuracy (as shown in *Figure 10**.4*) was never better than about
+    80% for the validation data, even after 20 epochs of training. Clearly, BERT does
+    much better than that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although BERT is an excellent system, it has recently been surpassed by very
+    large cloud-based pretrained LLMs. We will describe them in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cloud-based LLMs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recently, there have been a number of cloud-based pretrained large language
+    models that have shown very impressive performance because they have been trained
+    on very large amounts of data. In contrast to BERT, they are too large to be downloaded
+    and used locally. In addition, some are closed and proprietary and can’t be downloaded
+    for that reason. These newer models are based on the same principles as BERT,
+    and they have shown a very impressive performance. This impressive performance
+    is due to the fact that these models have been trained with much larger amounts
+    of data than BERT. Because they cannot be downloaded, it is important to keep
+    in mind that they aren’t appropriate for every application. Specifically, if there
+    are any privacy or security concerns regarding the data, it may not be a good
+    idea to send it to the cloud for processing. Some of these systems are GPT-2,
+    GPT-3, GPT-4, ChatGPT, and OPT-175B, and new LLMs are being published on a frequent
+    basis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The recent dramatic advances in NLP represented by these systems are made possible
+    by three related technical advances. One is the development of techniques such
+    as attention, which are much more able to capture relationships among words in
+    texts than previous approaches such as RNNs, and which scale much better than
+    the rule-based approaches that we covered in [*Chapter 8*](B19005_08.xhtml#_idTextAnchor159).
+    The second factor is the availability of massive amounts of training data, primarily
+    in the form of text data on the World Wide Web. The third factor is the tremendous
+    increase in computer resources available for processing this data and training
+    LLMs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far in the systems we’ve discussed, all of the knowledge of a language that
+    goes into the creation of a model for a specific application is derived from the
+    training data. The process starts without knowing anything about the language.
+    LLMs, on the other hand, come with models that have been *pretrained* through
+    processing very large amounts of more or less generic text, and as a consequence
+    have a basic foundation of information about the language. Additional training
+    data can be used for *fine-tuning* the model so that it can handle inputs that
+    are specific to the application. An important aspect of fine-tuning a model for
+    a specific application is to minimize the amount of new data that is needed for
+    fine-tuning. This is a cutting-edge area in NLP research and you may find references
+    to training approaches called **few-shot learning**, which is learning to recognize
+    a new class with only a few examples, or even **zero-shot learning**, which enables
+    a system to identify a class without having seen any examples of that class in
+    the training data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we’ll take a look at one of the currently most popular
+    LLMs, ChatGPT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ChatGPT
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'ChatGPT ([https://openai.com/blog/chatgpt/](https://openai.com/blog/chatgpt/))
+    is a system that can interact with users about generic information in a very capable
+    way. Although at the time of writing, it is hard to customize ChatGPT for specific
+    applications, it can be useful for other purposes than customized natural language
+    applications. For example, it can very easily be used to generate training data
+    for a conventional application. If we wanted to develop a banking application
+    using some of the techniques discussed earlier in this book, we would need training
+    data to provide the system with examples of how users might ask the system questions.
+    Typically, this involves a process of collecting actual user input, which could
+    be very time-consuming. ChatGPT could be used to generate training data instead,
+    by simply asking it for examples. For example, for the prompt *give me 10 examples
+    of how someone might ask for their checking balance*, ChatGPT responded with the
+    sentences in *Figure 11**.3*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 11.3 – GPT-3 generated training data for a banking application](img/B19005_11_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 11.3 – GPT-3 generated training data for a banking application
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most of these seem like pretty reasonable queries about a checking account,
+    but some of them don’t seem very natural. For that reason, data generated in this
+    way always needs to be reviewed. For example, a developer might decide not to
+    include the second to the last example in a training set because it sounds stilted,
+    but overall, this technique has the potential to save developers quite a bit of
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying GPT-3
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another well-known LLM, GPT-3, can also be fine-tuned with application-specific
+    data, which should result in better performance. To do this, you need an OpenAI
+    key because using GPT-3 is a paid service. Both fine-tuning to prepare the model
+    and using the fine-tuned model to process new data at inference time will incur
+    a cost, so it is important to verify that the training process is performing as
+    expected before training with a large dataset and incurring the associated expense.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenAI recommends the following steps to fine-tune a GPT-3 model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sign up for an account at [https://openai.com/](https://openai.com/) and obtain
+    an API key. The API key will be used to track your usage and charge your account
+    accordingly.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Install the OpenAI **command-line interface** (**CLI**) with the following
+    command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This command can be used at a terminal prompt in Unix-like systems (some developers
+    have reported problems with Windows or macOS). Alternatively, you can install
+    GPT-3 to be used in a Jupyter notebook with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'All of the following examples assume that the code is running in a Jupyter
+    notebook:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Set your API key:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The next step is to specify the training data that you will use for fine-tuning
+    GPT-3 for your application. This is very similar to the process of training any
+    NLP system; however, GPT-3 has a specific format that must be used for training
+    data. This format uses a syntax called JSONL, where every line is an independent
+    JSON expression. For example, if we want to fine-tune GPT-3 to classify movie
+    reviews, a couple of data items would look like the following (omitting some of
+    the text for clarity):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Each item consists of a JSON dict with two keys, `prompt` and `completion`.
+    `prompt` is the text to be classified, and `completion` is the correct classification.
+    All three of these items are negative reviews, so the completions are all marked
+    as `negative`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It might not always be convenient to get your data into this format if it is
+    already in another format, but OpenAI provides a useful tool for converting other
+    formats into JSONL. It accepts a wide range of input formats, such as CSV, TSV,
+    XLSX, and JSON, with the only requirement for the input being that it contains
+    two columns with `prompt` and `completion` headers. *Table 11.2* shows a few cells
+    from an Excel spreadsheet with some movie reviews as an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **prompt** | **completion** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| kolya is one of the richest films i’ve seen in some time . zdenek sverak
+    plays a confirmed old bachelor ( who’s likely to remain so ) , who finds his life
+    as a czech cellist increasingly impacted by the five-year old boy that he’s taking
+    care of … | positive |'
+  prefs: []
+  type: TYPE_TB
+- en: '| this three hour movie opens up with a view of singer/guitar player/musician/composer
+    frank zappa rehearsing with his fellow band members . all the rest displays a
+    compilation of footage , mostly from the concert at the palladium in new york
+    city , halloween 1979 … | positive |'
+  prefs: []
+  type: TYPE_TB
+- en: '| `strange days’ chronicles the last two days of 1999 in los angeles . as the
+    locals gear up for the new millenium , lenny nero ( ralph fiennes ) goes about
+    his business … | positive |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 11.2 – Movie review data for fine-tuning GPT-3
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To convert one of these alternative formats into JSONL, you can use the `fine_tunes.prepare_data`
+    tool, as shown here, assuming that your data is contained in the `movies.csv`
+    file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `fine_tunes.prepare_data` utility will create a JSONL file of the data and
+    will also provide some diagnostic information that can help improve the data.
+    The most important diagnostic that it provides is whether or not the amount of
+    data is sufficient. OpenAI recommends several hundred examples of good performance.
+    Other diagnostics include various types of formatting information such as separators
+    between the prompts and the completions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the data is correctly formatted, you can upload it to your OpenAI account
+    and save the filename:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is to create and save a fine-tuned model. There are several different
+    OpenAI models that can be used. The one we’re using here, `ada`, is the fastest
+    and least expensive, and does a good job on many classification tasks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can test the model with a new prompt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, since we are only using a few fine-tuning utterances, the results
+    will not be very good. You are encouraged to experiment with larger amounts of
+    training data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter covered the currently best-performing techniques in NLP – transformers
+    and pretrained models. In addition, we have demonstrated how they can be applied
+    to processing your own application-specific data, using both local pretrained
+    models and cloud-based models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specifically, you learned about the basic concepts behind attention, transformers,
+    and pretrained models, and then applied the BERT pretrained transformer system
+    to a classification problem. Finally, we looked at using the cloud-based GPT-3
+    systems for generating data and for processing application-specific data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [*Chapter 12*](B19005_12.xhtml#_idTextAnchor217), we will turn to a different
+    topic – unsupervised learning. Up to this point, all of our models have been *supervised*,
+    which you will recall means that the data has been annotated with the correct
+    processing result. Next, we will discuss applications of *unsupervised* learning.
+    These applications include topic modeling and clustering. We will also talk about
+    the value of unsupervised learning for exploratory applications and maximizing
+    scarce data. It will also address types of partial supervision, including weak
+    supervision and distant supervision.
+  prefs: []
+  type: TYPE_NORMAL

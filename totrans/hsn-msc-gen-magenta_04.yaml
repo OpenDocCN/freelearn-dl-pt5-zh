@@ -1,0 +1,1393 @@
+- en: Generating Drum Sequences with the Drums RNN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you'll learn what many consider the foundation of music—percussion.
+    We'll show the importance of **Recurrent Neural Networks** (**RNNs**) for music
+    generation. You'll then learn how to use the Drums RNN model using a pre-trained
+    drum kit model, by calling it in the command-line window and directly in Python,
+    to generate drum sequences. We'll introduce the different model parameters, including
+    the model's MIDI encoding, and show how to interpret the output of the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The significance of RNNs in music generation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using the Drums RNN in the command line
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using the Drums RNN in Python
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''ll use the following tools:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **command line** or **bash** to launch Magenta from the Terminal
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Python** and its libraries to write music generation code using Magenta'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Magenta** to generate music in MIDI'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**MuseScore** or **FluidSynth** to listen to the generated MIDI'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In Magenta, we'll make the use of the **Drums RNN** model. We'll be explaining
+    this model in depth, but if you feel like you need more information, the model's
+    README in Magenta's source code ([github.com/tensorflow/magenta/tree/master/magenta/models/drums_rnn](https://github.com/tensorflow/magenta/tree/master/magenta/models/drums_rnn))
+    is a good place to start. You can also take a look at Magenta's code on GitHub,
+    which is well documented. We also provide additional content in the last section,
+    *Further reading*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for this chapter is in this book's GitHub repository in the `Chapter02`
+    folder, located at [github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter02](https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter02).
+    For this chapter, you should run `cd Chapter02` in the command-line window before
+    you start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Check out the following video to see the Code in Action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[http://bit.ly/37G0mmW](http://bit.ly/37G0mmW)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The significance of RNNs in music generation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Specific neural network architectures are designed for specific problems. It
+    doesn't mean that one architecture is better than another one—it just means it
+    is better at a specific task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we'll be looking at our specific problem, generating music,
+    and see why RNNs are well suited for the task. We'll be building our knowledge
+    of neural network architectures for music throughout this book, by introducing
+    specific concepts in each chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For music generation, we are looking at two specific problems that RNNs solve—operating
+    on sequences in terms of input and output and keeping an internal state of past
+    events. Let's have a look at those properties.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Musical score prediction is analogous to generating music. By predicting the
+    next notes from an input sequence, you can iteratively generate a new sequence
+    by choosing a prediction at each iteration. This process is described in the *Understanding
+    the generation algorithm* section in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Operating on a sequence of vectors
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In many neural net architectures, **input size** and **output size** are fixed.
+    Take a **Convolutional Neural Network** (**CNN**), for example. This neural net
+    can be used for image classification, with the input being an array of pixels
+    representing the image and the output the prediction for each element of a set
+    of classes (for example, "cat," "dog," and so on). Notice the input and output
+    are of fixed size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is nice about RNNs is that input and output size can be of arbitrary lengths.
+    For a music score prediction network, an input could be an arbitrary length sequence
+    of notes, and the output could be a sequence of predicted notes from that input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is possible in an RNN because it works on a **sequence** of vectors. There
+    are many ways of representing RNN types:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**One**-**to**-**one**: This is where there''s fixed input and output; an example
+    is image classification.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**One**-**to**-**many**: This is where there''s fixed input to sequence output;
+    an example is image captioning, where the network will generate a text based on
+    the image content.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Many**-**to**-**one**: Here, there''s sequence input to fixed output; an
+    example is sentiment analysis, where the network will output a single word (sentiment)
+    describing an input sentence.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Many**-**to**-**many**: Here, there''s sequence input to sequence output;
+    an example is language translation, where the network will output a full sentence
+    in a language from a full sentence in another language.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A classic way of representing an RNN is shown in the following diagram. On
+    the left side of the diagram, you have a compact representation of the network—the
+    hidden layer outputs the feeds into itself. On the right side, you have the detailed
+    representation of the same network—at each step, the hidden layer takes an input
+    and the previous state and produces an output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/96ac9fbc-545c-46e4-abe0-5de6187303a3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The bottom row of the diagram shows the input vectors, the middle row of the
+    diagram shows the hidden layers, and the upper row of the diagram shows the output
+    layer. This representation shows how well an RNN can represent many-to-many inputs
+    and outputs for the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A sequence of vectors for the input: *{ ..., x(t - 1), x(t), x(t + 1), ...
+    }*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A sequence of vectors for the output: *{ ..., y(t - 1), y(t), y(t + 1), ...
+    }*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Remember the past to better predict the future
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we saw in the previous section, in RNNs, the input vector is combined with
+    its state vector to produce the output, which is then used to update the state
+    vector for the next step. This is different than feed-forward neural networks
+    such as CNNs, where the network feeds information from the input to the output
+    and only in that direction, meaning the output is a function of only its input,
+    not previous events.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's look at how we define a simple RNN. We implement a single operation, the
+    `step` operation, that takes an input vector, `x`, and returns an output vector, `y`.
+    Each time the step operation is called, the RNN needs to update its state, the
+    hidden vector, `h`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is important to note here, is that we can **stack** as many RNNs as we
+    want by taking the output of an RNN and feeding it in the next RNN, just like
+    in the previous diagram. For example, we could go `y1 = rnn1.step(x1)`, `y2 =
+    rnn2.step(y1)`, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When training the RNN, during the forward pass, we need to update the state,
+    calculate the output vector, and update the loss. But how do we update the state?
+    Let''s see the steps we need to follow:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we do the matrix multiplication of the hidden state matrix (`Whh`) with
+    the previous hidden state (`hs[t-1]`), `np.dot(Whh, hs[t-1])`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Then, we sum it with the matrix multiplication of the current input matrix (`Wxh`)
+    and the input vector (`xs[t]`), `np.dot(Wxh, xs[t])`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, we use the `tanh` activation function on the resulting matrix to squash
+    the activations between -1 and 1.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We do that at every step, meaning that, at every step of the training, the network
+    has an **up-to-date** context in regards to the sequence it is handling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand how an RNN handles sequential data, such as a note sequence, let's
+    take the example of an RNN training on broken chords, which are chords broken
+    down as a series of notes. We have the input data "A", "C", "E", and "G", which
+    is encoded as a vector, for example *[1, 0, 0, 0]* for the first note (which corresponds
+    to `x(t - 1)` in the previous diagram), *[0, 1, 0, 0]* for the second note (`x(t)`
+    in the previous diagram), and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During the first step, with the first input vector, the RNN outputs, for example,
+    a confidence of the next note being 0.5 for "A", 1.8 for "C", -2.5 for "E", and
+    3.1 for "G". Because our training data tells us that the correct next note is
+    "C", we want to increase the confidence score of 1.8, and decrease the other scores.
+    Similarly, for each of the 4 steps (for the 4 input notes), we have a correct
+    note to predict. Remember, at each step, the RNN uses both the hidden vector and
+    the input vector to make a prediction. During backpropagation, the parameters
+    are nudged in the proper direction by a small amount, and by repeating this enough
+    times, we get predictions that match the training data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During inference, if the network first receives an input of "C", it won't necessarily
+    predict "E" because it hasn't seen "A" yet, which doesn't match the example chord
+    that was used to train the model. The RNN prediction is based on its **recurrent
+    connection**, which keeps track of the context, and doesn't rely on the input
+    alone.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To sample from a trained RNN, we feed a note into the network, which outputs
+    the distribution for the next note. By **sampling the distribution**, we get a
+    probable next note that we can then feed back to the network. We can repeat the
+    process until we have a long enough sequence. This generation process is described
+    in more detail in the following section, *Understanding the generation algorithm*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'During backpropagation, we saw that we update the parameters going backward
+    in the network. Imagine the network is learning a long sequence of notes: how
+    far can the gradients be backpropagated in the network so that the link between
+    a note far in the sequence and a note at the beginning still holds? Well, it turns
+    out that this is a difficult problem for vanilla RNNs. One answer to that is **Lo****ng**-**Short
+    Term Memory** (**LSTM**) cell, which uses a different mechanism for keeping the
+    current state.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the right terminology for RNNs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we understand RNNs, we can say that most RNNs are using LSTM cells.
+    Those RNNs are sometimes called **LSTM networks**, but more often than not, they
+    are just called RNNs. Unfortunately, the two terms are often used interchangeably.
+    In Magenta, all of the RNNs are LSTMs but aren't named as such. This is the case
+    of the Drums RNN model we're looking at in this chapter and all of the models
+    we're going to use in the next chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be explaining LSTMs in [Chapter 3](48023567-4100-492a-a28e-53b18a63e01e.xhtml),
+    *Generating Polyphonic Melodies*. For now, just remember that what we saw in the
+    previous section still holds, but the hidden state update is more complex than
+    what we described.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Drums RNN on the command line
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we understand how RNNs make for powerful tools of music generation,
+    we'll use the Drums RNN model to do just that. The pre-trained models in Magenta
+    are a good way of starting music generation straightaway. For the Drums RNN model,
+    we'll be using the `drum_kit` pre-trained bundle, which was trained on thousands
+    of percussion MIDI files.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This section will provide insight into the usage of Magenta on the command
+    line. We''ll be primarily using Python code to call Magenta, but using the command
+    line has some advantages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is simple to use and useful for quick use cases.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It doesn't require writing any code or having any programming knowledge.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It encapsulates parameters in helpful commands and flags.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this section, we'll use the Drums RNN model in the command line and learn
+    to configure the generation though flags. We'll explain how the generation algorithm
+    works and look at its parameters and output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Magenta's command-line utilities
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Magenta comes with multiple command-line utilities. These command-line utilities
+    are Python scripts that can be called directly from the command line as console
+    entry points and are installed in your Conda environment when you install Magenta
+    (look in the `bin` folder of your Magenta environment or the `scripts` folder
+    if using Windows). The complete list of command-line utilities is located in Magenta's
+    source code, in `setup.py`, under `CONSOLE_SCRIPTS`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can always checkout Magenta's source code and have a look at it. It might
+    seem intimidating at first, but the source code is well documented and provides
+    invaluable insight into the inner workings of the software. Using Git, execute
+    `git clone https://github.com/tensorflow/magenta` in a Terminal and then open
+    the repository in your favorite IDE. Another advantage of having the source code
+    is to have a look at certain files that are not packaged with the app.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the Drums RNN model that we are going to use, we have three command-line
+    utilities (like much of the models):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`drums_rnn_create_dataset` will help to create a dataset for the training command.
+    We''ll be looking into this command in [Chapter 6](1ca56e24-b4d2-40de-b4cf-ae6bbb3c0eef.xhtml),
+    *Data Preparation for Training*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`drums_rnn_generate` will be used in this chapter to generate a musical score.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`drums_rnn_train` will train the model on an input dataset. We''ll be looking
+    into this command in [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml),
+    *Training Magenta Models*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating a simple drum sequence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, we generated a simple MIDI file to test our installation.
+    We'll take that example and change it a bit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before starting, go back on a terminal to the main book''s folder and then
+    change directory to `Chapter02`. Make sure you are in your Magenta environment.
+    If not, use `conda activate magenta` to do so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we download the Drums RNN bundle file, `drum_kit_rnn.mag`, in the `bundles`
+    folder. You only need to do this once:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: A bundle file is a file containing the model checkpoint and metadata. This is
+    a pre-trained model that contains the weights from the training phase, which will
+    be used to initialize the RNN network. We'll be seeing this format in detail in
+    [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml), *Training Magenta Models*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, we can use the bundle to generate MIDI files in the output directory
+    with `--output-dir`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Open one of the generated files in the `output` folder in MuseScore or Visual
+    MIDI. For the latter, you need to convert the MIDI file into a plot rendered in
+    an HTML file, which you can then open in a browser. To convert the MIDI file into
+    a plot, use the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, open the `output/GENERATED.html` HTML file, which contains the plot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/58c6a8a4-dff4-4e91-857c-d132239500ae.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synthesizer, refer to the following command depending on your
+    platform and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the model's parameters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'From the screenshot in the last section, you can already see that the model
+    used some default configurations to generate the score: the number of steps to
+    generate, the tempo, and so on. Now, let''s see what other flags are possible.
+    To see what kind of flags the model takes, use the `--helpfull` flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You will see a lot of possible flags showing. The sections that are of interest
+    for us are `drums_rnn_config_flags` and `drums_rnn_generate`, which are flags
+    specific for the Drums RNN model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following subsections will explain the most important ones. Because most
+    also apply to other models, you'll be able to apply what you learn to the next
+    chapters as well. We'll explain other model-specific flags of the later chapters
+    as we go.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing the output size
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A simple flag to change the number of generated samples is `--num_outputs`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can also use the `--num_steps` flag to change the size of the generated
+    samples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The last example we generated was 128 steps long because we generated it using
+    the default value. By looking at the previous screenshot, you can count the vertical
+    bar lines, which counts to 8 bars. This is because, with 128 steps at 16 steps
+    per bar, you get *128/16 = 8* bars. If you want a 1 bar generation, you'll be
+    asking for 16 steps, for example. You can see a single step as a single note slot,
+    in the sense that generators will generate one note per step maximum. It is a
+    convenient way of dividing time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be using the term **bar** in this book, which is more popular in British
+    English, but readers might be used to the word **measure**, which is more popular
+    in American English. There are some differences in their usage, and depending
+    on the context, one or the other might be used more often. However, both words
+    mainly have the same significance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main reason to stick with bar throughout this book is to follow Magenta's
+    code convention, where bar is used more consistently than measure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can show the steps by zooming on the last two bars of the previous example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/565596cb-9b46-4e66-8c78-e8144626129c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see in this diagram that there are 2 bars, each of 2 seconds (see the
+    next section for information on the tempo), with a different background for each
+    bar. You can also see that there are 16 steps per bar; we've marked one of those
+    steps with a different background. A step can contain multiple notes if the model
+    is polyphonic, like the Drums RNN model. Depending on the model, a note can spawn
+    multiple steps, which is not the case here. For this model, the note will always
+    start and stop exactly on the step start and end since the model outputs quantized
+    sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing the tempo
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The tempo is the speed at which the score is played. Be aware that it won't
+    change the number of notes or the generation length—it will only put the information
+    in the generated MIDI so that the MIDI player will later be able to play it at
+    the right speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The tempo in Magenta is expressed in **Quarter-notes Per Minute** (**QPM**).
+    A **quarter** is a bar separated into four—if you have 16 steps in a bar, then
+    a quarter contains 4 steps. So, if your tempo is 120 QPM, then you have *120 quarters/60
+    seconds = 2* quarters per second. That means you play 1 bar per 2 seconds (see
+    the previous diagram for an example of that).
+  prefs: []
+  type: TYPE_NORMAL
+- en: QPM is a measure of tempo similar but not to be confused with **BPM** (**Beats**
+    **Per** **Minute**) since, in the latter, the meaning of a beat might change for
+    some time signature. Also, the concept of a beat might change depending on the
+    listener. QPM is well defined and used in the MIDI and MusicXML format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To change the tempo, use the `--qpm` flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the following diagram, we''ve generated a drum file at 150 QPM using `--qpm
+    150`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/60e478fe-9897-49f5-9793-c3b2488378a3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see the bars are not aligned with 2, 4, and more seconds anymore. This
+    is because, at 120 QPM, a bar is exactly 2 seconds long, but it is now slightly
+    less. Our generated sample still has `--num_steps 128` but now has a duration
+    of 12.8 seconds (and still 8 bars) because we still have the same amounts of steps—they
+    are just played faster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To find the duration in seconds of a sequence for a specific QPM such as 150,
+    we first calculate the length of a step in seconds, by taking the number of seconds
+    in a minute (60), dividing by the QPM (150), and dividing by the number of steps
+    per quarter (4). This gives us 0.1 seconds per step. For 128 steps, the sequence
+    is 12.8 seconds long.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Changing the model type
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The `--config` flag changes the configuration of the model. With each configuration
+    in Magenta comes a pre-trained model. In this chapter, we are using the `drum_kit_rnn.mag`
+    pre-trained model (or bundle) for the `drum_kit` configuration. The chosen pre-trained
+    model must match the configuration it was trained with:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: It won't be useful for us now, but it will come in handy in [Chapter 3](48023567-4100-492a-a28e-53b18a63e01e.xhtml),
+    *Generating Polyphonic Melodies*. This also changes the mapping of the drums,
+    where the resulting encoded vector is different in both cases. We'll be talking
+    about vector encoding in the next section when we look at the Python code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Priming the model with Led Zeppelin
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A primer sequence can be given to the model to **prepare** it before the generation.
+    This is used extensively with Magenta and is really useful if you want the model
+    to generate something that is inspired by your primer. You can either prime the
+    model with a hardcoded sequence or directly from a MIDI file. The priming sequence
+    is fed to the model before the generation starts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The string representation of the `--primer_drums`flag reads as follows: you
+    enter a list of tuples, each tuple corresponding to a step, with each tuple containing
+    the MIDI notes being played at the same time. In this example, on the first step,
+    both MIDI notes, 36 and 42, are played at the same time, followed by 3 steps of
+    silence, then MIDI note 42 is played alone in its own step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you might remember from the previous chapter, a MIDI note also have velocity
+    information, which is not given here. This is not necessary since the Drums RNN
+    doesn't support velocity. Each generated note will have a default value of 100
+    for velocity (on a maximum value of 127).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some models in Magenta support velocity as we'll see in the next chapters. Since
+    the velocities have to be encoded in the input vectors that are fed to the network
+    during training, it is a design choice to include them or not. We'll also talk
+    about encoding in the next chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To give a primer corresponding to a bar, you'll have to provide 16 tuples, because
+    there are 16 steps per bar. The previous primer is half a bar long.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also provide the path to a MIDI file with the `--primer_midi` flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: A primer MIDI file gives the tempo and will override your `--qpm` flag if you
+    also provide it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When initializing the model with a primer, you also get the primer in the resulting
+    output sequence. That means `--num_steps` needs to be bigger than the primer''s
+    length or else Magenta won''t have space left to generate. For example, this command
+    will output an error because the number of steps is not high enough:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s generate something based on a small drum part of Jon Bonham''s (Led
+    Zeppelin) *When The Levee Breaks* track. Here''s a two-bar primer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/da0a6c06-1fda-47b1-8e2f-d8281188d5eb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, we generate some MIDI files by setting the primer, the temperature, and
+    the proper number of steps. Remember, the number of steps is the total number
+    of steps, primer included:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We get an interesting sequence shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/bbe135e5-4b35-4670-9db3-ce2ed58dfa05.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can still find the primer in the first 3 seconds or so, then we notice that
+    the model kept the musical structure of the track, but improvised over it, adding
+    a few kick drums, hit hats, and snares here and there. We'll be looking at the
+    MIDI mapping of percussion sequences, including the mapping of each pitch to their
+    corresponding instrument, in the next section, *Mapping MIDI notes to the real
+    world*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we verify whether Magenta knows how to count: you have 16 steps of primer,
+    1 step of silence, then 29 steps of generation for a total of 46, which is what
+    we asked for. The step of silence comes from the way Magenta calculates the start
+    of the generation. We''ll see in the Python code how to handle that in a better
+    way.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also notice that the length of the notes in the primer are different in the
+    generated score. You can see the same primer notes are present, but not with the
+    same duration. This is because Magenta will **quantize the primer before feeding
+    it to the model** and will generate quantized sequences. This depends on the model.
+    **Quantization** is the process of moving the note's beginning and end so that
+    they fall directly on some subdivisions of bars. In this case, Magenta moved the
+    notes' end so that they fall on the closest step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring the generation algorithm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The `--temperature` flag is important because it changes how random the generated
+    sequence is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s try to generate a drum track with more randomness using `--temperature
+    1.5`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f9851eb7-dbee-49c1-a35b-be6a58a5465e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is pretty wild! Remember a temperature of 1.5 is high, so you might have
+    a more coherent sample with a more conservative value, like 1.1, for example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, to generate a track with less randomness, use `--temperature 0.9`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4bd4aa61-7b48-408a-bdfb-c9d0d678ec3e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can clearly see the generation is more conservative here. Choosing the temperature
+    is up to taste and depends on what you are trying to achieve. Try different temperature
+    values and see what fits best with the music you are trying to generate. Also,
+    some models might sound better with wilder temperature values than others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other Magenta and TensorFlow flags
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are other flags that we haven't talked about, such as the configuration
+    of the hyperparameters of the model with `--hparams`, but we'll be looking into
+    this when we train our own model in [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml),
+    *Training Magenta Models*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the generation algorithm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous sections, we introduced how the generation algorithm works—by
+    predicting at each generation step what the next note in the sequence is, we can
+    iteratively generate a full score. The resulting prediction depends on what the
+    model has learned during the training phase. This section will delve deeper into
+    the generation algorithm by showing it in action on an example being executed
+    step by step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ll also be explaining the parameters that modify the generation''s execution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Generating the sequence branches and steps
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s use this command to launch the generation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Magenta will do the following operations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It converts the primer sequence into a format that the model understands (this
+    is called **encoding**—check the *Encoding percussion events as classes* section).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It uses that encoded primer to initialize the model state.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'It loops until all of the steps (`--num_steps 64`) have been generated:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'It loops to generate *N* branches (`--branch_factor 2`):'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It generates *X* steps (`--steps_per_iterations 1`) by running the model with
+    its current state using the **temperature** (`--temperature 1.1`). This returns
+    the predicted sequence as well as the resulting **softmax probabilities**. The
+    softmax probabilities are the actual probability scores for each class (the encoded
+    notes) at the final layer of the network.
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It calculates the **negative log-likelihood** of the resulting sequence, which
+    is a scoring evaluation of the entire sequence from the softmax probabilities.
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It updates the model state for the next iteration.
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It prunes the generated branches to best *K* branches (`--beam_size 1`) by using
+    the calculated score.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This diagram shows the generation process with a final sequence of **36**,
+    **38**, and **42**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3a0ea9af-e3a2-469e-81c8-09ab5cb8656a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the diagram, the **S** value denotes the calculated score of the entire sequence
+    (see *steps 3.1.2* and *3.2*). The beam search algorithm shown here is linear
+    in complexity on the output sequence length (which is the depth of the tree),
+    so it is pretty fast. The default value of `--beam_size 1` is useful since the
+    algorithm becomes a best-first search algorithm, where you don't actually do a
+    breadth-first search since you are keeping only the best candidate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Making sense of the randomness
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When we launch a generation that uses the beam search, Magenta shows the resulting
+    log-likelihood of the whole sequence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'What happens with `--temperature 1.25` instead of 1.1? The log-likelihood will
+    be smaller (further from zero) since the generation is more random:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'What if we generate only 1 branch with `--branch_factor 1` but keep the same
+    temperature at 1.25? The log-likelihood will be smaller:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Why is the log-likelihood smaller? Because we've reduced the branch factor,
+    the algorithm will generate fewer branches per iteration, meaning, at each iteration,
+    it will have fewer branches to choose its best from, resulting in a globally more
+    random sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's now use what we've learned about the Drums RNN model and create a small
+    Python application using those concepts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the Drums RNN in Python
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous section, we've seen how much we can already do on the command
+    line with the Drums RNN model. In this section, you'll get to create a small application
+    that will use that model to generate music in Python.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using Magenta in Python is a bit difficult because of the following reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It requires you to write code and understand Magenta's architecture.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It requires more boilerplate code and is less straightforward.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'But it also has advantages that we think are important:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You have more freedom in the usage of the models.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can create new models and modify existing ones.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can go beyond generating single sequences.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The last point is important for us because we'll be building a small music application
+    that generates music autonomously. Calling Magenta's scripts on the command line
+    is convenient, but you cannot build an app using only this. You'll be starting
+    this in the last section of this chapter, *Creating a music generation application*,
+    and building on it in the next chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's dive into the code by recreating what we've done on the command line and
+    then building from there.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating a drum sequence using Python
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We are going to generate a MIDI file from a primer in Python, much like we've
+    done in the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can follow this example in the `chapter_02_example_01.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start by downloading the bundle. There are a lot of useful tools in
+    the `magenta.music` package, and we''ll be using it in many examples:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then use the drums generator to initialize the generator class with the
+    `drum_kit` configuration. We are importing the Drums RNN models from its own package,
+    and we''ll do the same for each model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: By declaring the tempo, we can also calculate the length of a bar in seconds.
+    We need this because the generation start and end is given in seconds to Magenta.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We first calculate the seconds per step, which is equal to the number of seconds
+    in a minute, divided by the quarter per minute (the tempo), divided by the number
+    of steps per quarter. This last value is dependent on the generator, but it is
+    mostly equal to 4:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we calculate the seconds per bar, which is equal to the number of steps
+    per bar multiplied by the seconds per step we previously calculated. The number
+    of steps per bar changes depending on the time signature, but for now, we''ll
+    just put the default value, which is 16, for 4/4 music sampled at 4 steps per
+    quarter note:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: We are now ready to initialize our primer sequence. We'll use a small jazz drum
+    sequence of 1 bar for the primer (you can check it out in this book's source code
+    in the `Chapter02` folder, `primers/Jazz_Drum_Basic_1_bar.mid`), so we'll need
+    a list of 16 steps. We'll be explaining the primer definition in the next section.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We convert that primer drum track into a primer sequence using the QPM we''ve
+    already defined:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can calculate the time of the primer in seconds, which is only the seconds
+    per bar value since the primer is 1 bar:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We now calculate the start and end time of the generator section. First, we
+    define the number of generation bars, which is 3, then we start the generation
+    at the end of the primer and extend it for a three-bars duration in seconds:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now configure our generator options with the start and end times. The
+    generation options also take the temperature, which we''ll set to 1.1 for a bit
+    of randomness. The generator interface is common for all models:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'It is time to generate! You can now call the generate method on the generator
+    with the primer sequence as input. The return value of this method is a `NoteSequence`
+    instance:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There are many utilities to then convert the resulting `NoteSequence` instance
+    into other formats such as PrettyMidi. We''ll now convert the result, and write
+    the file and the plot to disk:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s open the `output/out.html` file:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/4b72ea6f-16e5-4ec6-a2d6-7e8534517d9a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice that your primer at the beginning should be the same (because it is hardcoded),
+    but your 3 generated bars should be different than these.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Packaging checkpoints as bundle files
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the last example, we saw the usage of a bundle. In Magenta, a bundle is a
+    convenient way of packaging a **TensorFlow checkpoint** and metadata information
+    into a single file. A checkpoint is used in TensorFlow to save the model state
+    that occurs during training, making it easy to reload the model's state at a later
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another nice usage of a bundle is that it defines a **common interface** for
+    multiple generators. You can check the `generator.proto` file in the Magenta's
+    source code, in the `magenta/protobuf` folder, which defines that interface, including
+    the generator `id` and `description`, as well as generator options such as `generate_sections`
+    that we'll be using to provide the generation length in many examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This common interface covers many models, including all of the models of Chapter
+    2 and Chapter 3\. Unfortunately, bundles aren't used in Chapter 4 for the MusicVAE
+    models, but we'll see more of them in [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml),
+    *Training Magenta Models*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Encoding MIDI using Protobuf in NoteSequence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the last example, we saw the usage of a class named **`NoteSequence`**, which
+    is an important part of Magenta, since every model working on the score will use
+    it to represent a sequence of MIDI notes. `NoteSequence` and `GeneratorOptions`
+    are Protobuf (Protocol Buffers), a language-neutral, platform-neutral extensible
+    mechanism for serializing structured data. In Magenta's source code, in the `magenta/protobuf/music.proto` file, you
+    can see the message definition of `NoteSequence`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The definition of `NoteSequence` is based on a MIDI message content, so you
+    have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A list of `TimeSignature` changes: By default, 4/4 is assumed per MIDI standard.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A list of `KeySignature` changes: By default, C Major is assumed per MIDI standard.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A list of `Tempo` changes: By default, 120 QPM is assumed per MIDI standard.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A list of `Note` changes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There's also much more including annotations, quantization information, pitch
+    bend, and control changes, but we won't be looking into that in this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Note` list is one we'll be mainly using, with the `pitch` (which is the
+    MIDI note, based on the MIDI tuning standard), `start_time`, and `end_time` properties,
+    representing a note.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Converting into and from `NoteSequence` is important. In the previous example,
+    we''ve used the following functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`magenta.music.midi_io.note_sequence_to_midi_file`: This is for converting
+    from a note sequence into a MIDI file. You can also convert into `PrettyMIDI`,
+    a useful format to edit MIDI in memory.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`magenta.music.midi_io.midi_file_to_note_sequence`: This is for converting
+    from a MIDI file into a note sequence; this would have been useful in our previous
+    example. Instead of hardcoding the primer in the Python code, we could have used
+    `midi_file_to_note_sequence("primers/Jazz_Drum_Basic_1_bar.mid")`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Another important point about `NoteSequence` is that it doesn't explicitly define
+    a start and end; it just assumes it starts at the start of the first note and
+    ends at the end of the last note. In other words, a sequence starting or ending
+    with silence cannot be defined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following diagram, the sequence is expected to be of 2 bars, which is
+    32 steps, but stops at the 31^(st) step, meaning the last note end time is 3.875
+    seconds, not 4 seconds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5599fd77-4d46-4b29-bdc1-23b29dcbec34.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Concatenating this sequence with another might yield unexpected resulting sequence
+    length. Fortunately, methods that handle note sequences have options to make this
+    work properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mapping MIDI notes to the real world
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous example, we''ve shown the following 1-bar primer but we haven''t
+    explained what those pitches correspond to:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We won''t be going into detail in the MIDI specification since it is pretty
+    big (you can check it out at [www.midi.org/specifications](https://www.midi.org/specifications)),
+    but we''ll look at the parts that concern this book. Two specifications are interesting
+    to us:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **MIDI specification** that defines the low-level protocol of communication
+    and encoding between the different instruments
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The **General MIDI specification** (**GM**) that defines a higher-level protocol,
+    defining requirements for instruments to be compliant and specifying instrument
+    sounds
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: January 2019 marks the first major update of the MIDI specification since its
+    standardization in 1983 with the release of MIDI 2.0 specification. That's after
+    more than 25 years of usage by millions of devices and users.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MIDI 2.0 introduces higher resolution values with 16 bits of precision instead
+    of 7 and the addition of the MIDI Capability Inquiry, enabling better integration
+    between tools. The new version of MIDI is completely backward compatible with
+    the old version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The instrument sounds definition is interesting for us and we'll be looking
+    into the **GM 1 Sound Set** specification, which defines the sound that should
+    be played for each MIDI note. In GM 1 Sound Set, each MIDI Program Change (PC#)
+    corresponds to a specific instrument in the synthesizer. For example, PC# 1 is
+    **Acoustic Grand Piano** and PC# 42 is **Viola**. Remember, those sounds are defined
+    by the synthesizer that implements the GM 1 specification and might change from
+    synth to synth.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The percussion keymap is a bit different. On MIDI Channel 10, each MIDI note
+    number (pitch) corresponds to a specific drum sound. Our previous example can
+    be read as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**36**: Bass Drum 1'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**38**: Acoustic Snare'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**44**: Pedal Hi-Hat'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**51**: Ride Cymbal 1'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can always refer to the full table later at [www.midi.org/specifications-old/item/gm-level-1-sound-set](https://www.midi.org/specifications-old/item/gm-level-1-sound-set).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Encoding percussion events as classes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The last section explained percussion mapping in terms of MIDI mapping. But
+    how do we encode the percussion for the Drums RNN model? To encode the MIDI mapping
+    to a vector, we'll use what is called **one**-**hot encoding**, which basically
+    maps every possible input events to classes then to a binary vector.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For that to happen, we need to reduce the number of drum classes first, from
+    all of the possible drums in MIDI (46 different drums is way too much) to a more
+    manageable 9 classes. You can see the mapping in the `DEFAULT_DRUM_TYPE_PITCHES` property of
+    the `magenta.music.drums_encoder_decoder` module. We then bit flip in a vector
+    at the index defined by summing two to the power of the class index for each class
+    in the set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, our set of pitches, *{51, 38}*, for the first step maps to classes
+    *{8, 1}*. This value will bit flip index 258 in the vector, because *2⁸ + 2¹ =
+    258*. The vector is of the size 2⁹ for each step, plus some binary counters and
+    flags we won't talk about here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This diagram shows the encoding part of the first step of the primer example
+    as described:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b159a218-91b0-47dc-96c8-872cfb84fa5c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In that specific encoding, some information is lost because there are less class
+    then MIDI notes. This means that, for example, if both MIDI notes, 35 and 36,
+    map to the same class index 0, then the difference between either 35 or 36 is
+    lost. In that specific case, 36 is chosen arbitrarily (you can actually see that
+    from the previous example in the section, *Priming the model with Led Zeppelin*,
+    the MIDI note 35 is lost).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This encoding is used for training when converting from the dataset into the
+    sequences, and during generation, if a primer is used to initialize the model.
+    When using a primer, the primer is encoded to produce input for the model. The
+    model state is then initialized with that input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The reverse of that operation is also important for a generation: when the
+    model makes a new generation, it needs to be decoded to find the sequence it represents.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are different ways of encoding the events, and others are used in Magenta.
+    This is the encoding for the "drum_kit" configuration for this model, which is `LookbackEventSequenceEncoderDecoder`,
+    implementing the encoding of repeated events using binary counters. The encoding
+    of the `one_drum` configuration is different and simpler; you can check it out
+    in `OneHotEventSequenceEncoderDecoder`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The one-hot encoding of the drum classes is implemented in the `MultiDrumOneHotEncoding` class,
+    which is used in other models as well, such as the MusicVAE model we'll see in
+    Chapter 4\. When instantiated with no drum pitches, it will use the reduced drum
+    encoding of 9 classes that we saw in this section, which is expressive enough
+    to capture many instruments, while keeping the model at a manageable size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be seeing more on the subject of encoding in the following chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sending MIDI files to other applications
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: While generating MIDI files and writing them on disk is nice, dynamically sending
+    the MIDI notes to another piece of software would be more useful, so that our
+    Python Magenta application could interact directly with other music software.
+    We will dedicate a whole chapter to this topic since there is a lot to talk about.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you want to know more about this topic right now, you can go see [Chapter
+    9](8018122a-b28e-44ff-8533-5061a0ad356b.xhtml), *Making Magenta Interact with
+    Music Applications*, and come back here later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we introduced an RNN and the role it plays in music generation,
+    by showing that operating on a sequence and remembering the past are mandatory
+    properties for music generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also generated a MIDI file using the Drums RNN model on the command line.
+    We've covered most of its parameters and learned how to configure the model's
+    output. By looking at the generation algorithm, we explained how it worked and
+    how the different flags can change its execution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By using the Drums RNN model in Python, we've shown how we can build a versatile
+    application. By doing that, we learned about the MIDI specification, how Magenta
+    encodes `NoteSequence` using Protobuf, and how to encode a sequence as a one-hot
+    vector. We've also introduced the idea of sending the generated MIDI to other
+    applications, a topic we'll cover in [Chapter 9](8018122a-b28e-44ff-8533-5061a0ad356b.xhtml),
+    *Making Magenta Interact with Music Applications*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we'll be using other models to generate melody. We'll also
+    continue writing Python code by finishing our learning of RNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: If you want to generate a musical score, what do you train your model to do?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are the properties that are interesting in RNNs concerning music prediction?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Given an RNN hidden layer with the notation *h(t + 2)*, what two inputs is the
+    hidden layer getting?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Given the following parameters for the generation, `--num_steps 32` and `--qpm
+    80`, how long will the generated MIDI be in seconds? How many bars will it be?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What happens if you increase `--branch_factor` and increase `--temperature`
+    during the generation phase?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How many nodes will the beam search algorithm go through at the last iteration
+    for a generation of 3 steps with the `--branch_factor 4` and `--beam_size 2` parameters?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the Protobuf Message class that is used in Magenta to represent a sequence
+    of MIDI notes? (NoteSequence)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using the one-hot encoding described in the encoding section, what is the encoded
+    vector for a step playing the MIDI notes, *{36, 40, 42}*?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using the same encoding, what are the decoded MIDI notes from an encoded vector
+    with index 131 at 1?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**The Unreasonable Effectiveness of Recurrent Neural Networks**: An excellent
+    article on RNNs ([karpathy.github.io/2015/05/21/rnn-effectiveness/](https://karpathy.github.io/2015/05/21/rnn-effectiveness/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Understanding softmax and the negative log-likelihood**: Complimentary information
+    on log-likelihood ([ljvmiranda921.github.io/notebook/2017/08/13/softmax-and-the-negative-log-likelihood/](https://ljvmiranda921.github.io/notebook/2017/08/13/softmax-and-the-negative-log-likelihood/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Finding Structure in Time**: An original paper (1990) on RNNs ([crl.ucsd.edu/~elman/Papers/fsit.pdf)](https://crl.ucsd.edu/~elman/Papers/fsit.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Gradient-Based Learning Applied to Document Recognition**: An original paper
+    (1998) on CNNs ([yann.lecun.com/exdb/publis/pdf/lecun-98.pdf](http://yann.lecun.com/exdb/publis/pdf/lecun-98.pdf))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The Neural Network Zoo**: An amazing list of neural network architectures
+    that you can refer to throughout this book ([asimovinstitute.org/neural-network-zoo/](https://www.asimovinstitute.org/neural-network-zoo/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

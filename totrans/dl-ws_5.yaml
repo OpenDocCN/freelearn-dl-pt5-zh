@@ -1,0 +1,2053 @@
+- en: 5\. Deep Learning for Sequences
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Overview
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will implement deep learning-based approaches to sequence
+    modeling, after understanding the considerations of dealing with sequences. We
+    will begin with **Recurrent Neural Networks** (**RNNs**), an intuitive approach
+    to sequence processing that has provided state-of-the-art results. We will then
+    discuss and implement 1D convolutions as another approach and see how it compares
+    with RNNs. We will also combine RNNs with 1D convolutions in a hybrid model. We
+    will employ all of these models on a classic sequence processing task – stock
+    price prediction. By the end of this chapter, you will become adept at implementing
+    deep learning approaches for sequences, particularly plain RNNs and 1D convolutions,
+    and you will have laid the foundations for more advanced RNN-based models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduction
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s say you''re working with text data and your objective is to build a
+    model that checks whether a sentence is grammatically correct. Consider the following
+    sentence: *"words? while sequence be this solved of can the ignoring".* The question
+    didn''t make sense, right? Well, how about the following? *"Can this be solved
+    while ignoring the sequence of words?"*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Suddenly, the text makes complete sense. What do we acknowledge, then, about
+    working with text data? That sequence matters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the task of assessing whether a given sentence is grammatically correct,
+    the sequence is important. Sequence-agnostic models would fail terribly at the
+    task. The nature of the task requires you to analyze the sequence of the terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the previous chapter, we worked with text data, discussing ideas around
+    representation and creating our own word vectors. Text and natural language data
+    have another important characteristic – they have a sequence to them. While text
+    data is one example of sequence data, sequences are everywhere: from speech to
+    stock prices, from music to global temperatures. In this chapter, we''ll start
+    working with sequential data in a way that considers the order of the elements.
+    We will begin with RNNs, a deep learning approach that exploits the sequence of
+    data to provide insightful results of tasks such as machine translation, sentiment
+    analysis, recommender systems, and time series prediction, to name a few. We will
+    then look at using convolutions for sequence data. Finally, we will see how these
+    approaches can be combined in a single, powerful deep learning architecture. Along
+    the way, we will also build an RNN-based model for stock price prediction.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Working with Sequences
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's look at another example to make the importance of sequence modeling clearer.
+    The task is to predict the stock price for a company for the next 30 days. The
+    data provided to you is the stock price for today. You can see this in the following
+    plot, where the *y-axis* represents the stock price and the *x-axis* denotes the
+    date. Is this data sufficient?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1: Stock price with just 1 day’s data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.1: Stock price with just 1 day''s data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Surely, one data point, that is, the price on a given day, is not sufficient
+    to predict the price for the next 30 days. We need more information. Particularly,
+    we need information about the past – how the stock price has been moving for the
+    past few days/months/years. So, we ask for, and get, data for three years:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2: Stock price prediction using historical data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.2: Stock price prediction using historical data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This seems much more useful, right? Looking at the past trend and some patterns
+    in the data, we can make predictions on the future stock prices. Thus, by looking
+    at the past trend, we get a rough idea of how the stock will move over the next
+    few days. We can't do this without a sequence. Again, sequence matters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In real-world use cases, say, machine translation, you need to consider the
+    sequence in the data. Sequence-agnostic models can only get you so far in some
+    tasks; you need an approach that truly exploits the information contained in the
+    sequence. But before talking about the workings of those architectures, we need
+    to answer an important question: *what are sequences, anyway*?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While the definition of a "*sequence*" from the dictionary is rather self-explanatory,
+    we need to be able to identify sequences for ourselves and decide whether we need
+    to consider the sequence. To understand this idea, let''s go back to the first
+    example we saw: "*words? while sequence be this solved of can the ignoring*" versus
+    "*can this be solved while ignoring the sequence of words?*"'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you jumbled the terms of the meaningful sentence text, it stopped making
+    sense and lost all/most of the information. This can be a simple and effective
+    test for a sequence: If you jumbled the elements, does it still make sense? If
+    the answer is "no," then you have a sequence at hand. While sequences are everywhere,
+    here are some examples of sequence data: language, music, movie scripts, music
+    videos, time-series data (stock prices, commodity prices, and more), and the survival
+    probability of a patient.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time Series Data – Stock Price Prediction
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We will start working on our own model for predicting stock prices. The objective
+    of the stock price prediction task is to build a model that can predict the next
+    day's stock price based on historical prices. As we saw in the previous section,
+    the task requires us to consider the sequence in the data. We will predict the
+    stock price for Apple Inc.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will use a cleaned-up version of Apple''s historical stock data that''s
+    been sourced from the Nasdaq website: [https://www.nasdaq.com/market-activity/stocks/aapl/historical](https://www.nasdaq.com/market-activity/stocks/aapl/historical).
+    The dataset can be downloaded from the following link: [https://packt.live/325WSKR](https://packt.live/325WSKR).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Make sure to place the file (`AAPL.csv`) in your working directory and start
+    a new Jupyter Notebook for the code. It is important that you run all the code
+    in the exercises and the topic sections in a single Jupyter Notebook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s begin by understanding the data. We will load the required libraries
+    and then load and plot the data. You can use the following commands to load the
+    necessary libraries and use the cell magic command (`%matplotlib inline`) to plot
+    the images inline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we''ll load the `.csv` file, using the `read_csv()` method from Pandas,
+    into a DataFrame (`inp0`) and have a look at a few records using the `head` method
+    of the pandas DataFrame:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should get the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.3: The first five records of the AAPL dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.3: The first five records of the AAPL dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see that the first record is for January 17, 2020 and is the most recent
+    date in the data (the latest data at the time of writing this book). As is the
+    convention for pandas DataFrames, the first record has an index of 0 (the index
+    is simply the identifier for the row, and each row has an index value). `Open`
+    refers to the value of a particular stock at the opening of the trade, `High`
+    refers to the highest value of the stock during the day, while `Low` and `Close`
+    represent the lowest price and closing price, respectively. We also have the volume
+    traded on the day.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s also look at the last few records of the dataset using the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The records look as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4: Bottom five records of the AAPL dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.4: Bottom five records of the AAPL dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the preceding tables, we can see that we have daily opening, high, low,
+    and closing prices, and volumes, from January 25, 2010 to January 17, 2020\. For
+    our purpose, we are concerned with the closing price.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Exercise 5.01: Visualizing Our Time-Series Data'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this exercise, we will extract the closing price from the data, perform
+    the necessary formatting, and plot the time series to gain a better understanding
+    of the data. Make sure that you have read through the preceding section and loaded
+    the data, as well as imported the relevant libraries. Perform the following steps
+    to complete this exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use the following command to import the necessary libraries if you haven''t already:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Download the file titled `AAPL.csv` from GitHub ([https://packt.live/325WSKR](https://packt.live/325WSKR))
+    and load it into a DataFrame:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Plot the `Close` column as a line plot to see the pattern using the `plot`
+    method of the DataFrame, specifying the `Date` column as the *X-axis*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The plot for this will be as follows, with the *X-axis* showing the closing
+    price and the *Y-axis* representing the dates:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.5: Plot of the closing price'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_05.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.5: Plot of the closing price'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: From the plot, we can see that the latest values are getting plotted first (on
+    the left). We'll reverse the data for convenience of plotting and handling. We'll
+    achieve this by sorting the DataFrame by the index (remember that the index was
+    0 for the latest record) in descending order.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Reverse the data by sorting the DataFrame on the index. Plot the closing price
+    again and supply `Date` as the *X-axis*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The closing price will be plotted as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.6: The trend after reversing the data'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_06.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.6: The trend after reversing the data'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: That worked as expected. We can see that the latest values are plotted to the right.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Extract the values for `Close` from the DataFrame as a `numpy` array, reshaped
+    to specify one column using `array.reshape(-1,1)`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Plot the values as a line plot using matplotlib. Don''t worry about marking
+    the dates; the order of the data is clear (matplotlib will use an index instead,
+    beginning with 0 for the first point):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The resulting trend is as follows, with the *X-axis* representing the index
+    and the *Y-axis* showing the closing price:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.7: The daily stock price trend'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_07.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.7: The daily stock price trend'
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's what our sequence data looks like. There is no continuous clear trend;
+    the prices rose for a period, after which the stock waxed and waned. The pattern
+    isn't straightforward. We can see that there is some seasonality at a small duration
+    (maybe monthly). Overall, the pattern is rather complex and there are no obvious
+    and easy-to-identify cyclicities in the data that we can exploit. This complex
+    sequence is what we will work with – predicting the stock price for a day using
+    historical values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: To access the source code for this specific section, please refer to [https://packt.live/2ZctArW](https://packt.live/2ZctArW).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also run this example online at [https://packt.live/38EDOEA](https://packt.live/38EDOEA).
+    You must execute the entire Notebook in order to get the desired result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this exercise, we loaded the stock price data. After reversing the data for
+    ease of handling, we extracted the closing price (the `Close` column). We plotted
+    the data to visually examine the trend and patterns in the data, acknowledging
+    that there aren't any obvious patterns in the data for us to exploit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Whether you treat the data as a sequence also depends on the task at hand. If
+    the task doesn't need the information in the sequence, then maybe you don't need
+    to treat it as such.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we'll be focusing on tasks that require/greatly benefit from
+    exploiting the sequence in the data. How is that done? We'll find out in the following
+    sections, where we'll discuss the intuition and the approach behind RNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recurrent Neural Networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'How does our brain process a sentence? Let''s try to understand how our brain
+    processes a sentence as we read it. You see some terms in a sentence, and you
+    need to identify the sentiment contained in the sentence (positive, negative,
+    neutral). Let''s look at the first term – "`I`":'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.8 Sentiment analysis for the first term'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_08.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 5.8 Sentiment analysis for the first term
+  prefs: []
+  type: TYPE_NORMAL
+- en: '"`I`" is neutral, so our classification (neutral) is appropriate. Let''s look
+    at another term:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.9: Sentiment analysis with two terms'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_09.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.9: Sentiment analysis with two terms'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With the term "`can''t`," we need to update our assessment of the sentiment.
+    "`I`" and "`can''t`" together typically have a negative connotation, so our current
+    assessment is updated as "negative" and is marked with a cross. Let''s look at
+    the next couple of words:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.10: Sentiment analysis with four terms'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_10.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.10: Sentiment analysis with four terms'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the two additional terms, we maintain our prediction that the sentence
+    has a negative sentiment. With all the information so far, "`I can''t find any`,"
+    is a good assessment. Let''s look at the final term:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.11: Sentiment analysis with the final term added'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_11.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.11: Sentiment analysis with the final term added'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that last term coming in, our prediction is completely overturned. Suddenly,
+    we now agree that this is a positive expression. Your assessment is updated with
+    each new term coming in, is it not? Your brain gathers/collects all the information
+    it has at hand and makes an assessment. On arrival of the new term, the assessment
+    so far is updated. This process is exactly what an RNN mimics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, what makes a network "recurrent"? The key idea is to *not only process new
+    information but also retain the information received so far*. This is achieved
+    in RNNs by making the output depend not only on the new input value but also on
+    the current "state" (information captured so far). To understand this better,
+    let's see how a standard feedforward neural network would process a simple sentence
+    and compare it with how an RNN would process it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider the task of sentiment classification (positive or negative) for an
+    input sentence, "*life is good*." In a standard feedforward network, the inputs
+    corresponding to all the terms in the sentence are passed to the network together.
+    As depicted in the following diagram, the input data is the combined representation
+    of all the terms in the sentence that have been passed to the hidden layers of
+    the network. All the terms are considered together to classify the sentiment in
+    the sentence as positive:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.12: Standard feedforward network for sentiment classification'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_12.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.12: Standard feedforward network for sentiment classification'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In contrast, an RNN would process the sentence word by word. As shown in the
+    following diagram, the first input for the term "*life*" is passed to the hidden
+    layers at time *t=0*. The hidden layers provide some output values, but this isn''t
+    the final classification of the sentence and is rather an intermediate value of
+    the hidden layers. No classification is done yet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.13: RNN processing the first term at time t=0'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_13.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.13: RNN processing the first term at time t=0'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next term "`is`"), along with its corresponding input, is processed at
+    time *t=1* and then fed to the hidden layers. As shown in the following diagram,
+    this time, the hidden layer also considers the intermediate output from the hidden
+    layer at time *t=0*, which is essentially the output corresponding to the term
+    "`life`." The output from the hidden layers will now effectively consider the
+    new input ("`is`") and the input at the previous time step ("`life`"):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.14: The network at t=1'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_14.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.14: The network at t=1'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After time step *t=1*, the output of the hidden layers effectively contains
+    information from the terms "`life`" and "`is`,", effectively holding information
+    corresponding to the inputs so far. At time *t=2*, the data corresponding to the
+    next term, that is, "`good`," is fed into the hidden layers. The following diagram
+    shows that the hidden layers use this new input data, along with the output from
+    hidden layers from time *t=1*, to provide an output. This output effectively considers
+    all the inputs so far, in the order in which they appear in the input text. It
+    is when the entire sentence is processed that the final classification of the
+    sentence is made ("positive", in this case):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.15: Output at t=2 when the entire sentence is processed'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_15.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.15: Output at t=2 when the entire sentence is processed'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loops – An Integral Part of RNNs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A common part of RNNs is using "loops," as shown in the following diagram.
+    By loops, we mean a mechanism of retaining the "state" value containing the information
+    so far and using it along with the new input:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.16: RNNs depicted with a loop'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_16.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.16: RNNs depicted with a loop'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in the following diagram, this is done by simply making a virtual
+    copy of the hidden layer and using it at the next time step, that is, when processing
+    the next input. If processing a sentence term by term, this would mean, for each
+    term, saving the hidden layer output (time *t-1*), and when the new term comes
+    in at time *t*, processing the hidden layer output (time *t*) along with its previous
+    state (time *t-1*). That''s all there really is to it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.17: Copying the hidden layer state'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_17.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.17: Copying the hidden layer state'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make the workings of RNNs even more clear, let's expand the view from *Figure
+    5.15*, where we saw how the input sentence is processed term by term. We'll understand
+    how different an RNN is from a standard feedforward network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The part highlighted by the dotted box should be familiar to you – it represents
+    the standard feedforward network with hidden layers (rectangles with dotted lines).
+    The data for an input flows from left to right across the depth of the network,
+    using feedforward weights, WF, to provide an output -- exactly as in a standard
+    feedforward network. The recurrent part is the flow of data from bottom to top,
+    across the time steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure. 5.18: RNN architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_18.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure. 5.18: RNN architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For all the hidden layers, the output propagates along the time dimension too,
+    to the next time step. Alternately, for a hidden layer at time step *t* and depth
+    *l*, the inputs are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data from the previous hidden layer at the same time step
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data from the same hidden layer at the previous time step
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Have a good look at the preceding diagram to understand the workings of an
+    RNN. The output from the hidden layer can be derived as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.19: Calculating activations in an RNN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_19.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.19: Calculating activations in an RNN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first part of the formula, *W*F(l)at(l-1), corresponds to the result of
+    the feedforward calculation, that is, applying feedforward weights (*W*F) to the
+    output (*a*t(l-1)) from the previous layer. The second part corresponds to the
+    recurrent calculation, that is, applying recurrent weights (*W*R(l)) to the output
+    from the same layer from the previous time step (*a*t-1(l)). Additionally, as
+    with all neural network layers, there is a bias term as well. This result, on
+    applying the activation function, becomes the output from the layer at time *t*
+    and depth *l* (*a*t(l)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make the idea more concrete, let's implement the feedforward steps of a simple
+    RNN using TensorFlow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Exercise 5.02: Implementing the Forward Pass of a Simple RNN Using TensorFlow'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this exercise, we will use TensorFlow to perform one pass of the operations
+    in a simple RNN with one hidden layer and two time steps. By performing one pass,
+    we mean calculating the activation of the hidden layer at time step *t=0*, then
+    using this output along with the new input at *t=1* (applying the appropriate
+    recurrent and feedforward weights) to obtain the output at time *t=1*. Initiate
+    a new Jupyter Notebook for this exercise and perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import TensorFlow and NumPy. Set a random seed of `0` using `numpy` to make
+    the results reproducible:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the `num_inputs` and `num_neurons` constants that will be holding the
+    number of inputs (2) and the number of neurons in the hidden layer (3), respectively:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We will have two inputs at each time step. Let's call them `xt0` and `xt1`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Define the variables for the weight matrices. We need two of them – one for
+    the feedforward weights and another for the recurrent weights. Initialize them randomly:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Notice the dimensions for the recurrent weights – it is a square matrix, with
+    as many rows/columns as the number of neurons in the hidden layer.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Add the bias variable (to make the activations fit the data better), with as
+    many zeros as the number of neurons in the hidden layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create the data – three examples for `xt0` (two inputs, three examples) as
+    `[[0,1], [2,3], [4,5]]` and `xt1` as `[[100,101], [102,103], [104,105]]` – as
+    `numpy` arrays of the `float32` type (consistent with `dtype` for TensorFlow''s
+    default float representation):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define a function named `forward_pass` to apply a forward pass to the given
+    data, that is, `xt0`, `xt1`. Use `tanh` as the activation function. The output
+    at *t=0* should be derived from `Wf` and `xt0` alone. The output at *t=1* must
+    use `yt0` with the recurrent weights, `Wf`, and use the new input, `xt1`. The
+    function should return outputs at the two time steps:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that there is no recurrent weight here at time step 0; it comes into play
+    only after the first time step.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Perform the forward pass by calling the `forward_pass` function with the created
+    data (`xt0_batch`, `xt1_batch`) and put the output into variables, `yt0_output`
+    and `yt1_output`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Print the output values, `yt0_output` and `yt1_output`, using the `print` function
+    from TensorFlow:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output at *t=0* gets printed out like so. Note that this result could be
+    slightly different for you because of the random initialization that''s done by
+    TensorFlow:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, print the values of yt1_output:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output at *t=1* gets is printed as follows. Again, this could be slightly
+    different for you because of the random initial values, but all the values should
+    be close to 1 or -1:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We can see that the final output at time *t=1* is a 3x3 matrix – representing
+    the outputs for the three neurons in the hidden layer for the three instances
+    of data.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: To access the source code for this specific section, please refer to [https://packt.live/2ZctArW](https://packt.live/2ZctArW).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You can also run this example online at [https://packt.live/38EDOEA](https://packt.live/38EDOEA).
+    You must execute the entire Notebook in order to get the desired result.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Despite having set the seeds for `numpy` as well as `tensorflow` to achieve
+    reproducible results, there are a lot more causes for the variation in results.
+    While the values you see may be different, the output you see should largely agree
+    with ours.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: In this exercise, we manually performed the forward pass for two time steps
+    in a simple RNN. We saw that it's merely using the hidden layer output from the
+    previous time step as an input to the next. Now, you don't really need to perform
+    any of this manually – Keras makes making RNNs very simple. We will use Keras
+    for our stock price prediction model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Flexibility and Versatility of RNNs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In *Exercise 5.2*, *Implementing the Forward Pass of a Simple RNN Using TensorFlow*,
+    we used two inputs at each time step, and we had an output at each time step.
+    But it doesn't always have to be that way. RNNs have a lot of flexibility to offer.
+    For starters, you can have single/multiple inputs as well as outputs. Additionally,
+    you needn't have inputs and outputs at each time step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You could have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inputs at different time steps with the output only at the final step
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A single input with outputs at multiple time steps
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both inputs and outputs (equal or unequal lengths) at multiple time steps
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There is enormous flexibility in RNN architectures, and this flexibility makes
+    them very versatile. Let''s take a look at some possible architectures and what
+    some potential applications can be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.20: Inputs at multiple steps with the output at the final step'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_20.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.20: Inputs at multiple steps with the output at the final step'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can have inputs at multiple time steps, such as in a sequence (or single
+    or more inputs) with the output only at the final time step, when the prediction
+    is made, as shown in the preceding diagram. At each time step, the hidden layers
+    operate on the feedforward output from the previous layer and the recurrent output
+    from its copy from the previous time step. But there is no prediction for the
+    intermediate time steps. Prediction is made only after processing the entire input
+    sequence – the same process we saw in *Figure. 5.15* (the "*life is good*" example).
+    Text classification applications extensively use this architecture – sentiment
+    classification into positive/negative, classifying an email into spam/ham, identifying
+    hate speech in comments, automatically moderating product reviews on a shopping
+    platform, and many more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Time series prediction (for example, stock prices) also utilizes this architecture,
+    where the past few values are processed to predict a single future value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.21: Input in a single step, output in multiple steps'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_21.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.21: Input in a single step, output in multiple steps'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding diagram illustrates another architecture in which the input is
+    received in a single step, but the output is obtained at multiple time steps.
+    Applications around generation – generating images for a given keyword, generating
+    music for a given keyword (composer), or generating a paragraph of text for a
+    given keyword – are based on this architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You could also have an output at each time step corresponding to the input,
+    as depicted in the following diagram. Essentially, this model will help you make
+    a prediction for each incoming element of the sequence. An example of such a task
+    would be the Parts-of-Speech tagging of terms – for each term in a sentence, we
+    identify whether the term is a noun, verb, adjective, or another part of speech.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another example from natural language processing would be **Named Entity Recognition**
+    (**NER**) where, for each term in the text, the objective is to detect whether
+    it represents a named entity and then classify it as an organization, person,
+    place, or another category if it does:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.22: Multiple outputs at each time step'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_22.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.22: Multiple outputs at each time step'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the previous architecture, we had an output for each incoming element. In
+    many situations, this doesn't work, and we need an architecture that has different
+    lengths for input and output, as shown in the following diagram. Think of translation
+    between languages. Does a sentence in English necessarily have the same number
+    of terms in its German translation? More often than not, the answer is no. For
+    such cases, the architecture in the following diagram provides the notion of an
+    "encoder" and a "decoder." The information corresponding to the input sequence
+    is stored in the final hidden layer of the encoder network, which in itself has
+    recurrent layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This representation/information is processed by the decoder network (again,
+    this is recurrent), which outputs the translated sequence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.23: Architecture with different lengths for input and output'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_23.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.23: Architecture with different lengths for input and output'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For all of these architectures, you could also have multiple inputs, making
+    RNN models even more versatile. For example, when making stock price predictions,
+    you could provide multiple inputs (previous stock prices of company, the stock
+    exchange index, crude oil price, and whatever you think is relevant) over multiple
+    time steps, and the RNN will be able to accommodate and utilize all of these.
+    This is one of the reasons RNNs are very popular and have changed the way we work
+    with sequences today. Of course, you also have all the predictive power of deep
+    learning to add.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing the Data for Stock Price Prediction
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: For our stock price prediction task, we will predict the value of a given stock
+    on any day by using the past few days' data and feeding it to an RNN. Here, we
+    have a single input (single feature), over multiple time steps, and a single output.
+    We will employ the RNN architecture from *Figure 5.20*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continue in the same Jupyter Notebook that we plotted our time-series data in
+    throughout this chapter (unless specified otherwise).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So far, we''ve looked at the data and understood what we''re dealing with.
+    Next, we need to prepare the data for the model. The first step is to create a
+    train-test split of the data. Since this is time-series data, we can''t just randomly
+    pick points to assign to our train and test sets. We need to maintain the sequence.
+    For time-series data, we typically reserve the first portion of the data to train
+    on and utilize the last part of the data for our test set. In our case, we will
+    take the first 75% records as our training data and the last 25% as our test data.
+    The following command will help us get the size of the train set needed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is the number of records we''ll have in the train set. We can separate
+    the sets as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The lengths of the train and test sets will be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we need to scale the stock data. For that, we can employ the min-max
+    scaler from `sklearn`. The `MinMaxScaler` scales the data so that it''s in a range
+    between 0 and 1 (inclusive) – the highest value in the data being mapped to 1\.
+    We''ll fit and transform the scaler on the train data and only transform the test
+    data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next important step is to format the data to get the "features" for each
+    instance. We need to define a "lookback period" – the number of days from the
+    history that we want to use to predict the next value. The following code will
+    help us define a function that returns the target value of `y` (stock price for
+    a day) and `X` (values for each day in the lookback period):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The function takes in a dataset (a series of numbers, rather) and, for the
+    provided lookback, adds as many values from the history. It does so by shifting
+    the series, each time concatenating it to the result. The function returns the
+    stock price for the day as *y* and the values in lookback period (shifted values)
+    as our features. Now, we can define a lookback period and see the result of applying
+    the function to our data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Try the following command to examine the shape of the outcome datasets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: As expected, there are 10 features for each example, corresponding to the past
+    10 days. We have this history for the train data as well as the test data. With
+    that, data preparation is complete. Before we move on to building our first RNN
+    on this data, let's understand RNNs a little more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `trainX` and `trainY` variables we created here will be used throughout
+    the exercises that follow. So, make sure you are running this chapter's code in
+    the same Jupyter Notebook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Parameters in an RNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To calculate the number of parameters in an RNN layer, let''s take a look at
+    a generic hidden layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.24: Parameters of the recurrent layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_24.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.24: Parameters of the recurrent layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The hidden layer takes inputs from the previous hidden layer at the same time
+    step, and also from itself from a previous time step. If the input layer (the
+    previous hidden layer) to the RNN layer is m-dimensional, we would need *n×m*
+    weights/parameters, where *n* is the number of neurons in the RNN layer. For the
+    output layer, the dimensionality if the weights would be *n×k*, if *k* is the
+    dimensionality of the output. The recurrent weight is always a square matrix of
+    dimensionality *n×n* – since the dimensionality of the input is the same as the
+    layer itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The number of parameters for any RNN layer would therefore be `n`2 `+ nk +
+    nm`, where we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`n`: Dimension of the hidden (current) layer'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`m`: Dimension of the input layer'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`k`: Dimension of the output layer'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training RNNs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'How to forward propagate information in an RNN should be clear by now. If not,
+    please refer to *Figure 5.19* with the equations. The new information propagates
+    along the depth of the network as well along the time steps, using the previous
+    hidden states at each step. The additional two key aspects of training RNNs are
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Defining loss**: We know how loss is defined for a standard neural network;
+    that is, it has a single output. With RNNs, in the case that there is a single
+    time step at the output (for example, text classification), the loss is calculated
+    the same way as in standard neural networks. But we know that RNNs could have
+    outputs over multiple time steps (for example, in Part-of-Speech tagging or machine
+    translation). How is loss defined across multiple time steps? A very simple and
+    popular approach is summing up the loss at all the steps. The loss for the entire
+    sequence is calculated as the sum of the loss at all time steps.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Backpropagation**: Backpropagation of the errors now needs us to work across
+    time steps, since there is a time dimension as well. We have already seen that
+    loss is defined as the sum of loss at each time step. The usual chain rule application
+    helps us out; we also need to sum the gradients at each time step over time. This
+    has a very catchy name: **Backpropagation Through Time** (**BPTT**).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: A detailed treatment of the training process and the involved math is beyond
+    the scope of this book. The basic concept is all we need to understand the considerations
+    involved.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now, let's continue building our first RNN model using Keras. We will introduce
+    two new layers that are available in Keras in this chapter and understand their
+    function and utility. The first layer we need is the `SimpleRNN` layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To import all the necessary utilities from Keras, you can use the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: The SimpleRNN layer is the simplest plain vanilla RNN layer. It takes in a sequence,
+    and the output of the neuron is fed back as input. Additionally, if we want to
+    follow this RNN layer with another RNN layer, we have the option of returning
+    sequences as output. Let's have a look at some of the options.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`?SimpleRNN`: The signature for the SimpleRNN layer is as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 5.25: Signature of the SimpleRNN layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_25.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.25: Signature of the SimpleRNN layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see that the layer also has all the usual options of regular/standard
+    layers in Keras that let you specify the activations, initialization, dropout,
+    and more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The RNN layers expect the input data to be in a certain format. Since we can
+    have input data as multiple time steps for multiple features, the input format
+    is expected to make that specification unambiguous. The expected input shape is
+    (look_back, number of features). It expects a matrix with the same lookback history
+    for each feature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our case, we have one feature, and the lookback period is 10\. So, the expected
+    input shape is (10, 1). Note that we currently have each input as a list of 10
+    values, so we need to make sure it is understood as (10,1). We'll use the reshape
+    layer for this purpose. The reshape layer needs the input shape and the target
+    shape. Let's start building our model by instantiating and adding a reshape layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even though we have set the seeds for `numpy` as well as `tensorflow` to achieve
+    reproducible results, there are a lot more causes for variation owing to which
+    you may get a result that's different from ours. This applies to all the models
+    we'll use here. While the values you see may be different, the output you see
+    should largely agree with ours. If the model performance is very different, you
+    may want to tweak the number of epochs – the reason for this being that the weights
+    in neural networks are initialized randomly, so the starting point for you and
+    us could be slightly different, and we may reach a similar position when training
+    a different number of epochs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Exercise 5.03: Building Our First Plain RNN Model'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this exercise, we will build our first plain RNN model. We will have a reshape
+    layer, followed by a `SimpleRNN` layer, followed by a dense layer for the prediction.
+    We will use the formatted data for `trainX` and `trainY` that we created earlier,
+    along with the initialized layers from Keras. Perform the following steps to complete
+    this exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s gather the necessary utilities from Keras. Use the following code to
+    do so:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Instantiate the `Sequential` model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add a `Reshape` layer to get the data in the format (`look_back`, `1`):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note the arguments to the `Reshape` layer. The target shape is (`lookback, 1`),
+    as we discussed.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Add a `SimpleRNN` layer with 32 neurons and specify the input shape. Note that
+    we took an arbitrary number of neurons, so you''re welcome to experiment with
+    this number:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add a `Dense` layer of size 1:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add an `Activation` layer with a linear activation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Compile the model with the `adam` optimizer and `mean_squared_error` (since
+    we''re predicting a real-values quantity):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Print a summary of the model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The summary will be printed as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.26: Summary of the SimpleRNN model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_26.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.26: Summary of the SimpleRNN model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pay attention to the number of parameters in the `SimpleRNN` layer. It works
+    out to be as we expected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: To access the source code for this specific section, please refer to [https://packt.live/2ZctArW](https://packt.live/2ZctArW).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also run this example online at [https://packt.live/38EDOEA](https://packt.live/38EDOEA).
+    You must execute the entire Notebook in order to get the desired result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this exercise, we defined our model architecture using a single-layer plain
+    RNN architecture. This is indeed a very simple model, in comparison to the kinds
+    of models we built earlier for image data. Next, let's see how this model performs
+    on the task at hand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Model Training and Performance Evaluation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We have defined and compiled the model. The next step is to learn the model
+    parameters by fitting the model on the train data. We can do this by using a batch
+    size of 1 and a validation split of 10%, and by training for only three epochs.
+    We tried different values of epochs and found that the model gave the best result
+    at three epochs. The following code will help us train the model using the `fit()`
+    method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.27: Training output'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_27.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.27: Training output'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see that the loss is already pretty low. We trained the model here without
+    doing any careful hyperparameter tuning. You can see that for this dataset, three
+    epochs was sufficient, and we're trying to keep it simple here. With the model
+    training done, we now need to assess the performance on the train and test sets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make our code a little more modular, we''ll define two functions – one to
+    print the RMS error on the train and test sets and the other function to plot
+    the predictions for the test data along with the original values in the data.
+    Let''s begin by defining our first function, using the `sqrt` function from `math`
+    to get the root of the `mean_squared_error` provided to us by the model''s `evaluate`
+    method. The function definition is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To see how our model did, we need to supply our `model` object to this method.
+    This can be done as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output will be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The values seem rather low (admittedly, we don''t really have a benchmark here,
+    but these values do seem to be good considering that our outcome values are ranging
+    from 0 to 1). But this is a summary statistic, and we already know that the values
+    in the data change considerably. A better idea would be to visually assess the
+    performance, comparing the actual values to the predicted for the test period.
+    The following code will help us define a function that plots the predictions for
+    a given model object:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'First, the function makes predictions on the test data. Since this data is
+    scaled, we apply the inverse transform to get the data back to its original scale
+    before plotting it. The function plots the actual values as a solid line and the
+    predicted values as dotted lines. Let''s use this function to visually assess
+    how our model performs. We need to simply pass the model object to the `plot_pred`
+    function, as demonstrated in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The plot that''s displayed is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.28: Predictions versus actuals'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_28.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.28: Predictions versus actuals'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding diagram visualizes the predictions (dotted lines) from the model
+    juxtaposed with the actual values (solid lines). That looks pretty good, doesn't
+    it? At this scale, it looks like overlap between the predicted and the actual
+    is very high – the prediction curve fits the actual values almost perfectly. Prima
+    facie, it does seem that the model has done a great job.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But before congratulating ourselves, let''s recall the granularity at which
+    we worked – we''re working with 10 points to predict the next day''s stock price.
+    Of course, at this scale, even if we took simple averages, the plot would look
+    impressive. We need to zoom in, a lot, to understand this better. Let''s zoom
+    in so that the individual points are visible. We''ll use the `%matplotlib notebook`
+    cell magic command for interactivity in the chart and zoom in on the values corresponding
+    to indices `2400` – `2500` in the plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the graph presented below is not displayed properly for some reason, run
+    the cell containing `%matplotlib notebook` for a couple of times. Alternatively,
+    you can also use `%matplotlib inline` instead of `%matplotlib notebook`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The output is as follows, with the dotted lines showing the predictions and
+    the solid line depicting the actual values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.29: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_29.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.29: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even after zooming in, the result is pretty good. All the variations have been
+    captured well. A single RNN layer with just 32 neurons giving us this kind of
+    result is great. Those who have worked with time series prediction using classical
+    methods would be elated (as we were) to see the efficacy of RNNs for this task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We saw what RNNs are and, through our stock price prediction model, also saw
+    the predictive power of even a very simple model for a sequence prediction task.
+    We mentioned earlier that using an RNN is one approach to sequence processing.
+    There is another noteworthy approach to handling sequences that employs convolutions.
+    We'll explore it in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1D Convolutions for Sequence Processing
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the previous chapters, you saw how deep neural networks benefit from convolutions
+    – you saw convnets and how they can be used for working with images, and how they
+    help with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reducing the number of parameters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Learning the "local features" for the image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Interestingly, and this is something that is not very obvious, convnets can
+    also be very helpful for sequence processing tasks. Instead of 2D, we could use
+    1D convolutions for sequence data. How does 1D convolution work? Let''s take a
+    look:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.30: Feature generation using 1D convolutions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_30.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.30: Feature generation using 1D convolutions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Chapter 3*, *Image Classification with Convolutional Networks*, we saw how
+    a filter works for the case of images, extracting "patches" from the input image
+    to provide us with output "features." In the case of 1D, a filter extracts subsequences
+    from the input sequence and multiplies them by the weights to give us a value
+    for the output features. As shown in the preceding diagram, the filter moves from
+    the beginning to the end of the sequence (top to bottom). This way, the 1D convnet
+    extracts local patches. As in the 2D case, the patches/features learned here can
+    be recognized later in a different position in the sequence. Of course, as with
+    2D convolutions, you can choose the filter size and the stride for 1D convolutions
+    as well. If used with a stride more than 1, the 1D convnet can also significantly
+    reduce the number of features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: When employed on text data as the first layer, the "local features" that 1D
+    convolutions extract are features for groups of words. A filter size of 2 would
+    help extract two-word combos (called bi-grams), 3 would extract three-word combos
+    (tri-grams), and so on. Larger filter sizes would learn larger groups of terms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You could also apply pooling to 1D – max or average pooling to further subsample
+    the features. So, you could greatly reduce the effective length of sequence that
+    you're dealing with. A long input sequence can be brought down to a much smaller,
+    more manageable length. This should certainly help with speed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We understand that we benefit in speed. But do 1D convnets perform well for
+    sequences? 1D convnets have shown very good results in tasks around translation
+    and text classification. They have also shown great results for audio generation
+    and other tasks regarding predicting from sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Will 1D convnets perform well for our task of stock price prediction? Ponder
+    it – think about what kind of features we get and how we're handling the sequence.
+    If you aren't sure, then don't worry – we're going to employ a 1D convnet-based
+    model for our task and see for ourselves in the next exercise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Exercise 5.04: Building a 1D Convolution-Based Model'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this exercise, we will build our first model using 1D convnets and evaluate
+    its performance. We''ll employ a single `Conv1D` layer, followed by `MaxPooling1D`.
+    We''ll continue using the same dataset and notebook we''ve been using so far.
+    Perform the following steps to complete this exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import the 1D convolution-related layers from Keras:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Initialize a `Sequential` model and add a `Reshape` layer to reshape each instance
+    as a vector (`look_back, 1`):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add a Conv1D layer with five filters of size 5 and `relu` as the activation
+    function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we're using fewer filters than the sequence length. In many other
+    applications, the sequence can be much longer than in our example. The filters
+    are generally much lower in number than the input sequence.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Add a Maxpooling1D layer with a pool size of 5:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Flatten the output with a `Flatten` layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add a `Dense` layer with a single neuron and add a linear activation layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Print out the summary of the model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The model''s summary is as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.31: Summary of the model'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_31.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.31: Summary of the model'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Notice the dimensions of the output from the Conv1D layer – 6 x 5\. This is
+    expected – for a filter size of 5, we get 6 features. Also, take a look at the
+    overall number of parameters. It's just 36, which is indeed a very small number.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Compile the model with the loss as `mean_squared_error` and `adam` as the `optimizer`,
+    and then fit it on the train data for 5 epochs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE51]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'You should see the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.32: Training and validation loss'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_32.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.32: Training and validation loss'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: From the preceding screenshot, we can see that the validation loss is pretty
+    low for the 1D convolution model too. We need to see whether this performance
+    is comparable to that of the plain RNN. Let's evaluate the performance of the
+    model and see whether it aligns with our expectations.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Use the `get_model_perf` function to get the RMSE for the train and test sets:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE52]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output is as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE53]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This is marginally higher than that of the plain RNN model. Let's visualize
+    the predictions next.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Using the `plot_pred` function, plot the predictions and the actual values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE54]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The model output would be as follows, with the dotted lines showing the predictions
+    and solid lines depicting the actual values:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.33: Plotting the predictions and actual values'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_33.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.33: Plotting the predictions and actual values'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: This is very similar to the plot from the predictions from the RNN model (*Figure
+    5.29*). But we now acknowledge that a better assessment would need interactive
+    visualization and zooming in to a scale where the individual points are visible.
+    Let's zoom in using the interactive plotting features of matplotlib using the
+    notebook backend by using the `%matplotlib` cell magic command.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Plot again with interactivity and zoom into the last 100 data points:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE55]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output will be as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.34: Zoomed-in view of predictions'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_34.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.34: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the preceding graph is not displayed properly for some reason, run the cell
+    containing `%matplotlib notebook` for a couple of times. Alternatively, you can
+    also use `%matplotlib inline` instead of `%matplotlib notebook`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding diagram shows a closer view of the predictions (dotted lines)
+    and the actual values (solid lines). Things aren't looking too good at this scale.
+    The output is very smooth, and almost looks like some kind of averaging is going
+    on. What happened? Is this in line with your expectations? Can you explain this
+    output?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: To access the source code for this specific section, please refer to [https://packt.live/2ZctArW](https://packt.live/2ZctArW).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also run this example online at [https://packt.live/38EDOEA](https://packt.live/38EDOEA).
+    You must execute the entire Notebook in order to get the desired result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this exercise, we built and trained our 1D convolution-based model for stock
+    price prediction. We saw that the number of parameters is very low, and that the
+    training time was much lower.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Performance of 1D Convnets
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To explain the result in the previous exercise, we need to understand what is
+    happening after we extract the subsequences using the Conv1D layer. The sequence
+    in the data is being captured, that is, in the individual filters. But is the
+    sequence being retained after that, and are we really exploiting the sequence
+    in the data? No, we are not. Once the patches have been extracted, they are being
+    treated independently. It is for this reason that the performance is not great.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, why did we state that 1D convnets do great on sequence tasks previously?
+    How do you make them perform well for our task? 1D convnets do very well on tasks
+    regarding text, especially classification, where the short, local sequence has
+    very high importance and following the order in the entire sequence (say, 200
+    terms) doesn't provide a huge benefit. For time series tasks, we need order in
+    the entire sequence. There are ways to induce order consideration for tasks such
+    as time series tasks, but they aren't great.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using 1D Convnets with RNNs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We saw the benefits of 1D convnets – speed, feature reduction, lower number
+    of parameters, learning local features, and much more. We also saw that RNNs provide
+    very powerful and flexible architectures for handling sequences but have a lot
+    of parameters and are expensive to train. One possible approach can be to combine
+    both – the benefit of the representation and feature reduction from 1D convnets
+    in the initial layers, and the benefit of the sequence processing power of RNNs
+    in the following layers. Let's try it out for our task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Exercise 5.05: Building a Hybrid (1D Convolution and RNN) Model'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this exercise, we will build a model that will employ both 1D convolutions
+    and RNNs and assess the change in performance. Making a hybrid model is straightforward
+    – we''ll begin with the convolution layer, the output of which is features in
+    a sequence. The sequence can be fed straight into the RNN layer. Therefore, combining
+    the 1D convolutions with RNNs is as simple as following the Conv1D layer with
+    an RNN layer. We''ll continue this exercise in the same Jupyter Notebook. Perform
+    the following steps to complete this exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Initialize a sequential model, add a `Reshape` layer (as in the preceding exercise),
+    and add a `Conv1D` layer with five filters and a filter size 3:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE56]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, add a `SimpleRNN` layer with 32 neurons, followed by a `Dense` layer
+    and an `Activation` layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE57]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Print out the model summary:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE58]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output will be as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.35: Summary of the hybrid (1D convolution and RNN) model'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_35.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.35: Summary of the hybrid (1D convolution and RNN) model'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The output from the Conv1D layer is 8 × 5 – 8 features from 5 filters. The overall
+    number of parameters is slightly higher than the plain RNN model. This is because
+    the sequence size we're dealing with is very low. If we were dealing with larger
+    sequences, we would have seen a reduction in the parameters. Let's compile and
+    fit the model.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Compile and fit the model on the training data for three epochs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE59]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The model training output is as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.36: Training and validation loss'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_36.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.36: Training and validation loss'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Let's assess the performance first by looking at RMSE. We don't expect this
+    to be very useful for our example, but let's print it out as good practice.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Print the RMSE for the train and test set using the `get_model_perf` function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE60]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'You''ll get the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE61]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The values seem lower, but only a very close look will help us assess the performance
+    of the model.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Plot the prediction versus actual in interactive mode and zoom in on the last
+    100 points:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE62]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output of the preceding command will be as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.37: Plot of the combined model'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_37.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Figure 5.37: Plot of the combined model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Following is a zoomed-in view of the predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.38: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_38.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.38: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the graphs presented below are not displayed properly for some reason, run
+    the cell containing `%matplotlib notebook` for a couple of times. Alternatively,
+    you can also use `%matplotlib inline` instead of `%matplotlib notebook`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This result is extremely good. The prediction (dotted lines) is extremely close
+    to the actual (solid lines) for the test data – capturing not only the level but
+    also the minute variations very well. There is also some effective regularization
+    going on when the 1D convnet is extracting patches from the sequence. These features
+    are being fed in sequence to the RNN, which is using its raw power to provide
+    the output we see. There is indeed merit in combining 1D convnets with RNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: To access the source code for this specific section, please refer to [https://packt.live/2ZctArW](https://packt.live/2ZctArW).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can also run this example online at [https://packt.live/38EDOEA](https://packt.live/38EDOEA).
+    You must execute the entire Notebook in order to get the desired result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this exercise, we saw how we can combine 1D convnets and RNNs to form a hybrid
+    model that can provide high performance. We acknowledge that there is merit in
+    trying this combination for sequence processing tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Activity 5.01: Using a Plain RNN Model to Predict IBM Stock Prices'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have seen RNNs in action and can now appreciate the kind of power they bring
+    in sequence prediction tasks. We also saw that RNNs in conjunction with 1D convnets
+    provide great results. Now, let's employ these ideas in another stock price prediction
+    task, this time predicting the stock price for IBM. The dataset can be downloaded
+    from [https://packt.live/3fgmqIL](https://packt.live/3fgmqIL). You will visualize
+    the data and understand the patterns. From your understanding of the data, choose
+    a lookback period and build an RNN-based model for prediction. The model will
+    have a 1D convnet as well as a plain RNN layer. You will also employ dropout to
+    prevent overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Perform the following steps to complete this exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Load the `.csv` file, reverse the index, and plot the time series (the `Close`
+    column) for visual inspection.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Extract the values for `Close` from the DataFrame as a `numpy` array and plot
+    them using `matplotlib`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Assign the final 25% data as test data and the first 75% as train data.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using `MinMaxScaler` from `sklearn`, scale the train and test data.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using the `get_lookback` function we defined in this chapter, get lookback data
+    for the train and test data using a lookback period of 15.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: From Keras, import all the necessary layers for employing plain RNNs (`SimpleRNN`,
+    `Activation`, `Dropout`, `Dense`, and `Reshape`) and 1D convolutions (Conv1D).
+    Also, import `mean_squared_error`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Build a model with a 1D convolution layer (5 filters of size 3) and an RNN layer
+    with 32 neurons. Add 25% dropout after the RNN layer. Print the model's summary.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compile the model with the `mean_squared_error` loss and the `adam` optimizer.
+    Fit this on the train data in five epochs with a validation split of 10% and a
+    batch size of 1.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using the `get_model_perf` method, print the RMSE of the model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Plot the predictions – the entire view, as well as a zoomed-in one for a close
+    assessment of the performance.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The zoomed-in view of the predictions (dotted lines) versus the actuals (solid
+    lines) should be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.39: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B15385_05_39.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.39: Zoomed-in view of predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The detailed steps for this activity, along with the solutions and additional
+    commentary, are presented on page 410.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we looked at the considerations of working with sequences.
+    There are several tasks that require us to exploit information contained in a
+    sequence, where sequence-agnostic models would fare poorly. We saw that using
+    RNNs is a very powerful approach to sequence modeling – the architecture explicitly
+    processes the sequence and considers the information accumulated so far, along
+    with the new input, to generate the output. Even very simple RNN architectures
+    performed very well on our stock price prediction task. We got the kind of results
+    that would take a lot of effort to get using classical approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also saw that 1D convolutions can be employed in sequence prediction tasks.
+    1D convolutions, like their 2D counterparts for images, learn local features in
+    a sequence. We built a 1D convolution model that didn't fare too well on our task.
+    The final model that we built combined 1D convolutions and RNNs and provided excellent
+    results regarding the stock price prediction task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will discuss models that are variations of RNNs that
+    are even more powerful. We will also discuss architectures that extract the latent
+    power of the idea of the RNN. We will apply these "RNNs on steroids" to an important
+    task in natural language processing – sentiment classification.
+  prefs: []
+  type: TYPE_NORMAL

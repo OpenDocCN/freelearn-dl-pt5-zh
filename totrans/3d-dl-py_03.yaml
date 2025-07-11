@@ -1,0 +1,983 @@
+- en: '2'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Introducing 3D Computer Vision and Geometry
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will learn about some basic concepts of 3D computer vision
+    and geometry that will be especially useful for later chapters in this book. We
+    will start by discussing what rendering, rasterization, and shading are. We will
+    go through different lighting models and shading models, such as point light sources,
+    directional light sources, ambient lighting, diffusion, highlights, and shininess.
+    We will go through a coding example for rendering a mesh model using different
+    lighting models and parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will then learn how to use PyTorch for solving optimization problems. Particularly,
+    we will go through stochastic gradient descent over heterogeneous mini-batches,
+    which becomes possible by using PyTorch3D. We will also learn about different
+    formats for mini-batches in PyTorch3D, including the list, padded, and packed
+    formats, and learn how to convert between the different formats.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the last part of the chapter, we will discuss some frequently used rotation
+    representations and how to convert between these representations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’re going to cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the basic concepts of rendering, rasterization, and shading
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the Lambertian shading and Phong shading models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to define a PyTorch tensor and optimize the tensor using an optimizer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to define a mini-batch and heterogeneous mini-batch and packed and padded
+    tensors
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Rotations and different ways to describe rotations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exponential mapping and log mapping in the SE(3) space
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To run the example code snippets in this book, the readers need to have a computer,
+    ideally with a GPU. However, running the code snippets only with CPUs is not impossible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The recommended computer configuration includes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A modern GPU – for example, the Nvidia GTX series or RTX series with at least
+    8 GB of memory
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Python 3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PyTorch library and PyTorch3D libraries
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The code snippets with this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python.](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the basic concepts of rendering, rasterization, and shading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Rendering** is a process that takes 3D data models of the world around our
+    camera as input and output images. It is an approximation to the physical process
+    where images are formed in our camera in the real world. Typically, the 3D data
+    models are meshes. In this case, rendering is usually done using ray tracing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 2.1: Rendering by ray tracing (rays are generated from camera origins
+    and go through the image pixels for finding relevant mesh faces) ](img/B18217_02_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.1: Rendering by ray tracing (rays are generated from camera origins
+    and go through the image pixels for finding relevant mesh faces)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An example of ray tracing processing is shown in *Figure 2**.1*. In the example,
+    the world model contains one 3D sphere, which is represented by a mesh model.
+    To form the image of the 3D sphere, for each image pixel, we generate one ray,
+    starting from the camera origin and going through the image pixel. If one ray
+    intersects with one mesh face, then we know the mesh face can project its color
+    to the image pixel. We also need to trace the depth of each intersection because
+    a face with a smaller depth would occlude faces with larger depths.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, the process of rendering can usually be divided into two stages – rasterization
+    and shading. The ray tracing process is a typical rasterization process – that
+    is, the process of finding relevant geometric objects for each image pixel. Shading
+    is the process of taking the outputs of the rasterization and computing the pixel
+    value for each image pixel.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `pytorch3d.renderer.mesh.rasterize_meshes.rasterize_meshes` function in
+    PyTorch3D usually computes the following four things for each image pixel:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`pix_to_face` is a list of face indices that the ray may intersect.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`zbuf` is a list of depth values of these faces.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`bary_coords` is a list of barycentric coordinates of the intersection point
+    of each face and the ray.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pix_dists` is a list of signed distances between pixels (*x* and *y*) and
+    the nearest point on all the faces where the ray intersects. The values of this
+    list can take negative values since it contains signed distances.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that usually, one face with the smallest depth would occlude all the mesh
+    faces with larger depths. Thus, if all we need is the rendered image, then all
+    we need in this list is the face with the smallest depth. However, with the more
+    advanced setting of differentiable rendering (which we will cover in later chapters
+    of this book), the pixel colors are usually fused from multiple mesh faces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding barycentric coordinates
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'For each point coplanar with a mesh face, the coordinates of the point can
+    always be written as a linear combination of the coordinates of the three vertices
+    of the mesh face. For example, as shown in the following diagram, the point p
+    can be written as ![](img/01.png), where *A*, *B*, and *C* are the coordinates
+    of the three vertices of the mesh face. Thus, we can represent each such point
+    with the coefficients u, v, and w. This representation is called the barycentric
+    coordinates of the point. For point lays within the mesh face triangle, ![](img/02.png)
+    and all u,v,w are positive numbers. Since barycentric coordinates define any point
+    inside a face as a function of face vertices, we can use the same coefficients
+    to interpolate other properties across the whole face as a function of the properties
+    defined at the vertices of the face. For example, we can use it for shading as
+    shown in *Figure 2**.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 2.2: Definition of the barycentric coordinate system ](img/B18217_02_002.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.2: Definition of the barycentric coordinate system'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once we have a list of the `pix_to_face`, `zbuf`, `bary_coords`, and `dists`
+    values, a shading process would mimic the physical process of image formation
+    as in the real world. Thus, we are going to discuss several physical models for
+    color formation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Light source models
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Light propagation in the real world can be a sophisticated process. Several
+    approximations of light sources are usually used in shading to reduce computational
+    costs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first assumption is ambient lighting, where we assume that there is some
+    background light radiation after sufficient reflections, such that they usually
+    come from all directions with almost the same amplitude at all image pixels.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Another assumption that we usually use is that some light sources can be considered
+    point light sources. A point light source radiates lights from one single point
+    and the radiations at all directions have the same color and amplitude.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A third assumption that we usually use is that some light sources can be modeled
+    as directional light sources. In such a case, the light directions from the light
+    source are identical at all the 3D spatial locations. Directional lighting is
+    a good approximation model for cases where the light sources are far away from
+    the rendered objects – for example, sunlight.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the Lambertian shading model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The first physical model that we will discuss is Lambert’s cosine law. Lambertian
+    surfaces are types of objects that are not shiny at all, such as paper, unfinished
+    wood, and unpolished stones:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 2.3: Light diffusion on Lambertian surfaces ](img/B18217_02_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.3: Light diffusion on Lambertian surfaces'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 2**.3* shows an example of how lights diffuse on a Lambertian surface.
+    One basic idea of the Lambertian cosine law is that for Lambertian surfaces, the
+    amplitude of the reflected light does not depend on the viewer’s angle, but only
+    depends on the angle ![](img/03.png) between the surface normal and the direction
+    of the incident light. More precisely, the intensity of the reflected light ![](img/04.png)
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/05.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/06.png) is the material’s reflected coefficient and ![](img/07.png)
+    is the amplitude of the incident light. If we further consider the ambient light,
+    the amplitude of the reflected light is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/08.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/09.png) is the amplitude of the ambient light.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the Phong lighting model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'For shiny surfaces, such as polished tile floors and glossy paint, the reflected
+    light also contains a highlight component. The Phong lighting model is a frequently
+    used model for these glossy components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 2.4: The Phong lighting model ](img/B18217_02_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.4: The Phong lighting model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An example of the Phong lighting model is shown in *Figure 2**.4*. One basic
+    principle of the Phong lighting model is that the shiny light component should
+    be strongest in the direction of reflection of the incoming light. The component
+    would become weaker as the angle ![](img/10.png) between the direction of reflection
+    and the viewing angle becomes larger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'More precisely, the amplitude of the shiny light component ![](img/101.png)
+    is equal to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/11.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, the exponent ![](img/12.png) is a parameter of the model for controlling
+    the speed at which the shiny components attenuate when the viewing angle is away
+    from the direction of reflection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, if we consider all three major components – ambient lighting, diffusion,
+    and highlights – the final equation for the amplitude of light is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/13.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Note that the preceding equation applies to each color component. In other
+    words, we will have one of these equations for each color channel (red, green,
+    and blue) with a distinct set of ![](img/14.png) values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we have learned about the basic concepts of rendering, rasterization, and
+    rendering. We have also learned about the different light source models and shading
+    models. We are ready to perform some coding exercises to use these light sources
+    and shading models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Coding exercises for 3D rendering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section, we will look at a concrete coding exercise using PyTorch3D
+    for rendering a mesh model. We are going to learn how to define a camera model
+    and how to define a light source in PyTorch3D. We will also learn how to change
+    the incoming light components and material properties so that more realistic images
+    can be rendered by controlling the three light components (ambient, diffusion,
+    and glossy):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to import all the Python modules that we need:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we need to load the mesh that we are going to use. The `cow.obj` file
+    contains a mesh model for a toy cow object:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will define the cameras and light sources next. We use the `look_at_view_transform`
+    function to map easy-to-understand parameters, such as the distance from the camera,
+    elevation angle, and azimuth angle to obtain the rotation (R) and translation
+    (T) matrices. The `R` and `T` variables define where we are going to place our
+    camera. The `lights` variable is a point light source placed at `[0.0, 0.0, -3.0]`
+    as its location:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will define a `renderer` variable of the `MeshRenderer` type. A `renderer`
+    variable is a callable object, which can take a mesh as input and output the rendered
+    images. Note that the renderer takes two inputs in its initialization – one rasterizer
+    and one shader. PyTorch3D has defined several different types of rasterizers and
+    shaders. Here, we are going to use `MeshRasterizer` and `HardPhongShader`. Note
+    that we can also specify the setting of the rasterizer. `image_size` is equal
+    to `512` here, which implies the rendered images would be 512 x 512 pixels. `blur_radius`
+    is set to `0` and `faces_per_pixel` is set to `1`. The `blur_radius` and `faces_per_pixel`
+    settings are the most useful for differentiable rendering, where `blur_radius`
+    should be greater than `0` and `faces_per_pixel` should be greater than `1`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We are therefore ready to run our first rendering results by calling the renderer
+    and passing the mesh model. The rendered image is shown in *Figure 2**.5*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 2.5: The rendered image when the light source is placed in front ](img/B18217_02_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.5: The rendered image when the light source is placed in front'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we will change the location of the light source to the back of the mesh
+    and see what will happen. The rendered image is shown in *Figure 2**.6*. In this
+    case, the light from the point light source cannot intersect with any mesh faces
+    that are facing us. Thus, all the colors that we can observe here are due to ambient
+    light:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 2.6: The rendered image when the light source is placed behind the
+    toy cow ](img/B18217_02_006.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.6: The rendered image when the light source is placed behind the toy
+    cow'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next experiment, we are going to define a `materials` data structure.
+    Here, we change the configuration so that the ambient components are close to
+    0 (indeed, being `0.01`). Because the point light source is behind the object
+    and the ambient light is also turned off, the rendered object does not reflect
+    any light now. The rendered image is shown in *Figure 2**.7:*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 2.7: The rendered image without ambient light and the point light
+    source behind the toy cow ](img/B18217_02_007.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.7: The rendered image without ambient light and the point light source
+    behind the toy cow'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next experiment, we will rotate the camera again and redefine the light
+    source location so that the light can shine on the cow’s face. Note that when
+    we define the material, we set `shininess` to `10.0`. This `shininess` parameter
+    is precisely the `p` parameter in the Phong lighting model. `specular_color` is
+    `[0.0, 1.0, 0.0]`, which implies that the surface is shiny mainly in the green
+    component. The rendered results are shown in *Figure 2**.8*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 2.8: The rendered image with specular lighting components ](img/B18217_02_008.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.8: The rendered image with specular lighting components'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next experiment, we are going to change `specular_color` to `red` and
+    increase the `shininess` value. The results are shown in *Figure 2**.9*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 2.9: The rendered image with a red specular color ](img/B18217_02_009.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.9: The rendered image with a red specular color'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we turn off the shininess and the results are shown in *Figure 2**.10*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '![Figure 2.10: The rendered image without specular components ](img/B18217_02_010.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 2.10: The rendered image without specular components'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the first part of this chapter, we mainly discussed rendering and shading,
+    which are super important for 3D computer vision. Next, we will discuss another
+    very important topic for 3D deep learning, which is the heterogeneous batch issue
+    for optimization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using PyTorch3D heterogeneous batches and PyTorch optimizers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we are going to learn how to use the PyTorch optimizer on PyTorch3D
+    heterogeneous mini-batches. In deep learning, we are usually given a list of data
+    examples, such as the following ones – ![](img/15.png).. Here, ![](img/16.png)
+    are the observations and ![](img/17.png) are the prediction values. For example,
+    ![](img/18.png) may be some images and ![](img/20.png) the ground-truth classification
+    results – for example, “cat” or “dog”. A deep neural network is then trained so
+    that the outputs of the neural networks are as close to ![](img/21.png) as possible.
+    Usually, a loss function between the neural network outputs and ![](img/22.png)
+    is defined so that the loss function values decrease as the neural network outputs
+    become closer to ![](img/22.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Thus, training a deep learning network is usually done by minimizing the loss
+    function that is evaluated on all training data examples, ![](img/23.png) and![](img/24.png).
+    A straightforward method used in many optimization algorithms is computing the
+    gradients first, as shown in the following equation, and then modifying the parameters
+    of the neural network along the direction of the negative gradient. In the equation,
+    *f* represents the neural network that takes ![](img/25.png) as its input and
+    has parameters Ɵ; loss is the loss function between the neural network outputs
+    and the ground-truth prediction![](img/26.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/27.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'However, computing this gradient is expensive, as the computational cost is
+    proportional to the size of the training dataset. In reality, a **Stochastic Gradient
+    Descent** (**SGD**) algorithm is used instead of the original gradient descent
+    algorithm. In the SGD algorithm, the descent direction is computed as in the following
+    equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/28.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the equation, the so-called mini-batch D is a small subset of all the training
+    data examples. The mini-batch D is randomly sampled from the whole training data
+    examples in each iteration. The SGD algorithm has a much lower computational cost
+    than the gradient descent algorithm. Due to the law of large numbers, the computed
+    descent directions in SGD are approximately close to the gradient descent directions.
+    It is also widely believed that SGD introduces certain implicit regularization,
+    which may contribute to the nice generalization properties of deep learning. The
+    method for choosing the size of the mini-batch is an important hyperparameter
+    that needs to be considered carefully. Nevertheless, the SGD algorithm and its
+    variants have been the methods of choice for training deep learning models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For many data types, such as images, the data can easily be made homogeneous.
+    We can form a mini-batch of images all with the same widths, heights, and channels.
+    For example, a mini-batch of eight images with three channels (the three colors
+    red, green, and blue), a height of 256, and a width of 256 can be made into a
+    PyTorch tensor with the dimensions 8 x 3 x 256 x 256\. Usually, the first dimension
+    of the tensor represents the data sample indices within the mini-batch. Usually,
+    computations on this kind of homogeneous data can be done efficiently using GPUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, 3D data is usually heterogeneous. For example, meshes within
+    one mini-batch may contain different numbers of vertices and faces. Processing
+    this heterogeneous data on GPUs efficiently is not a trivial issue. Coding for
+    the heterogeneous mini-batch processing can also be tedious. Luckily, PyTorch3D
+    has the capacity to handle heterogeneous mini-batches very efficiently. We will
+    go over a coding exercise involving these PyTorch3D capacities in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A coding exercise for a heterogeneous mini-batch
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we are going to learn how to use the PyTorch optimizer and
+    PyTorch3D heterogeneous mini-batch capacities by looking at a toy example. In
+    this example, we will consider a problem where a depth camera is placed at an
+    unknown location and we want to estimate the unknown location using the sensing
+    results of the camera. To simplify the problem, we assume that the orientation
+    of the camera is known and the only unknown is the 3D displacement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'More specifically, we assume that the camera observes three objects in the
+    scene and we know the ground-truth mesh models of the three objects. Let us look
+    at the code using PyTorch and PyTorch3D to solve the problem as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the first step, we are going to import all the packages that we are going
+    to use:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the next step, we will define a `torch` device using either a CPU or CUDA:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The mesh models that you are going to use in this toy example are included
+    in the code repository and are under the `data` subfolder. We are going to use
+    three mesh models contained in the `cube.obj`, `diamond.obj` and `dodecahedron.obj`
+    files. In the following code snippet, we are using the `Open3D` library to load
+    these mesh models and visualize them:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we are going to use PyTorch3D to load the same meshes and build a list
+    of meshes, which is the `mesh_list` variable:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we can create a PyTorch3D mini-batch of meshes by using the `join_meshes_as_batch`
+    PyTorch3D function. The function takes a list of meshes and returns a mini-batch
+    of meshes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In each PyTorch3D mini-batch, there are three ways to represent vertices and
+    faces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**List format**: The vertices are represented by a list of tensors where each
+    tensor represents the vertices or faces of one mesh within the mini-batch.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Padded format**: All the vertices are represented by one tensor and the data
+    of the smaller meshes are zero-padded so that all the meshes now have the same
+    numbers of vertices and faces.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Packed format**: All the vertices or faces are packed into one tensor. For
+    each vertex or face, which mesh it belongs to is tracked internally.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The three representations all have their pros and cons. Nevertheless, the formats
+    can be converted between each other efficiently by using the PyTorch3D API.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next code snippet shows an example of how to return vertices and faces
+    in a list format from a mini-batch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To return vertices and faces in the padded format, we can use the following
+    PyTorch3D API:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To get vertices and faces in the packed format, we can use the following code
+    snippet:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In this coding example, we consider the `mesh_batch` variable as the ground-truth
+    mesh model for the three objects. We will then simulate a noisy and displaced
+    version of the three meshes. In the first step, we want to clone the ground truth
+    mesh models:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We then define a `motion_gt` variable to represent the displacement between
+    the camera location and the origin:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To simulate the noisy depth camera observations, we generate some random Gaussian
+    noise with a mean equal to `motion_gt`. The noises are added to `mesh_batch_noisy`
+    using the `offset_verts` PyTorch3D function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To estimate the unknown displacement between the camera and the origin, we
+    will formulate an optimization problem. First, we will define the `motion_estimate`
+    optimization variable. The `torch.zeros` function will create an all zero PyTorch
+    tensor. Note that we set `requires_grad` to `true`. What that means is that when
+    we run gradient backpropagation from the `loss` function, we want the gradient
+    for this variable to be automatically computed by PyTorch for us:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we are going to define a PyTorch optimizer with a learning rate of `0.1`.
+    By passing a list of variables to the optimizer, we specify the optimization variables
+    for this optimization problem. Here, the optimization variable is the `motion_estimate`
+    variable:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The major optimization procedure is then shown as follows. Basically, we run
+    the stochastic gradient descent for 200 iterations. The resulting `motion_estimate`
+    should be very close to the ground truth after the 200 iterations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Each optimization iteration can be divided into the following four steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the first step, `optimizer.zero_grad()` resets all the gradient values from
+    the values computed in the last iteration to zero.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the second step, we compute the `loss` function. Note that PyTorch retains
+    a dynamic computational graph. In other words, all the computation procedures
+    toward the `loss` function are recorded and will be used in the backpropagation.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the third step, `loss.backward()` computes all the gradients from the `loss`
+    function to the optimization variables in the PyTorch optimizer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the fourth and final step, `optimizer.step` moves all the optimization variables
+    one step in the direction of decreasing the `loss` function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In the process of computing the `loss` function, we randomly sample 5,000 points
+    from the two meshes and compute their Chamfer distances. The Chamfer distance
+    is a distance between two sets of points. We will have a more detailed discussion
+    of this distance function in later chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can check that the optimization process here would converge to the `[3,4,5]`
+    ground-truth location very quickly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this coding exercise, we learned how to use heterogenous mini-batches in
+    PyTorch3D. Next, we will discuss another important concept in 3D computer vision.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding transformations and rotations
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In 3D deep learning and computer vision, we usually need to work with 3D transformations,
+    such as rotations and 3D rigid motions. PyTorch3D provides a high-level encapsulation
+    of these transformations in its `pytorch3d.transforms.Transform3d` class. One
+    advantage of the `Transform3d` class is that it is mini-batch based. Thus, as
+    frequently needed in 3D deep learning, it is possible to apply a mini-batch of
+    transformations on a mini-batch of meshes only within several lines of code. Another
+    advantage of `Transform3d` is that gradient backpropagation can straightforwardly
+    pass through `Transform3d`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PyTorch3D also provides many lower-level APIs for computations in the Lie groups
+    SO(3) and SE(3). Here, SO(3) denotes the special orthogonal group in 3D and SE(3)
+    denotes the special Euclidean group in 3D. Informally speaking, SO(3) denotes
+    the set of all the rotation transformations and SE(3) denotes the set of all the
+    rigid transformations in 3D. Many low-level APIs on SE(3) and SO(3) are provided
+    in PyTorch3D.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In 3D computer vision, multiple representations exist for rotations. One representation
+    is the rotation matrices ![](img/29.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this equation, *x* is a 3D vector and *R* is a 3 x 3 matrix. To be a rotation
+    matrix, *R* needs to be an orthogonal matrix and has a determinant of +1\. Thus,
+    not all 3 x 3 matrices can be a rotation matrix. The degree of freedom for rotation
+    matrices is 3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A 3D rotation can also be represented by a 3D vector *v,* where the direction
+    of *v* is the rotation axis. That is, the rotation would keep *v* fixed and rotate
+    all the other things around *v*. It is also conventional to use the amplitude
+    of *v* to represent the angle of rotation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are various mathematical connections between the two representations
+    of rotation. If we consider a constant speed rotation around the axis v, then
+    the rotation matrices become a matrix-valued function of the time *t*, *R(t)*.
+    In this case, the gradient of *R(t)* is always a skew-symmetric matrix, in the
+    form shown in the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/30.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, the following applies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/31.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As we can see from these two equations, the skew-symmetric matrix of the gradient
+    is uniquely determined by the vector *v* and vice versa. This mapping from the
+    vector *v* to its skew-symmetric matrix form is usually called the hat operator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A closed-form formula from the skew-symmetric matrix gradient to the rotation
+    matrix exists as follows. The mapping is called the exponential map for ![](img/32.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/33.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Certainly, the inverse mapping of the exponential map also exists:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/34.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The mapping is called the logarithmic map for ![](img/35.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: All the hat, inverse hat, exponential, and logarithmic operations have already
+    been implemented in PyTorch3D. PyTorch3D also implements many other frequently
+    used 3D operations, such as quaternion operations and Euler angles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A coding exercise for transformation and rotation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we will go through a coding exercise on how to use some of
+    PyTorch3D’s low-level APIs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We begin by importing the necessary packages:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We then define a PyTorch device using either a CPU or CUDA:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will define a mini-batch of four rotations. Here, each rotation is
+    represented by one 3D vector. The direction of the vector represents the rotation
+    axis and the amplitude of the vector represents the angle of rotation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The shape of `log_rot` is `[4, 3]`, where `4` is the batch size and each rotation
+    is represented by a 3D vector. We can use the hat operator in PyTorch3D to convert
+    them into the 3 x 3 skew-symmetric matrix representation as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The backward conversion from the skew-symmetric matrix form to the 3D vector
+    form is also possible using the `hat_inv` operator:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'From the gradient matrix, we can compute the rotation matrix by using the PyTorch3D
+    `so3_exp_map` function:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The inverse conversation is `so3_log_map`, which would map the rotation matrix
+    back to the gradient matrix again:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: These coding exercises show the most frequently used PyTorch3D APIs for transformations
+    and rotations. These APIs can be very useful for real-world 3D computer vision
+    projects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we learned about the basic concepts of rendering, rasterization,
+    and shading, including light source models, the Lambertian shading model, and
+    the Phong lighting model. We learned how to implement rendering, rasterization,
+    and shading using PyTorch3D. We also learned how to change the parameters in the
+    rendering process, such as ambient lighting, shininess, and specular colors, and
+    how these parameters would affect the rendering results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We then learned how to use the PyTorch optimizer. We went through a coding example,
+    where the PyTorch optimizer was used on a PyTorch3D mini-batch. In the last part
+    of the chapter, we learned how to use the PyTorch3D APIs for converting between
+    the different representations or rotations and transformations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will learn some more advanced techniques for using deformable
+    mesh models for fitting real-world 3D data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'PART 2: 3D Deep Learning Using PyTorch3D'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This part will cover some basic 3D computer vision processing using PyTorch3D.
+    Implementing these 3D computer vision algorithms may become easier by using PyTorch3D.
+    The readers will get a lot of hands-on experience working with meshes, point clouds,
+    and fitting from images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part includes the following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 3*](B18217_03.xhtml#_idTextAnchor046), *Fitting Deformable Mesh Models
+    to Raw Point Clouds*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 4*](B18217_04.xhtml#_idTextAnchor059), *Learning Object Pose Detection
+    and Tracking by Differentiable Rendering*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 5*](B18217_05.xhtml#_idTextAnchor070), *Understanding Differentiable
+    Volumetric Rendering*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 6*](B18217_06.xhtml#_idTextAnchor081), *Exploring Neural Radiance
+    Fields (NeRF)*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

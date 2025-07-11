@@ -1,0 +1,820 @@
+- en: Chapter 4
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Introducing Bayesian Deep Learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002),
+    *Fundamentals of* *Bayesian Inference*, we saw how traditional methods for Bayesian
+    inference can be used to produce model uncertainty estimates, and we introduced
+    the properties of well-calibrated and well-principled methods for uncertainty
+    estimation. While these traditional methods are powerful in many applications,
+    [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002)
+    also highlighted some of their limitations with respect to scaling. In *Chapter
+    3,* *Fundamentals of Deep Learning*, we saw the impressive things DNNs are capable
+    of given large amounts of data; but we also learned that they aren’t perfect.
+    In particular, they often lack robustness for out-of-distribution data – a major
+    concern when we consider the deployment of these methods in real-world applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file79.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.1: BDL combines the strengths of both deep learning and traditional
+    Bayesian inference'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'BDL looks to ameliorate the shortcomings of both traditional Bayesian inference
+    and standard DNNs, using the strengths from one method to address the weaknesses
+    of the other. The fundamental idea is pretty straightforward: our DNNs gain uncertainty
+    estimates, and so can be implemented more robustly, and our Bayesian inference
+    methods gain the scalability and high-dimensional non-linear representation learning
+    of DNNs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: While conceptually this is quite intuitive, practically it’s not a case of just
+    gluing things together. As the model complexity increases, so does the computational
+    cost of Bayesian inference – making certain methods for Bayesian inference (such
+    as via sampling) intractable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll introduce the concept of an ideal **Bayesian Neural**
+    **Network** (**BNN**) and discuss its limitations, and we’ll learn about how we
+    can use BNNs to create more robust deep learning systems. In particular, we’ll
+    be covering the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ideal BNN
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: BDL fundamentals
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Tools for BDL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 4.1 Technical requirements
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To complete the practical tasks in this chapter, you will need a Python 3.8
+    environment with the `SciPy` stack and the following additional Python packages
+    installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: TensorFlow 2.0
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TensorFlow Probability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Seaborn plotting library
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'All of the code for this book can be found in the GitHub repository for the
+    book: [https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference](https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.2 The ideal BNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As we saw in the previous chapter, a standard neural network comprises multiple
+    layers. Each of these layers comprises a number of perceptrons – and these perceptrons
+    comprise a multiplicative component (weight) and an additive component (bias).
+    Each weight and bias parameter comprises a single parameter – or point estimate
+    – and, in combination, these parameters transform the input to the perceptron.
+    As we’ve seen, multiple layers of perceptrons are capable of achieving impressive
+    feats when trained via backpropagation. However, these point estimates contain
+    very limited information – let’s take a look.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Generally speaking, the goal of deep learning is to find (potentially very,
+    very many) parameter values that best map a set of inputs onto a set of outputs.
+    That is, given some data, for each parameter in our network, we’ll choose the
+    parameter that best describes the data. This often boils down to taking the mean
+    – or expectation – of the candidate parameter values. Let’s see what this may
+    look like for a single parameter in a neural network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file80.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.2: A table of values illustrating how parameters are averaged in machine
+    learning models'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand this better, we’ll use a table to illustrate the relationship
+    between input values, model parameters, and output values. The table shows, for
+    five example input values (first column), what the ideal parameter (second column)
+    would be to obtain the target output value (fourth column). In this context, ideal
+    here simply means that the input value multiplied by the ideal parameter will
+    exactly equal the target output value. Because we need to find a single value
+    that best maps our input data to our output data, we end up taking the expectation
+    (or mean) of our ideal parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we see here, taking the mean of these parameters is the compromise our model
+    needs to make in order to find a parameter value that best fits all five data
+    points in the example. This is the compromise that is made with traditional deep
+    learning – by using distributions, rather than point estimates, BDL can improve
+    on this. If we look at our standard deviation (*σ*) values, we get an idea of
+    how the variation in the *ideal* parameter values (and thus the variance in the
+    input values) translates to a variation in the loss. So, what happens if we have
+    a poor selection of parameter values?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file81.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.3: A table of values illustrating how parameter *σ* increases for
+    poor sets of parameters'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we compare *Figure* [*4.2*](#x1-51002r2) and *Figure* [*4.3*](#x1-51004r3),
+    we see how a significant variance in parameter values can lead to poorer approximation
+    from the model, and that larger *σ* can be indicative of an error (at least for
+    well-calibrated models). While in practice things are a little more complicated,
+    what we see here is essentially what’s happening in every parameter of a deep
+    learning model: parameter distributions are distilled down to point estimates,
+    losing information in the process. In BDL, we’re interested in harnessing the
+    additional information from these parameter distributions, using it for more robust
+    training and for the creation of uncertainty-aware models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: BNNs look to achieve this by modeling the distribution over neural network parameters.
+    In the ideal case, the BNN would be able to learn any arbitrary distribution for
+    every parameter in the network. At inference time, we would sample from the NN
+    to obtain a distribution of output values. Using the sampling methods introduced
+    in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of* *Bayesian Inference*](CH2.xhtml#x1-250002),
+    we would repeat this process until we have obtained a statistically sufficient
+    number of samples from which we could assume a good approximation of our output
+    distribution. We could then use this output distribution to infer something about
+    our input data, whether that be classifying speech content or performing regression
+    on house prices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because we’d have parameter distributions, rather than point estimates, our
+    ideal BNN would produce precise uncertainty estimates. These would tell us how
+    likely the parameter values are given the input data. In doing so, they would
+    allow us to detect cases where our input data deviates from the data seen at training
+    time, and to quantify the degree of this deviation by how far a given sample of
+    values lies from the distribution learned at training time. With this information,
+    we would be able to handle our neural network outputs more intelligently – for
+    example, if they’re highly uncertain, then we could fall back to some safe, pre-defined
+    behavior. This concept of interpreting model predictions based on uncertainties
+    should be familiar: we saw this in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals
+    of Bayesian Inference*](CH2.xhtml#x1-250002), where we learned that high uncertainties
+    are indicative of erroneous model predictions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking back to [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian
+    Inference*](CH2.xhtml#x1-250002) again, we saw that sampling quickly becomes computationally
+    intensive. Now imagine sampling from a distribution for each parameter in an NN
+    – even if we take a relatively small network such as MobileNet (an architecture
+    specifically designed to be more computationally efficient), we’re still looking
+    at an enormous 4.2 million parameters. Performing this kind of sampling-based
+    inference on such a network would be incredibly computationally intensive, and
+    this would be even worse for other network architectures (for example, AlexNet
+    has 60 million parameters!).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of this intractability, BDL methods make use of various approximations
+    in order to facilitate uncertainty quantification. In the next section, we’ll
+    learn about some of the fundamental principles applied to make uncertainty estimates
+    possible with DNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.3 BDL fundamentals
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Throughout the rest of the book, we will introduce a range of methods necessary
+    to make BDL possible. There are a number of common themes present through these
+    methods. We’ll cover these here, so that we have a good understanding of these
+    concepts when we encounter them later on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These concepts include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Gaussian assumptions**: With many BDL methods, we use Gaussian assumptions
+    to make things computationally tractable'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Uncertainty sources**: We’ll take a look at the different sources of uncertainty,
+    and how we can determine the contributions of these sources for some BDL methods'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Likelihoods**: We were introduced to likelihoods in [*Chapter 2*](CH2.xhtml#x1-250002),
+    [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002), and here we’ll learn
+    more about the importance of likelihood as a metric for evaluating the calibration
+    of probabilistic models'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s look at each of these in the following subsections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.3.1 Gaussian assumptions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the ideal case described previously, we talked about learning distributions
+    for each neural network parameter. While realistically each parameter would follow
+    a specific non-Gaussian distribution, this would make an already difficult problem
+    even *more* difficult. This is because, for a BNN, we’re interested in learning
+    two key probabilities:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The probability of the weights *W* given some data *D*:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![P (W |D ) ](img/file82.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: 'The probability of some output *ŷ* given some input **x**:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![P (yˆ|x) ](img/file83.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: Obtaining these probabilities for arbitrary probability distributions would
+    involve solving intractable integrals. Gaussian integrals, on the other hand,
+    have closed-form solutions – making them a very popular choice for approximating
+    distributions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this reason, it’s common in BDL to assume that we can closely approximate
+    the true underlying distribution of our weights with Gaussian distributions (similarly
+    to what we’ve seen in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian
+    Inference*](CH2.xhtml#x1-250002)). Let’s see what this would look like – taking
+    our typical linear perceptron model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![z = f(x) = βX + ξ ](img/file84.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *x* is our input to the perceptron, *β* is our learned weight value,
+    *ξ* is our learned bias value, and *z* is the value that is returned (typically
+    passed to the next layer). With a Bayesian approach, we turn our parameters *β*
+    and *ξ* into distributions, rather than point estimates, such that:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![β ≈ 𝒩 (μ β,σβ) ](img/file85.jpg)![ξ ≈ 𝒩 (μ ξ,σξ) ](img/file86.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The learning process would now involve learning four parameters instead of
+    two, as each Gaussian is described by two parameters: the mean (*μ*) and standard
+    deviation (*σ*). Doing this for each perceptron in our neural network, we end
+    up doubling the number of parameters we need to learn – we can see this illustrated,
+    starting with *Figure* [*4.4*](#x1-53005r4):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/DNN-standard.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.4: An illustration of a standard DNN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Introducing one-dimensional Gaussian distributions for our weights, our network
+    becomes as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/DNN-bayesian.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.5: An illustration of a BNN with Gaussian priors over the weights'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Chapter 5, Principled Approaches for Bayesian Deep Learning*, we’ll see
+    methods that do exactly this. While this does increase the computational complexity
+    and memory footprint of our network, it makes the process of Bayesian inference
+    with NNs manageable – making it a very worthwhile trade-off.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, what is it we’re actually trying to capture in these uncertainty estimates?
+    In [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002),
+    we saw how uncertainty varies according to the sample of data used for training
+    – but what are the sources of this uncertainty, and why is it important in deep
+    learning applications? Let’s continue on to the next section to find out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.3.2 Sources of uncertainty
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As we saw in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian
+    Inference*](CH2.xhtml#x1-250002), and as we’ll see later on in the book, we typically
+    deal with uncertainties as scalar variables associated with a parameter or output.
+    These variables represent the variation in the parameter or output of interest,
+    but while they are just scalar variables, there are multiple sources contributing
+    to their values. These sources of uncertainty fall into two categories:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Aleatoric uncertainty**, otherwise known as observational uncertainty or
+    data uncertainty, is the uncertainty associated with our inputs. It describes
+    the variation in our **observations**, and as such is **irreducible**.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Epistemic uncertainty**, otherwise known as model uncertainty, is the uncertainty
+    that stems from our model. In the case of machine learning, this is the variance
+    associated with the parameters of our model that *does not* stem from the observations,
+    and is instead a product of the model, or how the model is trained. For example,
+    in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002),
+    we saw how different priors affected the uncertainty produced by Gaussian processes.
+    This is an example of how model parameters influence the epistemic uncertainty
+    – in this case, because they explicitly modify how the model interprets the relationship
+    between different data points.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can build an intuition of these concepts through some simple examples. Let’s
+    say we have a basket of fruit containing apples and bananas. If we measure the
+    height and length of some apples and bananas, we’ll see that apples are generally
+    round, and that bananas are generally long, as illustrated in *Figure* [*4.6*](#x1-54010r6).
+    We know from our observations that the exact dimensions of each fruit varies:
+    we accept that there is randomness, or stochasticity, associated with the measurements
+    of any given distribution of apples, but we know that they will all be roughly
+    similar. This is the **irreducible uncertainty**: the inherent uncertainty in
+    the data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/aleatoric-uncertainty-illustration.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.6: An illustration of aleatoric uncertainty, using fruit shapes as
+    an example'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can make use of this information to build a model to classify fruit as either
+    apples or bananas according to these input features. But what happens if we mainly
+    train our model on apples, with only a few measurements for bananas? This is illustrated
+    in *Figure* [*4.7*](#x1-54013r7).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/epistemic-uncertainty-illustration.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.7: An illustration of high epistemic uncertainty based on our fruit
+    example'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we see that – because of limited data – our model has incorrectly classified
+    bananas as apples. While these data points fall within our model’s `apple` boundary,
+    we also see that they lie very far from the other apples, meaning that, although
+    they’re classified as apples, our model (if it’s Bayesian) will have a high predictive
+    uncertainty associated with these data points. This epistemic uncertainty is very
+    useful in practical applications: it gives us an indication of when we can trust
+    our model, and when we should be cautious about our model’s predictions. Unlike
+    aleatoric uncertainty, epistemic uncertainty is **reducible** – if we give our
+    model more examples of bananas, its class boundaries will improve, and the epistemic
+    uncertainty will approach the aleatoric uncertainty.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/epistemic-uncertainty-illustration2.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.8: Illustration of low epistemic uncertainty'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure* [*4.8*](#x1-54016r8), we see that the epistemic uncertainty has
+    reduced significantly now that our model has observed more data, and it’s looking
+    a lot more like the aleatoric uncertainty illustrated in *Figure* [*4.6*](#x1-54010r6).
+    Epistemic uncertainty is therefore incredibly useful, both for indicating how
+    much we can trust our model, and as a means of improving our model’s performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As deep learning approaches are increasingly applied in mission-critical and
+    safety-critical applications, it’s crucial that the methods we use can estimate
+    the degree of epistemic uncertainty associated with their predictions. To illustrate
+    this, let’s change the domain of our example from *Figure* [*4.7*](#x1-54013r7):
+    instead of classifying fruit, we’re now classifying whether a jet engine is operating
+    within safe parameters, as shown in *Figure* [*4.9*](#x1-54019r9).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/epistemic-uncertainty-illustration-engine-failure.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.9: An illustration of high epistemic uncertainty in a safety-critical
+    application'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we see that our epistemic uncertainty could be a life-saving indicator
+    of engine failure. Without this uncertainty estimate, our model would assume that
+    all is fine, even though the temperature of the engine is unusual given the other
+    parameters – this could lead to catastrophic consequences. Fortunately, because
+    of our uncertainty estimates, our model is able to tell us that something is wrong,
+    despite the fact that it’s never encountered this situation before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Separating sourcing of uncertainty
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In this section, we’ve been introduced to two sources of uncertainty, and we’ve
+    seen how epistemic uncertainty can be very useful for understanding how to interpret
+    our model’s outputs. So, you may be wondering: is it possible to separate our
+    sources of uncertainty?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generally speaking, there are limited guarantees when trying to decompose uncertainty
+    into epistemic and aleatoric components, but some models allow us to obtain a
+    good approximation of this. Ensemble methods provide a particularly good illustrative
+    example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s say we have an ensemble of *M* models that produce the predictive posterior
+    *P*(*y*|**x***,D*) for some input **x** and output *y* from data *D*. For a given
+    input, our prediction will have entropy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 1 ∑M m m H [P (y|x, D)] ≈ H [M- P (y|x,𝜃 )],𝜃 ∼ p(𝜃|D ) m=1 ](img/file93.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *H* denotes entropy, and *𝜃* denotes our model parameters. This is a
+    formal exdivssion of concepts we’ve already covered, showing that the entropy
+    (in other words, uncertainty) of our predictive posterior will be high when our
+    aleatoric and/or epistemic uncertainty is high. This, therefore, represents our
+    **total** **uncertainty**, which is the uncertainty we’ll be working with throughout
+    this book. We can represent this in a manner more consistent with what we’ll be
+    encountering in the book – in terms of our predictive standard deviation *σ*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![σ = σa + σe ](img/file94.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Where *a* and *e* denote aleatoric and epistemic uncertainty, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because we’re working with ensembles, we can go a step further than our total
+    uncertainty. Ensembles are unique in that each model learns something slightly
+    different from the data, due to different data or parameter initialization. As
+    we get an uncertainty estimate for each model, we can take the expectation (in
+    other words, the average) of these uncertainty estimates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ ∑M 𝔼 [H [P(y|x,𝜃)]] ≈ -1- H [P (y|x,𝜃m )],𝜃m ∼ p(𝜃|D ) p(𝜃|D) M m=1 ](img/file95.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This gives us our **expected data uncertainty** – an estimate of our aleatoric
+    uncertainty. This approximate measure of aleatoric uncertainty becomes more accurate
+    as ensemble size increases. This is possible because of the way ensemble members
+    learn from different subsets of data. If there is no epistemic uncertainty, then
+    the models are consistent, meaning their outputs are identical, and the total
+    uncertainty exclusively comprises the aleatoric uncertainty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If, on the other hand, there is some epistemic uncertainty, then our total
+    uncertainty comprises both aleatoric and epistemic uncertainty. We can use the
+    expected data uncertainty to determine how much epistemic uncertainty is present
+    in our total uncertainty. We do this using **mutual information**, which is given
+    by:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![I[y,𝜃|x,D ] = H [P (y|x, D)]− 𝔼p (𝜃|D )[H [P(y|x,𝜃)]] ](img/file96.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can also exdivss this in terms of equation [4.3.2](#x1-550002):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![I[y,𝜃|x,D ] = σe = σ − σa ](img/file97.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'As we can see, the concept is pretty straightforward: simply subtract our aleatoric
+    uncertainty from our total uncertainty! The ability to estimate the aleatoric
+    uncertainty can make ensemble methods more attractive for uncertainty quantification,
+    as it allows us to decompose uncertainty, thus providing additional information
+    we don’t usually have access to. In *Chapter 6, Bayesian* *Inference with a Standard
+    Deep Learning Toolbox*, we’ll learn more about ensemble techniques for BDL. For
+    non-ensemble methods, we just have the general predictive uncertainty, *σ* (the
+    combined aleatoric and epistemic uncertainty), which is suitable in most cases.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we’ll see how we can incorporate uncertainties in how we
+    evaluate our models, and how they can be incorporated in the loss function to
+    improve model training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '4.3.3 Going beyond maximum likelihood: the importance of likelihoods'
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous section, we saw how uncertainty quantification can help to avoid
+    potentially hazardous scenarios in real-world applications of machine learning.
+    Going back even further to [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals
+    of Bayesian Inference*](CH2.xhtml#x1-250002) and [*Chapter 3*](CH3.xhtml#x1-350003),
+    [*Fundamentals of Deep Learning*](CH3.xhtml#x1-350003), we were introduced to
+    the concept of calibration, and shown how well-calibrated methods’ uncertainties
+    increase as data at inference deviates from training data – a concept illustrated
+    in *Figure* [*4.7*](#x1-54013r7).
+  prefs: []
+  type: TYPE_NORMAL
+- en: While it’s easy to illustrate the concept of calibration with simple data –
+    as we saw in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002)
+    (through *Figure* [*2.21*](CH2.xhtml#x1-31029r21)) – unfortunately, it’s not easy
+    or practical to do this in most applications. A much more practical approach to
+    understanding how well-calibrated a given method would be to use a metric that
+    incorporates its uncertainty – and this is exactly what we get with **likelihood**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Likelihood is the probability that some parameters describe some data. As mentioned
+    earlier, we typically work with Gaussian distributions to make things tractable
+    – so we’re interested in Gaussian likelihood: the likelihood that the parameters
+    of a Gaussian fit some observed data. The equation for Gaussian likelihood is
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 1 (y − μ)2 p(y) = √----exp {− ----2--} 2π σ 2σ ](img/file98.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let’s see what these distributions would look like for the parameter values
+    we saw earlier in *Figures* [*4.2*](#x1-51002r2) and [*4.3*](#x1-51004r3):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file99.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.10: The plot of Gaussian distributions corresponding to the parameter
+    sets from Figures [4.2](#x1-51002r2) and [4.3](#x1-51004r3)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Visualizing these two distributions highlights the difference in uncertainty
+    between the two parameter sets: our first set of parameters has high probability
+    (solid line), whereas our second set of parameters has low probability (dotted
+    line). But what does this mean for the resulting likelihood values associated
+    with our model’s outputs? To investigate these, we need to plug these values into
+    equation [4.3.3](#x1-560003). To do this, we’ll need a value for *y*. We’ll use
+    the mean of our target values: 24*.*03\. For our *μ* and *σ* values, we’ll take
+    the means and standard deviations of the predicted output values, respectively:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 1 (24.03 − 24.01)2 p(𝜃1) = √---------exp { − ----------2----} = 0.29 2π
+    × 1.37 2 × 1.37 ](img/file100.jpg)![ -----1----- (24.03−--31.11)2 − 5 p(𝜃2) =
+    √2-π-× 1.78 exp {− 2× 1.782 } = 7.88× 10 ](img/file101.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: We see here that we have a much higher likelihood score for our first set of
+    parameters (*𝜃*[1]) than for our second (*𝜃*[2]). This is consistent with *Figure*
+    [*4.10*](#x1-56004r10), and indicates that, given the data, parameters *𝜃*[1]
+    have a higher probability than parameters *𝜃*[2] – in other words, parameters
+    *𝜃*[1] do a better job of mapping the inputs to the outputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These examples illustrate the impact of incorporating uncertainty estimates,
+    allowing us to compute the likelihood of the data. While our error has increased
+    somewhat due to the poorer mean prediction, our likelihood has decreased more
+    dramatically – falling by many orders of magnitude. This tells us that these parameters
+    are doing a very poor job of describing the data, and it does so in a more principled
+    way than simply computing the error between our outputs and our targets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An important feature of likelihood is that it balances a model’s accuracy with
+    its uncertainty. Models that are over-confident have low uncertainty on data for
+    which they have incorrect predictions, and likelihood penalizes them for this
+    overconfidence. Similarly, well-calibrated models are confident on data for which
+    they have correct predictions, and uncertain on data for which they have incorrect
+    predictions. While the models will still be penalized for the incorrect predictions,
+    they will also be rewarded for being uncertain in the right places, and not being
+    over-confident. To see this in practice, we can again use the target output value
+    from the tables shown in *Figure* [*4.2*](#x1-51002r2) and *Figure* [*4.3*](#x1-51004r3):
+    *y* = 24*.*03, but we’ll also use an incorrect prediction: *ŷ* = 5*.*00\. As we
+    can see, this produces a pretty significant error of |*y* −*ŷ*| = |24*.*03 − 5*.*00|
+    = 19*.*03\. Let’s take a look at what happens to our likelihood as we increase
+    our *σ*² value associated with this prediction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file102.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.11: A plot of likelihood values with increasing variance'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we see here, our likelihood value is very small when *σ*² = 0*.*00, but increases
+    as *σ*² increases to around 0*.*15, before falling off again. This demonstrates
+    that, given an incorrect prediction, some uncertainty is better than none when
+    it comes to likelihood values. Thus, using likelihoods allows us to train better
+    calibrated models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Similarly, we can see that if we fix our uncertainty, in this case to *σ*²
+    = 0*.*1, and vary our predictions, our likelihood peaks at the correct value,
+    falling off in either direction as our predictions *ŷ* become less accurate and
+    our error |*y* −*ŷ*| grows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/likelihood-varying-predictions.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.12: A plot of likelihood values with varying predictions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Practically, we don’t usually use the likelihood, but instead use the **negative**
+    **log-likelihood** (**NLL**). We make it negative because, with loss functions,
+    we are interested in finding the minima, rather than the maxima. We use the log
+    because this allows us to use addition, rather than multiplication, which makes
+    things more computationally efficient (making use of the logarithmic identity
+    *log*(*a* ∗ *b*) = *log*(*a*) + *log*(*b*)). The equation that we’ll typically
+    be using is therefore:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 2 N LL (y) = − log{-1--}− (y-−-μ)- 2πσ 2 σ2 ](img/file103.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now that we’re familiar with the core concepts of uncertainty and likelihood,
+    we’re ready for the next section, where we’ll learn how to work with probabilistic
+    concepts in code using the TensorFlow Probability library.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.4 Tools for BDL
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this chapter, as well as in [*Chapter 2*](CH2.xhtml#x1-250002), [*Fundamentals
+    of Bayesian Inference*](CH2.xhtml#x1-250002), we’ve seen a lot of equations involving
+    probability. While it’s possible to create BDL models without a probability library,
+    having a library that supports some of the fundamental functions makes things
+    much easier. As we’re using TensorFlow for the examples in this book, we’ll be
+    using the **TensorFlow** **Probability** (**TFP**) library to help us with some
+    of these probabilistic components. In this section, we’ll introduce TFP and show
+    how it can be used to easily implement many of the concepts we’ve seen in [*Chapter 2*](CH2.xhtml#x1-250002),
+    [*Fundamentals of Bayesian Inference*](CH2.xhtml#x1-250002) and [*Chapter 4*](#x1-490004),
+    [*Introducing Bayesian Deep* *Learning*](#x1-490004).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Much of the content up to this point has been about introducing the concept
+    of working with distributions. As such, the first TFP module we’ll learn about
+    is the `distributions` module. Let’s take a look:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we have a simple example of initializing a Gaussian (or normal) distribution
+    using the `distributions` module. We can now sample from this distribution – we’ll
+    visualize the distribution of our samples using `seaborn` and `matplotlib`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This produces the following plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file104.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.13: A probability distribution of samples drawn from a Gaussian distribution
+    using TFP'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see, the samples follow a Gaussian distribution defined by our parameters
+    *μ* = 0 and *σ* = 1*.*5\. The TFD distribution classes also have methods for useful
+    functions such as **Probability Density Function** (**PDF**) and **Cumulative
+    Density Function** (**CDF**). Let’s take a look, starting with computing the PDF
+    over a range of values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With the divceding code, we’ll produce the following plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file105.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.14: A plot of probability density function values for a range of inputs
+    spanning *x* = −4 to *x* = 4'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Similarly, we can also compute the CDF:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Compared with the PDF, the CDF produces cumulative probability values, from
+    0 to 1, as we see in the following plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file106.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.15: Cumulative density function values for a range of inputs spanning
+    *x* = −4 to *x* = 4'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `tfp.distributions` classes also give us easy access to the parameters
+    of the distributions, for example, we can recover the parameters of our Gaussian
+    distribution via the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that these will return `tf.Tensor` objects, but the NumPy values can be
+    accessed easily via the `.numpy()` function, for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This gives us two NumPy scalars for our `mu` and `sigma` variables: 0*.*0 and
+    1*.*5, respectively.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Just as we can compute the probability, and thus obtain the PDF, using the
+    `prob()` function, we can also easily compute the log probability, or log likelihood,
+    using the `log_prob()` function. This makes things a little easier than coding
+    the full likelihood equation (for instance, equation [4.3.3](#x1-56010r3)) each
+    time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we first obtain the log likelihood for some value *x* = 5, and then obtain
+    the NLL, such as would be used in the context of gradient descent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we continue through the book, we’ll learn more about what TFP has to offer
+    – using the `distributions` module to sample from parameter distributions, and
+    exploring the powerful `tfp.layers` module, which implements probabilistic versions
+    of common neural network layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.5 Summary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this chapter, we were introduced to the fundamental concepts that we’ll need
+    to progress through the book and learn how to implement and use BNNs. Most crucially,
+    we learned about the ideal BNN, which introduced us to the core ideas underlying
+    BDL, and the computational difficulties of achieving this in practice. We also
+    covered the fundamental practical methods used in BDL, giving us a grounding in
+    the concepts that allow us to implement computationally tractable BNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The chapter also introduced the concept of uncertainty sources, describing
+    the difference between data and model uncertainty, how these contribute to total
+    uncertainty, and how we can estimate the contributions of different types of uncertainty
+    with various models. We also introduced one of the most fundamental components
+    in probabilistic inference – the likelihood function – and learned about how it
+    can help us to train better principled and better calibrated models. Lastly, we
+    were introduced to TensorFlow Probability: a powerful library for probabilistic
+    inference, and a crucial component of the practical examples later in the book.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve covered these fundamentals, we’re ready to see how the concepts
+    we’ve encountered so far can be applied in the implementation of several key BDL
+    models. We’ll learn about the advantages and disadvantages of these approaches,
+    and how to apply them to a variety of real-world problems. Continue on to [*Chapter 5*](CH5.xhtml#x1-600005),
+    [*Principled Approaches for Bayesian* *Deep Learning*](CH5.xhtml#x1-600005), where
+    we’ll learn about two key principled approaches for BDL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 4.6 Further reading
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This chapter has introduced the material necessary to start working with BDL;
+    however, there are many resources that go into more depth on the topics of uncertainty
+    sources. The following are a few recommendations for readers interested in exploring
+    the theory and code in more depth:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Machine Learning: A Probabilistic Perspective, Murphy*: Kevin Murphy’s extremely
+    popular book on machine learning has become a staple for students and researchers
+    in the field. This book provides a detailed treatment of machine learning from
+    a probabilistic standpoint, unifying concepts from statistics, machine learning,
+    and Bayesian probability.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*TensorFlow Probability* *Tutorials*: in this book, we’ll see how TensorFlow
+    Probability can be used to develop BNNs, but their website includes a wide array
+    of tutorials addressing probabilistic programming more generally: [https://www.tensorflow.org/probability/overview](https://www.tensorflow.org/probability/overview)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Pyro Tutorials*: Pyro is a PyTorch-based library for probabilistic programming
+    – it’s another powerful tool for Bayesian inference, and the Pyro website has
+    many excellent tutorials and examples of probabilistic inference: [https://pyro.ai/](https://pyro.ai/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,1035 @@
+- en: '*Chapter 7*: Multi-Step Deep Learning Inference Pipeline'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have successfully run **HPO** (**Hyperparameter Optimization**)
+    and produced a well-tuned DL model that meets the business requirements, it is
+    time to move to the next step towards using this model for prediction. This is
+    where the model inference pipeline comes into play, where the model is used for
+    predicting or scoring real-world data in production, either in real time or batch
+    mode. However, an inference pipeline usually does not just rely on a single model
+    but needs preprocessing and postprocessing logic that is not necessarily seen
+    during the model development stage. Examples of preprocessing steps include detecting
+    the language locale (English or some other languages) before passing the input
+    data to the model for scoring. Postprocessing could include enriching the predicted
+    labels with additional metadata to meet the business application's requirements.
+    There are also patterns of ML/DL inference pipelines that could even involve an
+    ensemble of models to solve a real-world business problem. Many ML projects often
+    underestimate the efforts needed to implement a production inference pipeline,
+    which could result in degradation of the model's performance in production or
+    in the worst case, failure of the entire project. Thus, it is important to learn
+    how to recognize the pattern of different inference pipelines and implement them
+    properly before we deploy the model into production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will be able to use MLflow to confidently implement
+    preprocessing and postprocessing steps for a multi-step inference pipeline that
+    is ready to be used in production in future chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding patterns of DL inference pipelines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the MLflow Model Python Function API
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing a custom MLflow Python model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing preprocessing and postprocessing steps in a DL inference pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing an inference pipeline as a new entry point in the main ML project
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following are the technical requirements for this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The GitHub code for this chapter: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter07](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter07)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A full-fledged local MLflow tracking server, as described in [*Chapter 3*](B18120_03_ePub.xhtml#_idTextAnchor040),
+    *Tracking Models, Parameters, and Metrics*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding patterns of DL inference pipelines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As the model development enters the stage of implementing an inference pipeline
+    for the upcoming production usage, it is important to understand that having a
+    well-tuned and trained DL model is only half the success story for business AI
+    strategy. The other half includes deploying, serving, monitoring, and continuously
+    improving the model after it goes into production. Designing and implementing
+    a DL inference pipeline is the initial step toward the second half of the story.
+    While the model has been trained, tuned, and tested on curated offline datasets,
+    now it needs to handle prediction in two ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Batch inference**: This usually requires some scheduled or ad hoc execution
+    of an inference pipeline for some offline batch of observational data. The turnaround
+    time for producing prediction results is daily, weekly, or other schedules.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Online inference**: This usually requires a web service for real-time execution
+    of an inference pipeline that produces prediction results for input data in under
+    a second or even less than 100 milliseconds depending on the user scenarios.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that because the execution environment and data characteristics could be
+    different from the offline training and testing environment, there will be additional
+    preprocessing or postprocessing steps around the core model logic developed during
+    the model training and tuning steps. While it should be emphasized that any sharable
+    data preprocessing steps should be used in both the training pipeline and inference
+    pipeline, it is unavoidable that some business logic will come into play, which
+    will allow the inference pipeline to have additional preprocessing and postprocessing
+    logic. For example, a very common step in a DL inference pipeline is to use caching
+    to store and return prediction results based on a recently seen input so that
+    an expensive model evaluation does not need to be invoked. This step is not needed
+    for a training/testing pipeline during the model development stage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While the pattern for inference pipelines is still emerging, it is now commonly
+    known that there are at least four patterns in a real-world production environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Multi-step pipeline**: This is the most typical usage of the model in production,
+    which includes a linear workflow of preprocessing steps before the model logic
+    is invoked and some postprocessing steps after the model evaluation results are
+    returned. While this is conceptually simple, the implementation can still be varied.
+    We will see how we can do this efficiently in this chapter using MLflow.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Ensemble of models**: This is a more complex scenario where multiple different
+    models can be used. These could be the same types of models with different versions
+    for A/B testing purposes or different types of models. For example, for a complex
+    conversational AI chatbot scenario, an intent classification model of the user
+    query to classify user intents into a specific category is required. Then a content
+    relevance model is also required to retrieve relevant answers to present to the
+    user based on the detected user intent.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Business logic and model**: This usually involves additional business logic
+    on how and where the input to the model should come from, such as querying from
+    an enterprise database for user information and validation or retrieving precomputed
+    additional features from a feature store before invoking a model. In addition,
+    postprocessing business logic could also transform the prediction results into
+    some application-specific logic and store the results in some backend storage.
+    While this could be as simple as a linear multi-step pipeline, it can also quickly
+    become a **DAG** (**Directed Acyclic Graph**) with multiple fan-in and fan-out
+    parallel tasks before and after the model has been invoked.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Online learning**: This is one of the most complex inference tasks in production
+    where a model is constantly learning and updating its parameters such as reinforcement
+    learning.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While it is necessary to understand the big picture of the complexity of inference
+    pipelines in production, the purpose of this chapter is to learn how we can create
+    reusable building blocks of inference pipelines that could be used in multiple
+    scenarios through the powerful and generic MLflow Model API, which can encapsulate
+    preprocessing and postprocessing steps alongside a trained model. Interested readers
+    are encouraged to learn more about the model pattern in production from this post
+    ([https://www.anyscale.com/blog/serving-ml-models-in-production-common-patterns](https://www.anyscale.com/blog/serving-ml-models-in-production-common-patterns))
+    and other references in the *Further reading* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, what's the MLflow Model API and how do you use that to implement preprocessing
+    and postprocessing logic for a multi-step inference pipeline? Let's find out in
+    the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-Step Inference Pipeline as an MLflow Model
+  prefs: []
+  type: TYPE_NORMAL
+- en: Previously, in [*Chapter 3*](B18120_03_ePub.xhtml#_idTextAnchor040), *Tracking
+    Models, Parameters, and Metrics*, we introduced the flexible loosely coupled multi-step
+    pipeline implementation using MLflow **MLproject** so that we could execute and
+    track a multi-step training pipeline explicitly in MLflow. However, during inference
+    time, it is desirable to implement lightweight preprocessing and postprocessing
+    logic alongside a trained model that's already logged in the model repository.
+    The MLflow Model API provides a mechanism to wrap a trained model with preprocessing
+    and postprocessing logic and then save the newly wrapped model as a new model
+    that encapsulates the inference pipeline logic. This unifies the way to load an
+    original model or an inference pipeline model using MLflow Model APIs. This is
+    critical for flexible deployment using MLflow and opens doors for creative inference
+    pipeline building.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the MLflow Model Python Function API
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The MLflow Model ([https://www.mlflow.org/docs/latest/models.html#id25](https://www.mlflow.org/docs/latest/models.html#id25))
+    is one of the core components provided by MLflow to load, save, and log models
+    in different flavors (for example, a `MLmodel` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.1 – MLmodel content for a fine-tuned PyTorch model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.1 – MLmodel content for a fine-tuned PyTorch model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen from *Figure 7.1*, the flavor of this model is PyTorch. There
+    are also a few other metadata about the model, such as the conda environment,
+    which defines the dependencies for running the model, and many others. Given this
+    self-contained information, it should be enough to allow MLflow to load the model
+    back using the `mlflow.pytorch.load_model` API as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will allow loading the model that was logged by an MLflow run with `run_id`
+    back to memory and doing inference. Now imagine we have the following scenario
+    where we need to add some preprocessing logic to check the language type of the
+    input text. This requires loading a language detector model ([https://amitness.com/2019/07/identify-text-language-python/](https://amitness.com/2019/07/identify-text-language-python/))
+    such as the **FastText** language detector ([https://fasttext.cc/](https://fasttext.cc/)),
+    or Google''s **Compact Language Detector v3** ([https://pypi.org/project/gcld3/](https://pypi.org/project/gcld3/)).
+    Additionally, we also want to check whether there is any cached prediction for
+    the exact same input. If it exists, then we should just return the cached result
+    without invoking the expensive model prediction part. This is very typical preprocessing
+    logic. For postprocessing, a common scenario is to return the prediction along
+    with some metadata about the model URIs so that we can debug any potential prediction
+    issue in production. Given this preprocessing and postprocessing logic, the inference
+    pipeline now looks like the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.2 – Multi-step inference pipeline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.2 – Multi-step inference pipeline
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen from *Figure 7.2*, these five steps include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One original fine-tuned model for prediction (a PyTorch DL model)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: One additional language detection model that was not part of our previous training
+    pipeline
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cache operations (check cache and store to cache) for improving response performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: One response message composition step
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Rather than splitting these five steps into five different entry points in
+    an **ML project** (recall that an entry point in an **ML project** can be arbitrary
+    execution code in Python or other executables), it is much more elegant to compose
+    this multi-step inference pipeline in a single entry point, since these steps
+    are closely related to the model''s prediction step. In addition, the advantage
+    of encapsulating these closely related steps into a single inference pipeline
+    is that we can save and load the inference pipeline as an MLmodel artifact. MLflow
+    provides a generic way to implement this multi-step inference pipeline as a new
+    Python model, without losing the flexibility of adding additional preprocessing
+    and postprocessing capability if needed as shown in the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ Figure 7.3 – Encapsulate the multi-step preprocessing and postprocessing
+    logic into'
+  prefs: []
+  type: TYPE_NORMAL
+- en: a new MLflow Python model
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.3 – Encapsulate the multi-step preprocessing and postprocessing logic
+    into a new MLflow Python model
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 7.3*, if we encapsulate the preprocessing and postprocessing
+    logic into a new MLflow model called `inference_pipeline_model`, then we can load
+    this entire inference pipeline as if it is just another model. This will also
+    allow us to formalize the input and output format (called **Model Signature**)
+    for the inference pipeline so that whoever wants to consume this inference pipeline
+    will not need to guess what the format of the input and output is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The mechanism to implement this at a high level is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, create a custom MLflow `pyfunc` (Python function) model ([https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#creating-custom-pyfunc-models](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#creating-custom-pyfunc-models))
+    to wrap the existing trained model. Specifically, we need to go beyond the built-in
+    model flavors ([https://www.mlflow.org/docs/latest/models.html#built-in-model-flavors](https://www.mlflow.org/docs/latest/models.html#built-in-model-flavors))
+    provided by MLflow and implement a new Python class that inherits from `mlflow.pyfunc.PythonModel`
+    ([https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel)),
+    defining `predict()` and, optionally, the `load_context()` methods in this new
+    Python class.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In addition, we can specify the **Model Signature** ([https://mlflow.org/docs/latest/models.html#model-signature](https://mlflow.org/docs/latest/models.html#model-signature))
+    by defining the schema of a model's inputs and outputs. These schemas can be either
+    column-based or tensor-based. It is highly recommended to implement these schemas
+    for automatic input validation and model diagnosis in a production environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then implement the preprocessing and postprocessing logic within this MLflow
+    `pyfunc`. These could include caching, language detection, a response message,
+    and any other logic that's needed.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, implement the entry point in the ML project for the inference pipeline
+    so that we can invoke the inference pipeline as if it is a single model artifact.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we understand the fundamentals of MLflow's custom Python model to represent
+    a multi-step inference pipeline, let's see how we can implement it for our NLP
+    sentiment classification model with the preprocessing and postprocessing steps
+    described in *Figure 7.3* in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing a custom MLflow Python model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s first describe the steps to implement a custom MLflow Python model without
+    any extra preprocessing and postprocessing logic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, make sure we have a trained DL model that''s ready to be used for inference
+    purposes. For the sake of learning in this chapter, we include the training pipeline
+    `README` file in this chapter''s GitHub repository and *set up the environment
+    variables* accordingly ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/README.md](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/README.md)).
+    Then, in the command line, run the following command to generate a fine-tuned
+    model in the local MLflow tracking server:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Once this is done, you will have a fine-tuned DL model logged in the MLflow
+    tracking server. Now, we will use the logged model URI as the input for the inference
+    pipeline since we will wrap it and save it as a new MLflow model. The logged model
+    URI is something like the following, where the long random alphanumeric string
+    is the `run_id` of the `fine_tuning_model` MLflow run, which you can find in the
+    MLflow tracking server:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once you have a trained/fine-tuned model, we are ready to implement a new custom
+    MLflow Python model as follows. You may want to check out the `basic_custom_dl_model.py`
+    in the GitHub repo ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/basic_custom_dl_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/basic_custom_dl_model.py))
+    to follow through the steps outlined here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Let''s see what we have implemented. First, the `InferencePipeline` class inherits
+    from the `MLflow.pyfunc.PythonModel` module, and implements four methods as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`predict`: This is a method that''s required by `mlflow.pyfunc.PythonModel`,
+    which returns the prediction result. Here, the `model_input` parameter is a `pandas`
+    DataFrame, which contains a column with input text that needs to be classified.
+    We leverage the `pandas` DataFrame''s `apply` method to run a `sentiment_classifier`
+    method to score each row of the DataFrame''s text and the result is a DataFrame
+    with each row being the predicted label. Since our original fine-tuned model does
+    not accept a `pandas` DataFrame as input (it accepts a list of text strings as
+    input), we need to implement a new classifier as a wrapper to the original model.
+    That''s the `sentiment_classifier` method. The other `context` parameter is the
+    MLflow context to describe where the model artifact is stored. Since we will pass
+    an MLflow logged model URI, this `context` parameter is not used in our implementation,
+    as the logged model URI contains everything MLflow needs to load a model.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`sentiment_classifier`: This is a wrapper method to allow each row of the input
+    `pandas` DataFrame to be scored by calling the fine-tuned DL model''s prediction
+    function. Note that we are wrapping the first element of the row into a list so
+    that the DL model can correctly use it as an input.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`init`: This is a standard Python constructor method. Here, we use it to pass
+    in a previously fine-tuned DL model URI, `finetuned_model_uri`, so that we can
+    load it in the `load_context` method. Note that we do not want to directly load
+    the model in the `init` method since it will cause a serialization issue (if you
+    want to try, you will find out serializing a DL model naively is not a fun experience).
+    Since the fine-tuned DL model is already serialized and deserialized through the
+    `mlflow.pytorch` APIs, we should not reinvent the wheel here. The recommended
+    way is to load the model in the `load_context` method.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`load_context`: This method is called when loading an MLflow model with the
+    `mlflow.pyfunc.load_model` API. This is executed immediately after the Python
+    model is constructed. Here, we load the fine-tuned DL model by using the `mlflow.pytorch.load_model`
+    API. Note that whatever models are loaded in this method can use their corresponding
+    deserializing methods. This will open doors for loading other models such as a
+    language detection model, which could contain native code (for example, C++ code)
+    that cannot be serialized using Python serialization protocols. This is one of
+    the nice features provided by the MLflow model API framework.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now that we have an MLflow custom model that can accept a column-based input,
+    we can also define the model signature as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This signature defines an input format with one named column called `text` with
+    a datatype of `string`, and an output format with one named column called `text`
+    with a datatype of `string`. The `mlflow.models.ModelSignature` class is used
+    to create this `signature` object. This will be used when we log the new custom
+    model in MLflow, as we will see in the next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we can log this new custom model in MLflow as if this is a generic MLflow
+    `pyfunc` model using the `mlflow.pyfunc.log_model` API as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The preceding code will log a model in the MLflow tracking server with a top-level
+    folder named `inference_pipeline_model`, since we define the `MODEL_ARTIFACT_PATH`
+    variable with this string value and assign this value to the `artifact_path` parameter
+    of the `mlflow.pyfunc.log_model` method. The other three parameters we assign
+    are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`conda_env`: This is to define the conda environment where this custom model
+    will run. Here, we can pass the absolute path of the `conda.yaml` file in the
+    root folder of this chapter defined by the `CONDA_ENV` variable (details of this
+    variable can be found in the source code of this `basic_custom_dl_model.py` notebook
+    on GitHub).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`python_model`: Here, we call the new `InferencePipeline` class we just implemented
+    and pass in the parameter of `finetuned_model_uri`. This way, the inference pipeline
+    will load the correct fine-tuned model for prediction purposes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`signature`: We also pass the signature for both input and output we just defined
+    and assign it to the signature parameter so that model input and output schema
+    can be logged and enforced for validation purposes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a reminder, make sure you replace the `'runs:/1290f813d8e74a249c86eeab9f6ed24e/model'`
+    value for the `finetuned_model_uri` variable with your own fine-tuned model URI
+    generated in *step 1* so that the code will correctly load the original fine-tuned
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you follow through the `basic_custom_dl_model.py` and run it cell by cell
+    up to *step 4*, you should be able to find a newly logged model in the **Artifacts**
+    section of the MLflow tracking server as shown in the following screenshot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 7.4 – Inference MLflow model with model schema and a root folder of
+    inference_pipeline_model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.4 – Inference MLflow model with model schema and a root folder of inference_pipeline_model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen from *Figure 7.4*, the root folder name (top left of the screenshot)
+    is `inference_pipeline_model`, which is the `artifact_path` parameter''s assigned
+    value when calling `mlflow.pyfunc.log_model`. Note, if we do not specify the `artifact_path`
+    parameter, by default it will be just `model`. You can confirm this by just looking
+    at *Figure 7.1* earlier in this chapter. Also note that now there is a `MLmodel`
+    file under the `inference_pipeline_model` folder, we can see the full content
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.5 – The content of inference_pipeline_model''s MLmodel file'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.5 – The content of inference_pipeline_model's MLmodel file
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 7.5*, the content of the `signature` section near
+    the bottom, a new section compared with *Figure 7.1*. However, there are some
+    more important differences in terms of the model flavor. The flavor of `inference_pipeline_model`
+    is a generic `mlflow.pyfunc.model` model, not a `mlflow.pytorch` model anymore.
+    In fact, if you compare *Figure 7.5* with *Figure 7.1*, which is our PyTorch fine-tuned
+    DL model, there is a section about `pytorch` and its `model_data` and `pytorch_version`,
+    which has now completely disappeared in *Figure 7.5*. For MLflow, it has no knowledge
+    of the original model, which is a PyTorch model, but just a generic MLflow `pyfunc`
+    model as the newly wrapped model. This is great news since now we only need one
+    generic MLflow `pyfunc` API to load the model, regardless of how complex the wrapped
+    model is and how many more preprocessing and postprocessing steps are inside this
+    generic `pyfunc` model when we implement it in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We now can load `inference_pipeline_model` using the generic `mlflow.pyfunc.load_model`
+    to load the model and do prediction with an input `pandas` DataFrame as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here, `inference_pipeline_uri` is the URI produced in *step 4* as the unique
+    identifier for `inference_pipeline_model`. For example, an `inference_pipeline_uri`
+    value could look as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the model is loaded, we can just call the `predict` function to score
+    the `input_df` DataFrame. This calls the `predict` function of our newly implemented
+    `InferencePipleine` class, as described in *step 2*. The results will look something
+    like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.6 – Output of the inference pipeline in a pandas DataFrame format'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.6 – Output of the inference pipeline in a pandas DataFrame format
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you see the prediction results like in *Figure 7.6*, then you should feel
+    proud that you have just implemented a working custom MLflow Python model that
+    has enormous flexibility and power to enable us to implement preprocessing and
+    postprocessing logic without changing any of the logging and loading model parts,
+    as we will see in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a New Flavor of MLflow Custom Model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in this chapter, we can build a wrapped MLflow custom model using
+    an already trained model for inference purposes. It should be noted that it is
+    also possible to build an entirely new flavor of MLflow custom model for training
+    purposes. This is needed when you have a model that''s not yet supported by the
+    built-in MLflow model flavors. For example, if you want to train a brand new **FastText**
+    model based on your own corpus but as of MLflow version 1.23.1, there is no **FastText**
+    MLflow model flavor yet, then you can build a new **FastText** MLflow model flavor
+    (see reference: [https://medium.com/@pennyqxr/how-save-and-load-fasttext-model-in-mlflow-format-37e4d6017bf0](mailto:https://medium.com/@pennyqxr/how-save-and-load-fasttext-model-in-mlflow-format-37e4d6017bf0)).
+    Interested readers can also find more references in the *Further reading* section
+    at the end of this chapter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing preprocessing and postprocessing steps in a DL inference pipeline
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have a basic generic MLflow Python model that can do prediction
+    on an input `pandas` DataFrame and produce output in another `pandas` DataFrame,
+    we are ready to tackle the multi-step inference scenario described before. Note
+    that while the initial implementation in the previous section might not look earth-shaking,
+    this opens doors for implementing preprocessing and postprocessing logic that
+    was not possible before while maintaining the capability of using the generic
+    `mlflow.pyfunc.log_model` and `mlflow.pyfunc.load_model` to treat the entire inference
+    pipeline as a generic `pyfunc` model, regardless of how complex the original DL
+    model is and how many additional preprocessing and postprocessing steps there
+    are. Let's see how we can do this in this section. You may want to check out the
+    VS Code notebook for `multistep_inference_model.py` from GitHub ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/multistep_inference_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/notebooks/multistep_inference_model.py))
+    to follow through the steps in this section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 7.3*, we depicted two preprocessing steps prior to the model prediction,
+    and two postprocessing steps after the model prediction. So where and how do we
+    add the preprocessing and postprocessing logic while keeping this entire inference
+    pipeline as a single MLflow model? It turns out the main changes will happen in
+    the `InferencePipeline` class implemented in the previous section. Let's walk
+    through the implementation and changes step by step in the following subsections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing language detection preprocessing logic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s first implement the language detection preprocessing logic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To detect the language type of the input text, we can use Google''s `pyfunc`
+    model. The good news is that MLflow''s `load_context` method allows us to load
+    this model without worrying about serialization and deserialization. We only need
+    to add two lines of code in the `load_context` method in the `InferencePipeline`
+    class as follows to load the language detector model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The preceding two lines are added into the `load_context` method, along with
+    the preexisting statement that loads the fine-tuned DL model for sentiment classification.
+    This will allow the language detector to be loaded as soon as the initialization
+    of the `InferencePipeline` class is done. This language detector will use up to
+    the first 1,000 bytes of the input to determine the language type. Once this language
+    detector is loaded, then we can use it to detect the language in a preprocessing
+    method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a preprocessing method for language detection, we will accept each row of
+    the input text, detect the language, and return the language type as a `string`
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The implementation is straightforward. We also add a printout to see if we see
+    any non-English text in the input to the console. If your business logic requires
+    you to implement any preemptive actions when dealing with some specific language,
+    then you can add more logic in this method. Here, we just return the language
+    type detected.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, in the `sentiment_classifier` method that scores each row of the input,
+    we can just add one line prior to the prediction to first detect the language
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Later, we pass along the `language_detected` variable to the response as we
+    will see in the postprocessing logic implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: And that's all it takes to implement the language detection as a preprocessing
+    step in the inference pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now let''s see how to implement the other step: cache, which requires both
+    preprocessing (detecting if there are any preexisting matched prediction results
+    for the same input) and postprocessing (storing a key-value pair of input and
+    prediction results in the cache).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing caching preprocessing and postprocessing logic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s see how we can implement caching in the `InferencePipeline` class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can add a new statement to initialize the cache store in the `init` method,
+    as this has no problem being serialized or deserialized:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will initialize a Least Recently Used cache with 100 objects stored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we will add a preprocessing method to detect if any input is in the cache:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: If it finds the exact input row as a key already in the cache, then it returns
+    the cached value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `sentiment_classifier` method, we can add the preprocessing step to
+    check the cache and if it finds the cache, then it will immediately return the
+    cached response without invoking the expensive DL model classifier:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This preprocessing step should be placed as the first step in the `sentiment_classifier`
+    method, before doing language detection and model prediction. This can significantly
+    speed up real-time prediction responses when there are many duplicated inputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Also in the `sentiment_classifier` method, we need to add a postprocessing
+    step to store new input and prediction responses in the cache:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: That's it. We have successfully added caching as a preprocessing and postprocessing
+    step in the `InferencePipeline` class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing response composition postprocessing logic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now let''s see how we can implement the response composition logic as a postprocessing
+    step after the original DL model prediction is invoked and the result is returned.
+    Just returning a prediction label of `positive` or `negative` usually is not enough,
+    as we would like to know which version of the model was used and what language
+    was detected for debugging and diagnosis in the production environment. The response
+    to the caller of the inference pipeline will no longer be a plain string, but
+    rather a serialized JSON string. Follow these steps to implement this postprocessing
+    logic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `init` method of the `InferencePipeline` class, we need to add a new
+    `inference_pipeline_uri` parameter, so that we can capture this generic MLflow
+    `pyfunc` model''s reference for provenance tracking purposes. Both the `finetuned_model_uri`
+    and `inference_pipeline_uri` parameters will be part of the response''s JSON object.
+    The `init` method now looks like the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the `sentiment_classifier` method, add a new postprocessing statement to
+    compose a new response based on the language detected, predicted label, and the
+    model metadata including both `finetuned_model_uri` and `inference_pipeline_uri`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we use `json.dumps` to encode a nested Python string object into a
+    JSON formatted string, so that the caller can easily parse out the response using
+    JSON tools.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `mlflow.pyfunc.log_model` statement, we need to add a new `inference_pipeline_uri`
+    parameter when calling the `InferencePipeline` class:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will log a new inference pipeline model with all the additional processing
+    logic we implemented. This completes the implementation of the multi-step inference
+    pipeline depicted in *Figure 7.3*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that once the model is logged with all these new steps, to consume this
+    new inference pipeline, that''s to say, to load this model, requires zero code
+    changes. We can load the newly logged model the same way as before:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you have followed through the steps up until now, you should also run the
+    VS Code notebook for `multistep_inference_model.py` cell by cell up to *step 3*
+    described in this subsection. Now we can try to use this new multi-step inference
+    pipeline to test it out. We can prepare a new set of input data where there are
+    duplicates and a non-English text string as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This input includes two duplicated entries (`Great movie`) and one Chinese
+    text string (the last element in the input list, where the meaning of the Chinese
+    text is the same as `Great Movie`). Now we can just load the model and call `results
+    = loaded_model.predict(input_df)` as before. And during the execution of this
+    predict statement, you should see the following two statements in the console
+    output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: This means that our caching and language detector works!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also print out the results to double-check whether our multi-step pipeline
+    works or not using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will print out the full content for each row of the response. Here, we
+    display the output for the last one (which has the Chinese text) as an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.7 – JSON response for the Chinese text string input using the multi-step
+    inference pipeline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_07.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.7 – JSON response for the Chinese text string input using the multi-step
+    inference pipeline
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen in *Figure 7.7*, `prediction_label` is included in the response
+    (which is `negative`). Since we have been using `language_detected` field under
+    the `metadata` section in the JSON response, we see the string `"zh"`, which represents
+    the Chinese language. This is what the language detector produced in the preprocessing
+    step. Additionally, the `model_metadata` section includes both the original `finetuned_model_uri`
+    and `inference_pipeline_model_uri`. These are MLflow tracking server-specific
+    URIs that we can use to uniquely trace and identify which fine-tuned model and
+    inference pipeline was used for this prediction result. This is very important
+    for provenance tracking and diagnosis analysis in the production environment.
+    Comparing this complete JSON output with the earlier prediction label output in
+    *Figure 7.6*, this has much richer contextual information for the consumer of
+    the inference pipeline to use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you see the JSON output in your notebook run like *Figure 7.7*, give yourself
+    a round of applause, because you have just completed a big milestone in implementing
+    a multi-step inference pipeline that can be reused and deployed into production
+    for realistic business scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing an inference pipeline as a new entry point in the main MLproject
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have successfully implemented a multi-step inference pipeline as
+    a new custom MLflow model, we can go one step further by incorporating this as
+    a new entry point in the main **MLproject** so that we can run the following entire
+    pipeline end to end (*Figure 7.8*). Check out this chapter's code from GitHub
+    to follow through and run the pipeline in your local environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.8 – End-to-end pipeline using MLproject'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_08.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.8 – End-to-end pipeline using MLproject
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can add the new entry point `inference_pipeline_model` into the `MLproject`
+    file. You can check out this file on the GitHub repository ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/MLproject](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/MLproject)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This entry point or step can be invoked either standalone or as part of the
+    entire pipeline depicted in *Figure 7.8*. As a reminder, make sure you have set
+    up the environment variables as described in the `README` file of this chapter
+    for the MLflow tracking server and backend storage URIs before you execute the
+    MLflow `run` commands. This step logs and registers a new `inference_pipeline_model`,
+    which itself contains multi-step preprocessing and postprocessing logic. The following
+    command can be used to run this step at the root level of the `chapter07` folder,
+    if you know the `finetuned_model_run_id`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will not only log a new `inference_pipeline_model` in the MLflow tracking
+    server but will also register a new version of `inference_pipeline_model` in the
+    MLflow model registry. You can find the registered `inference_pipeline_model`
+    in your local MLflow server with the following link:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As an example, a registered `inference_pipeline_model` version 6 is shown in
+    the following screenshot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.9 – A registered inference_pipeline_model at version 6'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_07_09.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.9 – A registered inference_pipeline_model at version 6
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also run the entire end-to-end pipeline depicted in *Figure 7.8* as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will run all the steps in this end-to-end pipeline and finish with a logged
+    and registered `inference_pipeline_model` in the model registry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The implementation of the Python code for `inference_pipeline_model.py`, which
+    is executed when the entry point `inference_pipeline_model` is invoked, is basically
+    copying the `InferencePipeline` class we implemented in the VS Code notebook for
+    `multistep_inference_model.py` with a couple of small changes as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Adding a task function to be executed as a parameterized entry point for this
+    step:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: What this function does is starting a new MLflow run to log and register a new
+    inference pipeline model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Turning on the model registration while logging as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we assign to `registered_model_name` the value of `MODEL_ARTIFACT_PATH`,
+    which is `inference_pipeline_model`. This enables the model to be registered under
+    this name in the MLflow model registry, as seen in *Figure 7.9*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The complete code for this new entry point can be found in the GitHub repository:
+    [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/pipeline/inference_pipeline_model.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/pipeline/inference_pipeline_model.py).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that we also need to add a new section in the `main.py` file to allow
+    the `inference_pipeline_model` entry point to also be callable from within the
+    `main` entry point. The implementation is straightforward, just like adding other
+    steps previously as described in [*Chapter 4*](B18120_04_ePub.xhtml#_idTextAnchor050),
+    *Tracking Code and Data Versioning*. Interested readers should check out the `main.py`
+    file from GitHub to take a look at the implementation: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/main.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter07/main.py).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes the implementation of adding a new entry point in the **MLproject**
+    so that we can run the multi-step inference pipeline creation, logging, and registering
+    using the MLflow run command tool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we covered a very important topic on creating a multi-step
+    inference pipeline using MLflow's custom Python model approach, namely `mlflow.pyfunc.PythonModel`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We discussed four patterns of inference workflow in production where usually
+    a single trained model is not enough to complete the business application requirements.
+    It is highly likely some preprocessing and postprocessing logic is not seen during
+    the model training and development stage. That's why MLflow's `pyfunc` approach
+    is an elegant approach to implementing a custom MLflow model that can wrap a trained
+    DL model with additional preprocessing and postprocessing logic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We successfully implemented an inference pipeline model that wraps our DL sentiment
+    classifier with language detection using Google's Compact Language Detector, caching,
+    and additional model metadata in addition to the prediction label. We went one
+    step further to incorporate the inference pipeline model creation step into the
+    end-to-end model development workflow so that we can produce a registered inference
+    pipeline model with one MLflow run command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The skills and lessons learned in this chapter will be critical for anyone who
+    wants to implement a real-world inference pipeline using the MLflow `pyfunc` approach.
+    This also opens doors for supporting flexible and powerful deployment into production
+    scenarios, which we will cover in the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*MLflow Models* (MLflow documentation): [https://www.mlflow.org/docs/latest/models.html#](https://www.mlflow.org/docs/latest/models.html#)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Implementing the statsmodels flavor in MLflow*: [https://blog.stratio.com/implementing-the-statsmodels-flavor-in-mlflow/](https://blog.stratio.com/implementing-the-statsmodels-flavor-in-mlflow/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*InferLine: ML inference Pipeline Composition Framework*: [https://www2.eecs.berkeley.edu/Pubs/TechRpts/2018/EECS-2018-76.pdf](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2018/EECS-2018-76.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Batch Inference vs Online Inference*: [https://mlinproduction.com/batch-inference-vs-online-inference/](https://mlinproduction.com/batch-inference-vs-online-inference/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Lessons from building a small MLOps pipeline*: [https://www.nestorsag.com/blog/lessons-from-building-a-small-ml-ops-pipeline/](https://www.nestorsag.com/blog/lessons-from-building-a-small-ml-ops-pipeline/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Text summarizer on Hugging Face with MLflow*: [https://vishsubramanian.me/hugging-face-with-mlflow/](https://vishsubramanian.me/hugging-face-with-mlflow/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

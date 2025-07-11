@@ -1,0 +1,1191 @@
+- en: Chapter 5
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Principled Approaches for Bayesian Deep Learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve introduced the concept of **Bayesian Neural Networks** (**BNNs**),
+    we’re ready to explore the various ways in which they can be implemented. As we
+    discussed previously, ideal BNNs are computationally intensive, becoming intractable
+    with more sophisticated architectures or larger amounts of data. In recent years,
+    researchers have developed a range of methods that make BNNs tractable, allowing
+    them to be implemented with larger and more sophisticated neural network architectures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ll explore two particularly popular methods: **Probabilistic**
+    **Backpropagation** (**PBP**) and **Bayes by Backprop** (**BBB**). Both methods
+    can be referred to as *probabilistic neural network models*: neural networks designed
+    to learn probabilities over their weights, rather than simply learning point estimates
+    (a fundamental defining feature of BNNs, as we learned in [*Chapter 4*](CH4.xhtml#x1-490004),
+    [*Introducing Bayesian Deep Learning*](CH4.xhtml#x1-490004)). Because they explicitly
+    learn distributions over the weights at training time, we refer to them as *principled*
+    methods; in contrast to the methods we’ll explore in the next chapter, which more
+    loosely approximate Bayesian inference with neural networks. We’ll cover these
+    topics in the following sections of this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Explaining notation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Familiar probabilistic concepts from deep learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Bayesian inference by backpropagation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing BBB with TensorFlow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Scalable Bayesian deep learning with PBP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing PBP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: First, let’s quickly review the technical requirements for this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.1 Technical requirements
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To complete the practical tasks in this chapter, you will need a Python 3.8
+    environment with the Python SciPy stack and the following additional Python packages
+    installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: TensorFlow 2.0
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TensorFlow Probability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'All of the code for this book can be found on the GitHub repository for the
+    book: [https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference](https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.2 Explaining notation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'While we’ve introduced much of the notation used throughout the book in the
+    previous chapters, we’ll be introducing more notation associated with BDL in the
+    following chapters. As such, we’ve provided an overview of the notation here for
+    reference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*μ*: The mean. To make it easy to cross-reference our chapter with the original
+    Probabilistic Backpropagation paper, this is represented as *m* when discussing
+    PBP.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*σ*: The standard deviation.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*σ*²: The variance (meaning the square of the standard deviation). To make
+    it easy to cross-reference our chapter with the paper, this is represented as
+    *v* when discussing PBP.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**x**: A single vector input to our model. If considering multiple inputs,
+    we’ll use **X** to represent a matrix comprising multiple vector inputs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**x**: An approximation of our input **x**.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*y*: A single scalar target. When considering multiple targets, we’ll use **y**
+    to represent a vector of multiple scalar targets.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*ŷ*: A single scalar output from our model. When considering multiple outputs,
+    we’ll use **ŷ** to represent a vector of multiple scalar outputs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**z**: The output of an intermediate layer of our model.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*P*: Some ideal or target distribution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Q*: An approximate distribution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*KL*[*Q*∥*P*]: The KL preergence between our target distribution *P* and our
+    approximate distribution *Q*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'ℒ: The loss.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ': The expectation.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*N*(*μ,σ*): A normal (or Gaussian) distribution parameterized by the mean *μ*
+    and the standard deviation *σ*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*𝜃*: A set of model parameters.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Δ: A gradient.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*∂*: A partial derivative.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*f*(): Some function (e.g. *y* = *f*(*x*) indicates that *y* is produced by
+    applying function *f*() to input *x*).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will encounter different variations of this notation, using different subscripts
+    or variable combinations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.3 Familiar probabilistic concepts from deep learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: While this book introduces many concepts that may be unfamiliar, you may find
+    that some ideas discussed here are familiar. In particular, **Variational** **Inference**
+    (**VI**) is something you may be familiar with due to its use in **Variational
+    Autoencoders** (**VAEs**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a quick refresher, VAEs are generative models that learn encodings that can
+    be used to generate plausible data. Much like standard autoencoders, VAEs comprise
+    an encoder-decoder architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file107.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.1: Illustration of autoencoder architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With a standard autoencoder, the model learns a mapping from the encoder to
+    the latent space, and then from the latent space to the decoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we see here, our output is simply defined as **x** = *f*[*d*](**z**), where
+    our encoding **z** is simply: **z** = *f*[*e*](**x**), where *f*[*e*]() and *f*[*d*]()
+    are our encoder and decoder functions, respectively. If we want to generate new
+    data using values in our latent space, we could simply inject some random values
+    into the input of our decoder; bypassing the encoder and randomly sampling from
+    our latent space:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file108.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.2: Illustration of sampling from the latent space of a standard autoencoder'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem with this approach is that a standard autoencoder doesn’t do a great
+    job of learning the structure of the latent space. This means that while we’re
+    free to randomly sample points in this space, there’s no guarantee that those
+    points will correspond to something that can be processed by the decoder to generate
+    plausible data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a VAE, the latent space is modeled as a distribution. Therefore, what was
+    **z** = *f*[*e*](**x**) becomes **z** ≈𝒩(*μ*[x], *σ*[x]); that is to say, our
+    latent space **z** now becomes a Gaussian distribution conditioned on our input
+    **x**. Now, when we want to generate data using our trained network, we can do
+    so simply by sampling from a normal distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To achieve this, we need to ensure that the latent space approximates a Gaussian
+    distribution. To do so, we use the **Kullback-Leibler divergence** (or KL divergence)
+    during training by incorporating it as a regularization term:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 2 ℒ = ∥x− ˆx ∥ + KL [Q ∥P] ](img/file109.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *P* is our target distribution (in this case, a multivariate Gaussian
+    distribution), which we’re trying to approximate with *Q*, which is the distribution
+    associated with our latent space, which in this case is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Q = z ≈ 𝒩 (μ,σ) ](img/file110.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'So, our loss now becomes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ℒ = ∥x− ˆx ∥2 + KL [q(z|x)∥p(z )] ](img/file111.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can expand it as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ℒ = ∥x − ˆx∥2 + KL [𝒩 (μ,σ)∥𝒩 (0,I)] ](img/file112.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *I* is the identity matrix. This will allow our latent space to converge
+    on our Gaussian prior, while also minimizing the reconstruction loss. The KL divergence
+    can additionally be rewritten as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![KL [q(z|x )∥p (z)] =q (z|x) logq(z|x )− q(z|x) log p(z) ](img/file113.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The terms on the right hand side of our equation here are the expectation (or
+    mean) of log *q*(**z**|**x**) and log *p*(**z**). As we know from [*Chapter 2*](CH2.xhtml#x1-250002),
+    [*Fundamentals of* *Bayesian Inference*](CH2.xhtml#x1-250002) and [*Chapter 4*](CH4.xhtml#x1-490004),
+    [*Introducing Bayesian Deep Learning*](CH4.xhtml#x1-490004), we can obtain the
+    the expectation of a given distribution by sampling. Thus, as we can see that
+    all terms of our KL divergence are expectations computed with respect to our approximate
+    distribution *q*(**z**|**x**), we can approximate our KL divergence by sampling
+    from *q*(**z**|**x**), which is exactly what we’re about to do!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that our encoding is represented by the distribution shown in equation
+    [5.3](#x1-63006r3), our neural network structure has to change. We need to learn
+    the mean (*μ*) and standard deviation (*σ*) parameters of our distribution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file114.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.3: Illustration of autoencoder architecture with mean and standard
+    deviation weights'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The issue with constructing a VAE in this way is that our encoding *z* is now
+    stochastic, rather than deterministic. This is a problem because we can’t obtain
+    a gradient for stochastic variables – and if we can’t obtain a gradient, we have
+    nothing to backpropagate – so we can’t learn!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can fix this using something called the **reparameterization trick**. The
+    reparameterization trick involves modifying how we compute **z**. Instead of sampling
+    **z** from our distribution parameters, we will define it as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![z = μ + σ ⊙ 𝜖 ](img/file115.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'As you can see, we’ve introduced a new variable, *𝜖*, which is sampled from
+    a Gaussian distribution with *μ* = 0 and *σ* = 1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![𝜖 = 𝒩 (0,1) ](img/file116.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Introducing *𝜖* has allowed us to move the stochasticity out of our backpropagation
+    path. With the stochasticity residing solely in *𝜖*, we’re able to backpropagate
+    through our weights as normal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file117.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.4: Illustration of typical VAE architecture with mean and standard
+    deviation weights, having moved the sampling component out of the backpropagation
+    path'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This means we’re able to represent our encoding as a distribution while still
+    being able to backpropagate the gradient of *z*: learning the parameters *μ* and
+    *σ*, and using *𝜖* to sample from the distribution. Being able to represent *z*
+    as a distribution means we’re able to use it to compute the KL divergence, allowing
+    us to incorporate our regularization term in equation 5.1, which in turn allows
+    our embedding to converge towards a Gaussian distribution during training.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: These are the fundamental steps in variational learning, and are what turn our
+    standard autoencoder into a VAE. But this isn’t all about learning. Crucially
+    for VAEs, because we’ve learned a normally distributed latent space, we can now
+    sample effectively from that latent space, enabling us to use our VAE to generate
+    new data according to the data landscape learned during training. Unlike the brittle
+    random sampling we had with a standard autoencoder, our VAE is now able to generate
+    *plausible* data!
+  prefs: []
+  type: TYPE_NORMAL
+- en: To do this, we sample *𝜖* from a normal distribution and multiply *σ* by this
+    value. This gives us a sample of *z* to pass through our decoder, obtaining our
+    generated data, **x**, at the output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’re familiar with the fundamentals of variational learning, in the
+    next section we’ll see how these principles can be applied to create BNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.4 Bayesian inference by backpropagation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In their 2015 paper, *Weight Uncertainty in Neural Networks*, Charles Blundell
+    and his colleagues at DeepMind introduced a method for using variational learning
+    for Bayesian inference with neural networks. Their method, which learned the BNN
+    parameters via standard backpropagation, was appropriately named **Bayes by Backprop**
+    (**BBB**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the previous section, we saw how we can use variational learning to estimate
+    the posterior distribution of our encoding, *z*, learning *P*(*z*|*x*). For BBB,
+    we’re going to be doing very much the same thing, except this time it’s not just
+    the encoding we care about. This time we want to learn the posterior distribution
+    over all of the parameters (or weights) of our network: *P*(*𝜃*|*D*).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can think of this as having an entire network made up of VAE encoding layers,
+    looking something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file118.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.5: Illustration of BBB'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As such, it’s logical that the learning strategy is also similar to that which
+    we used for the VAE. We again use the principle of variational learning to learn
+    parameters for *Q*, and approximation of the true distribution *P*, but this time
+    we’re looking for the parameters *𝜃*^(*⋆*) that minimize this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![𝜃⋆ = 𝜃 KL [q(w |𝜃)||P(w |D)] ](img/file119.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *D* is our data, **w** is our network weights, and *𝜃* is the parameters
+    of our distribution, e.g. *μ* and *σ* in the case of a Gaussian distribution.
+    To do this we make use of an important cost function in Bayesian learning: the
+    **Evidence Lower** **Bound**^([1](#footnote1)) , or **ELBO** (also referred to
+    as the variational free energy). We denote this with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ℒ(D,𝜃 ) = KL [q(w |𝜃)||P (w)]− q(w |𝜃) [log P(D |w)] ](img/file120.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This looks rather complicated, but it’s really just a generalization of what
+    we saw in equation 5.4\. We can break it down as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the left-hand side, we have the KL divergence between our prior *P*(**w**)
+    and our approximate distribution *q*(**w**|*𝜃*). This is similar to what we saw
+    in equations 5.1-5.4 in the previous section. Incorporating the KL divergence
+    in our loss allows us to tune our parameters *𝜃* such that our approximate distribution
+    converges on our prior distribution.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: On the right-hand side, we have the expectation of the negative log-likelihood
+    of our data *D* given our neural network weights **w** with respect to the variational
+    distribution. Minimizing this (because it’s the *negative log-likelihood*) ensures
+    that we learn parameters that maximize the likelihood of our data given our weights;
+    our network learns to map our inputs to our outputs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Just as with VAEs, BBB makes use of the reparameterization trick to allow us
+    to backpropagate gradients through our network parameters. Also as before, we
+    sample from our distribution. Taking the form of the KL divergence introduced
+    in equation 5.5, our loss becomes as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ ∑N ℒ (D,𝜃) ≈ logq(wi |𝜃)− log P(wi) − log P(D |wi) i=1 ](img/file121.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '*N* is the number of samples, and *i* denotes a particular sample. While we’ll
+    be using Gaussian priors here, an interesting property of this approach is that
+    it can be applied to a wide range of distributions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next step is to use our weight samples to train our network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, just as with VAEs, we sample *𝜖* from a Gaussian distribution:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![𝜖 ≈ 𝒩 (0,I) ](img/file122.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: 'Next, we apply *𝜖* to the weights in a particular layer, just as with our VAE
+    encoding:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![w = μ + log(1 + exp(ρ))⊙ 𝜖 ](img/file123.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: Note that in BBB, *σ* is parameterized as *σ* = log(1 + exp(*ρ*)). This ensures
+    that it is always non-negative (because a standard deviation cannot be negative!).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'With our parameters *𝜃* = (*μ,ρ*), we define our loss, following equation 3.10,
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![f(w, 𝜃) = logq(w |𝜃 )− log P (w )P (D |w ) ](img/file124.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: 'Because our neural network is made up of weights for both means and standard
+    deviations, we need to calculate the gradients for them separately. We first calculate
+    the gradient with respect to the mean, *μ*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![ ∂f(w,-𝜃) ∂f-(w,𝜃) Δ μ = ∂w + ∂μ ](img/file125.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: 'Then we calculate the gradient with respect to the standard deviation parameter,
+    *ρ*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![ ∂f(w, 𝜃) 𝜖 ∂f (w, 𝜃) Δ ρ = --------------------+ -------- ∂w 1 + exp(− ρ)
+    ∂ρ ](img/file126.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: 'Now we have all the components necessary to update our weights via backpropagation,
+    in a similar fashion to a typical neural network, except we update our mean and
+    variance weights with their respective gradients:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![μ ← μ − α Δμ ](img/file127.jpg)![ρ ← ρ − αΔ ρ ](img/file128.jpg)'
+  prefs:
+  - PREF_IND
+  type: TYPE_IMG
+- en: You may have noticed that the first terms of the gradient computations in equations
+    5.14 and 5.15 are the gradients you would compute for backpropagation of a typical
+    neural network; we’re simply augmenting these gradients with *μ*- and *ρ*-specific
+    update rules.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While that was fairly heavy in terms of mathematical content, we can break
+    it down into a few simple concepts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just as with the encoding in VAEs, we are working with weights that represent
+    the mean and standard deviation of a multivariate distribution, except this time
+    they make up our entire network, not just the encoding layer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Because of this, we again use a loss that incorporates the KL divergence: we’re
+    looking to maximize the ELBO.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: As we are dealing with mean and standard deviation weights, we update these
+    separately with update rules that use the gradients for the respective set of
+    weights.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we understand the core principles behind BBB, we’re ready to see how
+    it all comes together in code!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.5 Implementing BBB with TensorFlow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we’ll see how to implement BBB in TensorFlow. Some of the code
+    you’ll see will be familiar; the core concepts of layers, loss functions, and
+    optimizers will be very similar to what we covered in *Chapter 3, Fundamentals
+    of* *Deep Learning*. Unlike the examples in [*Chapter 3*](CH3.xhtml#x1-350003),
+    [*Fundamentals of Deep* *Learning*](CH3.xhtml#x1-350003), we’ll see how we can
+    create neural networks capable of probabilistic inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Importing packages'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We start by importing the relevant packages. Importantly, we will import `tensorflow-probability`,
+    which will provide us with the layers of the network that replace the point-estimate
+    with a distribution and implement the reparameterization trick. We also set the
+    global parameter for the number of inferences, which will determine how often
+    we sample from the network later:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Acquiring data'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We then download the MNIST Fashion dataset, which is a dataset that contains
+    images of ten different clothing items. We also set the class names and derive
+    the number of training examples and classes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 3: Helper functions'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Next, we create a helper function that defines our model. As you can see, we
+    use a very simple convolutional neural network structure for image classification
+    that consists of a convolutional layer, followed by a max-pooling layer and a
+    fully connected layer. The convolutional layer and the dense layer are imported
+    from the `tensorflow-probability` package, as indicated by the prefix *tfp*. Instead
+    of defining point-estimates for the weights, they will define weight distributions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As the names `Convolution2DReparameterization` and `DenseReparameterization`
+    suggest, these layers will use the reparameterization trick to update the weight
+    parameters during backpropagation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also create another helper function that compiles the model for us, using
+    `Adam` as our optimizer and a categorical cross-entropy loss. Provided with this
+    loss and the preceding network structure, `tensorflow-probability` will automatically
+    add the Kullback-Leibler divergence that is contained in the convolutional and
+    dense layers to the cross-entropy loss. This combination effectively amounts to
+    calculating the ELBO loss that we described in equation 5.9:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 4: model training'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Before we can train the model, we first need to convert the labels of the training
+    data from integers to one-hot vectors because this is what TensorFlow expects
+    for the categorical cross-entropy loss. For example, if an image shows a t-shirt
+    and the integer label for t-shirts is 1, then this label will be transformed like
+    this: `[1,`` 0,`` 0,`` 0,`` 0,`` 0,`` 0,`` 0,`` 0,`` 0]`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we are ready to train our model on the training data. We will train for
+    ten epochs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 5: inference'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We can then use the trained model to perform inference on the test images.
+    Here, we predict the class label for the first 50 images in the test split. For
+    every image, we sample seven times from the network (as determined by `NUM_INFERENCES`),
+    which will give us seven predictions for every image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And that’s it: we have a working BBB model! Let’s visualize the first image
+    in the test split and the seven different predictions for that image. First, we
+    obtain the class predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we visualize the image along with the predicted class for every inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looking at the image in *Figure* [*5.7*](#x1-70136r7), on most samples the network
+    predicts Ankle boot (which is the correct class). For two of the samples, the
+    network also predicted Sneaker, which is somewhat plausible given the image is
+    showing a shoe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file129.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.6: Class predictions across the seven different samples from the network
+    trained with the BBB approach on the first test image in the MNIST fashion dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Given that we now have seven predictions per image, we can also calculate the
+    mean variance across these predictions to approximate an uncertainty value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For example, the uncertainty value for the first test image in the MNIST fashion
+    dataset is 0*.*0000002\. To put this uncertainty value into context, let’s load
+    some images from the regular MNIST dataset, which contains handwritten digits
+    between 0 and 9, and obtain uncertainty values from the model we have trained.
+    We load the dataset and then perform inference again and obtain the uncertainty
+    values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can then visualize and compare the uncertainty values between the first 50
+    images in the fashion MNIST dataset and the regular MNIST dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure* [*5.7*](#x1-70136r7), we see that uncertainty values are a lot greater
+    for images from the regular MNIST dataset than for the fashion MNIST dataset.
+    This is expected, given that our model has only seen fashion MNIST images during
+    training and the handwritten digits from the regular MNIST dataset are out-of-distribution
+    for the model we trained.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file130.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.7: Uncertainty values for images in the fashion MNIST dataset (left)
+    versus the regular MNIST dataset (right)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: BBB is perhaps the most commonly encountered highly principled Bayesian deep
+    learning method, but it isn’t the only option for those concerned with better
+    principled methods. In the next section, we’ll introduce another highly principled
+    method and learn about the properties that differentiate it from BBB.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.6 Scalable Bayesian Deep Learning with Probabilistic Backpropagation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'BBB provided a great introduction to Bayesian inference with neural networks,
+    but variational methods have one key drawback: their reliance on sampling at training
+    and inference time. Unlike a standard neural network, we need to sample from the
+    weight parameters using a range of *𝜖* values in order to produce the distributions
+    necessary for probabilistic training and inference.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At around the same time that BBB was introduced, researchers at Harvard University
+    were working on their own brand of Bayesian inference with neural networks: **Probabilistic
+    Backpropagation**, or **PBP**. Like BBB, PBP’s weights form the parameters of
+    a distribution, in this case mean and variance weights (using variance, *σ*²,
+    rather than *σ*). In fact, the similarities don’t end here – we’re going to see
+    quite a few similarities to BBB but, crucially, we’re going to end up with a different
+    approach to BNN approximation with its own advantages and disadvantages. So, let’s
+    get started.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make things simpler, and for parity with the various PBP papers, we’ll stick
+    with individual weights while we work through the core ideas of PBP. Here’s a
+    visualization of how these weights are related in a small neural network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file131.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.8: Illustration of neural network weights in PBP'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Just as before, we see that our network is essentially built from two sub-networks:
+    one for the mean weights, or *m*, and one for the variance weights, or *v*. The
+    core idea behind PBP is that, for each weight, we have some distribution *P*(*w*|*D*)
+    that we’re trying to approximate:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![q(w) = 𝒩 (w|m, v) ](img/file132.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This notation should be very familiar now, with *P*() being the true (intractable)
+    distribution, and *q*() being the approximate distribution. In PBP’s case, as
+    demonstrated in equation 5.18, this is a Gaussian distribution parameterized by
+    mean *m* and variance *v*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In BBB, we saw how variational learning via the ELBO used the KL divergence
+    to ensure our weight distribution converged towards our prior *P*(*w*). In PBP,
+    we will again make use of the KL divergence, although this time we’ll do it indirectly.
+    The way that we achieve this is through the use of a process called **Assumed
+    Density Filtering** (**ADF**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ADF was developed as a fast sequential method of minimizing the KL divergence
+    between the true posterior *P*(*w*|*D*) and some approximation *q*(*w*|*D*). A
+    key point here is the fact that it is a *sequential* algorithm: just like gradient
+    descent, which we use with standard neural networks, ADF updates its parameters
+    sequentially. This makes it particularly well suited for adapting to a neural
+    network. The ADF algorithm can be described in two key steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize our parameters, with *m* = 0 and *v* = 1; that is, we start with
+    a unit Gaussian 𝒩(0*,*1).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Next, we go through each data point *x*[*i*] ∈ **x** and update the parameters
+    of our model using a set of specific update equations that update our model parameters
+    *m* and *v* separately.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: While it’s beyond the scope of this book to provide a full derivation of ADF,
+    you should know that as we update our parameters through ADF, we also minimize
+    the KL divergence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Thus, for PBP, we need to adapt typical neural network update rules so that
+    the weights are updated along the lines of ADF instead. We do this using the following
+    update rules, which are derived from the original ADF equations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![mnew = m + v ∂logZ-- ∂m ](img/file133.jpg)![ [ ( ) ] new 2 ∂-log-Z- ∂-log-Z-
+    v = v − v ∂m − 2 ∂v ](img/file134.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, log *Z* denotes the Gaussian marginal likelihood, which is defined as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 2 logZ = − log p(y|m, v) = − 0.5 × log-v +-(y-−-m-) v ](img/file135.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This is the **negative log-likelihood** (**NLL**). Equation 5.21 is crucial
+    to how we learn the parameters of PBP, as this is the loss function that we’re
+    trying to optimise - so let’s take some time to understand what’s going on. Just
+    as with our loss for BBB (equation 5.9), we can see that our log *Z* loss incorporates
+    a few important pieces of information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the numerator, we see (*y*−*m*)². This is similar to a typical loss we’re
+    used to seeing in standard neural network training (the L2 loss). This incorporates
+    the penalty between our target *y* and our mean estimate for the value, *m*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The whole equation gives us the NLL function, which describes the joint probability
+    of our target *y* as a function of our distribution parameterised by *m* and *v*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This has some important properties, which we can explore through a few simple
+    examples. Let’s look at the loss for some arbitrary parameters *m* = 0*.*8 and
+    *v* = 0*.*4 for a given target *y* = 0*.*6:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 2 2 − 0.5× logv-+-(y −-m)- = − 0.5 × log(0.4)-+-(0.6-−-0.8)- = 1.095 v 0.4
+    ](img/file136.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, we can see that our typical error, in this case the squared error, is
+    (0*.*6 − 0*.*8)² = 0*.*04, and we know that as *m* converges towards *y*, this
+    will shrink. In addition to that, the log-likelihood scales our error. This is
+    important, because a well-conditioned model for uncertainty quantification will
+    be *more uncertain* when it’s wrong, and *more confident* when it’s right. The
+    likelihood function gives us a way of achieving this, ensuring that our likelihood
+    is greater if we’re uncertain about incorrect predictions and certain about correct
+    predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can see this in action by substituting another value of *v* and seeing how
+    this changes the NLL. For example, let’s increase our variance to *v* = 0*.*9:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ 2 − 0.5× log(0.9)+-(0.6−-0.8)- = 0.036 0.9 ](img/file137.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This significant increase in variance produces a similarly significant reduction
+    in NLL. Similarly, we’ll see our NLL increase again if we have high variance for
+    a correct prediction *m* = *y*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ log(0.9)+-(0.8−-0.8)2 − 0.5× 0.9 = 0.059 ](img/file138.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Hopefully, with this example you can see how using the NLL loss translates
+    to well calibrated uncertainty estimates over our outputs. In fact, this property
+    – using the variance to scale to our objective function – is a fundamental component
+    of all principled BNN methods: BBB also does this, although it’s a little more
+    difficult to demonstrate on paper as it requires sampling.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are a few low-level details of PBP that we’ll encounter in the implementation.
+    These relate to the ADF process, and we encourage you to take a look at the articles
+    in the *Further reading* section for comprehensive derivations of PBP and ADF.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve covered PBP’s core concepts, let’s take a look at how we implement
+    it with TensorFlow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.7 Implementing PBP
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Because PBP is quite complex, we’ll implement it as a class. Doing so will keep
+    our example code tidy and allow us to easily compartmentalize our various blocks
+    of code. It will also make it easier to experiment with, for example, if you want
+    to explore changing the number of units or layers in your network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Importing libraries'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We begin by importing various libraries. In this example, we will use scikit-learn’s
+    California Housing dataset to predict house prices:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To make sure we produce the same output every time, we initialize our seeds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can then load our dataset and create train and test splits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Helper functions'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Next, we define two helper functions that ensure that our data is in the correct
+    format, one for the input and another one for the output data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will also create a short class to initialize a gamma distribution: `ReciprocalGammaInitializer`.
+    This distribution is used as the prior for PBP’s precision parameter *λ* and the
+    noise parameter *γ*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: A thorough treatment of these variables is not required for a general understanding
+    of PBP. For further details on this, please see the PBP paper listed in the *Further
+    reading* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Data preparation'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'With these prerequisites implemented, we can normalize our data. Here, we normalize
+    to mean zero and unit standard deviation. This is a common pre-processing step
+    that will make it easier for our model to find the right set of weights:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 4: Defining our model class'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We can now start to define our model. Our model will consist of three layers:
+    two ReLU layers and one linear layer. We use Keras’ `Layer` to define our layers.
+    The code for this layer is quite long, so we will break it into several subsections.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we subclass the `Layer` to create our own `PBPLayer` and define our
+    `init` method. Our initialization method sets the number of units in our layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then create a `build()` method that defines the weights of our layer. As
+    we discussed in the previous section, PBP comprises both *mean* weights and *variance*
+    weights. As a simple MLP is composed of a multiplicative component, or weight,
+    and a bias, we’ll split both our weights and biases into mean and variance variables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `weights_m` and `weights_v` variables are our mean and variance weights,
+    forming the very core of our PBP model. We will continue our definition of `PBPLayer`
+    when we work through our model fitting function. For now, we can subclass this
+    class to create our ReLU layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can see that we overwrite two functions: our `call()` and `predict()` functions.
+    The `call()` function calls our regular linear `call()` function and then applies
+    the ReLU max operation we saw in [*Chapter 3*](CH3.xhtml#x1-350003), [*Fundamentals
+    of Deep* *Learning*](CH3.xhtml#x1-350003). The `predict()` function calls our
+    regular `predict()` function, but then also calls a new function, `get_bias_mean_variance()`.
+    This function computes the mean and variance of our bias in a numerically stable
+    way, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With our layer definitions in place, we can build our network. We first create
+    a list of all layers in our network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then create a `PBP` class that contains the model’s `fit()` and `predict()`
+    functions, similar to what you see in a model defined with Keras’s `tf.keras.Model`
+    class. Next, we’ll see a number of important variables; let’s go through them
+    here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`alpha` and `beta` : These are parameters of our gamma distribution'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Gamma` : An instance of the `tfp.distributions.Gamma()` class for our gamma
+    distributions, which is a hyper-prior on PBP’s precision parameter *λ*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`layers` : This variable specifies the number of layers in the model'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Normal` : Here, we instantiate an instance of the `tfp.distributions.Normal()`
+    class, which implements a Gaussian probability distribution (in this case, with
+    a mean of 0 and a standard deviation of 1):'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `PBP` class `__init__` function creates a number of parameters but essentially
+    initializes our *α* and *β* hyper-priors with a normal and a gamma distribution.
+    Furthermore, we save the layers that we created in the previous step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `fit()` function updates the gradients of our layers and then updates our
+    *α* and *β* parameters. The function for updating gradients is defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Before we can update our gradients, we need to propagate them forward through
+    the network. To do so, we’ll implement our `predict()` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we can propagate values through our network, we are ready to implement
+    our loss function. As we saw in the previous section, we use the NLL, which we’ll
+    define here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now propagate values through the network and obtain our gradient with
+    respect to our loss (as we would with a standard neural network). This means we’re
+    ready to update our gradients by applying the update rules we saw in equations
+    5.19 and 5.20 for the mean weights and variance weights, respectively:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As discussed in the previous section, PBP belongs to the class of **Assumed**
+    **Density Filtering** (**ADF**) methods. As such, we update the *α* and *β* parameters
+    according to ADF’s update rules:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 5: Avoiding numerical errors'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Finally, let’s define a few helper functions to ensure that we avoid numerical
+    errors during fitting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 6: Instantiating our model'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'And there we have it: the core code for training PBP. Now we’re ready to instantiate
+    our model and train it on some data. Let’s use a small batch size and a single
+    epoch in this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 7: Using our model for inference'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now that we have our fitted model, let’s see how well it works on our test
+    set. We first normalize our test set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we get our model predictions: the mean and variance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we post-process these values to make sure they have the right shape and
+    are in the range of the original input data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we’ve got our predictions, we can compute how well our model’s done.
+    We’ll use a standard error metric, RMSE, as well as the metric we used for our
+    loss: the NLL. We can compute them using the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Evaluating both of these metrics is good practice for any regression task for
+    which you have model uncertainty estimates. The RMSE gives you your standard error
+    metric, which allows you to compare directly with non-probabilistic methods. The
+    NLL gives you an imdivssion of how well calibrated your method is by evaluating
+    how confident your model is when it’s doing well versus doing poorly, as we discussed
+    earlier in the chapter. Together, these metrics give you a comprehensive imdivssion
+    of a Bayesian model’s performance, and you’ll see them used time and time again
+    in the literature.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.8 Summary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this chapter, we learned about two fundamental, well-principled, Bayesian
+    deep learning models. BBB showed us how we can make use of variational inference
+    to efficiently sample from our weight space and produce output distributions,
+    while PBP demonstrated that it’s possible to obtain predictive uncertainties *without*
+    sampling. This makes PBP more computationally efficient than BBB, but each model
+    has its pros and cons.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In BBB’s case, while it’s less computationally efficient than PBP, it’s also
+    more adaptable (particularly with the tools available in TensorFlow for variational
+    layers). We can apply this to a variety of different DNN architectures with relatively
+    little difficulty. The price is incurred through the sampling required at both
+    inference and training time: we need to do more than just a single forward pass
+    to obtain our output distributions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conversely, PBP allows us to obtain our uncertainty estimates with a single
+    pass, but – as we’ve just seen – it’s quite complex to implement. This makes it
+    awkward to adapt to other network architectures, and while it has been done (see
+    the *Further reading* section), it’s not a particularly practical method to use
+    given the technical overhead of implementation and the relatively marginal gains
+    compared to other methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In summary, these methods are excellent if you need robust, well-principled
+    BNN approximations and aren’t constrained in terms of memory or computational
+    overheads at inference. But what if you have limited memory and/or limited compute,
+    such as running on edge devices? In these cases, you may want to turn to more
+    practical methods of obtaining predictive uncertainties.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Chapter 6, Bayesian Neural Network Approximation Using a Standard Deep*
+    *Learning Toolbox*, we’ll see how we can use more familiar components in TensorFlow
+    to create more practical probabilistic neural network models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 5.9 Further reading
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Weight Uncertainty in Neural Networks*, Charles Blundell *et al.*: This is
+    the paper that introduced BBB, and is one of the key pieces of BDL literature.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Practical Variational Inference for Neural Networks*, Alex Graves *et al.*:
+    An influential paper on the use of variational inference for neural networks,
+    this work introduces a straightforward stochastic variational method that can
+    be applied to a variety of neural network architectures.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Probabilistic Backpropagation for Scalable Learning of Bayesian* *Neural Networks*,
+    José Miguel Hernández-Lobato *et al.*: Another important work in BDL literature,
+    this work introduced PBP, demonstrating how Bayesian inference can be achieved
+    via more scalable means.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Practical Considerations for Probabilistic Backpropagation*, Matt Benatan
+    *et al.*: In this work, the authors introduce methods for making PBP more practical
+    for real-world applications.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Fully Bayesian Recurrent Neural Networks for Safe Reinforcement* *Learning*,
+    Matt Benatan *et al.*: This paper shows how PBP can be adapted to an RNN architecture,
+    and shows how BNNs can be advantageous in safety-critical systems.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**[1](#footref1)** It is beyond the scope of this book to guide the reader
+    through the derivation of ELBO, but we encourage the reader to see the Further
+    reading section for texts that provide a more comprehensive overview of ELBO.'
+  prefs: []
+  type: TYPE_NORMAL

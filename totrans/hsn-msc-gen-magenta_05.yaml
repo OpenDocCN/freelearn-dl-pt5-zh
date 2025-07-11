@@ -1,0 +1,1105 @@
+- en: Generating Polyphonic Melodies
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Building on the last chapter where we created drum sequences, we can now proceed
+    to create the heart of music—its melody. In this chapter, you'll learn the importance
+    of **Long Short-Term Memory** (**LSTM**) networks in generating longer sequences.
+    We'll see how to use a monophonic Magenta model, the Melody RNN—an LSTM network
+    with a loopback and attention configuration. You'll also learn to use two polyphonic
+    models, the Polyphony RNN and Performance RNN, both LSTM networks using a specific
+    encoding, with the latter having support for note velocity and expressive timing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: LSTM for long-term dependencies
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating melodies with the Melody RNN
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating polyphony with the Polyphony RNN and Performance RNN
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''ll use the following tools:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **command line** or **bash** to launch Magenta from the Terminal
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Python** and its libraries to write music generation code using Magenta'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Magenta** to generate music in MIDI'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**MuseScore** or **FluidSynth** to listen to the generated MIDI'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In Magenta, we'll make the use of the **Melody RNN**, **the Polyphony RNN**,
+    and **Performance RNN** models. We'll be explaining those models in depth, but
+    if you feel like you need more information, the model's README in Magenta's source
+    code ([github.com/tensorflow/magenta/tree/master/magenta/models](https://github.com/tensorflow/magenta/tree/master/magenta/models))
+    is a good place to start. You can also take a look at Magenta's code, which is
+    well documented. We also provide additional content in the last section, *Further
+    reading*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for this chapter is in this book's GitHub repository in the `Chapter03` folder,
+    located at [github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter03](https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter03).
+    The examples and code snippets will presume you are located in the chapter folder.
+    For this chapter, you should do `cd Chapter03` before you start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Check out the following video to see the Code in Action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[http://bit.ly/314KEzq](http://bit.ly/314KEzq)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: LSTM for long-term dependencies
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, we learned how **Recurrent Neural Networks** (**RNNs**)
+    are essential for music generation because they make it possible to operate on
+    a sequence of vectors and remember past events. This second part is really important
+    in music generation since past events play an important role in defining the global
+    musical structure. Let's consider the example of a broken minor ninth chord of
+    "A," "C," "E," "G," "B." To predict the last note, "B," the network has to remember
+    four events back to know that this is probably a minor ninth chord being played.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, as the gap between the relevant information and the point where
+    it is needed grows, RNNs become unable to learn the dependency. In theory, the
+    network could be able to do it, but in practice, it is really difficult. Two common
+    problems with vanilla RNNs are the vanishing gradient problem and the exploding
+    gradient problem, which we'll get to see in this section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fortunately, LSTM networks, introduced in 1997, solve that problem. They are
+    a special type of RNN where each neuron has a memory cell with special gates.
+    As introduced in the previous chapter, the Drums RNN model is an LSTM network
+    as are all of the models in this chapter. Now, let's have a look at how LSTMs
+    work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at LSTM memory cells
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'LSTM networks have been popular since their invention and for a good reason:
+    they were designed specifically to handle the long-term dependency problem we''ve
+    been talking about. In Magenta, the RNN models are LSTM networks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s have a quick refresher with the RNN diagram from the previous chapter.
+    We''ll take the same diagram but zoom in on one of the cells and add a bit of
+    detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9bdbdd46-7734-433c-8e93-002d7318f688.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We see here that the repeated module is pretty simple: it takes the output
+    from the previous layer, concatenates it with the current input, and uses an activation
+    function (such as tanh, sigmoid, or ReLU) layer to produce both the layer''s output
+    and the next layer''s input. We also remember that long-term information has to
+    travel through all of the cells and layers in a sequential matter, meaning that
+    information has to be multiplied at each step. This is where the vanishing gradient
+    problem arrives: the values getting multiplied many times by small numbers tend
+    to vanish.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s now see how an LSTM memory cell is designed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5596566d-df05-4002-953c-3af38fe8f087.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The first thing to notice here is the added horizontal line, annotated { ...,
+    *c(t-1)*, *c(t)* , *c(t+1), ...* }, that carries the cell state information forward.
+    The cell state can be modified by three gates—**forget**, **input**, and **output**.
+    We won't go into details on how those gates work since this is outside the scope
+    of this book, but we'll be looking at an example of how it works for our use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check out the last section, *Further reading*, for references containing more
+    information on LSTM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's take our example of a broken minor ninth chord to illustrate how the gate
+    layers work. The network is training and has received so far "A", "C", "E", "G",
+    "B", which is its current state. Now the LSTM sees a new note, "C", and what happens?
+    First, let's have a look at the **forget gate layer**. The LSTM will look at *h(t-1)*,
+    the previous layer output, and *x(t)*, the current input, which is "C", and output
+    a number for each element in the previous cell state, *c(t-1)*. The state is then
+    multiplied by that output, varying from 0 to 1, meaning a value closer to 0 will
+    result in a state losing this value, and a value closer to 1 will result in a
+    state keeping this value. Because the input is a "C", and in our state, we already
+    saw a full chord, the network might learn to forget previous information because
+    we are starting a new chord.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, the **input gate layer** will look at *h(t-1)* and *x(t)* and decide what
+    additions are going to be made to the state. Using this, the forget gate output
+    gets updated, producing *c(t)*. The cell state now has new content, meaning our
+    input "C" is now added in the cell state, which will be useful for later layers
+    to detect, for example, a potential start of a C major chord. At this point, the
+    network might also learn other chords, depending on the training data. A properly
+    trained network will learn about the different musical chords based on its training
+    and will output predictions accordingly during inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, the **output gate layer** will produce the output, *h(t)*, by looking
+    at the new state *c(t)*, *h(t-1)*, and *x(t)*. At this point, the state is already
+    updated and doesn't need further updates. Since our model just saw a "C", it might
+    want to output an "E" to constitute a C Major chord.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is a simplified explanation of LSTM but it serves the purpose of understanding
+    how it works for our use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at the code, you can see where the LSTM memory cell is used. In the
+    `events_rnn_graph.py` module, the `make_rnn_cell` function uses `tf.contrib.rnn.BasicLSTMCell`.
+    You can see that Magenta uses TensorFlow as a backing engine, as LSTM is not defined
+    in Magenta.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring alternative networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To summarize the last section, we have RNNs, which are capable of handling sequences
+    and looking at past events, and LSTM, a specific memory cell implementation for
+    an RNN. Often, a network might be called only RNN but actually uses LSTM memory
+    cells.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While LSTMs are a huge step forward for keeping long-term information, there
+    are possible improvements. Another type of similar memory cell, **Gated Recurrent
+    Units** (**GRU**), has gained popularity in recent years for its simpler design.
+    Because of that, GRUs are also less expressive, which is a trade-off to look out
+    for.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A problem with LSTMs is that they use more resources to run because the memory
+    cell takes more memory and more computation to operate. A popular idea for further
+    improvement is the introduction of **attention**, where the RNN can look at a
+    subset of past outputs, making it possible to look at past events without using
+    too much cell memory. We'll be looking at attention in the *Having attention for
+    specific steps *section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating melodies with the Melody RNN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we'll be building on our previous chapter's knowledge by using
+    our Python code to generate music with a new model, the Melody RNN. This section
+    will show how to generate monophony and the next section will show how to handle
+    polyphony.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Monophony** is the simplest form of musical texture, where the notes, a **melody**,
+    are played by a single instrument, one by one. Sometimes, a melody can be played
+    by multiple instruments, or multiple singers, at a different octave (for example,
+    in a choir), but are still considered monophonic because the backing score is.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Polyphony,** on the other hand, consists of two or more melody lines played
+    together. For example, a piano score played with two hands is polyphonic since
+    there are two separate melodies to be played together.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An instrument can be monophonic or polyphonic. For example, a monophonic synthesizer
+    will be able to play only one note at a time (so if you press two notes, only
+    one will come out), and a polyphonic synthesizer or a classic piano will be able
+    to play multiple notes at the same time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is a small monophonic example from the piano score of *Fur Elisa* from
+    Beethoven, at bar #37:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/913a7d9b-fcc0-4081-abda-a187742ad89e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You notice there''s only one melody and the notes are played one by one. And
+    here is a small polyphonic example from the same score, at bar #25:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/137820cb-6808-4adc-8a01-fe8bd3ca0f5f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this example, you have two melodies played at the same time, typically using
+    both hands on the piano.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Does polyphony sound familiar? It might, because percussion scores are polyphonic
+    in essence, since multiple melodies (kick drum, hit hats, snare, and so on) are
+    played together to form a complete rhythm. What we're going to see in the next
+    section about polyphony is a bit different though, since we'll need a way to represent
+    a note that spans longer than a single step's length, unlike the previous chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's start by writing some code to generate melodies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating a song for Fur Elisa
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For this example, we''ll be using a small primer from the piano score of *Fur
+    Elisa* to generate melodies based on it. The primer looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c35cee40-f6be-436f-aa05-d833c79960a0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice the time signature is 3/8\. We'll be looking into this in a later section,
+    *Losing track of time*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since you already know how to generate a sequence, we'll only provide what has
+    changed from the previous code; you can reuse what you've written from the previous
+    chapter. We'll be encapsulating the code in a `generate` function, making it easy
+    to call with different models and configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can follow this example in the `chapter_03_example_01.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find the `generate` function in that file. We'll be making more versions
+    of this method as we go. The primer for this example is located at `primers/Fur_Elisa_Beethoveen_Monophonic.mid`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ll go through the important changes in the `generate` function by explaining
+    the new content step by step. The new function signature is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At the beginning of the function, we can keep the same code we previously had,
+    changing the references to the Drums RNN bundle, generator, and configuration
+    to the respective parameters—`bundle_name`, `sequence_generator`, and `generator_id`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we''ll handle the `primer_filename` parameter by using the MIDI file
+    to note sequence function we previously saw, using an empty sequence if no primer
+    is provided:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we''ll handle the `qpm` parameter. If a primer sequence has a tempo,
+    we''ll use it. If not, we''ll use the provided `qpm` parameter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: This introduces the `tempos` attribute on the `NoteSequence` message, which
+    contains a list of tempo changes. As in MIDI, a score can have multiple tempos,
+    each of them starting and stopping at a specific time. We won't be handling multiple
+    tempos for the sake of simplicity and because Magenta doesn't handle them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We then change how we calculate the primer length. This used to be a fixed
+    value, but now we take the end of the last note, given by `total_time`, a sequence
+    attribute, and round it up to the closest step beginning. We then calculate the
+    sequence length in seconds from that value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: The resulting primer end time will be of `primer_sequence_length_time`. Remember
+    Magenta handles sequences in seconds, so we always have to calculate timing in
+    seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We also change how the generation length is calculated by subtracting the primer
+    length by the provided `total_length_steps` value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: We've been using bars to calculate the primer and generation length in the previous
+    chapter, and now, we are using steps to do the same thing. Both approaches are
+    useful in different circumstances and we wanted to show both.
+  prefs: []
+  type: TYPE_NORMAL
+- en: More often than not, using steps is easier to calculate because you don't need
+    to worry about time signatures, which makes the number of steps per bar change.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using bars, on the other hand, makes it easier to make loops that start and
+    stop with proper timing as we did in the previous chapter's exercises.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also add `beam_size`, `branch_factor`, and `steps_per_iteration` to
+    the generator options, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we''ll save the MIDI and plot to disk so that we can listen to the
+    sequence and show it. It is the same code you saw previously with a bit more information
+    in the filename, with the `<generator_name>_<generator_id>_<date_time>.<format>` pattern:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now call our brand new `generate` method! Let''s do a simple example
+    with the Melody RNN model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: So, we've used the `basic_rnn.mag` pre-trained bundle with the `basic_rnn` configuration
+    and `melody_rnn_sequence_generator`. We've asked for 64 steps, which is 4 bars
+    in 4/4 time. But didn't we say the primer has a 3/8 time signature? Yes, but the
+    generated sequence will be in 4/4 time, so we have to make our calculations based
+    on that. We'll be discussing this in a later section, *Losing track of time*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Calling the method will generate two files in the `output` directory, a MIDI
+    `.mid` file and a plot `.html` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `` `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI` ``'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Opening the plot file, we get something like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/fe689195-4587-4e81-9176-11fd328db9e3.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: If you listen to it, you'll hear that the generated sample is in the same key
+    as the primer and with similar notes, but the global structure of the primer is
+    lost. That is because the `basic_rnn` configuration doesn't learn musical structure
+    as well as the lookback configuration since the encoded vector doesn't contain
+    step positions and repeating musical steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's see how we can fix that by looking at the `attention_rnn` and `lookback_rnn` configurations,
+    which are both LSTMs with specific encodings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the lookback configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To see the lookback configuration in action, we''ll first generate a new sequence
+    using the following parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can see we''re using the same `melody_rnn_sequence_generator` function
+    but changing the configuration and bundle files. Let''s look at the generated
+    sample for the **lookback** configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/aefd249b-b189-4ed5-b98d-511ef245995f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see here that bar 1 and bar 3 have a repeating musical structure annotated
+    with **s1** and **s2** in the diagram, with bar 0 and bar 2 also having a similar
+    structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If repeating musical structures rings a bell, this is because we've already
+    seen that concept—the Drums RNN uses a lookback encoder, namely, `LookbackEventSequenceEncoderDecoder`,
+    the same as we are using here. In the section on encoding in the previous chapter,
+    we saw that the drum notes are encoded into a one-hot vector for the input of
+    the RNN. We have the same thing here, but instead, it's the melody that gets encoded
+    as a one-hot vector.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take the diagram we had in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml),
+    *Generating Drum Sequences with Drums RNN*, and add more details:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3cbcba20-c5ba-4ad9-a3a9-a32489c1f1de.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We provide a small example vector for the sake of the example. The index range
+    for the one-hot encoding is 16, which means we can encode 16 classes only. Remember
+    that the encoding for the drum classes had a length of 512\. The `basic_rnn` configuration of
+    the Melody RNN model encodes the melody to 36 classes by mapping only a portion
+    of the pitches. If we want the full pitch range of 127, we should use the `mono_rnn` configuration.
+    The total length of the vector is 55 since we have 3 times a one-hot encoding
+    of 16 classes, plus a binary counter of 5 bits, plus 2 lookback flags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s break it down into five parts and explain the vector''s composition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we encode the **event of the current step**, which is the part we've
+    already explained in the previous chapter. In the example vector, the event class
+    1 is encoded, meaning the lowest pitch is played at the current step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Then, we encode the **event of the next step for the first lookback**. So, what
+    is a lookback? When the encoder-decoder gets initialized, it takes by default
+    the lookback distances of *[default steps per bar, default steps per bar * 2]*,
+    namely, [16, 32], which corresponds to the last two bars in the 4/4 time signature.
+    Now, we are looking at the first lookback, which is 16 steps, or 1 bar, before
+    the current step. The encoded event is the next step of that first lookback. In
+    the example vector, the event class 6 is encoded, meaning the corresponding pitch
+    was played 15 steps ago.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Then, we encode the **event of the next step for the second lookback**, which
+    is 31 steps, or 2 bars minus one step, before the current step. In the example
+    vector, the event class 8 is encoded, meaning the corresponding pitch was played
+    31 steps ago.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Then, we encode the **step position in the bar binary counter**. The 5-bit vector
+    can encode values from 0 to 15, which is the range of steps we have in 4/4 music.
+    This helps the model to learn musical structure by keeping track of its position
+    inside a bar. In the example vector, the position in the bar is the third step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, we encode the **repeating lookback flags**, which encodes whether the
+    current step is repeating the first lookback or second lookback. It helps to learn
+    whether the event is new content or a repetition of previous content. In the example
+    vector, there are no repetitions.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Magenta's source code is well documented and you can see this code in the `encoder_decoder.py` file in
+    the `magenta.music` module. The class we are looking at is `LookbackEventSequenceEncoderDecoder`
+    and the method is `events_to_input`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, if you are wondering how the models are configured, you can go find the
+    configuration module. For the Melody RNN, search for the `melody_rnn_model.py`
+    file; you'll find, in this module, the configurations we are talking about in
+    this section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is important information to feed the model because it enables it to keep
+    the musical structure of the sequence. The model also uses custom labels to reduce
+    the complexity of the information the model has to learn to represent. Since music
+    often has repeating structures on one bar and two bars, the model will use custom
+    labels as appropriate, for example, `repeat-1-bar-ago` and `repeat-2-bar-ago`.
+    This makes it easier for the model to repeat such phrases without having to store
+    them in its memory cell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the attention mask
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that we understand the lookback configuration, let''s have a look at the
+    attention configuration. We''ll start by generating a sequence using the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We''re generating a longer sequence of 128 steps to try and see the longer
+    dependencies in the musical structure. Let''s look at the generated sample for
+    the **attention** configuration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0035273a-8557-4892-8ba0-d7d1b8a04d22.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see here that, during the eight-bar generation, the model was able to
+    keep track of the musical structure for six bars before wandering off. As previously
+    stated in this chapter's first section, *Looking at an LSTM memory cell*, attention
+    models are relatively new but powerful tools to remember long-term structures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Magenta, attention is implemented by looking at the previous *n* steps using
+    an attention mechanism. The exact way the attention mechanism works is outside
+    the scope of this book, but we'll show an example to have an idea of how it works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, an *n* length vector is calculated using the previous *n* steps and the
+    current cell state. This gives us how much attention each step should receive.
+    By normalizing it, we get the **attention mask**. For example, it could be *[0.2,
+    0.8, 0.5]* for *n* equals 3, with the first element (0.2) corresponding to the
+    attention the previous step gets, the second element (0.8) the attention for the
+    step before that, and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, we take the three previous steps'' output and apply the attention mask
+    on them. The output of a step, for example *[0.0, 1.0, 1.0, 0.0]*, represents
+    to the encoding of one step. Take a look at this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 1**: *[0.0, 1.0, 1.0, 0.0]* becomes *[0.0, 0.2, 0.2, 0.0]* by applying
+    0.2 (the first element of the attention mask) to each value.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Step 2**: *[0.0, 0.0, 1.0, 0.0]* becomes *[0.0, 0.0, 0.8, 0.0]* by applying
+    0.8 (the second element of the attention mask) to each value.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Step 3**: *[0.5, 0.0, 0.0, 0.0]* becomes *[0.25, 0.0, 0.0, 0.0]* by applying
+    0.5 (the third element of the attention mask) to each value.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Finally, we sum the resulting vectors and get *[0.25, 0.2, 1.0, 0.0]*, which
+    corresponds to the *n* previous outputs, each contributing in a different proportion.
+    That resulting vector is then combined with the RNN output for that current step
+    and applied to the input of the next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: By using attention, we can directly inject information of the previous outputs
+    into the current step's calculation, without having to store all of the information
+    about the cell's state. This is a powerful mechanism that has usage in many network
+    types.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In Magenta, you can see when attention is used by searching for the `attn_length`
+    argument in the model configuration. If that argument is provided, when the RNN
+    cell is instantiated, an attention wrapper is used. You can see the code in `events_rnn_graph.py` in `make_rnn_cell`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The length of the attention will define the number of steps (*n*) of the previous
+    outputs the attention will take into account during training. You can see that
+    the Drums RNN, the Melody RNN, and Improv RNN have attention configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To change the attention configuration during training to 64 steps, for example,
+    use the `attn_length=64` hyperparameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Losing track of time
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'By now, you will have noticed that we lost the initial primer time signature
+    of 3/8\. To understand what 3/8 means, let''s go back to what we''ve learned.
+    First, let''s remember we have 4 steps per quarter note because this is mainly
+    the sample rate in Magenta. Then, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In **4**/**4 time**, you have 4 steps per quarter notes times 4 quarter notes
+    in a bar (numerator), which equals 16 steps per bar.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In **3**/**4 time**, you have 4 steps per quarter notes times 3 quarter notes
+    in a bar (numerator), which equals 12 steps per bar.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In **3**/**8 time**, you have 2 steps per eight notes times 3 eight notes in
+    a bar (numerator), which equals 6 steps per bar. This is because an eight note
+    means it is half the time of a quarter note, so we have 2 steps per eight notes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Why are we looking into this? We are doing so because time signature doesn''t
+    change how many steps or notes we have in a score, but it does change its structure.
+    Because the Melody RNN model supposes a certain structure, it won''t be able to
+    adapt to a new one. In our case, the model assumes 4/4 time for two reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The binary counter representing the position in the bar is defined for 4/4 time
+    because it counts from 0 to 15 for one bar (instead of 0 to 5 in 3/8 time).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The default lookback in the model is configured to [16, 32] steps, which are
+    the number of steps to lookback in 4/4 time for 1 and 2 bars respectively (instead
+    of 6 and 12 in 3/8 time).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Those are the reasons why this model won't understand our primer's time signature,
+    and finds structures and repetitions on 4/4 time instead of 3/8 time. You might
+    also notice the generate sequence doesn't have a time signature, which, by default,
+    we assume is 4/4.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A time signature is important for the global musical structure of a musical
+    piece and for quantization. Different time signatures will change the way the
+    notes are rounded to the closest steps since it makes the number of steps change.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can always get the time signature by using `sequence.time_signatures` on
+    a `NoteSequence` instance. This returns a list in Protobuf, on which you can use
+    the `add` method, which adds and returns a new `TimeSignature` element.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Magenta supports any time signature, but all of the models in Magenta were trained
+    in 4/4 time. To generate sequences in another time signature, we'll have to build
+    a proper dataset, create a new configuration, and train the model. Refer to [Chapter
+    6](1ca56e24-b4d2-40de-b4cf-ae6bbb3c0eef.xhtml), *Data Preparation for Training*,
+    and [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml), *Training Magenta
+    Models*, for information on how to do that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating polyphony with the Polyphony RNN and Performance RNN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we've talked in depth about melodies, their representation, encoding,
+    and configuration, we can talk about polyphony. We'll use two models, the Polyphony
+    RNN and Performance RNN, to generate polyphonic music. We'll also look into the
+    encoding of such a musical structure since it is different than monophonic encoding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start by reminding ourselves that we''ve used a primer from Beethoven''s *Fur
+    Elise* composition in the last example. We''ll now use the polyphonic version
+    of it, which looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/43e96a60-efdf-4491-a206-d2d18b43ae20.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You can see that indeed the primer is polyphonic since multiple notes are being
+    played at the same time. You should know that using a polyphonic primer in a monophonic
+    model will result in an error. You can verify that by calling our `generate` method
+    from the previous section using the following parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You''ll get the following error because there are too many extracted melodies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Differentiating conditioning and injection
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now take the code we''ve already written, our `generate` function, and
+    add some content so that we can call it with the Polyphony RNN model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can follow this example in the `chapter_03_example_02.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find the `generate` method in that file. We'll be making more versions
+    of this method as we go. The primer for this example is located at `primers/Fur_Elisa_Beethoveen_Polyphonic.mid`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we''ll add two new parameters that are specific to this model, `condition_on_primer`
+    and `inject_primer_during_generation`. You can modify the generate method signature
+    as follow:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And then add the parameters to the generator options:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: Be careful with `inject_primer_during_generation`; it is inverted in the arguments
+    map.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now launch some generations:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: What we've done here is activated only one of the new parameters at a time to
+    see its impact on the generated sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `condition_on_primer` parameter is used to provide the primer sequence
+    to the RNN before it begins its generation. This needs to be activated for the
+    primer to be taken into account. It is useful to start a sequence with, on a certain
+    key. You can see it in action in this generation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a80698da-0a11-483c-a1d7-25740fd4c9cf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice the generated sequence is in key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `inject_primer_during_generation` parameter will inject the primer in the
+    generator''s output, which means we''ll basically have the full primer in the
+    output. You can see it in action in this generation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/c80bf417-4f53-40c1-b812-49889ed67c1c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice the generated sequence has the full primer in it. You should try different
+    values to see their impact on the generated sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Explaining the polyphonic encoding
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we saw a generated polyphonic sequence, let's look at how this type
+    of sequence gets generated. First, let's look at the `PolyphonyRnnModel` model in
+    the module, `polyphony_model.py`. We first notice that the model doesn't define
+    anything new, which means the generation's code is the same as the previous chapter,
+    defined in the *Understanding the generation algorithm* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is different is the way the model encodes its one-hot vector using `PolyphonyOneHotEncoding`.
+    Now, multiple notes can be played at the same time and a single note can spawn
+    multiple steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the Drums RNN encoding, multiples notes could be struck at the same time
+    because it encoded a combination of multiple notes to a specific event, but it
+    couldn't encode a note that spawned multiple steps since a note didn't have a
+    specific marker for start and stop. The Melody RNN encoding is similar in that
+    matter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take the first four steps of our previously generated example to see
+    how that polyphonic encoding works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/14f1f639-b427-4978-a5ee-94d4eb57377b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, we see 5 notes of pitches, *{69, 45, 52, 57, 60}*, over 4 steps, with
+    the first note, 69, spanning two steps. The Polyphony RNN uses five different
+    event classes to encode this. For the classes without pitch, used to represent
+    the structure of the sequence, you have `START`, `END`, and `STEP_END`. For the
+    classes with a pitch, used to represent a note, you have `NEW_NOTE` and `CONTINUED_NOTE`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s try to encode our sequence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: What is interesting here is to notice the note continuation on the second step.
+    Also, note endings are not explicitly specified; a note will end if, at `CONTINUED_NOTE`, the
+    event is not present in the following step. This is different to the encoding
+    presented in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This sequence gets generated by multiple passes of an RNN generation. This
+    is different than what we saw for a monophonic generation since, previously, it
+    would take the RNN one step to generate one sequence step. Now, we need approximately
+    5 RNN steps to generate one sequence step. You can see that in the console output.
+    For this example, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Performance music with the Performance RNN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have a grip on the Polyphony RNN, we'll be looking into the Performance
+    RNN, a powerful model with more options and pre-trained models than the Polyphony
+    RNN. First, let's have a look at the different pre-trained bundles. Remember that
+    a pre-trained bundle is associated with a specific configuration. This time, you
+    can go see the different configurations in the `performance_model.py` module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the Performance RNN, a different encoding than the Polyphony RNN is used,
+    with new event classes such as `NOTE_ON`  and `NOTE_OFF`. That might sound familiar
+    because this is also how MIDI encodes its information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s first look at a couple of configuration to start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `performance` configuration supports expressive timing, where the notes
+    won't fall exactly on steps beginning and end, giving it a more "human" feel or
+    "groove" (we'll be also looking into groove in the following chapter, *Latent
+    Space Interpolation with Music VAE*). An event class, `TIME_SHIFT`, is used to
+    represent that, which defines an advance in time.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `performance_with_dynamics` configuration supports note velocity, where
+    the notes aren't all played with the same force. An event class, `VELOCITY`, is
+    used to represent that.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Those two additions are important in generating expressive sequences that are
+    closer to what a human player would do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s look at two more configurations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `density_conditioned_performance_with_dynamics` configuration supports density
+    conditioning, where the quantity of generated notes can be modified.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `pitch_conditioned_performance_with_dynamics` configuration supports pitch
+    conditioning, where the pitch distribution of the generated sequence can be controlled.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These configurations do not change the encoding but control how the generation
+    is executed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the first configuration, we need to remember our previous example with the
+    Polyphony RNN, where multiple RNN steps were needed to generate one sequence step.
+    Changing the generation option, `notes_per_second`, will change the number of
+    RNN steps for each sequence step, reducing or augmenting the generation density.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the second configuration, a histogram can be provided with the relative
+    density of each pitch in an octave using the generator option, `pitch_class_histogram`. 
+    The histogram is a list of 12 values (there are 12 notes per octave) with a value
+    of frequency for each pitch, corresponding to *[C, C#, D, D#, E, F, F#, G, G#,
+    A, A#, B]*. For an F Major scale, with F happening twice as much, you would have:
+    *[1, 0, 1, 0, 1, 2, 0, 1, 0, 1, 0, 1]*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can see this example in action in the `chapter_03_example_03.py` file in
+    the source code of this chapter. We won't be looking at the code here since it
+    is similar to the previous two examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To learn expressive timing and dynamics, these models have been trained on real
+    piano performances from the Yamaha e-Piano Competition (you can find them at [www.piano-e-competition.com/midiinstructions.asp](http://www.piano-e-competition.com/midiinstructions.asp)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating expressive timing like a human
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Here is an example of a generation with the Performance RNN, with the pre-trained
+    model, `density_conditioned_performance_with_dynamics`, with a parameter of `notes_per_second=8`.
+    We''re showing only the generated part, which is four bars after the primer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3e75a3d8-12bc-454a-a514-cec205ac79d4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'You will notice a couple of things here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, the notes do not all have the same height. This is because we can ask
+    Visual MIDI to scale the note height according to their velocity. The bigger the
+    note, the louder it is. Remember, velocity in MIDI is from 0 to 127\. For example,
+    the first note of pitch 71 has a velocity of 77.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Second, the notes do not fall directly on bar subdivisions—they start and end
+    a bit off, just before or after the steps boundaries. This is possible because
+    the model uses a `TIME_SHIFT` event and was trained on a dataset that was played
+    by human players, which contained such a groove. This is very interesting and
+    different than what we were previously doing: we are not generating sheet music
+    anymore; we are generating a performance.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating a quantized score or generating a groovy performance, both have their
+    specific usage, so you'll need to decide which suits best your goals. Because
+    of the performance nature of the generated sequence, opening the file in music
+    notation software such as MuseScore might look a bit messy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we looked at generating melodies, using both monophonic and
+    polyphonic models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We first started by looking at LSTM cells and their usage in RNNs to keep information
+    for a long period of time, using forget, input, and output gates.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we generated melodies with the Melody RNN, using multiple pre-trained
+    models such as basic, lookback, and attention. We saw that the basic model cannot
+    learn repeating structure, because its input vector encoding do not contain such
+    information. We then looked at the lookback encoding, where step position in bar
+    and repeating structure are encoded into the input vector, making it possible
+    for the model to learn such information. We finally saw the attention model, where
+    the attention mechanism makes it possible to look at multiple previous steps,
+    using an attention mask that gives a weight to each step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we generated polyphony using the Polyphony RNN and the Performance
+    RNN. In the former model, we learned how polyphony can be encoded in a vector,
+    using start and continue events. In the latter model, we learned another polyphony
+    encoding, using note on and note off events, similar to what MIDI uses. In the
+    Performance RNN, we also learned about expressive generation, both in terms of
+    timing and velocity changes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we now know, expressive timing is what gives the music a human feel, where
+    the notes do not fall on predefined times. This is what we sometimes call groove,
+    and we'll be looking more into this subject in the next chapter, *Latent Space
+    Interpolation with Music VAE*. We'll also be looking at score interpolation, which
+    makes it possible to gradually transition from one score to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What are the main problems RNN suffers from when learning, and what are the
+    solutions brought by LSTMs?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is a simpler alternative to LSTM memory cells? What are their advantages
+    and disadvantages?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You want to configure the lookback encoder-decoder from the Melody RNN to learn
+    structures with a 3/4 time signature. How big is the binary step counter? How
+    are the lookback distances configured for 3 lookback distances?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: You have the resulting vector, *[0.10, 0.50, 0.00, 0.25],* from the applied
+    attention mask of *[0.1, 0.5]*, with *n = 2*, and the previous step 1 of *[1,
+    0, 0, 0]* and step 2 of *[0, 1, 0, x].* What is the value of *x*?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'You have the following the Polyphony RNN encoding: *{ (START), (NEW_NOTE, 67),
+    (NEW_NOTE, 64), (NEW_NOTE, 60), (STEP_END), (CONTINUED_NOTE, 67), (CONTINUED_NOTE,
+    64), (CONTINUED_NOTE, 60), (STEP_END), (CONTINUED_NOTE, 67), (CONTINUED_NOTE,
+    64), (CONTINUED_NOTE, 60), (STEP_END), (CONTINUED_NOTE, 67), (CONTINUED_NOTE,
+    64), (CONTINUED_NOTE, 60), (STEP_END), (END) }*. What is being played?'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What event would be used to end a note of pitch 56 in the Polyphony RNN encoding?
+    And in the Performance RNN?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What are two components of a generated score that would give them a more human
+    fell? What model and arguments would you use to achieve that?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When using the `notes_per_seconds` parameter in the `density_conditioned_performance_with_dynamics` model,
+    what is the impact on the generation algorithm?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Learning Long-Term Dependencies with Gradient Descent is Difficult**: A paper
+    (1994) describing the difficulties of RNN to learn long-term dependencies in practice
+    ([ai.dinfo.unifi.it/paolo//ps/tnn-94-gradient.pdf](http://ai.dinfo.unifi.it/paolo//ps/tnn-94-gradient.pdf))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Long Short-Term Memory**: An original paper (1997) on LSTM ([www.bioinf.jku.at/publications/older/2604.pdf](http://www.bioinf.jku.at/publications/older/2604.pdf))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Understanding LSTM Networks**: An excellent article explaining in detail
+    LSTM memory cells, which contains more information than this chapter ([colah.github.io/posts/2015-08-Understanding-LSTMs/](https://colah.github.io/posts/2015-08-Understanding-LSTMs/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Illustrated Guide to LSTM''s and GRU''s: A step by step explanation**: an
+    excellent in-depth article about LSTM and GRU ([towardsdatascience.com/illustrated-guide-to-lstms-and-gru-s-a-step-by-step-explanation-44e9eb85bf21](https://towardsdatascience.com/illustrated-guide-to-lstms-and-gru-s-a-step-by-step-explanation-44e9eb85bf21))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Understanding LSTM and its diagrams**: Another excellent article on LSTMs
+    ([medium.com/mlreview/understanding-lstm-and-its-diagrams-37e2f46f1714#.swstv6z61](https://medium.com/mlreview/understanding-lstm-and-its-diagrams-37e2f46f1714#.swstv6z61))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Generating Long-Term Structure in Songs and Stories**: An excellent blog
+    post from Magenta''s developers looking into the lookback and attention models
+    of the Melody RNN ([magenta.tensorflow.org/2016/07/15/lookback-rnn-attention-rnn/](https://magenta.tensorflow.org/2016/07/15/lookback-rnn-attention-rnn/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Attention Is All You Need**: A paper (2017) on the usage and performance
+    of the attention mechanism ([arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

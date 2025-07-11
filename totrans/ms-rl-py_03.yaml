@@ -1,0 +1,1279 @@
+- en: '*Chapter 2*: Multi-Armed Bandits'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When you log on to your favorite social media app, chances are that you''ll
+    see one of the many versions of the app that are tested at that time. When you
+    visit a website, the ads displayed to you are tailored to your profile. In many
+    online shopping platforms, the prices are determined dynamically. Do you know
+    what all of these have in common? They are often modeled as **multi-armed bandit**
+    (**MAB**) problems to identify optimal decisions. A MAB problem is a form of **reinforcement**
+    **learning** (**RL**), where the agent makes decisions in a problem horizon that
+    consists of a single step. Therefore, the goal is to maximize only the immediate
+    reward, and there are no consequences considered for any subsequent steps. While
+    this is a simplification over multi-step RL, the agent must still deal with a
+    fundamental trade-off of RL: the exploration of new actions that could possibly
+    lead to higher rewards versus exploitation of the actions that are known to be
+    decent. A wide range of business problems, such as the ones mentioned previously,
+    involve optimizing this exploration-exploitation trade-off. Throughout the next
+    two chapters, you will understand the implications of this trade-off – which will
+    be a recurring theme in almost all RL methods – and learn how to effectively address
+    it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we lay the groundwork by solving MAB problems that don't take
+    into account the "context" in which the actions are taken, such as the profile
+    of the user visiting the website/app of interest, the time of day, and so on.
+    To that end, we cover four fundamental exploration strategies. In the next chapter,
+    we are going the extend these strategies to solve **contextual MABs**. In both
+    chapters, we use online advertising, an important application of bandit problems,
+    as our running case study.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, let''s get started! Here is what we will specifically cover in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploration-exploitation trade-off
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What is a MAB?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Case study – online advertising
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A/B/n testing as an exploration strategy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_000.png)-greedy actions for exploration'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Action selection using upper confidence bounds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Thompson (posterior) sampling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploration-exploitation trade-off
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we mentioned earlier, RL is all about learning from experience without a
+    supervisor labeling correct actions for the agent. The agent observes the consequences
+    of its actions, identifies what actions are leading to the highest rewards in
+    each situation, and learns from this experience. Now, think about something you
+    have learned from your own experience – for example, how to study for a test.
+    Chances are you explored different methods until you discovered what works best
+    for you. Maybe you studied regularly for your tests first, but then you tested
+    whether studying the last night before the test could work well enough – and maybe
+    it does for certain types of tests. The point is that you had to **explore** to
+    find the method(s) that maximizes your "reward," which is a function of your test
+    score, time spent on leisure activities, your anxiety levels before and during
+    the test, and so on. In fact, exploration is essential for any learning that is
+    based on experience. Otherwise, we may never discover better ways of doing things
+    or a way that works at all! On the other hand, we cannot always be trying new
+    ways. It would be silly to not exploit what we have already learned! So, there
+    is a *trade-off between exploration and exploitation*, and this trade-off is at
+    the very center of RL. It is crucial to balance this trade-off for efficient learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the exploration-exploitation trade-off is a challenge across all RL problems,
+    why do we specifically bring it up in the context of MAB? This is for two main
+    reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: MAB is one-step RL. Therefore, it allows us to study various exploration strategies
+    in isolation from the complexities of multi-step RL, and potentially prove how
+    good they are theoretically.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'While in multi-step RL we often train the agent offline (and in a simulation)
+    and use its policy online, in MAB problems, the agent is often trained and used
+    (almost always) online. Therefore, inefficient exploration costs more than just
+    computer time: it actually burns real money through bad actions. Therefore, it
+    becomes absolutely crucial to balance exploration and exploitation effectively
+    in MAB problems.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With this in mind, now it is time to define what a MAB problem is, and then
+    see an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is a MAB?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A MAB problem is all about identifying the best action among a set of actions
+    available to an agent through trial and error, such as figuring out the best look
+    for a website among some alternatives, or the best ad banner to run for a product.
+    We will focus on the more common variant of MABs where there are ![](img/Formula_02_001.png)
+    discrete actions available to the agent, also known as a ![](img/Formula_02_002.png)**-armed
+    bandit problem**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's define the problem in more detail through the example it got its name
+    from.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Problem definition
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The MAB problem is named after the case of a gambler who needs to choose a
+    slot machine (bandit) to play from a row of machines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the lever of a machine is pulled, it gives a random reward coming from
+    a probability distribution specific to that machine.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Although the machines look identical, their reward probability distributions
+    are different.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The gambler is trying to maximize their total reward. So, in each turn, they
+    need to decide whether to play the machine that has given the highest average
+    reward so far, or to try another machine. Initially, the gambler has no knowledge
+    of the machines' reward distributions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Clearly, the gambler needs to find a balance between exploiting the one that
+    has been the best so far and exploring the alternatives. Why is that needed? Well,
+    because the rewards are stochastic. A machine that won't give the highest average
+    reward in the long term may have looked like the best just by chance!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 2.1 – MAB problems involve identifying the best lever to pull among
+    multiple options'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_02_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 2.1 – MAB problems involve identifying the best lever to pull among multiple
+    options
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, to summarize what a MAB problem looks like, we can state the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The agent takes sequential actions. After each action, a reward is received.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An action affects only the immediate reward, not the subsequent rewards.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is no "state" in the system that changes with the actions that the agent
+    takes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is no input that the agent uses to base its decisions on. That will come
+    later in the next chapter when we discuss contextual bandits.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So far, so good! Let's better understand this by actually coding an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Experimenting with a simple MAB problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, you will experience through an example how tricky it could
+    be to solve even a simple MAB problem. We will create some virtual slot machines
+    and try to maximize the total reward by identifying the luckiest machine. This
+    code is available in `Chapter02/Multi-armed bandits.ipynb` on the GitHub repo.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the virtual environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Before we start, we suggest you create a virtual environment for the exercise
+    using `virtualenv` or using Conda commands. In a folder that you would like to
+    place the virtual environment files in, execute the following commands in your
+    terminal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will open a browser tab with a Jupyter notebook. Find the `.ipynb` file
+    you get from the repo, open it, and set your kernel to be the `rlenv` environment
+    we just created.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The bandit exercise
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s get started with the exercise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s create a class for a single slot machine that gives a reward
+    from a normal (Gaussian) distribution with respect to a given mean and standard
+    deviation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we create a class that will simulate the game:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: A game instance receives a list of slot machines as inputs. It then shuffles
+    the order of the slot machines so that you won't recognize which machine gives
+    the highest average reward. In each step, you will choose a machine and aim to
+    get the highest reward.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Then, we create some slot machines and a game instance:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, start playing the game by calling the `user_play()` method of the game
+    object:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output will look like the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'As you enter your choice, you will observe the reward you got in that round.
+    We don''t know anything about the machines, so let''s start with 1:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Let''s play the same machine for a couple more rounds:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Snap! This in fact looks like the worst machine! It is very unlikely for `slotA`
+    or `slotB` machines to give a reward of `-2.8`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Let's check what we have as the first machine in the game (remember that the
+    first machine would correspond to index 0 in the `bandits` list) by looking at
+    its mean value parameter. Executing `game.bandits[0].mean` gives us `1` as the
+    output!
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Indeed, we thought we had chosen the best machine although it was the worst!
+    Why did that happen though? Well, again, the rewards are stochastic. Depending
+    on the variance of the reward distribution, a particular reward could be wildly
+    different from the average reward we could expect from that machine. For this
+    reason, it is not quite possible to know which lever to pull before we experience
+    enough rounds of the game. In fact, with only a few samples, our observations
+    could be quite misleading as just happened. In addition, if you play the game
+    yourself, you will realize that it is quite difficult to differentiate between
+    `slotA` and `slotB`, because their reward distributions are similar. You might
+    be thinking, "is this a big deal?". Well, it kind of is, if the difference corresponds
+    to significant money and resources, as is the case in many real-world applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will introduce such an application, online advertising, which is going
+    to be our running example throughout this chapter and the next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Case study – online advertising
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Consider a company that wants to advertise a product on various websites through
+    digital banners, aiming to attract visitors to the product landing page. Among
+    multiple alternatives, the advertiser company wants to find out which banner is
+    the most effective and has the maximum **click-through rate** (**CTR**), which
+    is defined as the total number of clicks an ad receives divided by the total number
+    of impressions (number of times it is shown).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Every time a banner is about to be shown on a website, it is the advertiser's
+    algorithm that chooses the banner (for example, through an API provided by the
+    advertiser to the website) and observes whether the impression has resulted in
+    a click or not. This is a great use case for a MAB model, which could boost clicks
+    and product sales. What we want the MAB model to do is to identify the ad that
+    performs the best as early as possible, display it more, and write off the ad(s)
+    that is (are) a clear loser(s) as early as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: The probability of observing a click or no click after an impression, a binary
+    outcome, can be modeled using the Bernoulli distribution. It has a single parameter,
+    ![](img/Formula_02_003.png), which is the probability of receiving a click, or
+    more generally, observing a 1 as opposed to a 0\. Note that this is a discrete
+    probability distribution, whereas the normal distribution we used earlier is a
+    continuous one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the previous example, we had rewards coming from a normal distribution.
+    In the online ad case, we have a binary outcome. For each ad version, there is
+    a different probability of click (CTR), which the advertiser does not know but
+    is trying to discover. So, the rewards will come from different Bernoulli distributions
+    for each ad. Let''s code these to use with our algorithms later:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We start by creating a class to model the ad behavior:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, let''s create five different ads (banners) with the corresponding CTRs
+    we arbitrarily pick:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: So far, so good. Now, it is time to implement some exploration strategies to
+    maximize the CTR of the ad campaign!
+  prefs: []
+  type: TYPE_NORMAL
+- en: A/B/n testing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the most common exploration strategies is what is called **A/B testing**,
+    which is a method to determine which one of the two alternatives (of online products,
+    pages, ads, and so on) performs better. In this type of testing, the users are
+    randomly split into two groups to try different alternatives. At the end of the
+    testing period, the results are compared to choose the best alternative, which
+    is then used in production for the rest of the problem horizon. In our case, we
+    have more than two ad versions. So, we will implement what is called **A/B/n testing**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will use A/B/n testing as our baseline strategy for comparison with the more
+    advanced methods that we will introduce afterward. Before going into the implementation,
+    we need to define some notation that we will use throughout the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Throughout the implementations of various algorithms, we will need to keep
+    track of some quantities related to a particular action (the ad chosen for display), ![](img/Formula_02_004.png).
+    Now, we define some notation for those quantities. Initially, we drop ![](img/Formula_02_0041.png)
+    from our notation for brevity, but at the end of this section, we will put it
+    back:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we denote the reward (that is, 1 for a click, 0 for no click) received
+    after selecting the action, ![](img/Formula_02_0042.png), for the ![](img/Formula_02_007.png)
+    time by ![](img/Formula_02_008.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The average reward observed before the ![](img/Formula_02_009.png) selection
+    of this same action is defined as follows:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_010.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This estimates the expected value of the reward that this action yields, ![](img/Formula_02_011.png),
+    after ![](img/Formula_02_012.png) observations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is also called the **action value** of ![](img/Formula_02_013.png). Here,
+    this is ![](img/Formula_02_014.png) estimates of the action value after selecting
+    this action ![](img/Formula_02_0121.png) times.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, we need a bit of simple algebra and we will have a very convenient formula
+    to update the action values:![](img/Formula_02_016.jpg)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_017.jpg)![](img/Formula_02_018.jpg)![](img/Formula_02_019.jpg)![](img/Formula_02_020.jpg)![](img/Formula_02_021.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Remember that ![](img/Formula_02_014.png) is our estimate for the action value
+    of ![](img/Formula_02_0131.png) before we take it for the ![](img/Formula_02_0091.png)
+    time. When we observe the reward, ![](img/Formula_02_025.png), it gives us another
+    signal for the action value. We don't want to discard our previous observations,
+    but we also want to update our estimate to reflect the new signal.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, we adjust our current estimate, ![](img/Formula_02_0141.png), in the direction
+    of the **error** that we calculate based on the latest observed reward, ![](img/Formula_02_027.png),
+    with a **step size** of ![](img/Formula_02_028.png) and obtain a new estimate,
+    ![](img/Formula_02_029.png). This means, for example, if the latest observed reward
+    is greater than our current estimate, we revise the action value estimate upward.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: For convenience, we define ![](img/Formula_02_030.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Notice that the rate at which we adjust our estimate will get smaller as we
+    make more observations due to the ![](img/Formula_02_0281.png) term. So, we put
+    less weight on the most recent observations and our estimate for the action value
+    for a particular action will settle down over time.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: However, this might be a disadvantage if the environment is not stationary but
+    is changing over time. In those cases, we would want to use a step size that does
+    not diminish over time, such as a fixed step size of ![](img/Formula_02_032.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that this step size must be smaller than 1 for the estimate to converge
+    (and larger than 0 for a proper update).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a fixed value for ![](img/Formula_02_033.png) will make the weights of
+    the older observations decrease exponentially as we take action ![](img/Formula_02_0331.png)
+    more and more.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s bring ![](img/Formula_02_033.png) back to the notation, so we can obtain
+    our formula to update the action values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_036.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_02_0332.png) is a number between 0 and 1\. For stationary
+    problems, we usually set  ![](img/Formula_02_038.png), where ![](img/Formula_02_039.png)
+    is the number of times the action ![](img/Formula_02_0132.png) has been taken
+    up to that point (which was denoted by ![](img/Formula_02_041.png) initially).
+    In stationary problems, this will help action values converge quicker, due to
+    the diminishing ![](img/Formula_02_042.png) term, rather than chasing after noisy
+    observations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's all we need. Without further ado, let's implement an A/B/n test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Application to the online advertising scenario
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In our example, we have five different ad versions, which we randomly show
+    to the users with equal probabilities. Let''s implement this in Python:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We start with creating the variables to keep track of the rewards in the experiment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, let''s run the A/B/n test:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Remember that we randomly select an ad to display during the test and observe
+    whether it gets a click. We update the counter, the action value estimate, and
+    the average reward observed so far.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'At the end of the test period, we choose the winner as the ad that has achieved
+    the highest action value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We display the winner using a `print` statement:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The outcome is the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In this case, the A/B/n test has identified D as the best performing ad, which
+    is not exactly correct. Apparently, the test period was not long enough.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let''s run the best ad identified in the A/B/n test in production:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: At this stage, we don't explore any other actions. So, the incorrect selection
+    of the ad D will have its impact throughout the production period. We continue
+    to record the average reward observed so far to later visualize the ad campaign
+    performance.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Now, time to visualize the results:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let''s create a `pandas` DataFrame to record the results from the A/B/n test:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To display the progress of the average rewards, we use Plotly with Cufflinks:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 2.2 – A/B/n test rewards'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_02_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 2.2 – A/B/n test rewards
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can see from *Figure 2.2* that after the exploration ends, the average reward
+    is approaching 2.8%, which is the expected CTR for the ad D. On the other hand,
+    due to the exploration during the first 10k impressions, in which we tried several
+    bad alternatives, the CTR after 100k impressions ended up being 2.71%. We could
+    have achieved a higher CTR if the A/B/n test had identified ad E as the best alternative.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's it! We have just implemented an A/B/n test. Overall, the test was able
+    to identify one of the best ads for us, although not the best. Next, we discuss
+    the pros and cons of A/B/n testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantages and disadvantages of A/B/n testing
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now, let''s qualitatively evaluate this method and discuss its shortcomings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A/B/n testing is inefficient as it does not modify the experiment dynamically
+    by learning from the observations**. Instead, it explores in a fixed time budget
+    with pre-determined probabilities of trying the alternatives. It fails to benefit
+    from the early observations in the test by writing off/promoting an alternative
+    even though it is obviously underperforming/outperforming the others.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**It is unable to correct a decision once it''s made**. If, for some reason,
+    the test period identifies an alternative as the best incorrectly (mostly because
+    of a not-sufficiently long test duration), this selection remains fixed during
+    the production period. So, there is no way to correct the decision for the rest
+    of the deployment horizon.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**It is unable to adapt to changes in a dynamic environment**. Related to the
+    previous note, this approach is especially problematic for environments that are
+    not stationary. So, if the underlying reward distributions change over time, plain
+    A/B/n testing has no way of detecting such changes after the selection is fixed.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The length of the test period is a hyperparameter to tune, affecting the
+    efficiency of the test**. If this period is chosen to be shorter than needed,
+    an incorrect alternative could be declared the best because of the noise in the
+    observations. If the test period is chosen to be too long, too much money gets
+    wasted in exploration.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A/B/n testing is simple**. Despite all these shortcomings, it is intuitive
+    and easy to implement, and therefore widely used in practice.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, the vanilla A/B/n testing is a rather naive approach to MAB. Next, let's
+    look into some other more advanced approaches that will overcome some of the shortcomings
+    of A/B/n testing, starting with ε-greedy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ε-greedy actions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An easy-to-implement, effective, and widely used approach to the exploration-exploitation
+    problem is what is called **ε-greedy** actions. This approach suggests, most of
+    the time, greedily taking the action that is the best according to the rewards
+    observed by that point in the experiment (that is, with 1-ε probability); but
+    once in a while (that is, with ε probability), take a random action regardless
+    of the action performances. Here, ε is a number between 0 and 1, usually closer
+    to zero (for example, 0.1) to "exploit" in most decisions. This way, the method
+    allows continuous exploration of the alternative actions throughout the experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Application to the online advertising scenario
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now, let''s implement the ε-greedy actions to the online advertising scenario
+    that we have:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We start with initializing the necessary variables for the experiment, which
+    will keep track of the action value estimates, the number of times each ad has
+    been displayed, and the moving average for the reward:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we choose 0.1 for ε, but this is a somewhat arbitrary choice. Different
+    ε values will lead to different performances, so this should be treated as a hyperparameter
+    to be tuned. A more sophisticated approach would be to start with a high ε value
+    and gradually reduce it. We'll talk about this a bit more later.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Next, we run the experiment. Pay attention to how we select a random action
+    with ε probability, and the best action otherwise. We update our action value
+    estimates according to the rule we previously described:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run *steps 1 and 2* for different ε values, namely 0.01, 0.05, 0.1, and 0.2\.
+    Then, compare how the ε selection affects the performance, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 2.3 – Exploration using ε-greedy actions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_02_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 2.3 – Exploration using ε-greedy actions
+  prefs: []
+  type: TYPE_NORMAL
+- en: The best rewards are given by ε=0.05 and ε=0.1 as 2.97%. It turns out the exploration
+    with the other two ε values were either too low or too high. In addition, all
+    of the ε-greedy policies gave better results than the A/B/n test, particularly
+    because the A/B/n test happened to make an incorrect choice in that specific case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantages and disadvantages of ε-greedy actions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s talk about the pros and cons of using ε-greedy actions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**ε-greedy actions and A/B/n tests are similarly inefficient and static in
+    allocating the exploration budget**. The ε-greedy approach, too, fails to write
+    off actions that are clearly bad and continues to allocate the same exploration
+    budget to each alternative. For example, halfway through the experiment, it is
+    pretty clear that ad A is performing pretty poorly. It would have been more efficient
+    to use the exploration budget to try to differentiate between the rest of the
+    alternatives to identify the best. On a related note, if a particular action is
+    under-explored/over-explored at any point, the exploration budget is not adjusted
+    accordingly.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**With ε-greedy actions, exploration is continuous, unlike in A/B/n testing**.
+    This means if the environment is not stationary, the ε-greedy approach has the
+    potential to pick up the changes and modify its selection of the best alternative.
+    In stationary environments, though, we can expect the A/B/n testing and the ε-greedy
+    approach to perform similarly since they are very similar in nature, except when
+    they do the exploration.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The ε-greedy actions approach could be made more efficient by dynamically
+    changing the ε value**. For example, you could start with a high ε value to explore
+    more at the beginning and gradually decrease it to exploit more later. This way,
+    there is still continuous exploration, but not as much as at the beginning when
+    there was no knowledge of the environment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The ε-greedy actions approach could be made more dynamic by increasing the
+    importance of more recent observations**. In the standard version, the ![](img/Formula_02_043.png)
+    values in the preceding are calculated as simple averages. Remember that, in dynamic
+    environments, we could instead use the following formula:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_044.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This would exponentially diminish the weights of the older observations and
+    enable the approach to detect the changes in the environment more easily.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Modifying the ε-greedy actions approach introduces new hyperparameters, which
+    need to be tuned**. Both of the previous suggestions – gradually diminishing ε
+    and using exponential smoothing for *Q* – come with additional hyperparameters,
+    and it may not be obvious what values to set these to. Moreover, incorrect selection
+    of these hyperparameters may lead to worse results than what the standard version
+    would yield.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So far, so good! We have used ε-greedy actions to optimize our online advertising
+    campaign and obtained better results than A/B/n testing. We have also discussed
+    how we can modify this approach to use in a broader set of environments. However,
+    ε-greedy selection of the actions is still too static, and we can do better. Now,
+    let's look into another approach, upper confidence bounds, which dynamically adjusts
+    the exploration of the actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Action selection using upper confidence bounds
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Upper confidence bounds** (**UCB**) is a simple yet effective solution to
+    the exploration-exploitation trade-off. The idea is that at each time step, we
+    select the action that has the highest potential for reward. The potential of
+    the action is calculated as the sum of the action value estimate and a measure
+    of the uncertainty of this estimate. This sum is what we call the UCB. So, an
+    action is selected either because our estimate for the action value is high, or
+    the action has not been explored enough (that is, as many times as the other ones)
+    and there is high uncertainty about its value, or both.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'More formally, we select the action to take at time ![](img/Formula_02_045.png)
+    using the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_046.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s unpack this a little bit:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we have used a notation that is slightly different from what we introduced
+    earlier. ![](img/Formula_02_047.png) and ![](img/Formula_02_048.png) have essentially
+    the same meanings as before. This formula looks at the variable values, which
+    may have been updated a while ago, at the time of decision-making, ![](img/Formula_02_0451.png),
+    whereas the earlier formula described how to update them.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this equation, the square root term is a measure of the uncertainty for the
+    estimate of the action value of ![](img/Formula_02_0332.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The more we select ![](img/Formula_02_0332.png), the less uncertainty we have
+    about its value, and so is the ![](img/Formula_02_052.png) term in the denominator.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As time passes, however, the uncertainty grows due to the ![](img/Formula_02_053.png)
+    term (which makes sense especially if the environment is not stationary), and
+    more exploration is encouraged.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: On the other hand, the emphasis on uncertainty during decision making is controlled
+    by a hyperparameter, ![](img/Formula_02_054_1.png). This obviously requires tuning,
+    and a bad selection could diminish the value in the method.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, it is time to see UCB in action.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Application to the online advertising scenario
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Follow along to implement the UCB method to optimize the ad display:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As usual, let''s initialize the necessary variables first:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, implement the main loop to use UCB for action selection:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we select the action in each time step with the highest UCB. If an
+    action has not been selected yet, it has the highest UCB. We break the ties randomly
+    if there are multiple such actions.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'As mentioned before, different ![](img/Formula_02_054.png) selections will
+    lead to different levels of performance. Run *steps 1 and 2* with different selections
+    of the ![](img/Formula_02_0541.png) hyperparameter. Then, compare the results,
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 2.4 – Exploration using UCB'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_02_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 2.4 – Exploration using UCB
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, using UCB for exploration, after some hyperparameter tuning, gave
+    a better result (3.07% CTR) than ε-greedy exploration and A/B/n testing! Of course,
+    the elephant in the room is how to do this hyperparameter tuning. Interestingly,
+    this is itself a MAB problem! First, you have to form a set of plausible ![](img/Formula_02_0541.png)
+    values and choose the best one using one of the methods we described so far.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Try hyperparameters in a logarithmic scale, such as [0.01, 0.1, 1, 10], rather
+    than a linear scale, such as [0.08, 0.1, 0.12, 0.14]. The former allows exploring
+    different orders of magnitude, where we could see significant jumps in performance.
+    A search on a linear scale could be used after identifying the right order of
+    magnitude.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To make things less complicated, you can use an A/B/n test to choose ![](img/Formula_02_0541.png).
+    This might look like an infinite loop – you form a MAB to solve a MAB, which itself
+    may have a hyperparameter to tune and so on. Fortunately, once you identify a
+    good ![](img/Formula_02_0542.png) value that works for your problem type (for
+    example, online advertising), you can usually use the same value over and over
+    again in later experiments as far as the reward scale remains similar (for example,
+    around 1–3% CTR for online ads).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantages and disadvantages of using UCBs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Finally, let''s discuss some of the pros and cons of the UCB approach:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**UCB is a set-and-forget approach**. It systematically and dynamically allocates
+    the budget to alternatives that need exploration. If there are changes in the
+    environment – for example, if the reward structure changes because one of the
+    ads gets more popular for some reason – the method will adapt its selection of
+    the actions accordingly.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**UCB can be further optimized for dynamic environments, potentially at the
+    expense of introducing additional hyperparameters**. The formula we provided for
+    UCB is a common one, but it can be improved – for example, by using exponential
+    smoothing to calculate the ![](img/Formula_02_060.png) values. There are also
+    more effective estimations of the uncertainty component in literature. These modifications,
+    though, could potentially make the method more complicated.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**UCB could be hard to tune**. It is somewhat easier to make the call and say,
+    "I want to explore 10% of the time, and exploit for the rest" for the ε-greedy
+    approach than saying, "I want my ![](img/Formula_02_0543.png) to be 0.729" for
+    the UCB approach, especially if you are trying these methods on a brand-new problem.
+    When not tuned, a UCB implementation could give unexpectedly bad results.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There you go! You have now implemented multiple approaches to the online advertising
+    problem, and using the UCB approach has particularly equipped you to manage the
+    exploration effectively in potentially non-stationary environments. Next, we will
+    cover another very powerful approach, Thompson sampling, which will be a great
+    addition to your arsenal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thompson (posterior) sampling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The goal in MAB problems is to estimate the parameter(s) of the reward distribution
+    for each arm (that is, the ad to display, in the preceding example). In addition,
+    measuring our uncertainty about our estimate is a good way to guide the exploration
+    strategy. This problem very much fits into the Bayesian inference framework, which
+    is what Thompson sampling leverages. Bayesian inference starts with a prior probability
+    distribution – an initial idea, for the parameter ![](img/Formula_02_062.png)
+    – and updates this prior distribution as data becomes available. Here, ![](img/Formula_02_062.png)
+    refers to the mean and variance for a normal distribution, and to the probability
+    of observing a 1 for Bernoulli distribution. So, the Bayesian approach treats
+    the parameter as a random variable given the data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The formula for this is given by the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_064.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this formula, ![](img/Formula_02_065.png) is the **prior distribution** of
+    ![](img/Formula_02_062.png), which represents the current hypothesis on its distribution.
+    ![](img/Formula_02_067.png) represents the data, with which we obtain a **posterior
+    distribution**, ![](img/Formula_02_068.png). This is our updated hypothesis on
+    the distribution of the parameter given the data we observe. ![](img/Formula_02_069.png)
+    is called the **likelihood** (of observing the data ![](img/Formula_02_0671.png)
+    given the parameter) and ![](img/Formula_02_071.png) is called the **evidence**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's look into how we can implement Thompson sampling for cases with
+    0–1 type of outcome, such as what we have in the online advertising scenario.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Application to the online advertising scenario
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In our example, for a given ad ![](img/Formula_02_072.png), observing a click
+    is a Bernoulli random variable with parameter ![](img/Formula_02_073.png), which
+    we are trying to estimate. Since ![](img/Formula_02_073.png) is essentially the
+    probability that the ad ![](img/Formula_02_075.png) is clicked when displayed,
+    equivalently, the CTR is between 0 and 1\. Note that many problems other than
+    online advertising have such a binary outcome. Therefore, our discussion and the
+    formulas here can be extended to such other cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Details of Thompson sampling
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For now, let''s see how we can use a Bayesian approach to our problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initially, we don't have any reason to believe that the parameter is high or
+    low for a given ad. Therefore, it makes sense to assume that ![](img/Formula_02_0731.png)
+    has a uniform distribution over ![](img/Formula_02_077.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Assume that we display the ad ![](img/Formula_02_0721.png) and it results in
+    a click. We take this as a signal to update the probability distribution for ![](img/Formula_02_0731.png)
+    so that the expected value shifts a little bit toward 1\.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As we collect more and more data, we should also see the variance estimate
+    for the parameter shrink. Well, this is exactly how we want to balance exploration
+    and exploitation. We did something similar when we used UCB: we used our estimate
+    of a parameter together with the associated uncertainty around the estimate to
+    guide the exploration. Thompson sampling does exactly the same, using Bayesian
+    inference.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This method tells us to take a sample from the posterior distribution of the
+    parameter, ![](img/Formula_02_080.png). If the expected value of ![](img/Formula_02_0732.png)
+    is high, we are likely to get samples closer to 1\. If the variance is high because
+    ad ![](img/Formula_02_0722.png) has not been selected many times by that point,
+    our samples will also have high variance, which will lead to exploration. At a
+    given time step, we take one sample for each ad and select the greatest sample
+    to determine the ad to display.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In our example, the likelihood (chance of an impression resulting in a click)
+    is Bernoulli distribution, to which we will apply the logic we described previously.
+    Here is what is really going on in less technical terms:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We want to understand what the CTR is for each ad. We have estimates, but we
+    are unsure about them, so we associate a probability distribution with each CTR.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We update the probability distributions for CTRs as new data come in.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When it is time to select an ad, we make a guess about the CTR for each ad –
+    that is, sample ![](img/Formula_02_083.png)s. We then pick the ad for which we
+    happened to guess the highest CTR.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the probability distribution for the CTR of an ad has a high variance, it
+    means we are very uncertain about it. This will cause us to make wild guesses
+    about that particular ad and select it more often, until the variance reduces
+    – that is, we become more certain about it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now, let''s talk about the update rules for the Bernoulli distribution. It
+    is okay if you don''t fully grasp the terms here. The preceding explanations should
+    tell you about what is going on:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A common choice to use for the prior is beta distribution. If you think for
+    a moment, parameter ![](img/Formula_02_084.png) takes values within ![](img/Formula_02_085.png).
+    So, we need to use a probability distribution with the same support to model ![](img/Formula_02_086.png),
+    which beta distribution has.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition, if we use beta distribution for the prior and plug it in the Bayes
+    formula with a Bernoulli likelihood, the posterior also becomes a beta distribution.
+    This way, we can use the posterior as the prior for the next update when we observe
+    new data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Having the posterior in the same distribution family with the prior is such
+    a convenience that it even has a special name: they are called **conjugate distributions**,
+    and the prior is called a **conjugate prior** for the likelihood function. Beta
+    distribution is a conjugate prior for the Bernoulli distribution. Depending on
+    your choice of modeling the likelihood, it is possible to find a conjugate before
+    implementing Thompson sampling.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Without further ado, let's implement Thompson sampling for our online advertising
+    example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The beta distribution for the prior of the ad ![](img/Formula_02_087.png) is
+    given by the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_088.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_02_089.png) and ![](img/Formula_02_090.png) are the parameters
+    characterizing the beta distribution, and ![](img/Formula_02_091.png) is the gamma
+    function. Don''t let this formula scare you! It is actually pretty easy to implement.
+    To initialize the prior, we use ![](img/Formula_02_092.png), which makes ![](img/Formula_02_093.png)
+    uniformly distributed over ![](img/Formula_02_094.png). Once we observe a reward,
+    ![](img/Formula_02_095.png), after selecting the ad ![](img/Formula_02_096.png),
+    we obtain the posterior distribution, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_02_097.png)s![](img/Formula_02_098.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, let''s do this in Python:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, initialize the variables that we will need:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, initialize the main loop with Bayesian updates:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We sample ![](img/Formula_02_099.png) for each ![](img/Formula_02_100.png) value
+    from their corresponding posteriors and display the ad that corresponds to the
+    greatest sampled parameter. Once we observe the reward, we make the posterior
+    the prior and update it according to the preceding rule to obtain the new posterior.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Then, display the results:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 2.5 – Exploration using Thompson sampling'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_02_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 2.5 – Exploration using Thompson sampling
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thompson sampling has given a performance that is similar to ε-greedy and UCB
+    approaches, right at 3% CTR.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantages and disadvantages of Thompson sampling
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Thompson sampling is a very competitive approach with one major advantage over
+    the ε-greedy and UCB approaches: *Thompson sampling did not require us to do any
+    hyperparameter tuning*. This, in practice, has the following benefits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Saves significant time** that would have been spent on hyperparameter tuning'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Saves significant money** that would have been burned by ineffective exploration
+    and incorrect selection of hyperparameters in other approaches.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition, Thompson sampling is shown to be a very competitive choice in many
+    benchmarks in literature, and it has gotten increasingly popular over the last
+    few years.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Awesome job! Now that Thompson sampling is in your toolkit, along with the other
+    methods, you are set to go out and solve real-world MAB problems!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we covered MAB problems, which is one-step RL with many practical
+    business applications. Despite its apparent simplicity, it is tricky to balance
+    the exploration and exploitation in MAB problems, and any improvements in managing
+    this trade-off come with savings in cost and increases in revenue. We have introduced
+    four approaches to this end: A/B/n testing, ε-greedy actions, action selection
+    using UCB, and Thompson sampling. We implemented these approaches in an online
+    advertising scenario and discussed their advantages and disadvantages.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, while making decisions, we have not considered any information about
+    the situation in the environment. For example, we have not used any information
+    about the users (for example, location, age, previous behavior, and so on) in
+    the online advertising scenario that could be available to our decision-making
+    algorithm. In the next chapter, you will learn about a more advanced form of MABs,
+    namely contextual bandits, which can use to come up with better decisions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Chapelle, O., & Li, L. (2011). An Empirical Evaluation of Thompson Sampling.
+    *Advances in Neural Information Processing Systems 24*, (pp. 2249-2257)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Marmerola, G. D. (2017, November 28). *Thompson Sampling for Contextual bandits*.
+    Retrieved from Guilherme''s blog: [https://gdmarmerola.github.io/ts-for-contextual-bandits/](https://gdmarmerola.github.io/ts-for-contextual-bandits/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Russo, D., Van Roy, B., Kazerouni, A., Osband, I., & Wen, Z. (2018). *A Tutorial
+    on Thompson Sampling. Foundations and Trends in Machine Learning*, (pp. 1-96)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

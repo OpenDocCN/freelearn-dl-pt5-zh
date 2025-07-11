@@ -1,0 +1,1299 @@
+- en: '*Chapter 4*: Makings of the Markov Decision Process'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the first chapter, we talked about many applications of **Reinforcement Learning**
+    (**RL**), from robotics to finance. Before implementing any RL algorithms for
+    these applications, we need to first model them mathematically. **Markov Decision
+    Process** (**MDP**) is the framework we use to model these sequential decision-making
+    problems. MDPs have some special characteristics that make it easier for us to
+    theoretically analyze those problems. Building on that theory, **Dynamic Programming**
+    (**DP**) is the field that proposes solution methods for MDPs. RL, in some sense,
+    is a collection of approximate DP approaches that enable us to obtain good (but
+    not necessarily optimal) solutions to very complex problems that are intractable
+    to solve with exact DP methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will step-by-step build an MDP, explain its characteristics,
+    and lay down the mathematical foundation for the RL algorithms coming up in later
+    chapters. In an MDP, the actions an agent takes have long-term consequences, which
+    is what differentiates it from the **Multi-Armed Bandit** (**MAB**) problems we
+    covered earlier. This chapter focuses on some key concepts that quantify this
+    long-term impact. It involves a bit more theory than other chapters, but don''t
+    worry, we will quickly dive into Python exercises to get a better grasp of the
+    concepts. Specifically, we cover the following topics in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Markov chains
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Markov reward processes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Markov decision processes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Partially observable MDPs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Starting with Markov chains
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We start this chapter with Markov chains, which do not involve any decision-making.
+    They only model a special type of stochastic processes that are governed by some
+    internal transition dynamics. Therefore, we won't talk about an agent yet. Understanding
+    how Markov chains work will allow us to lay the foundation for the MDPs that we
+    will cover later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stochastic processes with the Markov property
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We already defined the **state** as the set information that completely describes
+    the situation that an environment is in. If the next state that the environment
+    will transition into only depends on the current state, not the past ones, we
+    say that the process has the **Markov property**. This is named after the Russian
+    mathematician Andrey Markov.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Imagine a broken robot that randomly moves in a grid world. At any given step,
+    the robot goes up, down, left, and right with 0.2, 0.3, 0.25, and 0.25 probability,
+    respectively. This is depicted in *Figure 4.1*, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.1 – A broken robot in a grid world, currently at (1,2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.1 – A broken robot in a grid world, currently at (1,2)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The robot is currently in state ![](img/Formula_04_001.png). It does not matter
+    where it has come from; it will be in state ![](img/Formula_04_002.png) with a
+    probability of ![](img/Formula_04_003.png), in ![](img/Formula_04_004.png) with
+    a probability of ![](img/Formula_04_005.png), and so on. Since the probability
+    of where it will transition next depends only on which state it is currently in,
+    but not where it was before, the process has the Markov property.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s define this more formally. We denote the state at time ![](img/Formula_04_006.png)
+    by ![](img/Formula_04_007.png). A process has the Markov property if the following
+    holds for all states and times:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_008.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Such a stochastic process is called a **Markov chain**. Note that if the robot
+    hits a wall, we assume that it bounces back and remains in the same state. So,
+    while in state ![](img/Formula_04_009.png), for example, the robot will be still
+    there in the next step with a probability of ![](img/Formula_04_010.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A Markov chain is usually depicted using a directed graph. The directed graph
+    for the broken robot example in a ![](img/Formula_04_011.png) grid world would
+    be as in *Figure 4.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.2 – A Markov chain diagram for the robot example in a 2x2 grid world'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.2 – A Markov chain diagram for the robot example in a 2x2 grid world
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many systems can be made Markovian by including historical information in the
+    state. Consider a modified robot example where the robot is more likely to continue
+    in the direction it moved in the previous time step. Although such a system seemingly
+    does not satisfy the Markov property, we can simply redefine the state to include
+    the visited cells over the last two time steps, such as ![](img/Formula_04_012.png).
+    The transition probabilities would be independent of the past states under this
+    new state definition and the Markov property would be satisfied.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have defined what a Markov chain is, let's go deeper. Next, we will
+    look at how to classify states in a Markov chain as they might differ in terms
+    of their transition behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classification of states in a Markov chain
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: An environment that can go from any state to any other state after some number
+    of transitions, as we have in our robot example, is a special kind of Markov chain.
+    As you can imagine, a more realistic system would involve states with a richer
+    set of characteristics, which we will introduce next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reachable and communicating states
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: If the environment can transition from state ![](img/Formula_04_013.png) to
+    state ![](img/Formula_04_014.png) after some number of steps with a positive probability,
+    we say ![](img/Formula_04_015.png) is **reachable** from ![](img/Formula_04_016.png).
+    If ![](img/Formula_04_017.png) is also reachable from ![](img/Formula_04_018.png),
+    those states are said to **communicate**. If all the states in a Markov chain
+    communicate with each other, we say that the Markov chain is **irreducible**,
+    which is what we had in our robot example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Absorbing state
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A state, ![](img/Formula_04_019.png), is an **absorbing state** if the only
+    possible transition is to itself, which is ![](img/Formula_04_020.png). Imagine
+    that the robot cannot move again if it crashes into a wall in the preceding example.
+    This would be an example of an absorbing state since the robot can never leave
+    it. The ![](img/Formula_04_021.png) version of our grid world with an absorbing
+    state could be represented in a Markov chain diagram, as in *Figure 4.3*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.3 – A Markov chain diagram with an absorbing state'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.3 – A Markov chain diagram with an absorbing state
+  prefs: []
+  type: TYPE_NORMAL
+- en: An absorbing state is equivalent to a terminal state that marks the end of an
+    episode in the context of RL, which we defined in [*Chapter 1*](B14160_01_Final_SK_ePub.xhtml#_idTextAnchor016)*,
+    Introduction to Reinforcement Learning*. In addition to terminal states, an episode
+    can also terminate after a time limit T is reached.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transient and recurrent states
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A state ![](img/Formula_04_022.png) is called a **transient state**, if there
+    is another state ![](img/Formula_04_023.png), that is reachable from ![](img/Formula_04_024.png),
+    but not vice versa. Provided enough time, an environment will eventually move
+    away from transient states and never come back.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Consider a modified grid world with two sections; let's call them the light
+    side and the dark side for fun. The possible transitions in this world are illustrated
+    in *Figure 4.4*. Can you identify the transient state(s)?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.4 – Grid world with a light and dark side'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.4 – Grid world with a light and dark side
+  prefs: []
+  type: TYPE_NORMAL
+- en: If your answer is ![](img/Formula_04_027.png) of the light side, think again.
+    For each of the states on the light side, there is a way out to the states on
+    the dark side without a way back. So, wherever the robot is on the light side,
+    it will eventually transition into the dark side and won't be able to come back.
+    Therefore, all the states on the light side are transient. Such a dystopian world!
+    Similarly, in the modified grid world with a **crashed** state, all the states
+    are transient except the **crashed** state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, a state that is not transient is called a **recurrent state**. The
+    states on the dark side are recurrent in this example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Periodic and aperiodic states
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We call a state, ![](img/Formula_04_028.png), **periodic** if all of the paths
+    leaving ![](img/Formula_04_029.png) come back after some multiple of ![](img/Formula_04_030.png)
+    steps. Consider the example in *Figure 4.5*, where all the states have a period
+    of ![](img/Formula_04_031.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.5 – A Markov chain with periodic states, k=4'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.5 – A Markov chain with periodic states, k=4
+  prefs: []
+  type: TYPE_NORMAL
+- en: A recurrent state is called **aperiodic** if ![](img/Formula_04_032.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ergodicity
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We can finally define an important class of Markov chains. A Markov chain is
+    called **ergodic** if all states exhibit the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Communicate with each other (irreducible)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Are recurrent
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Are aperiodic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For ergodic Markov chains, we can calculate a single probability distribution
+    that tells which state the system would be in, after a very long time from its
+    initialization, with what probability. This is called the **steady state probability
+    distribution**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, so good, but what we have covered has also been a bit dense with all
+    the sets of definitions. Before we go into practical examples, though, let's also
+    define the math of how a Markov chain transitions between states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transitionary and steady state behavior
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We can mathematically calculate how a Markov chain behaves over time. To this
+    end, we first need to know the **initial probability distribution** of the system.
+    When we initialize a grid world, for example, in which state does the robot appear
+    at the beginning? This is given by the initial probability distribution. Then,
+    we define the **transition probability matrix**, whose entries give, well, the
+    transition probabilities between all state pairs from one time step to the next.
+    More formally, the entry at the ![](img/Formula_04_033.png) row and ![](img/Formula_04_034.png)
+    column of this matrix gives ![](img/Formula_04_035.png), where ![](img/Formula_04_036.png)
+    and ![](img/Formula_04_037.png) are the state indices (starting with 1 in our
+    convention).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, to calculate the probability of the system being in state ![](img/Formula_04_038.png)
+    after ![](img/Formula_04_039.png) steps, we use the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_040.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_04_041.png) is the initial probability distribution and
+    ![](img/Formula_04_042.png) is the transition probability matrix raised to the
+    power ![](img/Formula_04_043.png). Note that ![](img/Formula_04_044.png) gives
+    the probability of being in state ![](img/Formula_04_045.png) after ![](img/Formula_04_046.png)
+    steps when started in state ![](img/Formula_04_047.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: A Markov chain is completely characterized by the ![](img/Formula_04_048.png)
+    tuple, where ![](img/Formula_04_049.png) is the set of all states and ![](img/Formula_04_050.png)
+    is the transition probability matrix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Yes, we have covered a lot of definitions and theory so far. Now, it is a good
+    time to finally look at a practical example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example – n-step behavior in the grid world
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In many RL algorithms, the core idea is to arrive at a consistency between our
+    understanding of the environment in its current state and after ![](img/Formula_04_051.png)
+    steps of transitions and to iterate until this consistency is ensured. Therefore,
+    it is important to get a solid intuition of how an environment modeled as a Markov
+    chain evolves over time. To this end, we will look into ![](img/Formula_04_052.png)-step
+    behavior in the grid world example. Follow along!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s start by creating a ![](img/Formula_04_053.png) grid world with our
+    robot in it, similar to the one in *Figure 4.1*. For now, let''s always initialize
+    the world with the robot being at the center. Moreover, we index the states/cells
+    so that ![](img/Formula_04_054.png) So, the initial probability distribution,
+    ![](img/Formula_04_055.png), is given by the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, `q` is the initial probability distribution.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We define a function that gives the ![](img/Formula_04_056.png) transition
+    probability matrix:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The code may seem a bit long but what it does is pretty simple: it just fills
+    an ![](img/Formula_04_057.png) transition probability matrix according to specified
+    probabilities of going up, down, left, and right.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Get the transition probability matrix for the ![](img/Formula_04_058.png) grid
+    world of ours:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Calculate the ![](img/Formula_04_059.png)-step transition probabilities. For
+    example, for ![](img/Formula_04_060.png), we have the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The result will look like the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Nothing surprising, right? The output just tells us that the robot starting
+    at the center will be a cell above with a probability of ![](img/Formula_04_061.png),
+    a cell down with a probability of ![](img/Formula_04_062.png), and so on. Let''s
+    do this for 3, 10, and 100 steps. The results are shown in *Figure 4.6*:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 4.6 – n-step transition probabilities'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.6 – n-step transition probabilities
+  prefs: []
+  type: TYPE_NORMAL
+- en: You might notice that the probability distribution after 10 steps and 100 steps
+    are very similar. This is because the system has almost reached a steady state
+    after a few steps. So, the chance that we will find the robot in a specific state
+    is almost the same after 10, 100, or 1,000 steps. Also, you should have noticed
+    that we are more likely to find the robot at the bottom cells, simply because
+    we have ![](img/Formula_04_063.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we wrap up our discussion about the transitionary and steady state behaviors,
+    let's go back to ergodicity and look into a special property of ergodic Markov
+    chains.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example – a sample path in an ergodic Markov chain
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If the Markov chain is ergodic, we can simply simulate it for a long time once
+    and estimate the steady state distribution of the states through the frequency
+    of visits. This is especially useful if we don't have access to the transition
+    probabilities of the system, but we can simulate it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s see this in an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s Import the SciPy library to count the number of visits. Set the
+    number of steps to one million in the sample path, initialize a vector to keep
+    track of the visits, and initialize the first state to `4`, which is ![](img/Formula_04_064.png):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Simulate the environment for one million steps:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Count the number of visits to each state:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'You will see numbers similar to the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The results are indeed very much in line with the steady state probability distribution
+    we calculated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Great job so far, as we've covered Markov chains in a fair amount of detail,
+    worked on some examples, and gained a solid intuition! Before we close this section,
+    let's briefly look into a more realistic type of Markov process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Semi-Markov processes and continuous-time Markov chains
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: All of the examples and formulas we have provided so far are related to discrete-time
+    Markov chains, which are environments where transitions occur at discrete time
+    steps, such as every minute or every 10 seconds. But in many real-world scenarios,
+    when the next transition will happen is also random, which makes them a **semi-Markov
+    process**. In those cases, we are usually interested in predicting the state after
+    ![](img/Formula_04_065.png) amount of time (rather than after ![](img/Formula_04_066.png)
+    steps).
+  prefs: []
+  type: TYPE_NORMAL
+- en: One example of a scenario where a time component is important is queuing systems
+    – for instance, the number of customers waiting in a customer service line. A
+    customer could join the queue anytime and a representative could complete the
+    service with a customer at any time – not just at discrete time steps. Another
+    example is a work-in-process inventory waiting in front of an assembly station
+    to be processed in a factory. In all these cases, analyzing the behavior of the
+    system over time is very important to be able to improve the system and take action
+    accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In semi-Markov processes, we would need to know the current state of the system,
+    and also how long the system has been in it. This means the system depends on
+    the past from the time perspective, but not from the perspective of the type of
+    transition it will make – hence the name semi-Markov.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s look into several possible versions of how this can be of interest to
+    us:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we are only interested in the transitions themselves, not when they happen,
+    we can simply ignore everything related to time and work with the **embedded Markov
+    chain of the semi-Markov process**, which is essentially the same as working with
+    a discrete-time Markov chain.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In some processes, although the time between transitions is random, it is memoryless,
+    which means exponentially distributed. Then, we have the Markov property fully
+    satisfied, and the system is a **continuous-time Markov chain**. Queuing systems,
+    for example, are often modeled in this category.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If it is both that we are interested in, and the time component and the transition
+    times are not memoryless, then we have a general semi-Markov process.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When it comes to working with these types of environments and solving them using
+    RL, although not ideal, it is common to treat everything as discrete and use the
+    same RL algorithms developed for discrete-time systems with some workarounds.
+    For now, it is good for you to know and acknowledge the differences, but we will
+    not go deeper into semi-Markov processes. Instead, you will see what these workarounds
+    are when we solve continuous-time examples in later chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have made great progress toward building our understanding of MDPs with Markov
+    chains. The next step in this journey is to introduce a "reward" to the environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing the reward – Markov reward process
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In our robot example so far, we have not really identified any situation/state
+    that is "good" or "bad." In any system, though, there are desired states to be
+    in and there are other states that are less desirable. In this section, we will
+    attach rewards to states/transitions, which gives us a **Markov Reward Process**
+    (**MRP**). We then assess the "value" of each state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Attaching rewards to the grid world example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Remember the version of the robot example where it could not bounce back to
+    the cell it was in when it hits a wall but crashed in a way that it was not recoverable?
+    From now on, we will work on that version, and attach rewards to the process.
+    Now, let''s build this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Modify the transition probability matrix to assign self-transition probabilities
+    to the "crashed" state that we add to the matrix:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Assign rewards to transitions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: For every transition where the robot stays alive, it collects +1 reward. It
+    collects 0 reward when it crashes. Since "crashed" is a terminal/absorbing state,
+    we terminate the episode there. Simulate this model for different initializations,
+    100K times for each initialization, and see how much reward is collected on average
+    in each case.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'The results will look as in *Figure 4.7* (yours will be a bit different due
+    to the randomness):'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 4.7 – Average returns with respect to the initial state'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_07.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.7 – Average returns with respect to the initial state
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, if the initial state is ![](img/Formula_04_067.png), the average
+    return is the highest. This makes it a "valuable" state to be in. Contrast this
+    with state ![](img/Formula_04_068.png) with an average return of ![](img/Formula_04_069.png).
+    Not surprisingly, it is not a great state to be in. This is because it is more
+    likely for the robot to hit the wall earlier when it starts in the corner. Another
+    thing that is not surprising is that the returns are vertically symmetrical (almost),
+    since ![](img/Formula_04_070.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have calculated the average reward with respect to each initialization,
+    let's go deeper and see how they are related to each other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Relationships between average rewards with different initializations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The average returns that we have observed have quite a structural relationship
+    between them. Think about it: assume the robot started at ![](img/Formula_04_071.png)
+    and made a transition to ![](img/Formula_04_072.png). Since it is still alive,
+    we collected a reward of +1\. If we knew the "value" of state ![](img/Formula_04_073.png),
+    would we need to continue the simulation to figure out what return to expect?
+    Not really! The value already gives us the expected return from that point on.
+    Remember that this is a Markov process and what happens next does not depend on
+    the past!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can extend this relationship to derive the value of a state from the other
+    state values. But remember that the robot could have transitioned into some other
+    state. Taking into account other possibilities and denoting the value of a state
+    by ![](img/Formula_04_074.png), we obtain the following relationship:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_075.jpg)![](img/Formula_04_076.jpg)![](img/Formula_04_077.jpg)![](img/Formula_04_078.jpg)![](img/Formula_04_079.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: As you can see, some small inaccuracies in the estimations of the state values
+    aside, the state values are consistent with each other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: This recursive relationship between state values is central to many RL algorithms
+    and it will come up again and again. We will formalize this idea using the Bellman
+    equation in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's formalize all these concepts in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Return, discount, and state values
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We define the **return** in a Markov process after time step ![](img/Formula_04_080.png)
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_081.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_04_082.png) is the reward at time ![](img/Formula_04_083.png)
+    and ![](img/Formula_04_084.png) is the terminal time step. This definition, however,
+    could be potentially problematic. In an MRP that has no terminal state, the return
+    could go up to infinity. To avoid this, we introduce a **discount rate**, ![](img/Formula_04_085.png),
+    in this calculation and define a **discounted return**, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_086.jpg)![](img/Formula_04_087.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'For ![](img/Formula_04_088.png), this sum is guaranteed to be finite as far
+    as the reward sequence is bounded. Here is how varying ![](img/Formula_04_089.png)
+    affects the sum:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_090.png) values closer to 1 place almost equal emphasis
+    on distant rewards as immediate rewards.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When ![](img/Formula_04_091.png), all the rewards, distant or immediate, are
+    weighted equally.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For ![](img/Formula_04_092.png) values closer to 0, the sum is more myopic.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At ![](img/Formula_04_093.png), the return is equal to the immediate reward.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Throughout the rest of the book, our goal will be to maximize the expected
+    discounted return. So, it is important to understand the other benefits of using
+    a discount in the return calculation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The discount diminishes the weight placed on the rewards that will be obtained
+    in the distant future. This is reasonable as our estimations about the distant
+    future may not be very accurate when we bootstrap values estimations using other
+    estimations (more on this later).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Human (and animal) behavior prefers immediate rewards over future rewards.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For financial rewards, immediate rewards are more valuable due to the time value
+    of money.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now that we have defined the discounted return, the **value** of a state, ![](img/Formula_04_095.png),
+    is defined as the expected discounted return when starting in ![](img/Formula_04_0951.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_096.jpg)![](img/Formula_04_097.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Note that this definition allows us to use the recursive relationships that
+    we figured out in the previous section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_098.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This equation is called the **Bellman equation for MRP**. It is what we utilized
+    in the preceding grid world example when we calculated the value of a state from
+    the other state values. The Bellman equation is at the heart of many RL algorithms
+    and is of crucial importance. We will give its full version after we introduce
+    the MDP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's close this section with a more formal definition of an MRP, which is detailed
+    in the following info box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: An MRP is fully characterized by a ![](img/Formula_04_099.png) tuple, where
+    ![](img/Formula_04_100.png) is a set of states, ![](img/Formula_04_101.png) is
+    a transition probability matrix, ![](img/Formula_04_102.png) is a reward function,
+    and ![](img/Formula_04_103.png) is a discount factor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will look at how to calculate the state values analytically.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analytically calculating the state values
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The Bellman equation gives us the relationships between the state values, rewards,
+    and transition probabilities. When the transition probabilities and the reward
+    dynamics are known, we can use the Bellman equation to precisely calculate the
+    state values. Of course, this is only feasible when the total number of states
+    is small enough to make the calculations. Let's now see how we can do this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When we write the Bellman equation in matrix form, it looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_104.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_04_105.png) is a column vector where each entry is the
+    value of the corresponding state, and ![](img/Formula_04_106.png) is another column
+    vector where each entry corresponds to the reward obtained when transitioned into
+    that state. Accordingly, we get the following expanded representation of the previous
+    formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_107.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can solve this system of linear equations as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Image88879.jpg)![](img/Formula_04_109.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now it is time to implement this for our grid world example. Note that, in
+    the ![](img/Formula_04_110.png) example, we have 10 states, where the 10th state
+    represents the robot''s crash. Transitioning into any state results in +1 reward,
+    except in the "crashed" state. Let''s get started:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Construct the ![](img/Formula_04_111.png) vector:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Set ![](img/Formula_04_112.png) (something very close to 1 that we actually
+    have in the example) and calculate the state values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output will look like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Remember that these are the true (theoretical, rather than estimated) state
+    values (for the given discount rate), and they are aligned with what we estimated
+    through simulation before in *Figure 4.7*!
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are wondering why we did not simply set ![](img/Formula_04_113.png) to
+    1, remember that we have now introduced a discount factor, which is necessary
+    for things to converge mathematically. If you think about it, there is a chance
+    that the robot will randomly move but stay alive infinitely long, collecting an
+    infinite reward. Yes, this is extremely unlikely, and you will never see this
+    in practice. So, you may think that we can set ![](img/Formula_04_114.png) here.
+    However, this would lead to a singular matrix that we cannot take the inverse
+    of. So, instead, we will choose ![](img/Formula_04_115.png). For practical purposes,
+    this discount factor almost equally weighs the immediate and future rewards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can estimate the state values in other ways than simulation or matrix inversion.
+    Let's look at an iterative approach next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Estimating the state values iteratively
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the central ideas in RL is to use the value function definition to estimate
+    the value functions iteratively. To achieve that, we arbitrarily initialize the
+    state values and use its definition as an update rule. Since we estimate states
+    based on other estimations, this is a **bootstrapping** method. We stop when the
+    maximum update to the state value over all the states is below a set threshold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the code to estimate the state values in our robot example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The result will closely resemble the estimations in *Figure 4.7*. Just run
+    the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should get something similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This looks great! Again, remember the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We had to iterate over all possible states. This is intractable when the state
+    space is large.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We used the transition probabilities explicitly. In a realistic system, we don't
+    know what these probabilities are.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Modern RL algorithms tackle these drawbacks by using a function approximation
+    to represent the states and sample the transitions from (a simulation of) the
+    environment. We will visit those approaches in later chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So far, so good! Now, we will incorporate the last major piece into this picture:
+    actions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Bringing the action in – MDP
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The MRP allowed us to model and study a Markov chain with rewards. Of course,
+    our ultimate goal is to control such a system to achieve the maximum reward. Now,
+    we will incorporate decisions into the MRP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Definition
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: An MDP is simply an MRP with decisions affecting transition probabilities and
+    potentially the rewards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: An MDP is characterized by a ![](img/Formula_04_116.png) tuple, where we have
+    a finite set of actions, ![](img/Formula_04_117.png), on top of the MRP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'MDP is the mathematical framework behind RL. So, now is the time to recall
+    the RL diagram that we introduced in [*Chapter 1*](B14160_01_Final_SK_ePub.xhtml#_idTextAnchor016),
+    *Introduction to Reinforcement Learning*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.8 – MDP diagram'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_04_08.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 4.8 – MDP diagram
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our goal in an MDP is to find a **policy** that maximizes the expected cumulative
+    reward. A policy simply tells which action(s) to take for a given state. In other
+    words, it is a mapping from states to actions. More formally, a policy is a distribution
+    over actions given states, and is denoted by ![](img/Formula_04_118.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_119.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The policy of an agent potentially affects the transition probabilities, as
+    well as the rewards, and it fully defines the agent''s behavior. It is also stationary
+    and does not change over time. Therefore, the dynamics of the MDP are defined
+    by the following transition probabilities:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_120.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: These are for all states and actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's see how an MDP might look in the grid world example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Grid world as an MDP
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Imagine that we can control the robot in our grid world, but only to some extent.
+    In each step, we can take one of the following actions: up, down, left, and right.
+    Then, the robot goes in the direction of the action with 70% chance and one of
+    the other directions with 10% chance each. Given these dynamics, a sample policy
+    could be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Right, when in state ![](img/Formula_04_121.png)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Up, when in state ­![](img/Formula_04_122.png)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The policy also determines the transition probability matrix and the reward
+    distribution. For example, we can write the transition probabilities for state
+    ![](img/Formula_04_123.png) and given our policy, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_124.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_IMG
+- en: '![](img/Formula_04_125.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_IMG
+- en: '![](img/Formula_04_126.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_IMG
+- en: Tip
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Once a policy is defined in an MDP, the state and reward sequence become an
+    MRP.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'So far, so good. Now, let''s be a bit more rigorous about how we express the
+    policy. Remember that a policy is actually a probability distribution over actions
+    given the state. Therefore, saying that "the policy is to take the "right" action
+    in state ![](img/Formula_04_127.png)" actually means "we take the "right" action
+    with probability 1 when in state ![](img/Formula_04_128.png)." This can be expressed
+    more formally as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_129.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'A perfectly legitimate policy is a probabilistic one. For example, we can choose
+    to take the left or up action when in state ![](img/Formula_04_130.png) with equal
+    probability, which is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_131.jpg)![](img/Formula_04_132.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Again, our goal in RL is to figure out an optimal policy for the environment
+    and the problem at hand that maximizes the expected discounted return. Starting
+    from the next chapter, we will go into the details of how to do that and solve
+    detailed examples. For now, this example is enough to illustrate what an MDP looks
+    like in a toy example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will define the value functions and related equations for MDPs as we
+    did for MRPs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: State-value function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We have already talked about the value of a state in the context of the MRP.
+    The value of a state, which we now formally call the **state-value function**,
+    is defined as the expected discounted return when starting in state ![](img/Formula_04_133.png).
+    However, there is a crucial point here: *the state-value function in an MDP is
+    defined for a policy*. After all, the transition probability matrix is determined
+    by the policy. So, changing the policy is likely to lead to a different state-value
+    function. This is formally defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_134.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note the ![](img/Formula_04_135.png) subscript in the state-value function,
+    as well as the expectation operator. Other than that, the idea is the same as
+    what we defined with the MRP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can finally define the Bellman equation for ![](img/Formula_04_136.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_137.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: You already know that the values of the states are related to each other from
+    our discussion on MRPs. The only difference here is that now the transition probabilities
+    depend on the actions and the corresponding probabilities of taking them in a
+    given state as per the policy. Imagine "no action" is one of the possible actions
+    in our grid world. The state values in *Figure 4.7* would correspond to the policy
+    of taking no action in any state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Action-value function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'An interesting quantity we use a lot in RL is the action-value function. Now,
+    assume that you have a policy, ![](img/Formula_04_138.png) (not necessarily an
+    optimal one). The policy already tells you which actions to take for each state
+    with the associated probabilities, and you will follow that policy. However, for
+    the current time step, you ask "what would be the expected cumulative return if
+    I take action ![](img/Formula_04_139.png) initially while in the current state,
+    and follow ![](img/Formula_04_140.png) thereafter for all states?" The answer
+    to this question is the **action-value function**. Formally, this is how we define
+    it in various but equivalent ways:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_141.jpg)![](img/Formula_04_142.jpg)![](img/Formula_04_143.jpg)![](img/Formula_04_144.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now, you may ask what the point in defining this quantity is if we will follow
+    policy ![](img/Formula_04_145.png) thereafter anyway. Well, it can be shown that
+    we can improve our policy by choosing the action that gives the highest action
+    value for state ![](img/Formula_04_146.png), represented by ![](img/Formula_04_147.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will come to how to improve and find the optimal policies later in the next
+    chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimal state-value and action-value functions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'An optimal policy is one that gives the optimal state-value function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_148.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'An optimal policy is denoted by ![](img/Formula_04_149.png). Note that more
+    than one policy could be optimal. However, there is a single optimal state-value
+    function. We can also define optimal action-value functions, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_150.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The relationship between the optimal state-value and action-value functions
+    is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_151.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Bellman optimality
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When we defined the Bellman equation earlier for ![](img/Formula_04_152.png),
+    we needed to use ![](img/Formula_04_153.png) in the equation. This is because
+    the state-value function is defined for a policy and we needed to calculate the
+    expected reward and the value of the following state with respect to the action(s)
+    suggested by the policy while in state ![](img/Formula_04_154.png) (together with
+    the corresponding probabilities if multiple actions are suggested to be taken
+    with positive probability). This equation was the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_155.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'However, while dealing with the optimal state-value function, ![](img/Formula_04_156.png),
+    we don''t really need to retrieve ![](img/Formula_04_157.png) from somewhere to
+    plug into the equation. Why? Because the optimal policy should be suggesting an
+    action that maximizes the consequent expression. After all, the state-value function
+    represents the cumulative expected reward. If the optimal policy was not suggesting
+    the action that maximizes the expectation term, it would not be an optimal policy.
+    Therefore, for the optimal policy and the state-value function, we can write a
+    special form of the Bellman equation. This is called the **Bellman optimality
+    equation** and is defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_158.jpg)![](img/Formula_04_159.jpg)![](img/Formula_04_160.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can write the Bellman optimality equation for the action-value function
+    similarly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_161.jpg)![](img/Formula_04_162.jpg)![](img/Formula_04_163.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: The Bellman optimality equation is one of the most central ideas in RL, which
+    will form the basis of many of the algorithms we will introduce in the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we have now covered a great deal of the theory behind the RL algorithms.
+    Before we actually go into using them to solve some RL problems, we will discuss
+    an extension to MDPs next, called partially observable MDPs, which frequently
+    occur in many real-world problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Partially observable MDPs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The definition of policy we have used in this chapter so far is that it is
+    a mapping from the state of the environment to actions. Now, the question we should
+    ask is *is the state really known to the agent in all types of environments*?
+    Remember the definition of state: it describes everything in an environment related
+    to the agent''s decision-making (in the grid world example, the color of the walls
+    is not important, for instance, so it would not be part of the state).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you think about it, this is a very strong definition. Consider the situation
+    when someone is driving a car. Does the driver know everything about the world
+    around them while making their driving decisions? Of course not! To begin with,
+    the cars would be blocking each other in the driver's sight more often than not.
+    Not knowing the precise state of the world does not stop anyone from driving,
+    though. In such cases, we base our decision on our **observations**, for example,
+    what we see and hear during driving, rather than the state. Then, we say the environment
+    is **partially observable**. If it is an MDP, we call it a **partially observable
+    MDP**, or **POMDP**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a POMDP, the probability of seeing a particular observation for an agent
+    depends on the latest action and the current state. The function that describes
+    this probability distribution is called the **observation function**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A POMDP is characterized by a ![](img/Formula_04_164.png) tuple, where ![](img/Formula_04_165.png)
+    is the set of possible observations and ![](img/Formula_04_166.png) is an observation
+    function, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_04_167.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In practice, having a partially observable environment usually requires keeping
+    a memory of observations to base the actions off of. In other words, a policy
+    is formed based not only on the latest observation but also on the observations
+    from the last ![](img/Formula_04_168.png) steps. To better understand why this
+    works, think of how much information a self-driving car can get from a single,
+    frozen scene obtained from its camera. This picture alone does not reveal some
+    important information about the environment, such as the speed and the exact directions
+    of other cars. To infer that, we need a sequence of scenes and then to see how
+    the cars have moved between the scenes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: In partially observable environments, keeping a memory of observations makes
+    it possible to uncover more information about the state of the environment. That
+    is why many famous RL settings utilize **Long** **Short-Term** **Memory** (**LSTM**)
+    networks to process the observations. We will look at this in more detail in later
+    chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we conclude our discussion on MDPs. You are now set to dive into
+    how to solve RL problems!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we covered the mathematical framework in which we model the
+    sequential decision-making problems we face in real life: MDPs. To this end, we
+    started with Markov chains, which do not involve any concept of reward or decision-making.
+    Markov chains simply describe stochastic processes where the system transitions
+    based on the current state, independent of the previously visited states. We then
+    added the notion of reward and started discussing things such as which states
+    are more advantageous to be in in terms of the expected future rewards. This created
+    a concept of a "value" for a state. We finally brought in the concept of "decision/action"
+    and defined the MDP. We then finalized the definitions of state-value functions
+    and action-value functions. Lastly, we discussed partially observable environments
+    and how they affect the decision-making of an agent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Bellman equation variations we introduced in this chapter are central to
+    many of the RL algorithms today, which are called "value-based methods." Now that
+    you are equipped with a solid understanding of what they are, starting from the
+    next chapter, we will use these ideas to come up with optimal policies. In particular,
+    we will first look at the exact solution algorithms to MDPs, which are dynamic
+    programming methods. We will then go into methods such as Monte Carlo and temporal-difference
+    learning, which provide approximate solutions but don't require knowing the precise
+    dynamics of the environment, unlike dynamic programming methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stay tuned and see you in the next chapter!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exercises
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Calculate ![](img/Formula_04_169.png)-step transition probabilities for the
+    robot using the Markov chain model we introduced with the state initialized at
+    ![](img/Formula_04_170.png). You will notice that it will take a bit more time
+    for the system to reach the steady state.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Modify the Markov chain to include the absorbing state for the robot crashing
+    into the wall. What does your ![](img/Formula_04_171.png) look like for a large
+    ![](img/Formula_04_172.png)?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using the state values in *Figure 4.7*, calculate the value of a corner state
+    using the estimates for the neighboring state values.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Iteratively estimate the state values in the grid world MRP using matrix forms
+    and operations instead of a `for` loop.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calculate the ![](img/Formula_04_173.png) action value, where the π policy corresponds
+    to taking no action in any state, using the values in *Figure 4.7*. Based on how
+    ![](img/Formula_04_174.png) compares to ![](img/Formula_04_175.png), would you
+    consider changing your policy to take the up action instead of no action in state
+    ![](img/Formula_04_176.png)?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Silver, D. (2015). *Lecture 2: Markov Decision Processes*. Retrieved from a
+    UCL course on RL: [https://www.davidsilver.uk/wp-content/uploads/2020/03/MDP.pdf](https://www.davidsilver.uk/wp-content/uploads/2020/03/MDP.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Sutton, R. S., & Barto, A. G. (2018). *Reinforcement Learning: An Introduction*.
+    A Bradford book'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ross, S. M. (1996). *Stochastic Processes*. 2nd ed., Wiley
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,1604 @@
+- en: 5\. Backpropagation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The previous chapter described neural network training. There, the gradient
+    of a weight parameter in the neural network (i.e., the gradient of the loss function
+    for a weight parameter) was obtained by using numerical differentiation. Numerical
+    differentiation is simple, and its implementation is easy, but it has the disadvantage
+    that calculation takes time. This chapter covers backpropagation, which is a more
+    efficient way to calculate the gradients of weight parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are two ways to understand backpropagation correctly. One of them uses
+    "equations," while the other uses **computational graphs**. The former is a common
+    way, and many books about machine learning expand on this by focusing on formulas.
+    This is good because it is strict and simple, but it may hide essential details
+    or end in a meaningless list of equations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, this chapter will use computational graphs so that you can understand
+    backpropagation "visually." Writing code will deepen your understanding further
+    and convince you of this. The idea of using computational graphs to explain backpropagation
+    is based on Andrej Karpathy's blog (*Hacker's guide to Neural Networks*, ([http://karpathy.github.io/neuralnets/](http://karpathy.github.io/neuralnets/)))
+    and the deep learning course (*CS231n:* *Convolutional Neural Networks for Visual
+    Recognition* ([http://cs231n.github.io/](http://cs231n.github.io/))) provided
+    by him and Professor Fei-Fei Li at Stanford University.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Computational Graphs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A computational graph shows the process of calculation. This graph is used as
+    a graph of data structure and is represented by multiple nodes and edges (meaning,
+    straight lines that connect nodes). In this section, we will solve easy problems
+    to familiarize ourselves with computational graphs before advancing step by step
+    into more complex backpropagation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Computational Graphs to Solve Problems
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The problems in this section are simple enough that you can solve them with
+    mental arithmetic, but the purpose here is to get familiar with computational
+    graphs. Learning to use computational graphs will be helpful for the complicated
+    calculations we will cover later, so it's important to first master how to use
+    them here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Question 1**: Taro bought 2 apples that were 100 yen apiece. Calculate the
+    amount of money he paid if a 10% consumption tax was applied.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A computational graph shows the process of calculation with nodes and arrows.
+    A node is represented by a circle, and an operation is described in it. The intermediate
+    result of the calculation above an arrow shows the result of each node that flows
+    from left to right. The following diagram shows the computational graph that solves
+    Question 1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1: Answer to Question 1 using a computational graph'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig05_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.1: Answer to Question 1 using a computational graph'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As shown in the preceding diagram, 100 yen for an apple that flows to the "x2"
+    node becomes 200 yen, which is passed to the next node. Then, 200 yen is passed
+    to the "× 1.1" node and becomes 220 yen. The result of this computational graph
+    shows that the answer is 220 yen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the preceding diagram, each circle contains "× 2" or "× 1.1" as one operation.
+    You can also place only "x" in a circle to show the operation. In that case, as
+    shown in the following diagram, you can place "*2*" and "*1.1*" outside the circles
+    as the "Number of apples" and "Consumption tax" variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The solution to this problem can be observed in the figure below:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2: Answer to Question 1 using a computational graph: the "Number
+    of apples" and "Consumption tax" variables are placed outside circles'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.2: Answer to Question 1 using a computational graph: the "Number of
+    apples" and "Consumption tax" variables are placed outside circles'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '**Question 2**: Taro bought 2 apples and 3 oranges. An apple was 100 yen, and
+    the orange was 150\. A 10% consumption tax was applied. Calculate the amount of
+    money he paid.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As in Question 1, we will use a computational graph to solve Question 2\. The
+    following diagram shows the computational graph for this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.3: Answer to Question 2 using a computational graph'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.3: Answer to Question 2 using a computational graph'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: In this question, an addition node, "+", was added to sum the amounts of apples
+    and oranges. After creating a computational graph, we advance the calculation
+    from left to right. The calculation result moves from left to right, just like
+    an electric current flows in a circuit, and the calculation ends when the result
+    reaches the rightmost side. The preceding diagram shows that the answer is 715
+    yen.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To solve a problem using a computational graph, then, you must perform the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Create a computational graph.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Advance the calculation from left to right on the computational graph.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Step 2 is known as propagating in the forward direction or **forward propagation**.
+    In forward propagation, calculation propagates from start to finish in a computational
+    graph. If forward propagation exists, we can also consider propagation in the
+    backward direction—from right to left. This is called **backward** **propagation**
+    and is known as backpropagation. It will play an important role when we calculate
+    derivatives later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Local Calculation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The main characteristic of a computational graph is that it can obtain the final
+    result by propagating "local calculation." The word "local" means "a small range
+    related to the node." A local calculation can return the next result (subsequent
+    result) from information related to the node, no matter what is happening on the
+    whole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can break down local calculations using a specific example. For example,
+    let''s assume that we bought two apples and many other things at a supermarket.
+    To visualize this, you can create a computational graph like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4: Example of buying two apples and many other things'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.4: Example of buying two apples and many other things'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Let's assume that we bought many things and that the total amount was 4,000
+    yen (after a complicated calculation), as shown in the preceding computational
+    graph. What is important here is that the calculation in each node is a local
+    calculation. To sum the amounts of the apples and the other purchases (4,000 +
+    200 -> 4,200), you can add the two figures without thinking about how 4,000 was
+    obtained. In other words, what to calculate in each node is only the calculation
+    related to the node—in this example, the addition of the two numbers provided.
+    We do not need to think about the whole graph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, you can focus on local calculation in a computational graph. However complicated
+    the whole calculation is, what is done at each step is "local calculation" for
+    the target node. By passing the results of simple local calculations, you can
+    obtain the result of the complicated calculations that constitute the whole graph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: For example, the assembly of a car is complicated, but it is usually conducted
+    based on the division of labor on an "assembly line." Each worker (machine) conducts
+    simple work. The outcome of the workflows to the next worker, and finally, a car
+    is built. A computational graph also divides complicated calculations into "simple
+    and local calculations" and passes the calculation result to the next node, just
+    like a car is passed down an assembly line. Like the assembly of a car, complicated
+    calculations can be divided into simple calculations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why Do We Use Computational Graphs?
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We have solved two problems by using computational graphs and may now consider
+    the advantages. One of them is "local calculation," as described earlier. However
+    complicated the whole calculation is, local calculation enables you to focus on
+    the simple calculations in each node in order to simplify the problem as a whole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another advantage is that you can keep all the results of intermediate calculations
+    in a computational graph (for example, 200 yen after 2 apples are calculated and
+    650 yen before consumption tax is added). However, the largest reason for using
+    computational graphs is that you can calculate "derivatives" efficiently by propagating
+    in the backward direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To describe backward propagation in a computational graph, consider Question
+    1 again. In this problem, you calculated the final amount paid regarding two apples
+    and the consumption tax. Now say that you need to know how the final amount paid
+    will be affected when the price of an apple goes up. This corresponds to obtaining
+    the "derivative of the amount paid with respect to the price of an apple." It
+    corresponds to obtaining ![61](img/Figure_5.4_a.png) when the price of an apple
+    is x and the amount paid is L. The value of this derivative indicates how much
+    the amount paid increases when the price of an apple goes up "slightly."
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we mentioned earlier, you can use backward propagation in a computational
+    graph to obtain a value, such as the "derivative of the amount paid with respect
+    to the price of an apple." First, we will only look at the result. As shown in
+    the following diagram, you can obtain derivatives by using backpropagation in
+    a computational graph:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.5: Propagating differential values using backward propagation'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.5: Propagating differential values using backward propagation'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As shown in the preceding diagram, backward propagation is shown graphically
+    with arrows (thick lines) in the opposite direction to the forward direction.
+    Backward propagation passes "local differentials," and the values are placed below
+    the arrows. In this example, derivative values are passed from right to left,
+    as in 1 -> 1.1 -> 2.2\. The result shows that the value of the "derivative of
+    the amount paid with respect to the price of an apple" is 2.2\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This indicates that the final amount paid increases by 2.2 yen when the price
+    of an apple goes up 1 yen. This means that when the price of an apple goes up
+    by a small amount, the final amount increases by 2.2 times that of the small value.
+    Here, only the derivative with respect to the price of an apple was obtained,
+    but you can also obtain the "derivative of the amount paid with respect to consumption
+    tax" and the "derivative of the amount paid with respect to the number of apples"
+    by using similar steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During these steps, you can share the intermediate results of the derivatives
+    (the derivatives that are passed halfway) so that you can calculate multiple derivatives
+    efficiently. Thus, the advantage of a computational graph is that forward, and
+    backward propagations enable you to obtain the derivative value of each variable
+    efficiently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chain Rule
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Forward propagation in a computational graph propagates the calculation result
+    in the forward direction from left to right. These calculations seem natural because
+    they are usually conducted. On the other hand, in backward propagation, a "local
+    derivative" is propagated in the backward direction from right to left. The principle
+    that propagates the "local derivative" is based on the **chain rule**. Let's look
+    at the chain rule and clarify how it corresponds to backward propagation in a
+    computational graph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backward Propagation in a Computational Graph
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We will now look at an example of backward propagation using a computational
+    graph. Let''s assume that a calculation, *y = f (x)*, exists. The following diagram
+    shows the backward propagation of this calculation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.6: Backward propagation in a computational graph – the local derivative'
+  prefs: []
+  type: TYPE_NORMAL
+- en: is multiplied in the backward direction
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure5.6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.6: Backward propagation in a computational graph – the local derivative
+    is multiplied in the backward direction'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As shown in the preceding diagram, backward propagation multiplies the signal
+    E by the local derivative of the node, ![60](img/Figure_5.6_a.png), and propagates
+    it to the next node. The local derivative here means obtaining the derivative
+    of the calculation, y = f (x), in forward propagation and indicates obtaining
+    the derivative, `y`, with respect to x ![59](img/Figure_5.6_b.png); for example,
+    y = f (x) = x2, ![58](img/Figure_5.6_c.png). The local derivative is multiplied
+    by the value propagated from the upper stream (E, in this example) and passed
+    to the previous node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the procedure of backward propagation. It can obtain the target derivative
+    values efficiently. The reason why this is possible can be explained by the principle
+    of the chain rule, defined in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What Is the Chain Rule?
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Before explaining the chain rule, we need to talk about `z = (x + y)`2 consists
+    of two equations, as shown in equation (5.1):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![57](img/Figure_5.6_d.png) | (5.1) |'
+  prefs: []
+  type: TYPE_TB
+- en: The chain rule is the characteristic related to the derivative of a composite
+    function and is defined as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a function is expressed by a composite function, the derivative of the
+    composite function can be expressed by the product of the derivative of each function
+    that constitutes the composite function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is called the principle of the chain rule. Although it may seem difficult,
+    it is actually quite simple. In the example given in equation (5.1), ![2](img/Figure_5.6_g.png)
+    (a derivative of z with respect to x) is the product of ![1](img/Figure_5.6_f.png)
+    (a derivative of *z* with respect to *t*) and ![3](img/Figure_5.6_h.png) (a derivative
+    of *t* with respect to x). You can express this with the following equation (5.2):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![4](img/Figure_5.6_j.png) | (5.2) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'You can remember equation (5.2) easily because ∂t''s cancel each other out,
+    as shown here: ![5](img/Figure_5.6_k.png)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s use the chain rule to obtain the derivative of equation (5.2),
+    ![6](img/Figure_5.6_L.png). First, obtain the local differential (partial differential)
+    of equation (5.1):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![7](img/Figure_5.6_m.png) | (5.3) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'As shown in equation (5.3), ![9](img/Figure_5.6_o.png) is 2t and ![10](img/Figure_5.6_p.png)
+    is 1\. This result is analytically obtained from the differentiation formula.
+    The final result, ![11](img/Figure_5.6_q.png), can be calculated by the product
+    of the derivatives obtained in equation (5.3):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![12](img/Figure_5.6_r.png) | (5.4) |'
+  prefs: []
+  type: TYPE_TB
+- en: The Chain Rule and Computational Graphs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Now, let''s use a computational graph to express the calculation of the chain
+    rule in equation (5.4). When we represent a square with a node "**2", we can write
+    a graph for it, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.7: Computational graph of equation (5.4) – local derivatives are
+    multiplied'
+  prefs: []
+  type: TYPE_NORMAL
+- en: and passed in the backward direction
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.7.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.7: Computational graph of equation (5.4) – local derivatives are multiplied
+    and passed in the backward direction'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As shown in the preceding diagram, backward propagation in a computational graph
+    propagates signals from right to left. Backward propagation multiplies the signal
+    provided to a node by the local derivative (partial derivative) of the node and
+    passes it to the next node. For example, the input to "**2" in backward propagation
+    is ![55](img/Figure_5.7_a.png). It is multiplied by the local derivative, ![54](img/Figure_5.7_b.png)
+    (in forward propagation, the input is t and the output is z, so the (local) derivative
+    at this node is ![53](img/Figure_5.7_c.png)) and then multiplied and passed to
+    the next node. In the preceding diagram, the first signal in backward propagation
+    ![51](img/Figure_5.7_g.png) did not appear in the previous equation. It was omitted
+    there because ![51](img/Figure_5.7_g1.png) = 1.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What we should note from the preceding diagram is the result of backward propagation
+    at the leftmost position. It corresponds to the "derivative of z with respect
+    to x" because ![5k](img/Figure_5.7_e.png) due to the chain rule. What backward
+    propagation performs is based on the principle of the chain rule.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When you assign the result of equation (5.3), as shown in the preceding diagram,
+    the result is as follows. Thus, ![50](img/Figure_5.7_h.png) is 2(x + y):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.8: Based on the result of backward propagation in the computational
+    graph,  is 2(x + y)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.8.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.8: Based on the result of backward propagation in the computational
+    graph, is 2(x + y)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Backward Propagation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The previous section described how backward propagation in a computational graph
+    is based on the chain rule. We will now cover how backward propagation works by
+    taking operations, such as "+" and "x", as examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backward Propagation in an Addition Node
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'First, let''s consider backward propagation in an additional node. Here, we
+    will look at backward propagation for the equation *z = x + y*. We can obtain
+    the derivatives of *z = x + y* (analytically) as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![13](img/Figure_5.8_b.png) | (5.5) |'
+  prefs: []
+  type: TYPE_TB
+- en: As equation (5.5) shows, both ![15](img/Figure_5.8_d.png) and ![16](img/Figure_5.8_f.png)
+    are 1\. Therefore, we can represent them in a computational graph, as shown in
+    the following diagram. In backward propagation, the derivative from the upper
+    stream—![17](img/Figure_5.8_g.png), in this example—is multiplied by 1 and passed
+    downstream. In short, backward propagation in an addition node multiplies 1, so
+    it only passes the input value to the next node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this example, the differential value from the upper stream is expressed
+    as ![18](img/Figure_5.8_g.png). This is because we assume a large computational
+    graph that finally outputs L, as shown in *Figure 5.10*. The calculation, *z =
+    x + y*, exists somewhere in the large computational graph, and the value of ![19](img/Figure_5.8_g.png)
+    is passed from the upper stream. The values of ![20](img/Figure_5.8_i.png) and
+    ![21](img/Figure_5.8_j.png) are propagated downstream:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.9: Backward propagation in an addition node – forward propagation
+    on the left and backward propagation on the right.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.9.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.9: Backward propagation in an addition node – forward propagation
+    on the left and backward propagation on the right.'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As shown on the right, backward propagation in an addition node passes a value
+    from the upper stream to the lower stream without changing it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.10: This addition node exists somewhere in the final output calculation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.10.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.10: This addition node exists somewhere in the final output calculation.'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: In backward propagation, starting from the rightmost output, local derivatives
+    are propagated from node to node in the backward direction
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s look at an example of backward propagation. For example, say that
+    a calculation, "10 + 5 = 15", exists and that a value of 1.3 flows from the upper
+    stream in backward propagation. The following diagram shows this in terms of a
+    computational graph:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.11: Example of backward propagation in an addition node'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig05_11.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.11: Example of backward propagation in an addition node'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Because backward propagation in an addition node only outputs the input signal
+    to the next node, it passes 1.3 to the next node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backward Propagation in a Multiplication Node
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s take a look at backward propagation in a multiplication node by taking
+    an equation, *z = xy*, as an example. The differential of this equation is expressed
+    by the following equation (5.6):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![22](img/Figure_5.11_a.png) | (5.6) |'
+  prefs: []
+  type: TYPE_TB
+- en: Based on the preceding equation (5.6), you can write a computational graph as
+    follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the backward propagation of multiplication, the upstream value multiplied
+    by the "reversed value" of the input signal for forward propagation is passed
+    downstream. A reversed value means that if the signal is x in forward propagation,
+    the value to multiply is y in backward propagation; and that if the signal is
+    y in forward propagation, the value to multiply is x in backward propagation,
+    as shown in the following diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's look at an example. Assume that a calculation 10 x 5 = 50 exists and that
+    the value of 1.3 flows from the upper stream in backward propagation. *Figure
+    5.13* shows this in the form of a computational graph.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the backward propagation of multiplication, the reversed input signals are
+    multiplied, so 1.3 x 5 = 6.5 and 1.3 x 10 = 13 are obtained. In the backward propagation
+    of addition, the upstream value was only passed downstream. Therefore, the value
+    of the input signal in forward propagation is not required. On the other hand,
+    for the backward propagation of multiplication, the value of the input signal
+    in forward propagation is required. Therefore, to implement a multiplication node,
+    the input signal of forward propagation is retained:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.12: Backward propagation in a multiplication node – forward propagation
+    on the left and backward propagation on the right'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig05_12.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.12: Backward propagation in a multiplication node – forward propagation
+    on the left and backward propagation on the right'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '![Figure 5.13: Example of backward propagation in a multiplication node'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig05_13.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.13: Example of backward propagation in a multiplication node'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Apples Example
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s think about the example of buying apples—two apples and consumption
+    tax—from the beginning of this chapter again. The problem to solve here is how
+    each of the three variables (the price of an apple, the number of apples, and
+    consumption tax) affect the final amount paid. This corresponds to obtaining the
+    "derivative of the amount paid with respect to the price of an apple," the "derivative
+    of the amount paid with respect to the number of apples," and the "derivative
+    of the amount paid with respect to consumption tax." We can solve this by using
+    backward propagation in a computational graph, as shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.14: Example of backward propagation for purchasing apples'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.14.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.14: Example of backward propagation for purchasing apples'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As mentioned previously, input signals are reversed and passed downstream in
+    the backward propagation of a multiplication node. According to the result shown
+    in the preceding diagram, the differential of the price of an apple is 2.2, there
+    are 110 apples, and the consumption tax is 200\. They indicate that when consumption
+    tax and the price of an apple increase by the same quantity, the consumption tax
+    affects the final amount paid in the size of 200 and that the price of an apple
+    affects it in the size of 2.2\. However, this result is brought about because
+    the consumption tax and the price of an apple in this example are different in
+    terms of units (1 for the consumption tax is 100%, while 1 for the price of an
+    apple is 1 yen).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Lastly, let''s solve the backward propagation of "buying apples and oranges"
+    as an exercise. Please obtain the derivatives of individual variables and put
+    the numbers in the squares provided in the following diagram (you can find the
+    answer in the next section):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.15: Example of backward propagation for purchasing apples and oranges
+    – complete this calculation by putting figures in the squares'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.15.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.15: Example of backward propagation for purchasing apples and oranges
+    – complete this calculation by putting figures in the squares'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Implementing a Simple Layer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we will implement the apple example we've described in Python
+    using the multiplication node in a computational graph as the **multiplication
+    layer** (**MulLayer**) and the addition node as the **addition layer** (**AddLayer**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In the next section, we will implement the "layers" that constitute a neural
+    network in one class. The "layer" here is a functional unit in a neural network—the
+    Sigmoid layer for a sigmoid function, and the Affine layer for matrix multiplication.
+    Therefore, we will also implement multiplication and addition nodes here on a
+    "layer" basis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing a Multiplication Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We will implement a layer so that it has two common methods (interfaces): `forward()`
+    and `backward()`, which correspond to forward propagation and backward propagation,
+    respectively. Now, you can implement a multiplication layer as a class called
+    `MulLayer`, as follows (the source code is located at `ch05/layer_naive.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: '`__init__()` initializes the instance variables, `x,` and `y`, which are used
+    to retain the input values in forward propagation. `forward()` takes two variables,
+    `x` and `y`, and multiplies and outputs their product. On the other hand, `backward()`
+    multiplies the derivative from the upper stream (`dout`) by the "reversed value"
+    of forward propagation and passes the result downstream.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, use `MulLayer` to implement the "purchase of apples"—two apples and consumption
+    tax. In the previous section, we used forward and backward propagations in a computational
+    graph for this calculation, as shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.16: Purchasing two apples'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.16.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.16: Purchasing two apples'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'By using the multiplication layer, we can implement forward propagation for
+    this as follows (the source code is located at `ch05/buy_apple.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can use `backward()` to obtain the differential of each variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the order of calling `backward()` is the opposite of that of calling `forward()`.
+    Note that the argument of `backward()` is the "derivative with respect to the
+    output variable in forward propagation." For example, the multiplication layer,
+    `mul_apple_layer`, returns `apple_price` in forward propagation, while it takes
+    the derivative value of `apple_price (dapple_price)` as an argument in backward
+    propagation. The execution result of this program matches the result shown in
+    the preceding diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing an Addition Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Now, we will implement an addition layer, which is an addition node, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: An addition layer requires no initialization, so `__init__ ()` does nothing
+    (the pass statement is "does nothing"). `forward()` in the addition layer takes
+    two arguments, `x` and `y`, and adds them for output. `backward()` passes the
+    differential (`dout`) from the upper stream to the lower stream.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's use the addition and multiplication layers to implement the purchase
+    of two apples and three oranges, as shown in the following diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.17: Purchasing two apples and three oranges'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.17.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.17: Purchasing two apples and three oranges'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'You can implement this computational graph in Python as follows (the source
+    code is located at `ch05/buy_apple_orange.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This implementation is a little long, but each statement is simple. The required
+    layers are created and the forward propagation method, `forward()`, is called
+    in an appropriate order. Then, the backward propagation method, `backward()`,
+    is called in the opposite order to forward propagation to obtain the desired derivatives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this way, implementing layers (here, the addition and multiplication layers)
+    in a computational graph are easy, and you can use them to obtain complicated
+    derivatives. Next, we will implement the layers that are used in a neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing the Activation Function Layer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now, we will apply the idea of a computational graph to a neural network. Here,
+    we will implement the "layers" that constitute a neural network in one class using
+    the ReLU and Sigmoid layers, which are activation functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ReLU Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A **Rectified Linear Unit** (**ReLU**) is used as an activation function and
+    is expressed by the following equation (5.7):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![49](img/Figure_5.17_a.png) | (5.7) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'From the preceding equation (5.7), you can obtain the derivative of y with
+    respect to x with equation (5.8):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![48](img/Figure_5.17_b.png) | (5.8) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'As equation (5.8) shows, if the input in forward propagation, x, is larger
+    than 0, backward propagation passes the upstream value downstream without changing
+    it. Meanwhile, if x is 0 or smaller in forward propagation, the signal stops there
+    in backward propagation. You can express this in a computational graph, as shown
+    in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.18: Computational graph of the ReLU layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.18.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.18: Computational graph of the ReLU layer'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'Next, let''s implement the ReLU layer. When implementing a layer in a neural
+    network, we assume that `forward()` and `backward()` take NumPy arrays as arguments.
+    The implementation of the ReLU layer is located at `common/layers.py`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `Relu` class has an instance variable, `mask`. The `mask` variable is a
+    NumPy array that consists of `True`/`False` values. If an element of the input,
+    `x`, in forward propagation is `0` or smaller, the mask''s corresponding element
+    is `True`. Otherwise (if it is larger than 0), the element is `False`. For example,
+    the `mask` variable contains a NumPy array that consists of `True` and `False`,
+    as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: As shown in the preceding diagram, the value of backward propagation is 0 when
+    the input value in forward propagation is 0 or smaller. Therefore, in backward
+    propagation, the mask variable stored in forward propagation is used to set `dout`
+    from the upper stream. If an element of the mask is `True`, the corresponding
+    element in `dout` is set to 0\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The ReLU layer works as a "switch" in a circuit. In forward propagation, it
+    turns on the switch if an electric current flows through it, and turns off the
+    switch if an electric current does not flow through it. In backward propagation,
+    the electric current keeps on flowing if the switch is ON and does not flow any
+    longer if the switch is OFF.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sigmoid Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Next, let''s implement a sigmoid function. This is expressed by equation (5.9):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![24](img/Figure_5.18_a.png) | (5.9) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'The following diagram shows the computational graph that represents equation
+    (5.9):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.19: Computational graph of the Sigmoid layer (forward propagation
+    only)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.19.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.19: Computational graph of the Sigmoid layer (forward propagation
+    only)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Here, the *exp* and */* nodes appear in addition to the *X* and *+* nodes. The
+    *exp* node calculates *y = exp(x)*, while the */* node calculates ![47](img/Figure_5.19_a.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The calculation of equation (5.9) consists of the propagation of local calculations.
+    Next, let's consider the backward propagation shown in the preceding computational
+    graph, looking at the flow of backward propagation step by step to summarize what
+    we have described so far.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 1:**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The */* node represents ![46](img/Figure_5.19_a.png). Its derivative is analytically
+    expressed by the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| `![47](img/Figure_5.19_b.png)` | (5.10) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Based on equation (5.10), in backward propagation, the node multiplies the
+    upstream value by *−y*2 (the additive inverse of the square of the output in forward
+    propagation) and passes the value to the lower stream. The following computational
+    graph shows this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.20: Computational graph of the Sigmoid layer (with the additive
+    inverse of the square)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.20.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.20: Computational graph of the Sigmoid layer (with the additive inverse
+    of the square)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '**Step 2:**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The *+* node only passes the upstream value to the lower stream. The following
+    computational graph shows this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.21: Computational graph of the Sigmoid layer (with passing upstream
+    value)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.21.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.21: Computational graph of the Sigmoid layer (with passing upstream
+    value)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '**Step 3:**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The "exp" node represents *y = exp(x)*, and its derivative is expressed by
+    the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![48](img/Figure_5.21_a.png) | (5.11) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'In the following computational graph, the node multiplies the upstream value
+    by the output in forward propagation (*exp(-x)*, in this example) and passes the
+    value to the lower stream:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.22: Computational graph of the Sigmoid layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.22.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.22: Computational graph of the Sigmoid layer'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '**Step 4:**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The *X* node reverses the values in forward propagation for multiplication.
+    Therefore, *−1* is multiplied here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.23: Computational graph of the Sigmoid layer (reversed values)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.23.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.23: Computational graph of the Sigmoid layer (reversed values)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'Thus, we can show the backward propagation of the Sigmoid layer in the computational
+    graph shown in the preceding diagram. According to the result of the preceding
+    computational graph, the output of backward propagation is ![45](img/Figure_5.23_a.png)
+    and it is propagated to the downstream nodes. Note here that ![44](img/Figure_5.23_b.png)
+    can be calculated from the input, *x*, and output, *y*, of forward propagation.
+    Therefore, we can draw the computational graph shown in the preceding diagram
+    as a grouped "sigmoid" node, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.24: Computational graph of the Sigmoid layer (simple version)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.24.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.24: Computational graph of the Sigmoid layer (simple version)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: The computational graph in *Figure 5.23* and the simplified computational graph
+    in *Figure 5.24* provide the same calculation result. The simple version is more
+    efficient because it can omit the intermediate calculation in backward propagation.
+    It is also important to note that you can only concentrate on the input and output,
+    without caring about the details of the Sigmoid layer, by grouping the nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also organize ![26](img/Figure_5.24_a.png) as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![53](img/Figure_5.24_b.png) | (5.12) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Therefore, you can only calculate the backward propagation in the Sigmoid layer
+    shown in the preceding diagram from the output of forward propagation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.25: Computational graph of the Sigmoid layer – you can use the output,
+    y, of forward propagation to calculate the backward propagation'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.25.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.25: Computational graph of the Sigmoid layer – you can use the output,
+    y, of forward propagation to calculate the backward propagation'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'Now, let''s implement the Sigmoid layer in Python. Based on the preceding diagram,
+    you can implement it as follows (this implementation is located at `common/layers.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This implementation retains the output of forward propagation in the `out` instance
+    variable, then uses the `out` variable for calculation purposes in backward propagation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing the Affine and Softmax Layers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Affine Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In forward propagation in a neural network, the product of matrices (`np.dot()`,
+    in NumPy) was used to sum the weighted signals (for details, refer to the *Calculating
+    Multidimensional Arrays* section in *Chapter 3*, *Neural Networks*). For example,
+    do you remember the following implementation in Python?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, assume that `X`, `W`, and `B` are multidimensional arrays of the shape
+    `(2,)`, `(2, 3)`, and `(3,)`, respectively. With this, you can calculate the weighted
+    sum of neurons as `Y = np.dot(X, W) + B`. `Y` is converted by the activation function
+    and propagated to the next layer, which is the flow of forward propagation in
+    a neural network. Note that the number of elements in corresponding dimensions
+    must be the same for matrix multiplication. This means that in the product of
+    `X` and `W`, the number of elements in corresponding dimensions must be the same,
+    as shown in the following image. Here, the shape of a matrix is represented in
+    parentheses as *(2, 3)* (this is for consistency with the output of NumPy''s shape):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.26: The number of elements in corresponding dimensions'
+  prefs: []
+  type: TYPE_NORMAL
+- en: must be the same for matrix multiplication
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.26.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.26: The number of elements in corresponding dimensions must be the
+    same for matrix multiplication'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The product of matrices in forward propagation in a neural network is called
+    an "affine transformation" in the field of geometry. Therefore, we will implement
+    the process that performs an affine transformation as an "Affine layer."
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s take a look at the calculation—the product of matrices and the
+    sum of biases—in a computational graph. When we represent the node that calculates
+    the product of matrices as "dot," the following computational graph can show the
+    calculation `np.dot(X, W) + B`. Above each variable, the shape of the variable
+    is indicated (for example, the shape of *X* is *(2,)* and that of *X – W* is *(3,)*
+    are shown here):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.27: Computational graph of the Affine layer. Note that the variables
+    are matrices. Above each variable, the shape of the variable is shown'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.27.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.27: Computational graph of the Affine layer. Note that the variables
+    are matrices. Above each variable, the shape of the variable is shown'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: The preceding is a relatively simple computational graph. However, note that
+    *X*, *W*, and *B* are multidimensional arrays. In the computational graphs we've
+    looked at so far, "scalar values" flow between nodes, while in this example, "multidimensional
+    arrays" propagate between nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s think about the backward propagation of the preceding computational
+    graph. To obtain the backward propagation for multidimensional arrays, you can
+    use the same procedure as the previous computational graphs used for scalar values
+    by writing each element of the multidimensional arrays. Doing this, we can obtain
+    the following equation (how we can obtain equation (5.13) is omitted here):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![30](img/Figure_5.27_a.png) | (5.13) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'In equation (5.13), T in WT indicates transpose. Transpose switches the (i,
+    j) elements of W to the (j, i) elements, shown in the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![43](img/Figure_5.27_d.png) | (5.14) |'
+  prefs: []
+  type: TYPE_TB
+- en: As shown in equation (5.14), when the shape of W is (2, 3), the shape of WT
+    becomes (3, 2).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Based on equation (5.13), let''s write backward propagation in the computational
+    graph. The following diagram shows the result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.28: Backward propagation of the Affine layer. Note that the variables
+    are matrices. Below each variable, the shape of the variable is shown'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.28.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.28: Backward propagation of the Affine layer. Note that the variables
+    are matrices. Below each variable, the shape of the variable is shown'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'Let''s consider the shape of each variable carefully. Please note that X and
+    ![41](img/Figure_5.28_a.png) are the same shape, and that W and ![40](img/Figure_5.28_b.png)
+    are the same in terms of shape because of the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![60](img/Figure_5.28_d.png) | (5.15) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'We pay attention to the shapes of matrices because the number of elements in
+    the corresponding dimensions must be the same for matrix multiplication, and checking
+    that they''re the same can lead to equation (5.13). For example, consider the
+    product of ![33](img/Figure_5.28_f.png) and W so that the shape of ![34](img/Figure_5.28_g.png)
+    becomes (2,) when the shape of ![35](img/Figure_5.28_i.png) is (3,) and the shape
+    of W is (2,3). Then, equation (5.13) follows. This can be seen in the following
+    diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.29: Product of matrices (you can create backward propagation of
+    the "dot" node by configuring a product so that the number of elements in the
+    corresponding dimensions is the same in the matrices)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.29.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.29: Product of matrices (you can create backward propagation of the
+    "dot" node by configuring a product so that the number of elements in the corresponding
+    dimensions is the same in the matrices)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Batch-Based Affine Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The Affine layer takes one piece of data as input, X. In this section, we will
+    consider a batch-based Affine layer, which propagates N pieces of data collectively
+    (a group of data is called a "batch"). Let's start by looking at the computational
+    graph of the batch-based Affine layer (*Figure 5.30*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The only difference from the previous explanation is that the shape of the input,
+    X, is now (N, 2). All we have to do is to calculate the matrices in the computational
+    graph in the same way as we did previously. For backward propagation, we must
+    be careful regarding the shapes of the matrices. Only after that can we obtain
+    ![36](img/Figure_5.29_a.png) and ![37](img/Figure_5.29_b.png) in the same way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You must be careful when adding bias. When adding biases in forward propagation,
+    a bias is added to each piece of data for X · W. For example, when N = 2 (two
+    pieces of data), biases are added to each of the two pieces of data (to each calculation
+    result). The following diagram shows a specific example of this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.30: Computational graph of the batch-based Affine layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.30.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.30: Computational graph of the batch-based Affine layer'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In forward propagation, the biases are added to each piece of data (the first,
+    the second, and so on). Therefore, in backward propagation, the values of each
+    piece of data in backward propagation must be integrated into the elements of
+    biases. The following code shows this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this example, we're assuming that there are two pieces of data (N = 2). In
+    backward propagation of biases, the derivatives with respect to the two pieces
+    of data are summed for each piece of data. To do that, `np.sum()` sums the elements
+    of axis 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Thus, the implementation of the Affine layer is as follows. The Affine implementation
+    in `common/layers.py` is slightly different from the implementation described
+    here because it considers the case when input data is a tensor (four-dimensional
+    array):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Softmax-with-Loss Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Finally, we should consider a softmax function, which is the output layer. The
+    softmax function normalizes entered values and outputs them (as described earlier).
+    For example, the following diagram shows the output of the Softmax layer for handwritten
+    digit recognition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, the Softmax layer normalizes the entered values (meaning it converts
+    them so that the total of the output values is 1) and outputs them. The Softmax
+    layer has 10 inputs because handwritten digit recognition classifies data into
+    10 classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Neural network processing consists of two phases: **inference** and **training**.
+    Usually, inference in a neural network does not use the Softmax layer. For example,
+    for inference in the network shown in the following diagram, the output of the
+    final Affine layer is used as the inference result. The unnormalized output result
+    from a neural network (the output of the Affine layer before the Softmax layer
+    in the following diagram) is sometimes called a "score." To obtain only one answer
+    in neural network inference, you only need to calculate the maximum score, so
+    you do not need a Softmax layer. However, you do need a Softmax layer in neural
+    network training.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.31: The images are converted by the Affine and ReLU layers and 10
+    input values'
+  prefs: []
+  type: TYPE_NORMAL
+- en: are normalized by the Softmax layer
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.31.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.31: The images are converted by the Affine and ReLU layers and 10
+    input values are normalized by the Softmax layer'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: In this example, the score for "0" is 5.3, which is converted into 0.008 (0.8%)
+    by the Softmax layer. The score for "2" is 10.1, which is converted into 0.991
+    (99.1%).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we will implement the "Softmax-with-Loss layer," which also contains a
+    cross-entropy error, which is a loss function. The following diagram shows the
+    computational graph of the Softmax-with-Loss layer (the softmax function and cross-entropy
+    error):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.32: Computational graph of the Softmax-with-Loss layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.32.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.32: Computational graph of the Softmax-with-Loss layer'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As you can see, the Softmax-with-Loss layer is slightly complicated. Only the
+    result is shown here. If you are interested in how the Softmax-with-Loss layer
+    is created, refer to the *Computational Graph of the Softmax-with-Loss Layer*
+    section in the *Appendix*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can simplify the computational graph shown in the preceding diagram as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.33: "Simplified" computational graph of the Softmax-with-Loss layer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Figure_5.33.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 5.33: "Simplified" computational graph of the Softmax-with-Loss layer'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: In the preceding computational graph, the Softmax layer indicates the Softmax
+    function, while the Cross-Entropy Error layer indicates the cross-entropy error.
+    Here, we're assuming that the data, which is classified into three classes and
+    three inputs (scores), is received from the previous layer. As we can see, the
+    Softmax layer normalizes the input (a1, a2, a3) and outputs (y1, y2, and y3).
+    The Cross-Entropy Error layer receives the output from Softmax, (y1, y2, y3),
+    and the label, (t1, t2, t3), and outputs the loss, L, based on this data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backward propagation from the Softmax layer returns (y1 t1, y2 t2, y3 t3), which
+    is a "clean" result. Because (y1, y2, y3) is the output of the Softmax layer and
+    (t1, t2, t3) is the label, (y1 − t1, y2 − t2, y3 − t3) is the difference between
+    the output of the Softmax layer and the label. When backward propagating a neural
+    network, an error, which is the difference, is passed to the previous layer. This
+    characteristic is important when training a neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the purpose of neural network training is to adjust weight parameters
+    so that the neural network's output (output of Softmax) approaches the label.
+    To do that, we need to pass the error between the neural network's output and
+    the label to the previous layer in an efficient manner. The previous result, (y1
+    − t1, y2 − t2, y3 − t3), is exactly the difference between the output of the Softmax
+    layer and the label, and clearly shows the current error between the neural network's
+    output and the label.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we use a "cross-entropy error" as the loss function for the "softmax function,"
+    backward propagation returns a "pretty" result, (y1 − t1, y2 − t2, y3 − t3). This
+    "pretty" result is not accidental. A function that calls a cross-entropy error
+    is designed to do this. In a regression problem, an "identity function" is used
+    for the output layer, and the "sum of squared errors" is used as the loss function
+    (refer to the *Designing the Output Layer* section of *Chapter 3*, *Neural Networks*)
+    for the same reason. When we use the sum of squared errors as the loss function
+    of an "identity function", backward propagation provides a "pretty" result, (y1
+    − t1, y2 − t2, y3 − t3).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's consider a specific example here. Say that, for one piece of data, the
+    label is (0, 1, 0) and the output of the Softmax layer is (0.3, 0.2, 0.5). At
+    this time, the neural network does not recognize it correctly because the probability
+    of it being the correct label is 0.2 (20%). Here, backward propagating from the
+    Softmax layer propagates a large error, (0.3, −0.8, 0.5). Because this large error
+    propagates to the previous layers, the layers before the Softmax layer learn a
+    lot from the large error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As another example, let's assume that, for one piece of data, the label is (0,
+    1, 0) and the output of the Softmax layer is (0.01, 0.99, 0) (this neural network
+    recognizes quite accurately). In this case, backward propagating from the Softmax
+    layer propagates a small error, (0.01, −0.01, 0). This small error propagates
+    to the previous layers. The layers before the Softmax layer learn only small pieces
+    of information because the error is small.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s implement the Softmax-with-Loss layer. You can implement the Softmax-with-Loss
+    layer as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This implementation uses the `softmax()` and `cross_entropy_error()` functions.
+    They were implemented in the sub-section, *Issues when Implementing the Softmax
+    Function*, of *Chapter 3*, *Neural networks* and sub-section, *Implementing Cross-Entropy
+    Error (Using Batches)*, of *Chapter 4*, *Neural Network Training*. Therefore,
+    the implementation here is very easy. Note that the error per data propagates
+    to the previous layers in backward propagation because the value of propagation
+    is divided by the number of batches (`batch_size`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Backpropagation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You can build a neural network by combining the layers implemented in the previous
+    sections as if you were assembling Lego blocks. Here, we will build a neural network
+    by combining the layers we've implemented so far.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overall View of Neural Network Training
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Because my description was a little long, let's check the overall view of neural
+    network training again before proceeding with its implementation. Now we will
+    take a look at the procedure for neural network training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Presupposition
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A neural network has adaptable weights and biases. Adjusting them so that they
+    fit the training data is called "training." Neural network training consists of
+    the following four steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 1 (mini-batch):**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Select some data at random from the training data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 2 (calculating the gradients):**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obtain the gradient of the loss function for each weight parameter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 3 (updating the parameters):**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Update the parameters slightly in the gradient's direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 4 (repeating):**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Repeat steps 1, 2, and 3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backpropagation occurs in *Step 2,* *Calculating the gradients*. In the previous
+    chapter, we used numerical differentiation to obtain a gradient. Numerical differentiation
+    is easy to implement, but calculation takes a lot of time. If we use backpropagation,
+    we can obtain a gradient much more quickly and efficiently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing a Neural Network That Supports Backpropagation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this section, we will implement a two-layer neural network called `TwoLayerNet`.
+    First, we will look at the instance variables and methods of this class in *Tables
+    5.1* and *5.2*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The implementation of this class is a little long but has many sections in
+    common with the implementation as in the *Implementing a Training Algorithm* section,
+    of *Chapter 4*, *Neural Network Training*. A large change from the previous chapter
+    is that layers are being used here. If you use layers, you can obtain recognition
+    results (`predict( )`) and gradients (`gradient( )`) by propagating between the
+    layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Table 5.1: Instance variables in the TwoLayerNet class'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Table_5.1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Table 5.1: Instance variables in the TwoLayerNet class'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '![Table 5.2: Methods in the TwoLayerNet class'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/Table_5.2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Table 5.2: Methods in the TwoLayerNet class'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'Now, let''s implement `TwoLayerNet`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note the code in bold here. Retaining a neural network layer as `OrderedDict`
+    (i,e, an ordered dictionary) is especially important, as it means that the dictionary
+    can remember the order of the elements added to it. Therefore, in forward propagation
+    in the neural network, you can complete processing by calling the `forward()`
+    method of the layer in the order of addition. In backward propagation, you only
+    have to call the layers in reverse order. The Affine and ReLU layers internally
+    process forward propagation and backward propagation properly. So, all you have
+    to do is combine the layers in the correct order and call them in order (or in
+    reverse order).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, by implementing the components of the neural network as "layers," you
+    can build the neural network easily. The advantage of modular implementation using
+    "layers" is enormous. If you want to create a large network containing five, 10,
+    or 20 layers, you can create it by adding the required layers (as if you were
+    assembling Lego blocks). In this way, the gradients required for recognition and
+    learning are obtained properly by forward propagation and backward propagation
+    being implemented in each layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gradient Check
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: So far, we have seen two methods for calculating a gradient. One of them uses
+    numerical differentiation, while the other solves the equation analytically. The
+    latter method enables efficient calculation by using backpropagation, even if
+    many parameters exist. Therefore, we'll be using backpropagation instead of slow
+    numerical differentiation to calculate a gradient from now on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Numerical differentiation takes time to calculate. If the correct implementation
+    of backpropagation exists, we do not need the implementation of numerical differentiation.
+    So, what is numerical differentiation useful for? The fact is that numerical differentiation
+    is required to check whether the implementation of backpropagation is correct.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The advantage of numerical differentiation is that it is easy to implement,
+    making mistakes infrequent compared to the far more complicated backpropagation.
+    So, the result of numerical differentiation is often compared with that of backpropagation
+    to check whether the implementation of backpropagation is correct. The process
+    of this verification is called a `ch05/gradient_check.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, the MNIST dataset is loaded as usual. Next, part of the training data
+    is used to check the error between the gradient by numerical differentiation and
+    that of backpropagation. As the error, the absolute values of the differences
+    between the elements in the individual weight parameters are averaged. When the
+    preceding code is executed, the following result is returned:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The result shows that the differences between the gradients by numerical differentiation
+    and those by backpropagation are quite small. Case in point, the error of the
+    biases for layer 1 is `9.7e-13 (0.00000000000097)`. This indicates that the gradient
+    by backpropagation is also correct and improves the reliability of its accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The error between the calculation result of numerical differentiation and that
+    of backpropagation rarely becomes 0\. This is because the accuracy of the calculations
+    that are performed by a computer is finite (for example, 32-bit floating-point
+    numbers are used). Because the numerical precision is limited, the error is not
+    usually 0\. However, if the implementation is correct, the error is expected to
+    be a small value near 0\. If the value is large, the implementation of backpropagation
+    is incorrect.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training Using Backpropagation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Lastly, we will see how we can implement neural network training using backpropagation.
+    The only difference is that gradients are calculated via backpropagation. We will
+    only see the code and omit the description (the source code is located at `ch05/train_neuralnet.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: Summary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this chapter, we learned about computational graphs, which show calculation
+    processes visually. We looked at a computational graph that described backpropagation
+    in a neural network and implemented processing in a neural network with layers,
+    including the ReLU layer, Softmax-with-Loss layer, Affine layer, and Softmax layer.
+    These layers have forward and backward methods and can calculate the gradients
+    of weight parameters efficiently by propagating data both forward and backward
+    in direction. By using layers as modules, you can combine them freely in a neural
+    network so that you can build the desired network easily. The following points
+    were covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can use computational graphs to show calculation processes visually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A node in a computational graph consists of local calculations. Local calculations
+    constitute the whole calculation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Performing forward propagation in a computational graph leads to a regular calculation.
+    Meanwhile, performing backward propagation in a computational graph can calculate
+    the differential of each node.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By implementing components in a neural network as layers, you can calculate
+    gradients efficiently (backpropagation).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By comparing the results of numerical differentiation and backpropagation, you
+    can check that the implementation of backpropagation is correct (gradient check).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

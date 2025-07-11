@@ -1,0 +1,2027 @@
+- en: '9'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Improving Inference Performance with MXNet
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In previous chapters, we leveraged MXNet’s capabilities to solve **computer
+    vision** and **natural language processing tasks**. In those chapters, the focus
+    was on obtaining the maximum performance out of **pre-trained models**, leveraging
+    the **Model Zoo** API from GluonCV and GluonNLP. We trained these models using
+    different approaches from scratch, including **transfer learning** and **fine-tuning**.
+    In the previous chapter, we explored how some advanced techniques can be leveraged
+    to optimize the training process. Finally, in this chapter, we will focus on improving
+    the performance of the inference process itself, accelerating how we can obtain
+    results from our models with several topics related to **edge** **AI computing**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To achieve the objective of optimizing the performance of our inference pipeline,
+    MXNet contains different features. We have already briefly discussed some of those
+    features, such as the concept of **Automatic Mixed Precision** (**AMP**), which
+    was introduced in the previous chapter to increase the training performance and
+    can also be used to increase the inference performance. We will revisit it in
+    this chapter, along with other features, such as **hybridization**. Moreover,
+    we will further optimize how to use data types efficiently, leveraging the speed-ups
+    associated with using the **INT8** data type with **quantization**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moreover, we will explore how our models work in terms of operations, understanding
+    how they work internally with the help of the **MXNet profiler**. We will then
+    take a step forward with the help of MXNet GluonCV Model Zoo and learn how to
+    export our models to **ONNX**, which allows us to use our models in different
+    frameworks, such as deploying our models on NVIDIA hardware platforms, such as
+    the **NVIDIA Jetson** family of products.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we will apply all these techniques together, taking as examples problems
+    already explored in the book. For our computer vision task, we will choose image
+    segmentation, and for our natural language processing task, we will choose translating
+    text from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specifically, this chapter contains the following recipes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing inference optimization features
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing inference for image segmentation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing inference when translating text from English to German
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Apart from the technical requirements specified in the *Preface*, the following
+    apply:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensure that you have completed *Recipe 1*, *Installing MXNet*, from [*Chapter
+    1*](B16591_01.xhtml#_idTextAnchor016), *Up and Running with MXNet*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ensure that you have completed [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with Computer Vision*, and [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121),
+    *Understanding Text with Natural Language Processing*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ensure that you have completed [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148),
+    *Optimizing Models with Transfer Learning and Fine-Tuning*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code for this chapter can be found at the following GitHub URL: [https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch09](https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch09).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, you can access each recipe directly from Google Colab, for example,
+    for the first recipe of this chapter: [https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch09/9_1_Introducing_inference_optimization_features.ipynb](https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch09/9_1_Introducing_inference_optimization_features.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing inference optimization features
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we have seen how we can leverage MXNet, GluonCV, and
+    GluonNLP to retrieve pre-trained models in certain datasets (such as ImageNet,
+    MS COCO, or IWSLT2015) and use them for our specific tasks and datasets. Furthermore,
+    we used transfer learning and fine-tuning techniques to improve the algorithmic
+    performance of those tasks/datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will introduce (and revisit) several concepts and features
+    that will optimize our inference loops to improve our runtime performance, and
+    we will analyze the trade-offs involved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As in previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be carrying out the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hybridizing our models
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Applying float16 and AMP for inference
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Applying quantization by using INT8
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Profiling our models
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hybridizing our models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the initial chapters where we were exploring the features of MXNet, we focused
+    on **imperative programming**. If you have coded in the past with languages such
+    as Java, C/C++, or Python, it is very likely you used imperative programming.
+    It is the usual way of coding, as it is more flexible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With imperative programming, a step-by-step sequential execution of the statements
+    set in the code is expected. For example, typically in our evaluation paths, we
+    run these statements step-by-step inside a loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Load new samples from our data loader.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Transform the input and expected output so that it can be consumed by our model
+    and our metrics computations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Pass the input through the model to compute the output.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compare the model output with the expected output and update the corresponding
+    metrics.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In this programming paradigm, each of the statements is executed in sequence,
+    and the output can be checked or debugged for each step if we wait for its completion
+    (as MXNet uses **lazy evaluation**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: With a different programming paradigm, called **symbolic programming**, symbols
+    are used instead, which are basically abstractions for operations, and no actual
+    computation happens until a defined point (typically known as the compile step).
+    This is especially useful for **deep learning**, as all models can be defined
+    as graphs, use this graph as a symbol, optimize the operation paths in the underlying
+    graph, and only run the optimized computation when needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as the computation hasn’t happened yet, the output for each step cannot
+    be checked or debugged, making the finding and fixing of issues much more difficult.
+    On the other hand, due to the capabilities of graph optimization, symbolic programming
+    requires less memory and is faster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thankfully, with MXNet, we can leverage the best of both worlds. We can define
+    our model with imperative programming, test it, debug it, and fix it with the
+    usual mechanisms (*print* statements, tests, debugging, and so on). When we are
+    ready for optimization, we just need to call the `hybridize` function, and it
+    will take care of everything under the hood, working with our graph in symbolic
+    programming. This approach is called hybrid programming and is one of the best
+    advantages of MXNet. Moreover, there is no hardware limitation for this feature,
+    and it can be used for both CPU and GPU computations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a toy example, we can run some experiments with the inference of a model
+    and compare the different results for different configurations. Specifically,
+    these are the configurations we will test:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'CPU:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With imperative execution
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution and default parameters
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution with a specific backend
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution, specific backend, and static allocation of memory
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution, specific backend, static allocation of memory, and
+    invariant input shapes
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'GPU:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With imperative execution
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution and default parameters
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution and static allocation of memory
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With symbolic execution, static allocation of memory and invariant input shapes
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Please note that in order to verify the computation time properly, we are adding
+    calls to the `mx.nd.waitall()` function. The method chosen is to use the **ADE20K**
+    validation split (dataset available from MXNet GluonCV) and process it with a
+    **DeepLabv3** model. We will be using a batch size of 4:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the initial CPU computing configuration, with imperative execution, the
+    processing of the dataset by the model took the following time:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'For the second CPU computing configuration, we just need to leverage the MXNet
+    hybrid programming model and transform our model with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, the optimizations performed reduced to almost half the computation
+    time.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'For the third CPU computing configuration, we just need to slightly modify
+    our hybridization call to define a specific backend. We will leverage our Intel
+    CPU architecture, use the `MKLDNN` backend, and transform our model with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, the specific backend further reduced the computation time by
+    ~20%.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'For the fourth CPU computing configuration, we just need to slightly modify
+    our hybridization call to define that we want to use the static memory allocation.
+    We can update our call with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, the static memory allocation allowed us to reduce the computation
+    time by another ~4%.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'For the fifth CPU computing configuration, we just need to slightly modify
+    our hybridization call to define that we want to leverage our invariant input
+    shapes (we have already preprocessed our data to have the same input shape, `480x480`).
+    We can update our call with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, the invariant input shape constraint allowed us to reduce the
+    computation time by another ~2%.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'For the initial GPU computing configuration, with imperative execution, the
+    processing of the dataset by the model took the following time:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'For the second GPU computing configuration, we just need to leverage the MXNet
+    hybrid programming model and transform our model with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, when the optimizations are performed in the GPU, they yield almost
+    no improvement in the computation time as GPUs are already optimized internally
+    for these types of computations.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'For GPU computing, there are no specific backends to be selected. Therefore,
+    for the third GPU computing configuration, we just need to slightly modify our
+    hybridization call to define that we want to use static memory allocation. We
+    can update our call with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, the static memory allocation produced another negligible improvement
+    on the GPU.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'For the fourth GPU computing configuration, we just need to slightly modify
+    our hybridization call to define that we want to leverage our invariant input
+    shapes (we already preprocessed our data to have the same input shape, 480x480).
+    We can update our call with the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As we can see, the invariant input shape constraint produced another negligible
+    improvement on the GPU.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The results show that when using the CPU, we can reduce the inference time to
+    half the original time, which is a significant improvement. With the GPU, the
+    improvements are negligible due to the internal optimizations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please note in the code how we used the `mx.nd.waitall()` function to verify
+    that all computations have been strictly completed before computing the time these
+    operations took.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying float16 and AMP for inference
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous chapter, [*Chapter 8*](B16591_08.xhtml#_idTextAnchor172), *Improving
+    Training Performance with MXNet*, we introduced the `float16` data type and AMP
+    optimization, an extremely simple way to leverage this half-precision data type
+    only when it was most useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Recipe 1*, *Introducing training optimization features*, from the previous
+    chapter, we compared single-precision (`float32`) and half-precision (`float16`)
+    data types, understanding their characteristics and memory/speed trade-offs. You
+    are encouraged to review the recipe if you haven’t already done so as it is very
+    relevant to this topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As most concepts were introduced previously, in this section, we will focus
+    on how to apply AMP to the inference process. As usual, MXNet provides a very
+    simple interface for this operation, just requiring a call to the `amp.convert_hybrid_block()`
+    function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This optimization can be applied to both CPU and GPU environments, so let’s
+    run these experiments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To modify our CPU model to use AMP, we just need the following line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With this modified model, the processing of the dataset took the following
+    time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, AMP produced negligible improvements on the CPU. This is due
+    to the largest gains being achieved on the backward pass required for training,
+    but not necessary during inference. Furthermore, CPUs do not typically have specific
+    circuitry to work directly with float16, limiting the improvements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To modify the GPU model to use AMP, we just need the following line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With this modified model, the processing of the dataset took the following
+    time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, AMP produced excellent results on the GPU, reducing the inference
+    time to almost ~25%. This is due to GPUs having specific circuitry to work directly
+    with float16, improving the results massively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `amp.convert_hybrid_block()` function accepts different parameters. You
+    are encouraged to try different options (such as `cast_optional_params`) to find
+    the optimal configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying quantization by using Int8
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous sections, we saw how to optimize our inference loops by using
+    different approaches optimizing how to use the CPU and GPU for maximum performance,
+    given a model. We also explored how to leverage single-precision (float32) and
+    half-precision (float16) data types. In this section, we will explore how our
+    data inputs, our model parameters, and the different arithmetic calculations among
+    them can be optimized with a new data type, Int8.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This data type modification has larger implications than a change in precision.
+    We are also modifying the underlying representation from a floating-point number
+    to an integer, which yields a reduction in both memory and computing requirements.
+    Let’s analyze this data type.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Int8 indicates two things: that it is a data type that only supports integer
+    numbers (no floating radix point), and that the amount of bits used to store a
+    single number in this format is 8 bits. The most important features of this format
+    are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Capability of representing integer numbers from -128 to 127, or from 0 to 255
+    (depending on whether it is of the signed or unsigned type)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Constant precision (each consecutive number differs by exactly 1)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To explain the core idea behind `Int8` quantization, and also to show the loss
+    of precision, we can display the approximated value of the number 1/3 (one third-th)
+    in both formats (Float32 and Int8) with this code excerpt:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This yields the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, none of the representations are exact, with `float32` yielding
+    a very high precision as expected. With `Int8`, we did a small shortcut; we used
+    two 8-bit integers, `85` and `255`, and used one as the scaling factor. This scaling
+    factor is typically applied for several sets of numbers at the same time. It can
+    be the same scaling factor for the whole model (unlikely), per layer, and so on.
+    The scaling factor does not need to be represented in `Int8`; it can be a `float32`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this particular example, the chosen Int8 representation is more exact to
+    the intended number, but this is a coincidence. In common scenarios, there is
+    a loss of precision that translates to a loss of performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To minimize this loss of performance, typically quantization tuning techniques
+    ask for a **calibration dataset**. This dataset is then used to compute the parameters
+    that minimize the mentioned performance loss.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to using a calibration dataset, there are several techniques to
+    optimize the computation of the most accurate Int8 values, and MXNet provides
+    a very simple API to facilitate the optimization of our networks. With a simple
+    call to the `mx.contrib.quantization.quantize_net_v2()` function, we will update
+    our network to Int8.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specifically, for our experiments, this is the call that we used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`Int8` quantization is a nuanced process, and tailoring it for a specific application
+    requires in-depth analysis and some trial-and-error experiments. For more information
+    regarding the parameters involved, you are encouraged to read the function documentation:
+    [https://github.com/apache/mxnet/blob/v1.9.1/python/mxnet/contrib/quantization.py#L825](https://github.com/apache/mxnet/blob/v1.9.1/python/mxnet/contrib/quantization.py#L825).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With this modified CPU-based model, the processing of the dataset took the
+    following time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, `Int8` produced a strong improvement in the CPU, yielding almost
+    another ~50% reduction in runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfortunately, for GPUs, this feature cannot be introduced. Although recent
+    GPUs have dedicated `Int8` circuitry, this is quite a new development and MXNet
+    does not support these operators yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Profiling our models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this recipe, we have seen how to use different techniques to optimize our
+    inference loops. However, sometimes, even after introducing these optimization
+    techniques, our models might not reach the runtime performance we are targeting.
+    This could be due to a number of reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Architecture is not optimal for edge computing.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Operators have not been optimized adequately.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data transfers among components.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Memory leaks.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In order to verify how our model is working internally, to check where to optimize
+    further and/or investigate the possible reasons why our models might not be performing
+    well, MXNet provides us with a tool for low-level analysis called the MXNet profiler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The MXNet profiler runs in the background and records all operations and data
+    transfers happening on our models in real time. It is also very lightweight, consuming
+    a minimal amount of resources. Best of all, it is extremely easy to configure
+    and use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to profile a set of statements, we need to take two steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configure the profiler.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Start and stop the profiler before and after the statements to be profiled.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'To configure the profiler, we just need one line of code, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To start and stop the profiler, we need to add the following lines at the beginning
+    and end of the statements to be analyzed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Please note how we need three statements to stop recording: finalize all instructions,
+    stop recording, and dump the information of the file configured in the first step.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please note in the code how we used the `mx.nd.waitall()` function to verify
+    that all computations have been strictly completed before computing the time these
+    operations took.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The instructions described previously generate a JSON file, which can then
+    be analyzed with tracing applications. I recommend the Tracing app included with
+    Google Chrome as it is very easy to use and access. Simply type the following
+    in the address bar: `chrome://tracing`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to verify the functionality of the MXNet profiler, let’s take the example
+    of **ResNet** architectures, which are used extensively, such as in our image
+    segmentation task, being the backbone of the DeepLabv3 network we use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The typical architecture of a ResNet network is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.1 – ResNet50 model architecture](img/B16591_09_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.1 – ResNet50 model architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: Please note that in *Figure 9.1*, the initial steps (stage 1) are convolution,
+    batch normalization, and activation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From our profiled model, the Google Chrome Tracing app provides the following
+    screen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.2 – Profiling ResNet](img/B16591_09_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.2 – Profiling ResNet
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.2*, we can see the general execution of the model. Zooming on
+    the earlier layers, we can see it as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.3 – Profiling ResNet: Zoom](img/B16591_09_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.3 – Profiling ResNet: Zoom'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 9.3*, we can see how the stage 1 steps of convolution, batch normalization,
+    and activation are clearly displayed. We can also now very clearly see how the
+    batch normalization operation takes about 4x longer than the convolution and activation
+    steps, potentially indicating an avenue of improvement.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we have taken a deeper look into how MXNet and Gluon can help
+    us optimize our inference loops. We have leveraged our hardware (CPUs and GPUs)
+    by addressing each of the steps in the inference loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reused the work done for data loading in the previous chapter
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimized graph computation via hybridization
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Analyzed different data types and combined the accuracy and precision of float32
+    with the speed-ups of `float16` (leveraging the specific circuitry of GPUs) where
+    possible, using AMP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Taken another step forward by using Int8 quantization
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Analyzed low-level performance using the MXNet profiler
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We compared each of these features by running several experiments and comparing
+    the performance before and after a specific optimization, emphasizing potential
+    trade-offs that have to be taken into account when using these optimizations.
+    To summarize, these were the results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Feature** | **Result on** **CPU (ms)** | **Result on** **GPU (ms)** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Standard | 115 | 13.3 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Hybridize / Default | 65 | 12.9 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Hybridize / MKLDNN | 56 | N/A |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Hybridize / MKLDNN + Static Alloc | 54 | 12.8 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Hybridize / MKLDNN + Static Alloc + Invariant Shape | 52 | 12.6 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| AMP | 54 | 3.5 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Int8 Quantization | 36 | N/A |'
+  prefs: []
+  type: TYPE_TB
+- en: Table 9.1 – Summary of features and results for the CPU and GPU
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next recipes, we will apply all these optimization techniques concurrently
+    for the best cases for the CPU (MKL-DNN + static allocation + invariant shape
+    + Int8 quantization) and GPU (static allocation + invariant shape + automatic
+    mixed precision) to optimize two familiar tasks: image segmentation and text translation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'All the optimization features shown in this recipe have been thoroughly described
+    in the literature. In this section, we share some introductory links to start
+    understanding each of the features in depth:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Hybridization**: [https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html](https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Automatic Mixed Precision (AMP)**: [https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html](https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Int8 quantization**: [https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html](https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**MXNet profiler**: [https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html](https://mxnet.apache.org/versions/1.9.1/api/python/docs/tutorials/packages/gluon/blocks/hybridize.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing inference for image segmentation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipe, we saw how we can leverage MXNet and Gluon to optimize
+    the inference of our models, applying different techniques, such as improving
+    the runtime performance using hybridization; how using half-precision (float16)
+    in combination with AMP can strongly reduce our inference times; and how to take
+    advantage of further optimizations with data types such as Int8 quantization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we can revisit a problem we have been working with throughout the book,
+    image segmentation. We have worked with this task in recipes from previous chapters.
+    In *Recipe 4*, *Segmenting objects semantically with MXNet Model Zoo – PSPNet
+    and DeepLabv3*, from [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), *Analyzing
+    Images with Computer Vision*, we introduced the task and the datasets that we
+    will be using in this recipe, *MS COCO and Penn-Fudan Pedestrian*, and learned
+    how to use pre-trained models from GluonCV Model Zoo.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, in *Recipe 3*, *Improving performance for segmenting images*, from
+    [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148), *Optimizing Models with Transfer
+    Learning and Fine-Tuning*, we compared the different approaches that we could
+    take when dealing with a target dataset, training our models from scratch or leveraging
+    past knowledge from pre-trained models and adjust them for our task, using the
+    different modalities of transfer learning and fine-tuning. Lastly, in *Recipe
+    2*, *Optimizing training for image segmentation*, from [*Chapter 8*](B16591_08.xhtml#_idTextAnchor172),
+    *Improving Training Performance with MXNet*, we applied different techniques to
+    improve the runtime performance of our training loops.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, in this recipe, we will apply all the introduced optimization techniques
+    for the specific task of optimizing the inference of an image segmentation model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As in previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying inference optimization techniques
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Visualizing and profiling our models
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Exporting our models to ONNX and TensorRT
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying inference optimization techniques
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In *Recipe 1*, *Introducing inference optimization features*, at the beginning
+    of this chapter, we showed how different optimization techniques could improve
+    the performance of the different steps we take in the inference of a machine learning
+    model, including hybridization, AMP, and Int8 quantization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will show how, with MXNet and Gluon, just with a few lines
+    of code, we can easily apply each and every technique we've introduced and verify
+    the results of each technique.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Without applying these optimization techniques, as a baseline, these are the
+    quantitative results obtained with the CPU:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can display an image for qualitative results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.4 – Qualitative results: CPU baseline](img/B16591_09_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.4 – Qualitative results: CPU baseline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected from the quantitative metrics, *Figure 9.4* shows excellent results
+    as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As concluded in the previous recipe, for maximum performance on the CPU, the
+    best approach is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use hybridization: Using the Intel MKL-DNN backend, combined with static memory
+    allocation and invariant input shapes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Do not use AMP.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use Int8 quantization.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s apply each of these techniques for our current specific task, image segmentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For hybridization, we just need one line of code (which includes the necessary
+    parameters for the Intel `MKLDNN` backend, combined with static memory allocation
+    and invariant input shapes):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: We do not need to add an AMP step as it was shown not to add benefits to CPU-based
+    workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For `Int8` quantization, we need two separate steps. On one hand, we need to
+    define the calibration dataset. This can be achieved with a small number of lines:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, to apply `Int8` quantization, optimized using the calibration dataset,
+    just another line of code is required:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Applying these optimization techniques, these are the quantitative results
+    obtained for an optimized CPU inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the differences in performance (`0.959` versus `0.960` and `0.473`
+    versus `0.474`) are negligible. However, with these inference optimization techniques,
+    we have been able to reduce the inference runtime by 4x (8.4 seconds versus 27.6
+    seconds), which is an impressive result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also display an image for qualitative results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.5 – Qualitative results: CPU-optimized inference](img/B16591_09_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.5 – Qualitative results: CPU-optimized inference'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected from the quantitative metrics, *Figure 9.5* shows excellent results
+    as well, with negligible differences (if any).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What about GPU-based inference? Let’s follow the same steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Without applying these optimization techniques, as a baseline, these are the
+    quantitative results obtained with the GPU:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As expected, there is no change relative to algorithmic performance from the
+    CPU baseline. The runtime inference is indeed twice as fast in the GPU (`13.1`
+    seconds versus `27.6` seconds).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We can display an image for qualitative results:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 9.6 – Qualitative results: GPU baseline](img/B16591_09_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.6 – Qualitative results: GPU baseline'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected from the quantitative metrics, *Figure 9.6* shows excellent results
+    as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As concluded in the previous recipe, for maximum performance on the GPU, the
+    best approach is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Use hybridization**: Using static memory allocation and invariant input shapes.
+    Do not use the Intel MKL-DNN backend.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use AMP**.**
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Do not use Int8 quantization (not supported).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s apply each of these techniques to our current specific task, image segmentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For hybridization, we just need one line of code (which includes the necessary
+    parameters for static memory allocation and invariant input shapes):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For AMP, we need to follow two simple steps, a forward pass and the conversion
+    of the model, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: No further steps are required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By applying these optimization techniques, these are the quantitative results
+    obtained for an optimized GPU inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the differences in performance (`0.960` versus `0.960` and `0.474`
+    versus `0.474`) are non-existent. Furthermore, with these inference optimization
+    techniques, we have been able to reduce the inference runtime by 15x (0.85 seconds
+    versus 13.1 seconds), which is an impressive result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also display an image for qualitative results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.7 – Qualitative results: GPU-optimized inference](img/B16591_09_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.7 – Qualitative results: GPU-optimized inference'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As expected from the quantitative metrics, *Figure 9.7* shows excellent results
+    as well, with negligible differences (if any) from the results in *Figure 9.6*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Visualizing and profiling our models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous sections, we saw the different techniques that we could apply
+    to optimize our inference loops, and the results these techniques achieved. However,
+    how exactly do these techniques work? Why are they faster?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We are going to use two tools that MXNet provides for exactly this purpose:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Model visualization**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model profiling**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Model visualization provides us with an intuitive way to see how the different
+    layers interact with each other. This is particularly interesting for networks
+    that use ResNet backbones (such as `DeepLabv3`, which we use for image segmentation
+    in this recipe) because of the **residuals** being transferred through layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Visualizing our model architecture with MXNet is very easy. When working with
+    symbolic models, just one line of code is necessary. In our case, as we work with
+    Gluon models, these are the lines of code necessary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: As shown in the previous recipe, ResNet-based networks are composed of ResNet
+    blocks, which include the convolution, batch normalization, and activation steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For our CPU-optimized model (hybridized and `Int8`-quantized), this is what
+    some of the connections among those blocks look like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.8 – GraphViz of ResNet blocks (CPU-optimized)](img/B16591_09_8.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.8 – GraphViz of ResNet blocks (CPU-optimized)
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see in *Figure 9.8*, there are no individual blocks for each of the
+    expected ResNet block operations; they are all part of single blocks that perform
+    all computations. This combination of operations is aptly called operator fusion,
+    where as many operations as possible are fused together, instead of computing
+    an operation and then the next one (with the typical data transfers occurring).
+    The largest benefit is that fused operations can happen in the same memory space.
+    This is one of the optimizations performed by hybridization, as once the graph
+    for the network is finished, it is quite straightforward to find the operations
+    that are candidates to be fused.
+  prefs: []
+  type: TYPE_NORMAL
+- en: OK, so the model visualization tells us those optimizations will happen, but
+    how can we verify they are actually happening? This is what model profiling is
+    good at, and can also help us understand issues happening during runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As mentioned in the recipe, *Introducing inference optimization features*,
+    and the section Profiling our models, the output of model profiling is a JSON
+    file that can be visualized with tools such as the Google Chrome Tracing app.
+    For a non-optimized CPU workload, our `DeepLabv3` model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.9 – Profiling DeepLabv3: Non-optimized CPU workload](img/B16591_09_9.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.9 – Profiling DeepLabv3: Non-optimized CPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.9*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by a single process.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Around 80 ms into the operation, all tasks have been sent to be dispatched,
+    and the control is returned for operations to continue (lazy evaluation and `mx.nd.waitall`).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All tasks have been sent to be dispatched around 80ms into the operation, and
+    the control is returned for operations to continue (lazy evaluation and mx.nd.waitall).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All operations are atomic and executed individually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 800 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For a CPU-optimized workload, our DeepLabv3 model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.10 – Profiling DeepLabv3: Optimized CPU workload](img/B16591_09_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.10 – Profiling DeepLabv3: Optimized CPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.10*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by a single process, similar to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Around 5 ms into the operation, all tasks have been sent to be dispatched, and
+    the control is returned for operations to continue (lazy evaluation and `mx.nd.waitall`),
+    much faster than the non-optimized counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Memory is used in a synchronous/structured way, in stark contrast to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All operations are fused together, again in stark contrast to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 370 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In summary, for CPU-based optimizations, we can clearly see the effects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hybridization has fused all operators together, basically executing almost the
+    full workload in a single operation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The MKL-DNN backend and Int8 quantization have improved those operations with
+    accelerated operators.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For our GPU-optimized model (hybridized and AMP-ed), this is what some of the
+    connections among ResNet blocks look like:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.11 – GraphViz of ResNet blocks (GPU-optimized)](img/B16591_09_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.11 – GraphViz of ResNet blocks (GPU-optimized)
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see in *Figure 9.11*, this is a very different visualization than
+    the CPU-optimized one as all the individual blocks of the expected ResNet block
+    operations can be identified. As we saw in the first recipe of this chapter, hybridization
+    had a very limited effect on GPUs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, where do the accelerations come from? Let’s get some help from model profiling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a non-optimized GPU workload, our DeepLabv3 model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.12 – Profiling DeepLabv3: Non-optimized GPU workload](img/B16591_09_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.12 – Profiling DeepLabv3: Non-optimized GPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.12*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by two GPU processes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Around 40 ms into the operation, all tasks have been sent to be dispatched,
+    and the control is returned for operations to continue (lazy evaluation and `mx.nd.waitall`).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Asynchronous/unstructured usage of memory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All operations are atomic and executed individually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 150 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For a GPU-optimized workload, our DeepLabv3 model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.13 – Profiling DeepLabv3: Optimized GPU workload](img/B16591_09_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.13 – Profiling DeepLabv3: Optimized GPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.13*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by two processes, similar to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Around 4 ms into the operation, all tasks have been sent to be dispatched, and
+    the control is returned for operations to continue (lazy evaluation and `mx.nd.waitall`),
+    much faster than the non-optimized counter-part.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Synchronous/structured usage of memory, in stark contrast to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All operations are atomic and executed individually; similar to the non-optimized
+    counterpart, they are just much faster. For example, large convolution operations
+    take ~1 ms in the GPU non-optimized case, whereas they take one-third of that
+    time (~0.34 ms) in the GPU-optimized case.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 55 ms (one-third of the non-optimized time).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In summary, for GPU-based optimizations, we can clearly see the effects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hybridization, as expected, has no effect and no operator fusion can be identified.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: AMP makes operations run much faster if the GPU has float16-dedicated circuitry.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exporting our models to ONNX and TensorRT
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'MXNet and GluonCV also provide tools to export our models externally. This
+    makes the most sense for optimizing runtime computation times (inference) might
+    need:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specific algorithms that MXNet/GluonCV might not support
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Deployment and optimizations on specific hardware platforms
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this section, we are going to study one example of each category.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For specific algorithms, we are going to export our models in ONNX format. **ONNX**
+    stands for **Open Neural Network eXchange** and is an open format that describes
+    how deep learning models can be stored and shared. This is extremely useful to
+    leverage specific tools for highly specialized tasks. For example, **ONNX Runtime**
+    has really powerful inference tools, including quantization (for example, ONNX
+    Runtime has support for GPU-based INT8 quantization). Therefore, we can export
+    our model in ONNX format and start working directly with ONNX Runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As usual, MXNet will allow us to accomplish this with just a few lines of code.
+    We will need to carry out two steps. Firstly, we need to transform our model from
+    Gluon to symbolic format (hybridizing and then exporting):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we can transform the symbolic model into ONNX:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'ONNX also provides a checker to verify our model has been exported correctly.
+    This can be done with the following lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: And that’s it! Following these instructions, we will have our ONNX model stored
+    in a file (in our example, `'deeplab_resnet101_coco_pt_gpu_hybrid.onnx'`), ready
+    to be used with any tool that accepts ONNX models as input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the other hand, sometimes we would like to deploy and/or optimize our models
+    on specific hardware platforms, such as the NVIDIA family of products (for example,
+    Nvidia Jetson platforms). Specifically, Nvidia works with a specific machine learning
+    framework designed to run inference on their own hardware. This framework is called
+    **TensorRT**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although MXNet features direct TensorRT integration, it’s not enabled by default,
+    requiring building MXNet directly from the source, with specific parameters enabling
+    TensorRT integration. Much more straightforwardly, we can leverage our recently
+    described ONNX export to generate a TensorRT-capable model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To achieve this, it is enough to write a few lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: With this, we will write a serialized TensorRT-capable model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can verify the model can be read by deserializing and reading it. We can
+    do so with the following lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: And we are done! In this section, we have been able to successfully write ONNX
+    and TensorRT models. Congratulations!
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we have applied the different inference optimization techniques
+    seen in the first recipe of this chapter, leveraging our hardware (CPUs and GPUs)
+    to optimize our model runtime performance by doing the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hybridizing the model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Leveraging AMP
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Quantizing with the INT8 data type for accelerated inference
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Moreover, we have learned how to use model visualizations (powered by GraphViz)
+    and the MXNet profiler and have used these tools to analyze the inference optimizations
+    from a low-level perspective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we have learned how to export our models for specific scenarios and
+    purposes, using the ONNX and TensorRT libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we have presented the inference optimization problem from a
+    post-training perspective. We were given a (pre-)trained model and tried to squeeze
+    as much performance as we could from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, there is another avenue that can be explored, which starts thinking
+    about maximizing inference performance from a machine learning model design perspective.
+    This is known as **model compression** and is an active area of research, with
+    lots of improvements published periodically. Recently active research topics include
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Knowledge distillation**: [https://arxiv.org/pdf/1503.02531.pdf](https://arxiv.org/pdf/1503.02531.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Pruning**: [https://arxiv.org/pdf/1510.00149.pdf](https://arxiv.org/pdf/1510.00149.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Quantization-aware training**: [https://arxiv.org/pdf/1712.05877.pdf](https://arxiv.org/pdf/1712.05877.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimizing inference when translating text from English to German
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the initial recipe, we saw how we can leverage MXNet and Gluon to optimize
+    the inference of our models, applying different techniques: improving the runtime
+    performance using hybridization; how using half-precision (float16) in combination
+    with AMP can strongly reduce our inference times; and how to take advantage of
+    further optimizations with data types such as Int8 quantization.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can revisit a problem we have been working with throughout the book:
+    translating English to German. We have worked with translation tasks in recipes
+    from previous chapters. In *Recipe 4*, *Translating text from Vietnamese to English*,
+    from [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121), *Understanding Text with
+    Natural Language Processing*, we introduced the task of translating text, while
+    also learning how to use pre-trained models from GluonCV Model Zoo.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, in *Recipe 4*, *Improving performance for translating English
+    to German*, from [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148), *Optimizing
+    Models with Transfer Learning and Fine-Tuning*, we introduced the datasets that
+    we will be using in this recipe: **WMT 2014** and **WMT 2016**. We also compared
+    the different approaches that we could take when dealing with a target dataset:
+    training our models from scratch or leveraging past knowledge from pre-trained
+    models and adjusting them for our task, using the different modalities of transfer
+    learning and fine-tuning. Lastly, in *Recipe 3*, *Optimizing training for translating
+    English to German*, from [*Chapter 8*](B16591_08.xhtml#_idTextAnchor172), *Improving
+    Training Performance with MXNet*, we applied different techniques to improve the
+    runtime performance of our training loops.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, in this recipe, we will apply all the introduced optimization techniques
+    for the specific task of optimizing the inference for translating English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As in previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be carrying out the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying inference optimization techniques
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Profiling our models
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Exporting our models
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying inference optimization techniques
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In *Recipe 1*, *Introducing inference optimization features*, at the beginning
+    of this chapter, we showed how different optimization techniques could improve
+    the performance of the different steps we take in the inference of a machine learning
+    model, including hybridization, AMP, and Int8 quantization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will show how, with MXNet and Gluon, just with a few lines
+    of code, we can easily apply each and every technique introduced and verify the
+    results of each technique.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Without applying these optimization techniques, as a baseline, these are the
+    quantitative results obtained with the CPU:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'From a qualitative point of view, we can also check how well our model is performing
+    with a sentence example. In our case, we chose *I learn new things every day*,
+    and the output obtained is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence obtained in the output (*Ich lerne neue Dinge, die in jedem
+    Fall auftreten*) means *I learn new things that arise in every case*, and therefore,
+    as can be seen from the results, the text has been almost perfectly translated
+    from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As concluded in the previous recipe, for maximum performance on the CPU, the
+    best approach is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use hybridization: Using the Intel MKL-DNN backend, combined with static memory
+    allocation and invariant input shapes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Do not use AMP.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use Int8 quantization.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unfortunately, we won’t be able to use Int8 quantization, as this is not supported
+    for GluonNLP models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s apply each of these techniques for our current specific task, translating
+    from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For hybridization, we just need a couple of lines of code (which include the
+    necessary parameters for the Intel MKL-DNN backend, combined with static memory
+    allocation and invariant input shapes, and the hybridization of the loss function
+    as well):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: We do not need to add any steps connected to AMP as it was shown not to add
+    benefits to CPU-based workloads. Similarly, GluonNLP does not support Int8 quantization,
+    and therefore, we don’t need to make any further changes to our code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Applying these optimization techniques, these are the quantitative results
+    obtained for an optimized CPU inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the differences in performance (1.53 versus 1.53 for the loss
+    and 26.40 versus 26.40 for the BLEU score) are negligible. However, with these
+    inference optimization techniques, we have been able to reduce the inference runtime
+    by 20% (313 seconds versus 374 seconds), which is a very good result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, we can also check how well our model is performing
+    with a sentence example. In our case, we chose *I learn new things every day*,
+    and the output obtained is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence obtained in the output (*Ich lerne neue Dinge, die in jedem
+    Fall auftreten*) means *I learn new things that arise in every case*, and therefore,
+    as can be seen from the results, the text has been almost perfectly translated
+    from English to German. Moreover, the results are equivalent to the non-optimized
+    case (as expected).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'What about GPU-based inference? Let’s follow the same steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Without applying these optimization techniques, as a baseline, these are the
+    quantitative results obtained with the GPU:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As expected, there is no change relative to algorithmic performance from the
+    CPU baseline. Runtime inference is indeed six times as fast in the GPU (61.7 seconds
+    versus 374 seconds).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, we can also check how well our model is performing
+    with a sentence example. In our case, we chose *I learn new things every day*,
+    and the output obtained is the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The German sentence obtained in the output (*Ich lerne neue Dinge, die in jedem
+    Fall auftreten*) means *I learn new things that arise in every case*, and therefore,
+    as can be seen from the results, the text has been almost perfectly translated
+    from English to German (and is equivalent to both CPU cases).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'As concluded in the previous recipe, for maximum performance on the GPU, the
+    best approach is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Use hybridization: Using static memory allocation and invariant input shapes.
+    Do not use the Intel MKL-DNN backend.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use AMP.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Do not use Int8 quantization (not supported).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unfortunately, we won’t be able to use AMP, as this is not supported for GluonNLP
+    models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s apply each of these techniques for our current specific task, translating
+    from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For hybridization, we just need a couple of lines of code (which include the
+    necessary parameters for static memory allocation and invariant input shapes,
+    and the hybridization of the loss function as well):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: We do not need to add any steps connected to AMP or Int8 quantization, as GluonNLP
+    does not support these features. Therefore, no further steps are required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By applying these optimization techniques, these are the quantitative results
+    obtained for an optimized GPU inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, the differences in performance (1.53 versus 1.53 for the loss
+    and 26.40 versus 26.40 for the BLEU score) are negligible. However, with these
+    inference optimization techniques, we have been able to reduce the inference runtime
+    by 10% (56.3 seconds versus 61.7 seconds), which is a very good result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From a qualitative point of view, we can also check how well our model is performing
+    with a sentence example. In our case, we chose *I learn new things every day*,
+    and the output obtained is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence obtained in the output (*Ich lerne neue Dinge, die in jedem
+    Fall auftreten*) means *I learn new things that arise in every case*, and therefore,
+    as can be seen from the results, the text has been almost perfectly translated
+    from English to German. Moreover, the results are equivalent to the non-optimized
+    case (as expected).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Profiling our models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous sections, we saw the different techniques that we could apply
+    to optimize our inference loops, and the results these techniques achieved. However,
+    how exactly do these techniques work? Why are they faster?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we are going to use the MXNet profiler, which can help us understand
+    issues happening during runtime.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As mentioned in the initial section, the output of model profiling is a JSON
+    file that can be visualized with tools such as the Google Chrome Tracing app.
+    For a non-optimized CPU workload, our transformer model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.14 – Profiling Transformer: Non-optimized CPU workload](img/B16591_09_14.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.14 – Profiling Transformer: Non-optimized CPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.14*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by two processes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is almost no waiting time (lazy evaluation and `mx.nd.waitall`).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Synchronous/structured usage of memory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All operations are atomic and executed individually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 1,200 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For a CPU-optimized workload, our Transformer model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.15 – Profiling Transformer: Optimized CPU workload](img/B16591_09_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.15 – Profiling Transformer: Optimized CPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.15*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by two processes, similar to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is almost no waiting time (lazy evaluation and `mx.nd.waitall`), similar
+    to the non-optimized counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Memory is used in a more asynchronous/structured way, in comparison to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some operations are fused together. Although the visualizations are not very
+    clear, operator fusion (hybridization) seems to be working, with most of the time
+    spent on fused operations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 720 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s take a zoomed look into one of the operator fusion steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.16 – Profiling Transformer: Optimized CPU workload (zoom into OperatorFusion)](img/B16591_09_16.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.16 – Profiling Transformer: Optimized CPU workload (zoom into OperatorFusion)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 9.16* we can see how operator fusion has fused together several different
+    operations, including embeddings, layer normalization, fully connected layers,
+    and MKL-DNN-accelerated layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In summary, for CPU-based optimizations, we can clearly see the effects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hybridization has fused most of the operators together, although the visualization
+    is difficult to see, and this happens many times.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The MKL-DNN backend has improved those operations with accelerated operators.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s discuss the GPU case now.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a non-optimized GPU workload, our Transformer model shows the following
+    timing profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.17 – Profiling Transformer: Non-optimized GPU workload](img/B16591_09_17.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.17 – Profiling Transformer: Non-optimized GPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.17*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tasks are mostly handled by several (three) GPU processes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is almost no waiting time (lazy evaluation and `mx.nd.waitall`).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Memory is gradually increasing.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All operations are atomic and executed individually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Several copies from/to CPU, which do not seem to degrade performance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 580 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For a GPU-optimized workload, our Transformer model shows the following timing
+    profile:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.18 – Profiling Transformer: Optimized GPU workload](img/B16591_09_18.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.18 – Profiling Transformer: Optimized GPU workload'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 9.18*, we can see the following characteristics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Almost all of the tasks are handled by three processes, similar to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is almost no waiting time (lazy evaluation and `mx.nd.waitall`), similar
+    to the non-optimized counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: More asynchronous/unstructured usage of memory, in comparison to the non-optimized
+    counterpart.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some operations are fused together. Although the visualizations are not very
+    clear, operator fusion (hybridization) seems to be working, spending most of the
+    time in fused operations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data copy operations from/to CPU do not seem to degrade performance, although
+    there are several.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The full operation takes around 260 ms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s take a zoomed look into one of the operator fusion steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.19 – Profiling Transformer: Optimized GPU workload (zoom into OperatorFusion)](img/B16591_09_19.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 9.19 – Profiling Transformer: Optimized GPU workload (zoom into OperatorFusion)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 9.19*, we can see how operator fusion has fused together several
+    different operations, including embeddings, layer normalization, and fully connected
+    layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In summary, for GPU-based optimizations, we can clearly see the effect of hybridization,
+    where all operations have been fused together, although the visualization is difficult
+    to interpret, and this happens many times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exporting our models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: MXNet and GluonNLP also provide tools to export our models. However, these tools
+    are mostly for internal usage of MXNet/Gluon. The reason for this is that GluonNLP
+    mostly deals with `save()` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This function can be easily called:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can verify the files associated with the model, the parameters (the `.params`
+    extension), and the architecture (the `.json` extension) have been saved with
+    these commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: And we are done! In this section, we have been able to successfully export our
+    Transformer model. Congratulations!
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we have applied the different inference optimization techniques
+    seen in the first recipe of this chapter, leveraging our hardware (CPUs and GPUs)
+    to optimize our model runtime performance by hybridizing the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moreover, we have learned how to use the MXNet profiler to analyze the inference
+    optimizations from a low-level perspective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we have learned how to export our models using internal MXNet libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we presented the inference optimization problem from a post-training
+    perspective. We were given a (pre-)trained model and we tried to squeeze as much
+    performance as we could from it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, there is another avenue that can be explored, which starts thinking
+    about maximizing inference performance from a machine learning model design perspective.
+    Several improvements to how LLMs can be used without large compute workloads have
+    been published, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Low Ranking Adaptation (LORA)**: [https://arxiv.org/pdf/2012.13255.pdf](https://arxiv.org/pdf/2012.13255.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**LORA meets pruning**: [https://arxiv.org/pdf/2305.18403.pdf](https://arxiv.org/pdf/2305.18403.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**GPT4All (quantization)**: [https://gpt4all.io](https://gpt4all.io)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Int4 quantization**: [https://arxiv.org/pdf/2301.12017.pdf](https://arxiv.org/pdf/2301.12017.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,919 @@
+- en: Chapter 6
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Using the Standard Toolbox for Bayesian Deep Learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in previous chapters, vanilla NNs often produce poor uncertainty estimates
+    and tend to make overconfident predictions, and some aren’t capable of producing
+    uncertainty estimates at all. By contrast, probabilistic architectures offer principled
+    means to obtain high-quality uncertainty estimates; however, they have a number
+    of limitations when it comes to scaling and adaptability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While both PBP and BBB can be implemented with popular ML frameworks (as shown
+    in our previous TensorFlow examples), they are very complex. As we saw in the
+    last chapter, implementing even a simple network isn’t straightforward. This means
+    that adapting them to new architectures is awkward and time-consuming (particularly
+    for PBP, although it is possible – see *Fully Bayesian Recurrent Neural Networks
+    for Safe Reinforcement* *Learning*). For simple tasks, such as the examples from
+    *Chapter 5, Principled* *Approaches for Bayesian Deep Learning*, this isn’t an
+    issue. But in many real-world tasks, such as
+  prefs: []
+  type: TYPE_NORMAL
+- en: machine translation or object recognition, far more sophisticated network architectures
+    are necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While some academic institutions or large research organizations may have the
+    time and resources required to adapt these complex probabilistic methods to a
+    variety of sophisticated architectures, in many cases this simply is not viable.
+    Additionally, more and more industry researchers and engineers are turning to
+    transfer learning-based methods, using pre-trained networks as the backbone of
+    their models. In these cases, it’s impossible to simply add probabilistic machinery
+    to predefined architectures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To address this, in this chapter, we will explore how common paradigms in deep
+    learning can be harnessed to develop probabilistic models. The methods introduced
+    here show that, with relatively minor tweaks, you can easily adapt large, sophisticated
+    architectures to produce high-quality uncertainty estimates. We’ll even introduce
+    techniques that will enable you to get uncertainty estimates from networks you’ve
+    already trained!
+  prefs: []
+  type: TYPE_NORMAL
+- en: The chapter will cover three key approaches for facilitating model uncertainty
+    estimation easily with common deep learning frameworks. First, we will look at
+    **Monte Carlo Dropout** (**MC dropout**), a method that induces variance across
+    predictions by utilizing dropout at inference time. Second, we will introduce
+    deep ensembles, whereby multiple neural networks are combined to facilitate both
+    uncertainty estimation and improved model performance. Finally, we will explore
+    various methods for adding a Bayesian layer to our model, allowing any model to
+    produce uncertainty estimates.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These topics will be covered in the following sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing approximate Bayesian inference via dropout
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using ensembles for model uncertainty estimates
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring neural network augmentation with Bayesian last-layer methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 6.1 Technical requirements
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To complete the practical tasks in this chapter, you will need a Python 3.8
+    environment with the SciPy stack and the following additional Python packages
+    installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: TensorFlow 2.0
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TensorFlow Probability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'All of the code for this book can be found on the GitHub repository for the
+    book: [https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference](https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.2 Introducing approximate Bayesian inference via dropout
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Dropout** is traditionally used to prevent overfitting an NN. First introduced
+    in 2012, it is now used in many common NN architectures and is one of the easiest
+    and most widely used regularization methods. The idea of dropout is to randomly
+    turn off (or drop) certain units of a neural network during training. Because
+    of this, the model cannot solely rely on a particular small subset of neurons
+    to solve the task it was given. Instead, the model is forced to find different
+    ways to solve its task. This improves the robustness of the model and makes it
+    less likely to overfit.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we simplify a network to *y* = *Wx*, where *y* is the output of our network,
+    *x* the input, and *W* our model weights, we can think of dropout as:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![ ( { wj, p wˆj = ( 0, otherwise ](img/file139.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where *w*[*j*] is the new weights after applying dropout, *w*[*j*] is our weights
+    before applying dropout, and *p* is our probability of *not* applying dropout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The original dropout paper recommends randomly dropping 50% of the units in
+    a network and applying dropout to all layers. Input layers should not have the
+    same dropout probability because this would mean that we throw away 50% of the
+    input information for our network, which makes it more difficult for the model
+    to converge. In practice, you can experiment with different dropout probabilities
+    to find the dropout rate that works well for your specific dataset and model;
+    that is another hyperparameter you can optimize. Dropout is typically available
+    as a standalone layer in all standard neural network libraries you can find online.
+    You typically add it after your activation function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we’ve been reminded of the vanilla application of dropout, let’s look
+    at how we can use it for Bayesian inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.2.1 Using dropout for approximate Bayesian inference
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Traditional dropout methods make the prediction of dropout networks deterministic
+    at test time by turning off dropout during inference. However, we can also use
+    the stochasticity of dropout to our advantage. This is called **Monte** **Carlo
+    (MC)** dropout, and the idea is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We use dropout during test time.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Instead of running inference once, we run it many times (for example, 30-100
+    times).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We then average the predictions to get our uncertainty estimates.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why is this beneficial? As we said before, using dropout forces the model to
+    learn different ways to solve its task. So, when we keep dropout enabled during
+    inference, we use slightly different networks that all process the input via a
+    slightly different path through the model. This diversity is helpful when we want
+    a calibrated uncertainty score, as we will see in the next section, where we will
+    discuss the concept of deep ensembles. Instead of predicting a point estimate
+    (a single value) for each input, our network now produces a distribution of values
+    (made up of multiple forward passes). We can use this distribution to compute
+    a mean and variance associated with each input data point, as shown in *Figure*
+    [*6.1*](#x1-85011r1).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file140.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 6.1: Example of MC dropout'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also interpret MC dropout in a Bayesian way. Using these slightly different
+    networks with dropout can be seen as sampling from a distribution of all possible
+    models: the posterior distribution over all of the parameters (or weights) of
+    our network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![𝜃t ∼ P (𝜃|D ) ](img/file141.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *𝜃*[*t*] is a dropout configuration and ∼ a single sample from our posterior
+    distribution *P*(*𝜃*|*D*). This way, MC dropout is equivalent to a form of approximate
+    Bayesian inference, similar to the methods we saw in [*Chapter 5*](CH5.xhtml#x1-600005),
+    [*Principled Approaches for Bayesian Deep Learning*](CH5.xhtml#x1-600005).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have an idea of how MC dropout works, let’s implement it in TensorFlow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.2.2 Implementing MC dropout
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let’s assume we have trained a model with the convolutional architecture described
+    in this chapter’s first hands-on exercise. We can now use dropout at inference
+    by setting `training=True`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This allows us to get our mean and variance for every prediction of our model.
+    Each row of our `Predictions` variable contains the predictions associated with
+    each input, obtained from consecutive forward passes. From these predictions,
+    we can compute the means and variances, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As with all neural networks, Bayesian neural networks require some degree of
+    fine-tuning via hyperparameters. The following three hyperparameters are particularly
+    important for MC dropout:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Number of dropout layers**: How many layers (in our `Sequential` object)
+    will use dropout, and which layers these will be.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dropout rate**: The likelihood that nodes will be dropped.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The number of MC dropout samples**: A new hyperparameter specific to MC dropout.
+    Shown here as `nb_inference` , this defines the number of times to sample from
+    the MC dropout network at inference time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We’ve now seen how MC dropout can be used in a new way, giving us an easy and
+    intuitive method to compute Bayesian uncertainties using familiar tools. But this
+    isn’t the only method we have available to us. In the next section, we’ll see
+    how ensembling can be applied to neural networks; providing another straightforward
+    approach for approximating BNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.3 Using ensembles for model uncertainty estimates
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This section will introduce you to deep ensembles: a popular method for obtaining
+    Bayesian uncertainty estimates using an ensemble of deep networks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.3.1 Introducing ensembling methods
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A common strategy in machine learning is to combine several single models into
+    a committee of models. The process of learning such a combination of models is
+    called **ensemble learning**, and the resulting committee of models is called
+    an ensemble. Ensemble learning involves two main components: first, the different
+    single models need to be trained. There are various strategies to obtain different
+    models from the same training data: the models can be trained on different subsets
+    of data, we can train different model types or models with different architectures,
+    or we can initialize the same model types with different hyperparameters. Second,
+    the outputs of the different single models need to be combined. Common strategies
+    for combining the predictions of single models are simply taking their average
+    or taking a majority vote among all members of the ensemble. More advanced strategies
+    are taking a weighted average or, if more training data is available, learning
+    an additional model to combine the different predictions of the ensemble members.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensembles are very popular in machine learning because they tend to improve
+    predictive performance by minimizing the risk of accidentally picking a model
+    with poor performance. In fact, ensembles are guaranteed to perform at least as
+    well as any single model. Furthermore, ensembles will perform better than single
+    models if there is enough diversity among the predictions of ensemble members.
+    Diversity here means that different ensemble members make different mistakes on
+    a given data sample. If, for example, some ensemble members misclassify the image
+    of a dog as “cat,” but the majority of ensemble members make the correct prediction
+    (“dog”), then the combined ensemble output will still be correct (“dog”). More
+    generally, as long as every single model has an accuracy greater than 50% and
+    the models make independent mistakes, then the predictive performance of the ensemble
+    will approach 100% accuracy as we add more and more ensemble members.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to improving predictive performance, we can leverage the degree
+    of agreement (or disagreement) among ensemble members to obtain an uncertainty
+    estimate along with the prediction of the ensemble. In the context of image classification,
+    for example, if almost all ensemble members predict that the image shows a dog,
+    then we can say that the ensemble predicted “dog” with high confidence (or low
+    uncertainty). Conversely, if there is significant disagreement among the predictions
+    of different ensemble members, then we will observe high uncertainty in the form
+    of significant variance across the outputs from the ensemble members, telling
+    us that the prediction has low confidence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we are equipped with a basic understanding of ensembles, it is worth
+    highlighting that MC dropout, which we explored in the previous section, may also
+    be seen as an ensemble method. When we enable dropout during inference, we effectively
+    run inference with a slightly different (sub-)network every time. The combination
+    of these different sub-networks can be considered as a committee of different
+    models, and therefore an ensemble. This observation led a team at Google to look
+    into alternative ways of creating ensembles from DNNs, which led to the discovery
+    of deep ensembles (Lakshminarayan et al, 2016) , which are introduced in the following
+    section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.3.2 Introducing deep ensembles
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The main idea behind deep ensembles is straightforward: train several different
+    DNN models, then combine their predictions via averaging to improve model performance
+    and leverage the agreement among the predictions of these models to obtain an
+    estimate of predictive uncertainty.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: More formally, assume that we have some training data **X**, where *X* ∈ℝ^(*D*),
+    and corresponding target labels **y**. For example, in image classification the
+    training data would be images, and the target labels would be integers that denote
+    which object class is shown in the corresponding image, so *y* ∈{1*,...,K*} where
+    *K* is the total number of classes. Training a single neural network means that
+    we model the probabilistic predictive distribution *p*[*𝜃*](*y*|*x*) over the
+    labels and optimize *𝜃*, the parameters of the NN. For deep ensembles, we train
+    **M** neural networks whose parameters can be described as {*𝜃*[*m*]}[*m*=1]^(*M*),
+    where each *𝜃*[*m*] is optimized independently using **X** and **y** (meaning
+    that we train each NN independently on the same data). The predictions of the
+    deep ensemble members are combined via averaging, using *p*(*y*|*x*) = *M*^(−1)
+    ∑ [*m*=1]^(*M*)*p*[*𝜃*[m]](*y*|*x,𝜃*[*m*]).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure* [*6.2*](#x1-89003r2) illustrates the idea behind deep ensembles. Here,
+    we have trained *M* = 3 different feed-forward NNs. Notice that each network has
+    its own unique set of network weights, as illustrated by the varying thickness
+    of the edges connecting the network notes. Each of the three networks will output
+    its own prediction score, as illustrated by the green nodes, and we combine these
+    scores via averaging.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file142.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 6.2: Example of a deep ensemble. Note that the three networks differ
+    in their weights, as illustrated by edges with different thicknesses'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'How can we train several different neural network models if only one dataset
+    is available for training? The strategy proposed in the original paper (and still
+    the most commonly used strategy) is to start every training with a random initialization
+    of the network’s weights. If every training starts with a different set of weights,
+    the different training runs are likely to produce networks with different function
+    approximations of the training data. This is because NNs tend to have many more
+    weight parameters than there are samples in the training dataset. Therefore, the
+    same observations in the training dataset can be approximated by many different
+    weight parameter combinations. During training, the different NN models will each
+    converge to their own parameter combination and will occupy different local optima
+    on the loss landscape. Because of this, the different NNs will also often have
+    differing perspectives on a given data sample, for example, the image of a dog.
+    This also means that the different NNs will make different mistakes, for example,
+    when classifying the data sample. The degree of consensus between the different
+    networks in an ensemble provides information about how certain an ensemble is
+    in its predictions for a given data point: the more the networks agree, the more
+    confident we can be in the prediction.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alternative ways to train different NN models with the same training data set
+    are: to use a random ordering of mini-batches during training, to use different
+    hyperparameters for every training run, or to use different network architecture
+    for every model altogether. These strategies can also be combined, and understanding
+    exactly which combination of strategies leads to the best outcomes, in terms predictive
+    performance and predictive uncertainty, is an active field of research.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.3.3 Implementing a deep ensemble
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The following code example illustrates how to train a deep ensemble using the
+    strategy of random weight initialization to obtain differing ensemble members.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Importing libraries'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We start by importing the relevant packages and setting the number of ensembles
+    to `3` for this code example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Obtaining data'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We then download the `MNIST`` Fashion` dataset, which is a dataset that contains
+    images of ten different clothing items:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 3: Constructing our ensemble model'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Next, we create a helper function that defines our model. As you can see, we
+    use a simple image classifier structure that consists of two convolutional layers,
+    each followed by a max-pooling operation, and several fully connected layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also create another helper function that compiles the model for us, using
+    `Adam` as our optimizer and a categorical cross-entropy loss:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 4: Training'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We then train three different networks on the same dataset. Since the network
+    weights are initialized at random, this will result in three different models.
+    You will see that the training accuracy varies slightly between models:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 5: Inference'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We can then perform inference and obtain the Predictions for each of the models
+    for all images in the test split. We can also take the mean across the predictions
+    of the three models, which will give us one prediction vector per image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: That’s it. We have trained an ensemble of networks and performed inference.
+    Given that we have several predictions per image now, we can also look at images
+    where the three models disagree.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s, for example, find the image with the highest disagreement and visualize
+    it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Looking at the image in *Figure* [*6.3*](#x1-95107r3), even for a human it
+    is hard to tell whether there is a t-shirt, shirt, or bag in the image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file143.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 6.3: Image with highest variance among ensemble predictions. The correct
+    ground truth label is ”t-shirt,” but it is hard to tell, even for a human'
+  prefs: []
+  type: TYPE_NORMAL
+- en: While we’ve seen that deep ensembles have several favorable qualities, they
+    are not without limitations. In the next section, we’ll explore what kinds of
+    things we may wish to bear in mind when considering deep ensembles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.3.4 Practical limitations of deep ensembles
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Some practical limitations of ensembles become obvious when taking them from
+    the research environment to production at scale. We know that, in theory, the
+    predictive performance and the uncertainty estimate of an ensemble is expected
+    to improve as we add more ensemble members. However, there is a cost of adding
+    more ensemble members as the memory footprint and inference cost of ensembles
+    increases linearly with the number of ensemble members. This can make deploying
+    ensembles in a production setting a costly choice. For every NN that we add to
+    the ensemble, we will need to store an extra set of network weights, which significantly
+    increases memory requirements. Equally, for every network, we will also need to
+    run an additional forward pass during inference. Even though the inferences of
+    different networks can be run in parallel, and the impact on inference time can
+    therefore be mitigated, such an approach will still require more compute resources
+    than single models. As more compute resources tend to translate to higher costs,
+    the decision of using an ensemble versus a single model will need to trade off
+    the benefits of better performance and uncertainty estimation with the increase
+    in cost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Recent research has tried to address or mitigate these practical limitations.
+    In an approach called BatchEnsembles ([**?**]), for example, all ensemble members
+    share one underlying weight matrix. The final weight matrix for each ensemble
+    member is obtained by element-wise multiplication of this shared weight matrix
+    with a rank-one matrix that is unique to each ensemble member. This reduces the
+    number of parameters that need to be stored for each additional ensemble member
+    and thus reduces memory footprint. The ensemble’s computational cost is also reduced
+    because the BatchEnsembles can exploit vectorization, and the output for all ensemble
+    members can be computed in a single forward pass. In a different approach, called
+    **multi-input/multi-output** **processing** (**MIMO**; [**?**]), a single network
+    is encouraged to learn several independent sub-networks. During training, multiple
+    inputs are passed along with multiple, correspondingly labeled outputs. The network
+    will, for example, be presented with three images: of a dog, a cat and a chicken.
+    Corresponding output labels are passed and the network will need to learn to predict
+    ”dog” on its first output node, ”cat” on its second output node, and ”chicken”
+    on its third. During inference, one single image will be repeated three times
+    and the MIMO ensemble will produce three different predictions (one on each output
+    node). As a result, the memory footprint and computational cost of the MIMO approach
+    is almost as little as that of a single neural network, while still providing
+    all the benefits of an ensemble.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.4 Exploring neural network augmentation with Bayesian last-layer methods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Through the course of [*Chapter 5*](CH5.xhtml#x1-600005), [*Principled Approaches
+    for Bayesian Deep* *Learning*](CH5.xhtml#x1-600005) and [*Chapter 6*](#x1-820006),
+    [*Using the Standard Toolbox for Bayesian Deep* *Learning*](#x1-820006), we’ve
+    explored a variety of methods for Bayesian inference with DNNs. These methods
+    have incorporated some form of uncertainty information at every layer, whether
+    through the use of explicitly probabilistic means or via ensemble-based or dropout-based
+    approximations. These methods have certain advantages. Their consistent Bayesian
+    (or, more accurately, approximately Bayesian) mechanics mean that they are consistent:
+    the same principles are applied at each layer, both in terms of network architecture
+    and update rules. This makes them easier to justify from a theoretical standpoint,
+    as we know that any theoretical guarantees apply at each layer. In addition to
+    this, it means that we have the benefit of being able to access uncertainties
+    at every level: we can exploit embeddings in these networks just as we exploit
+    embeddings in standard deep learning models, and we’ll have access to uncertainties
+    along with those embeddings.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, these networks also come with some drawbacks. As we’ve seen, methods
+    such as PBP and BBB have more complicated mechanics, which makes them more difficult
+    to apply to more sophisticated neural network architectures. The topics earlier
+    in this chapter demonstrate that we can get around this by using MC dropout or
+    deep ensembles, but they increase our overheads in terms of computation and/or
+    memory footprint. This is where **Bayesian Last-Layer** (**BLL**) methods (see
+    *Figure* [*6.4*](#x1-97005r4)) come in. This class of methods gives us both the
+    flexibility of using any NN architecture, while also being more computationally
+    and memory efficient than MC dropout or deep ensembles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file144.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 6.4: Vanilla NN compared to a BLL network'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you’ve probably guessed, the fundamental principle behind BLL methods is
+    to estimate uncertainties only at the last-layer. But what you may not have guessed
+    is why this is possible. Deep learning’s success is due to the non-linear nature
+    of NNs: the successive layers of non-linear transformations enable them to learn
+    rich lower-dimensional representations of high-dimensional data. However, this
+    non-linearity makes model uncertainty estimation difficult. Closed-form solutions
+    for model uncertainty estimation are available for a variety of linear models,
+    but unfortunately, this isn’t the case for our highly non-linear DNNs. So, what
+    can we do?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Well, fortunately for us, the representations learned by the DNNs can also
+    serve as inputs to simpler linear models. In this way, we let the DNN do the heavy
+    lifting: condensing our high-dimensional input space down to a task-specific low-dimensional
+    representation. Because of this, the penultimate layer in the NN is far easier
+    to deal with; after all, in most cases our output is simply some linear transformation
+    of this layer. This means we can apply a linear model to this layer, which in
+    turn means we can apply closed-form solutions for model uncertainty estimation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can make use of other last-layer approaches too; recent work has demonstrated
+    that MC dropout is effective when applied only at the last layer. While this still
+    requires multiple forward passes, these forward passes only need to be done for
+    a single layer, making them much more computationally efficient, particularly
+    for larger models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.4.1 Last-layer methods for Bayesian inference
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The method proposed by Jasper Snoek et al. in their 2015 paper, *Scalable* *Bayesian
+    Optimization Using Deep Neural Networks*, introduces the concept of using a post-hoc
+    Bayesian linear regressor to obtain model uncertainties for DNNs. This method
+    was devised as a way of achieving Gaussian Process-like high-quality uncertainties
+    with improved scalability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The method first involves training a NN on some data *X* and targets **y**.
+    This training phase trains a linear output layer, **z**[*i*], resulting in a network
+    that produces point estimates (typical of a standard DNN). We then take the penultimate
+    layer (or the last hidden layer), **z**[*i*−1], as our set of basis functions.
+    From here, it’s simply a case of replacing our final layer with a Bayesian linear
+    regressor. Now, instead of our point estimates, our network will produce a predictive
+    mean and variance. For further details on this method and adaptive basis regression,
+    we point the reader to Jasper Snoek et al.’s paper, and to Christopher Bishop’s
+    *Pattern Recognition and Machine* *Learning*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s see how we achieve this in code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Creating and training our base model'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'First, we set up and train our network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Using a neural network layer as a basis function'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now that we have our base network, we just need to access the penultimate layer
+    so that we can feed this as our basis function to our Bayesian regressor. This
+    is easily done using TensorFlow’s high-level API, for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will build a model that will allow us to obtain the output of the second
+    hidden layer by simply calling its `predict` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is all that’s needed to prepare our basis function for passing to our Bayesian
+    linear regressor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Preparing our variables for Bayesian linear regression'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'For the Bayesian regressor, we assume that our outputs, *y*[*i*] ∈ **y**, are
+    conditionally normally distributed according to a linear relationship with our
+    inputs, **x**[*i*] ∈ *X*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![yi = 𝒩 (α + x⊺iβ, σ2) ](img/file145.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *α* is our bias term, *β* are our model coefficients, and *σ*² is the
+    variance associated with our predictions. We’ll also make some prior assumptions
+    about these parameters, namely:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![α ≈ 𝒩 (0,1) ](img/file146.jpg)![β ≈ 𝒩 (0,1) ](img/file147.jpg)![σ2 ≈ |𝒩 (0,1)|
+    ](img/file148.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Note that equation 6.6 denotes the half-normal of a Gaussian distribution.
+    To wrap up the Bayesian regressor in such a way that it’s easy (and practical)
+    to integrate it with our Keras model, we’ll create a `BayesianLastLayer` class.
+    This class will use the TensorFlow Probability library to allow us to implement
+    the probability distributions and sampling functions we’ll need for our Bayesian
+    regressor. Let’s walk through the various components of our class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we see here, our class requires at least two arguments at instantiation:
+    `model`, which is our Keras model, and `basis``_layer`, which is the layer output
+    we wanted to feed to our Bayesian regressor. The following arguments are all parameters
+    for the **Hamiltonian Monte-Carlo** (**HMC**) sampling for which we define some
+    default values. These values may need to be changed depending on the input. For
+    example, for a higher dimensional input (for instance, if you’re using `layer``_1`),
+    you may want to further reduce the step size and increase both the number of burn-in
+    steps and the overall number of samples.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: Connecting our basis function model'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Next, we simply define a few functions for creating our basis function model
+    and for obtaining its outputs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 5: Creating a method to fit our Bayesian linear regression parameters'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Now things get a little more complicated. We need to define the `fit()` method,
+    which will use HMC sampling to find our model parameters *α*, *β*, and *σ*². We’ll
+    provide an overview of what the code is doing here, but for more (hands-on) information
+    on sampling, we direct the reader to *Bayesian Analysis with Python* by Osvaldo
+    Martin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Firstly, we define a joint distribution using the priors described in equations
+    4.3-4.5\. Thanks to TensorFlow Probability’s `distributions` module, this is pretty
+    straightforward:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then go on to set up our sampler using TensorFlow Probability’s `HamiltonianMonteCarlo`
+    sampler class. To do this, we’ll need to define our target log probability function.
+    The `distributions` module makes this fairly trivial, but we still need to define
+    a function to feed our model parameters to the distribution object’s `log``_prob()`
+    method (line 28). We can then pass this to the instantiation of `hmc``_kernel`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that things are set up, we’re ready to run our sampler. To do this, we
+    call the `mcmc.sample``_chain()` function, passing in our HMC parameters, an initial
+    state for our model parameters, and our HMC sampler. We then run our sampling,
+    which returns `states`, which comprises our parameter samples, and `kernel``_results`,
+    which contains some information about the sampling process. The information we
+    care about here is to do with the proportion of accepted samples. If our sampler
+    has run successfully, then we’ll have a good proportion of accepted samples (indicating
+    a high acceptance rate). If it hasn’t been successful, then our acceptance rate
+    will be low (perhaps even 0%!) and we may need to tune our sampler parameters.
+    We print this to the console so that we can keep an eye on the acceptance rate
+    (we wrap the call to `sample``_chain()` in a `run``_chain()` function so that
+    it can be extended to sampling with multiple chains):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once we’ve run our sampler, we can fetch our model parameters. We take them
+    from the post-burn-in samples and assign them to class variables for later use
+    in inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 6: Inference'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'The last thing we need to do is implement a function to make predictions using
+    the learned parameters of our joint distribution. To do this, we’ll define two
+    functions: `get``_divd``_dist()`, which will obtain the posterior predictive distribution
+    given our input, and `predict()`, which will call `get``_divd``_dist()` and compute
+    our mean (*μ*) and standard deviation (*σ*) from our posterior distribution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And that’s it! We have our BLL implementation! With this class, we have a powerful
+    and principled means of obtaining Bayesian uncertainty estimates by using penultimate
+    NN layers as basis functions for Bayesian regression. Making use of it is as simple
+    as passing our model and defining which layer we want to use as our basis function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'While this is a powerful tool, it’s not always suited for the task at hand.
+    You can experiment with this yourself: try creating a model with a larger embedding
+    layer. As the size of the layer increases, you should start to see that the acceptance
+    rate of the sampler drops. Once it’s large enough, the acceptance rate may even
+    fall to 0%. So, we’ll need to modify the parameters of our sampler: reducing the
+    step size, increasing the number of samples, and increasing the number of burn-in
+    samples. As the dimensionality of the embedding grows, it becomes more and more
+    difficult to obtain a representative set of samples for the distribution.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For some applications, this isn’t an issue, but when dealing with complex,
+    high-dimensional data, this can quickly become problematic. Applications in domains
+    such as computer vision, speech processing, and molecular modeling all rely on
+    high-dimensional embeddings. One solution here is to reduce these embeddings further,
+    for example, via dimensionality reduction. But doing so can have an unpredictable
+    effect on these encodings: in fact, by reducing the dimensionality, you could
+    be unintentionally removing sources of uncertainty, resulting in poorer quality
+    uncertainty estimates.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, what can we do instead? Fortunately, there are a few other last-layer options
+    we can employ. Next, we’ll see how we can use last-layer dropout to approximate
+    the Bayesian linear regression approach introduced here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.4.2 Last-layer MC dropout
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Earlier in the chapter, we saw how we can use dropout at test time to obtain
+    a distribution over our model predictions. Here, we’ll combine that concept with
+    the concept of last-layer uncertainties: adding an MC dropout layer, but only
+    as a single layer that we add to a pre-trained network.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Connecting to our base model'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Similarly to the Bayesian last-layer method, we first need to obtain the output
+    from our model’s penultimate layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Adding an MC dropout layer'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now, instead of implementing a Bayesian regressor, we’ll simply instantiate
+    a new output layer, which applies dropout to the penultimate layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 3: Training the MC dropout last-layer'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Because we’ve now added a new final layer, we need to run an additional step
+    of training so that it can learn the mapping from our penultimate layer to the
+    new output; but because our original model is doing all of the heavy lifting,
+    this training is both computationally cheap and quick to run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 4: Obtaining uncertainties'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now that our last layer is trained, we can implement a function to obtain the
+    mean and standard deviation for our predictions using multiple forward passes
+    of our MC dropout layer; line 3 onwards should be familiar from earlier in the
+    chapter, and line 2 simply obtains the output from our original model’s penultimate
+    layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 5: Inference'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'All that’s left is to call this function and obtain our new model outputs,
+    complete with uncertainty estimates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Last-layer MC dropout is by far one of the easiest ways to obtain uncertainty
+    estimates from pre-trained networks. Unlike standard MC dropout, it doesn’t require
+    training a model from scratch, so you can apply this post-hoc to networks you’ve
+    already trained. Additionally, unlike the other last-layer methods, it can be
+    implemented in just a few straightforward steps that never stray from TensorFlow’s
+    standard API.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.4.3 Recap of last-layer methods
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Last-layer methods are an excellent tool for when you need to obtain uncertainty
+    estimates from a pre-trained network. Given how expensive and time-consuming neural
+    network training can be, it’s nice not to have to start from scratch just because
+    you need some predictive uncertainties. Additionally, given that more and more
+    machine learning practitioners are relying on state-of-the-art pre-trained models,
+    these kinds of techniques are a practical way to incorporate model uncertainties
+    after the fact.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But there are drawbacks to last-layer methods too. Unlike other methods, we’re
+    relying on a fairly limited source of variance: the penultimate layer of our model.
+    This limits how much stochasticity we can induce over our model outputs, meaning
+    we’re at risk of over-confident predictions. Bear this in mind when using last-layer
+    methods and, if you see the hallmark signs of over-confidence, consider using
+    a more comprehensive method to obtain your predictive uncertainties.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 6.5 Summary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ve seen how familiar machine learning and deep learning
+    concepts can be used to develop models with predictive uncertainties. We’ve also
+    seen how, with relatively minor modifications, we can add uncertain estimates
+    to pre-trained models. This means we can go beyond the point-estimate approach
+    of standard NNs: using uncertainties to gain valuable insights into the performance
+    of our models, and allowing us to develop more robust applications.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as with the methods introduced in [*Chapter 5*](CH5.xhtml#x1-600005),
+    [*Principled Approaches* *for Bayesian Deep Learning*](CH5.xhtml#x1-600005), all
+    techniques have advantages and disadvantages. For example, last-layer methods
+    may give us the flexibility to add uncertainties to any model, but they’re limited
+    by the representation that the model has already learned. This could result in
+    very low variance outputs, resulting in an overconfident model. Similarly, while
+    ensemble methods allow us to capture variance across every layer of the network,
+    they come at significant computational cost, requiring that we have multiple networks,
+    rather than just a single network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will examine the advantages and disadvantages in more
+    detail, and learn how we can address some of the shortcomings of these methods.
+  prefs: []
+  type: TYPE_NORMAL

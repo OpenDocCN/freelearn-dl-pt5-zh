@@ -1,0 +1,1494 @@
+- en: '*Chapter 11*: Generalization and Domain Randomization'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Deep **reinforcement** **learning** (**RL**) has achieved what was impossible
+    with earlier AI methods, such as beating world champions in games such as Go,
+    Dota 2, and StarCraft II. Yet, applying RL to real-world problems is still challenging.
+    Two key obstacles that stand in the way of this goal are the generalization of
+    trained policies to a broad set of environment conditions and developing policies
+    that can handle partial observability. As we will see in this chapter, these are
+    closely related challenges, for which we will present solution approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is what we will cover in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An overview of generalization and partial observability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Domain randomization for generalization
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using memory to overcome partial observability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These topics are critical to understand to ensure the successful implementation
+    of RL in real-world settings. So, let's dive right in!
+  prefs: []
+  type: TYPE_NORMAL
+- en: An overview of generalization and partial observability
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As in all machine learning, we want our RL models to work beyond training, and
+    under a broad set of conditions during test time. Yet, when you start learning
+    about RL, the concept of overfitting is not at the forefront of the discussion
+    as opposed to supervised learning. In this section, we will compare overfitting
+    and generalization between supervised learning and RL, describe how generalization
+    is closely related to partial observability, and present a general recipe to handle
+    these challenges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generalization and overfitting in supervised learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One of the most important goals in supervised learning, such as in image recognition
+    and forecasting, is to prevent overfitting and achieve high accuracy on unseen
+    data – after all, we already know the labels in our training data. We use various
+    methods to this end:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We use separate training, dev, and test sets for model training, hyperparameter
+    selection, and model performance assessment, respectively. The model should not
+    be modified based on the test set so that it gives a fair assessment of the model's
+    performance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use various regularization methods, such as penalizing model variance (for
+    example, L1 and L2 regularization) and dropout methods, to prevent overfitting.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use as much data as possible to train the model, which itself has a regularization
+    effect. In the absence of enough data, we leverage data augmentation techniques
+    to generate more.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We aim to have a dataset that is diverse and of the same distribution as the
+    kind of data we expect to see after model deployment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These concepts come up at the very beginning when you learn about supervised
+    learning, and they form the basis of how to train a model. In RL, though, we don't
+    seem to have the same mindset when it comes to overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's go into a bit more detail about what is different in RL, why, and whether
+    generalization is actually of secondary importance or not.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generalization and overfitting in RL
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Deep supervised learning notoriously requires a lot of data. But the hunger
+    for data in deep RL dwarfs the need in deep supervised learning due to the noise
+    in feedback signals and the complex nature of RL tasks. It is not uncommon to
+    train RL models over billions of data points, and over many months. Since it is
+    not quite possible to generate such large data using physical systems, deep RL
+    research has leveraged digital environments, such as simulations and video games.
+    This has blurred the distinction between training and testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Think about it: if you train an RL agent to play an Atari game, such as Space
+    Invaders, well (which is what most RL algorithms are benchmarked against) and
+    use a lot of data for that, then if the agent plays Space Invaders very well after
+    training, is there any problem with it? Well, in this case, no. However, as you
+    may have realized, such a training workflow does not involve any effort to prevent
+    overfitting as opposed to a supervised learning model training workflow. It may
+    just be that your agent could have memorized a wide variety of scenes in the game.
+    If you only care about Atari games, it may seem like overfitting is not a concern
+    in RL.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we depart from Atari settings and, say, train an agent to beat human competitors,
+    such as in Go, Dota 2, and StarCraft II, overfitting starts to appear as a bigger
+    concern. As we saw in [*Chapter 9*](B14160_09_Final_SK_ePub.xhtml#_idTextAnchor200),
+    *Multi-Agent Reinforcement Learning*, these agents are usually trained through
+    self-play. A major danger for the agents in this setting is them overfitting to
+    each other's strategies. To prevent this, we usually train multiple agents and
+    make them play against each other in phases so that a single agent sees a diverse
+    set of opponents (the environment from the agent's perspective) and there is less
+    chance of overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overfitting becomes a huge concern in RL, much more than the two situations
+    we mentioned previously, when we train models in a simulation and deploy them
+    in a physical environment. This is because, no matter how high-fidelity it is,
+    a simulation is (almost) never the same as the real world. This is called the
+    **sim2real gap**. A simulation involves many assumptions, simplifications, and
+    abstractions. It is only a model of the real world, and as we all know, all models
+    are wrong. We work with models everywhere, so why has this all of a sudden become
+    a major concern in RL? Well, again, the training and RL agent require lots and
+    lots of data (and that's why we needed a simulation in the first place), and training
+    any ML model over similar data for a long time is a recipe for overfitting. So,
+    RL models are extremely likely to overfit to the patterns and quirks of the simulation.
+    There, we really need RL policies to generalize beyond the simulation for them
+    to be useful. This is a serious challenge for RL in general, and one of the biggest
+    obstacles in the way of bringing RL to real applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The sim2real gap is a concept that is closely related to partial observability.
+    Let's look at this connection next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The connection between generalization and partial observability
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We mentioned that a simulation is never the same as the real world. Two forms
+    that this can manifest itself in are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In some problems, you will never get the exact same observations in a simulation
+    that you would get in the real world. Training a self-driving car is an example
+    of that. The real scenes will always be different.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In certain problems, you can train the agent on the same observations as you
+    would see in the real world – for example, a factory production planning problem
+    where the observation is the demand outlook, current inventory levels, and machine
+    states. If you know what the ranges for your observations are, you can design
+    your simulation to reflect that. Still, simulation and real life will be different.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In the former case, it is more obvious why your trained agent may not generalize
+    well beyond a simulation. However, the situation with the latter is a bit more
+    subtle. In that case, although observations are the same, the world dynamics may
+    not be between the two environments (admittedly, this will be also a problem for
+    the former case). Can you recall what this is similar to? Partial observability.
+    You can think of the gap between simulation and real world as a result of partial
+    observability: there is a state of the environment hidden from the agent affecting
+    the transition dynamics. So, even though the agent makes the same observation
+    in simulation and the real world, it does not see this hidden state that we assume
+    to capture the differences between them.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of this connection, we cover generalization and partial observability
+    together in this chapter. Having said that, generalization could be still of concern
+    even in fully observable environments, and we may have to deal with partial observability
+    even when generalization is not a major concern. We will look into these dimensions
+    later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's briefly discuss how we can tackle each of these challenges, before
+    going into the details in later sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overcoming partial observability with memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Do you remember what it was like when you first entered your high school classroom?
+    Chances are there were a lot of new faces and you wanted to make friends. However,
+    you would not want to approach people just based on your first impression. Although
+    a first impression does tell us something about people, it reflects only part
+    of who they are. What you really want to do is to make observations over time
+    before you make a judgment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The situation is similar in the context of RL. Take this example from the Atari
+    game Breakout:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 11.1 – A single frame of an Atari game gives a partial observation
+    of the environment'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_11_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 11.1 – A single frame of an Atari game gives a partial observation of
+    the environment
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is not very clear where the ball is moving toward from a single game scene.
+    If we had another snapshot from a previous timestep, we could estimate the change
+    in position and the velocity of the ball. One more snapshot could help us estimate
+    the change in velocity, acceleration, and so on. So, when an environment is partially
+    observable, taking actions based on not a single observation but a sequence of
+    them results in more informed decisions. In other words, having a **memory** allows
+    an RL agent to uncover what is not observable in a single observation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are different ways of maintaining memory in RL models, and we will discuss
+    them in more detail later in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before doing so, let's also briefly discuss how to overcome overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overcoming overfitting with randomization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If you are a car driver, think about how you have gained experience over time
+    about driving under different conditions. You may have driven small cars, large
+    vehicles, ones that accelerate fast and slow, ones that are high and low riding,
+    and so on. In addition, you probably have had driving experience in the rain,
+    maybe snow, and on asphalt and gravel. I personally have had these experiences.
+    So when I took a test drive with a Tesla Model S for the first time, it felt like
+    a quite different experience at first. But after several minutes, I got used to
+    it and started driving pretty comfortably.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, as a driver, we often cannot define precisely what differs from one vehicle
+    to another: what the exact differences in weight, torque, traction, and so on
+    are that make the environment partially observable for us. But our past experience
+    under diverse driving conditions helps us quickly adapt to new ones after several
+    minutes of driving. How does this happen? Our brains are able to develop a general
+    physics model for driving (and act accordingly) when the experience is diverse,
+    rather than "overfitting" the driving style to a particular car model and condition.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The way we will deal with overfitting and achieve generalization will be similar
+    for our RL agents. We will expose the agent to many different environment conditions,
+    including ones that it cannot necessarily fully observe, which is called **domain
+    randomization** (**DR**). This will give the agent the experience that is necessary
+    to generalize beyond the simulation and the conditions it is trained under.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to that, the regularization methods we use in supervised learning
+    are also helpful with RL models, as we will discuss.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's summarize our discussion related to generalization in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recipe for generalization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As it should be clear now after going through the preceding examples, we need
+    three ingredients to achieve generalization:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diverse environment conditions to help the agent enrich its experience
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Model memory to help the agent uncover the underlying conditions in the environment,
+    especially if the environment is partially observable
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using regularization methods as in supervised learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now it is time to make the discussion more concrete and talk about specific
+    methods to handle generalization and partial observability. We start with using
+    domain randomization for generalization, and then discuss using memory to overcome
+    partial observability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Domain randomization for generalization
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We mentioned previously how diversity of experience helps with generalization.
+    In RL, we achieve this by randomizing the environment parameters during training,
+    known as DR. Examples of these parameters, say, for a robot hand that carries
+    and manipulates objects, could be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Friction coefficient on the object surface
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Gravity
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Object shape and weight
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Power going into actuators
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: DR is especially popular in robotics applications to overcome the sim2real gap
+    since the agents are usually trained in a simulation and deployed in the physical
+    world. However, whenever generalization is of concern, DR is an essential part
+    of the training process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In order to get more specific about how environment parameters are randomized,
+    we need to discuss how two environments representing the same type of problems
+    could differ.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dimensions of randomization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Borrowed from *Rivilin*, *2019*, a useful categorization of differences between
+    similar environments is shown in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Different observations for the same/similar states
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this case, two environments emit different observations although the underlying
+    state and transition functions are the same or very similar. An example of this
+    is the same Atari game scene but with different backgrounds and texture colors.
+    Nothing is different in the game state, but the observations are different. A
+    more realistic example would be, while training a self-driving car, having a more
+    "cartoonish" look in the simulation versus a realistic one from the real camera
+    input even for the exact same scene.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solution – adding noise to observations
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In these cases, what can help with generalization is to add noise to observations,
+    so that the RL model focuses on the patterns in the observations that actually
+    matter, rather than overfitting to irrelevant details. Soon, we will discuss a
+    specific approach, called **network randomization**, that will address this problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Same/similar observations for different states
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Another way that POMDPs could differ from each other is when observations are
+    the same/similar, but the underlying states are actually different, also called
+    **aliased states**. A simple example is two separate versions of the mountain
+    car environment with the exact same look but different gravity. These situations
+    are pretty common in practice with robotics applications. Consider the manipulation
+    of objects with a robot hand, as in the famous OpenAI work (which we will discuss
+    in detail later in the chapter): the friction, weight, actual power going into
+    the actuators, and so on could differ between different environment versions in
+    ways that are not observable to the agent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solution – training with randomized environment parameters and using memory
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'The approach to take here is to train the agent in many different versions
+    of the environment with different underlying parameters, along with memory in
+    the RL model. This will help the agent uncover the underlying environment characteristics.
+    A famous example here is OpenAI''s robot hand manipulating objects trained in
+    simulation, which is prone to the sim2real gap. We can overcome this by randomizing
+    simulation parameters for the following scenario:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When used with memory, and having been trained in a vast majority of environment
+    conditions, the policy will hopefully gain the ability of adapting to the environment
+    it finds itself in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Different levels of complexity for the same problem class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This is the case where we are essentially dealing with the same type of problem
+    but at different levels of complexity. A nice example from *Rivlin*, *2019*, is
+    the **traveling** **salesman** **problem** (**TSP**) with a different number of
+    nodes on a graph. The RL agent's job in this environment is to decide which node
+    to visit next at every time step so that all nodes are visited exactly once at
+    minimum cost, while going back to the initial node at the end. In fact, many problems
+    we deal within RL naturally face this type of challenge, such as training a chess
+    agent against opponents of different levels of expertise and so on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solution – training at varying levels of complexity with a curriculum
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Not so surprisingly, training the agent in environments with varying levels
+    of difficulty is necessary to achieve generalization here. Having said that, using
+    a curriculum that starts with easy environment configurations and gets gradually
+    more difficult, as we described earlier in the book. This will potentially make
+    the learning more efficient, and even feasible in some cases that would have been
+    infeasible without a curriculum.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have covered high-level approaches to achieve generalization in
+    different dimensions, we will go into some specific algorithms. But first, let's
+    introduce a benchmark environment used to quantify generalization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quantifying generalization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are various ways of testing whether certain algorithms/approaches generalize
+    to unseen environment conditions better than others, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating validation and test environments with separate sets of environment
+    parameters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Assessing policy performance in a real-life deployment
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not always practical to do the latter as a real-life deployment may not
+    necessarily be an option. The challenge with the former is to have consistency
+    and to ensure that validation/test data is indeed not used in training. Also,
+    it is possible to overfit to the validation environment when too many models are
+    tried based on validation performance. One approach to overcome these challenges
+    is to use procedurally generated environments. To this end, OpenAI has created
+    the CoinRun environment to benchmark algorithms on their generalization capabilities.
+    Let's look into it in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CoinRun environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The CoinRun environment is about a character trying to collect the coin at
+    the level it is in without colliding with any obstacles. The character starts
+    at the far left and the coin is at the far right. The levels are generated procedurally
+    from an underlying probability distribution at various levels of difficulty, as
+    shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 11.2: Two levels in CoinRun with different levels of difficulty (source:
+    Cobbe et al., 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_11_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 11.2: Two levels in CoinRun with different levels of difficulty (source:
+    Cobbe et al., 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are more details about the environment''s reward function and terminal
+    conditions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are dynamic and static obstacles, causing the character to die when it
+    collides with them, which terminates the episode.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The reward is only given when the coin is collected, which also terminates the
+    episode.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is a time limit of 1,000 time steps before the episode terminates, unless
+    the character dies or the coin is reached.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that the CoinRun environment generates all (training and test) levels from
+    the same distribution, so it does not test the out-of-distribution (extrapolation)
+    performance of a policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's install this environment and experiment with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing the CoinRun environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'You can follow these steps to install the CoinRun environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We start with setting up and activating a virtual Python environment since
+    CoinRun needs specific packages. So, in your directory of choice, run the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we install the necessary Linux packages, including a famous parallel
+    computing interface, MPI:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we install the Python dependencies and the CoinRun package fetched from
+    the GitHub repo:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we had to install an old TensorFlow version. Officially, TensorFlow
+    1.12.0 is suggested by the creators of CoinRun. However, using a later TensorFlow
+    1.x version could help you avoid CUDA conflicts while using the GPU.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'You can test the environment out with your keyboard''s arrow keys with the
+    following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Great; enjoy playing CoinRun! I suggest you familiarize yourself with it to
+    gain a better understanding of the comparisons we will go into later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can visit the CoinRun GitHub repo for the full set of commands at [https://github.com/openai/coinrun](https://github.com/openai/coinrun).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The paper that introduced the environment (*Cobbe et al., 2018*) also mentions
+    how various regularization techniques affects generalization in RL. We will discuss
+    this next and then go into other approaches for generalization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The effect of regularization and network architecture on the generalization
+    of RL policies
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The authors found that several techniques used in supervised learning to prevent
+    overfitting are also helpful in RL. Since reproducing the results in the paper
+    takes a really long time, where each experiment takes hundreds of millions of
+    steps, we will not attempt to do it here. Instead, we have provided you with a
+    summary of the results and the commands to run various versions of algorithms.
+    But you can observe that, even after 500k time steps, applying the regularization
+    techniques we mention as follows improves the test performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can see all the training options for this environment using the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Let's start with running a baseline Define acronym without any regularizations
+    applied.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vanilla training
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'You can train an RL agent using PPO with an Impala architecture without any
+    improvements for generalization, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `BaseAgent` is an ID for your agent that is decided by you, `--num-levels
+    500` says to use 500 game levels during training with the default seed used in
+    the paper, and `--num-envs 60` kicks off 60 parallel environments for rollouts,
+    which you can adjust according to the number of CPUs available on your machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to test the trained agent in three parallel sessions, with 20 parallel
+    environments in each and five levels for each environment, you can run the following
+    command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: The average test reward will be specified in `mpi_out`. In my case, the reward
+    went from around 5.5 in training after 300K time steps to 0.8 in the test environment
+    to give you an idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Also, you can watch your trained agent by running the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is actually quite fun to do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a larger network
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The authors found that, as in supervised learning, using a larger neural network
+    increases generalization by successfully solving more test episodes as it comes
+    with a higher capacity. They also note that, however, there are diminishing returns
+    for generalization with the increase in size, so generalization won't improve
+    linearly with the network size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use an architecture with five residual blocks instead of three with double
+    the number of channels in each layer, you can add the `impalalarge` argument:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, you can run test evaluations with the run ID that you provided for the
+    large agent case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diversity in training data
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In order to test the importance of diverse training data, the authors compared
+    two types of training, both with a total of 256M time steps, across 100 and then
+    10,000 game levels (controlled by `--num-levels`). The test performance went from
+    30% to a 90%+ success rate (which is also on par with the training performance)
+    with the more diverse data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Increasing data diversity acts as a regularizer in supervised learning and RL.
+    This is because the model would have to explain more variation with the same model
+    capacity as diversity increases, forcing it to use its capacity to focus on the
+    most important patterns in the input, rather than overfitting to noise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This emphasizes the importance of the randomization of the environment parameters
+    to achieve generalization, which we will talk about separately later in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dropout and L2 regularization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The experiment results show both dropout and L2 regularization improve generalization,
+    bringing in around an additional 5% and 8% success on top of around a 79% baseline
+    test performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you need a refresher on dropout and L2 regularization, check out Chitta Ranjan's
+    blog at [https://towardsdatascience.com/simplified-math-behind-dropout-in-deep-learning-6d50f3f47275](https://towardsdatascience.com/simplified-math-behind-dropout-in-deep-learning-6d50f3f47275).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can explore this in more detail as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Empirically, the authors find the best L2 weight as ![](img/Formula_11_001.png)
+    and the best dropout rate as 0.1.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: L2 regularization, empirically, has a higher impact on generalization compared
+    to dropout.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As expected, training with dropout is slower to converge, to which twice as
+    many time steps (512M) are allocated.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To use a dropout with a rate of 0.1 on top of the vanilla agent, you can use
+    the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Similarly, to use L2 normalization with a weight of 0.0001, execute the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In your TensorFlow RL model, you can add dropout using the `Dropout` layer,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To add L2 regularization, do something like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'TensorFlow has a very nice tutorial on overfitting and underfitting, which
+    you might want to check out: [https://www.tensorflow.org/tutorials/keras/overfit_and_underfit](https://www.tensorflow.org/tutorials/keras/overfit_and_underfit).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's discuss data augmentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using data augmentation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A common method to prevent overfitting is data augmentation, which is modifying/distorting
+    the input, mostly randomly, so that the diversity in the training data increases.
+    When used on images, these techniques include random cropping, changing the brightness
+    and sharpness, and so on. An example CoinRun scene with data augmentation used
+    looks like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 11.3 – CoinRun with data augmentation (source: Cobbe et al., 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_11_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 11.3 – CoinRun with data augmentation (source: Cobbe et al., 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: For a TensorFlow tutorial on data augmentation, check out [https://www.tensorflow.org/tutorials/images/data_augmentation](https://www.tensorflow.org/tutorials/images/data_augmentation).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data augmentation, as it turns out, is also helpful in RL, and it gives a lift
+    in the test performance that is slightly worse than L2 regularization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using batch normalization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Batch normalization is one of the key tools in deep learning to stabilize training
+    as well as to prevent overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you need a refresher on batch normalization, check out Chris Versloot's blog
+    at [https://bit.ly/3kjzjno](https://bit.ly/3kjzjno).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the CoinRun environment, you can enable the batch normalization layers in
+    the training as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This adds a batch normalization layer after every convolutional layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When you implement your own TensorFlow model, the syntax for the batch normalization
+    layer is `layers.BatchNormalization()`, with some optional arguments you can pass.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The reported results show that using batch normalization gives the second-best
+    lift to the test performance among all of the other regularization methods (except
+    increasing the diversity in the training data).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding stochasticity
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Finally, introducing stochasticity/noise into the environment turns out to
+    be the most useful generalization technique, with around a 10% lift to the test
+    performance. Two methods are tried in the paper with the PPO algorithm during
+    training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using ![](img/Formula_11_002.png)-greedy actions (which are usually used with
+    Q-learning approaches)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Increasing the entropy bonus coefficient (![](img/Formula_11_003.png)) in PPO,
+    which encourages variance in the actions suggested by the policy
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some good hyperparameter choices for these methods are ![](img/Formula_11_004.png)
+    and ![](img/Formula_11_005.png), respectively. Something worth noting is that
+    if the environment dynamics are already highly stochastic, introducing more stochasticity
+    may not be as impactful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Combining all the methods
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Using all these regularization methods together during training only slightly
+    improved the boost obtained from the individual methods, suggesting that each
+    of these methods plays a similar role to prevent overfitting. Note that it is
+    not quite possible to say that these methods will have a similar impact on all
+    RL problems. What we need to keep in mind, though, is that the traditional regularization
+    methods used in supervised learning can have a significant impact on generalizing
+    RL policies as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our discussion on the fundamental regularization techniques for
+    RL. Next, we will look into another method that followed the original CoinRun
+    paper, which is network randomization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Network randomization and feature matching
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Network randomization, proposed by Lee et al., 2020, simply involves using
+    a random transformation of observations, ![](img/Formula_11_006.png), as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_11_007.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, the transformed observation, ![](img/Formula_11_008.png), is fed as input
+    to the regular policy network used in the RL algorithm. Here, ![](img/Formula_11_009.png)
+    is the parameter of this transformation, which is randomly initialized at every
+    training iteration. This can be simply achieved by adding, right after the input
+    layer, a layer that is not trainable and re-initialized periodically. In TensorFlow
+    2, a randomization layer that transforms the input after each call could be implemented
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that this custom layer exhibits the following traits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Has weights that are not trainable
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Assigns random weights to the layer at each call
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A further improvement to this architecture is to do two forward passes, with
+    and without randomized inputs, and enforce the network to give similar outputs.
+    This can be achieved by adding a loss to the RL objective that penalizes the difference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_11_010.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_11_011.png) is the parameters of the policy network, and
+    ![](img/Formula_11_012.png) is the second-from-last layer in the policy network
+    (that is, the one right before the layer that outputs the actions). This is called
+    **feature matching** and makes the network differentiate noise from the signal
+    in the input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The TensorFlow 1.x implementation of this architecture for the CoinRun environment
+    is available at [https://github.com/pokaxpoka/netrand](https://github.com/pokaxpoka/netrand).
+    Compare it to the original CoinRun environment by comparing `random_ppo2.py` with
+    `ppo2.py` and the `random_impala_cnn` method to the `impala_cnn` method under
+    `policies.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Going back to the dimensions of generalization we mentioned earlier, network
+    randomization helps RL policies generalize in all of the three dimensions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will discuss one of the key approaches to achieve generalization with
+    proven real-life successes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Curriculum learning for generalization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We already discussed how a rich training experience helps an RL policy to better
+    generalize. Let''s assume that for your robotics application, you have identified
+    two parameters to randomize in your environment with some minimum and maximum
+    values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Friction: ![](img/Formula_11_013.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Actuator torque: ![](img/Formula_11_014.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The goal here is to prepare the agent to act in an environment with an unknown
+    friction-torque combination at test time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It turns out that, as we mentioned in the previous chapter when we discussed
+    curriculum learning, the training may result in a mediocre agent if you try to
+    train it over the entire range for these parameters right at the beginning. That
+    is because the extreme values of the parameter ranges are likely to be too challenging
+    (assuming they are centered around some reasonable values for the respective parameters)
+    for the agent who has not even figured out the basics of the task. The idea behind
+    curriculum learning is to start with easy scenarios, such as having the first
+    lesson as ![](img/Formula_11_015.png) and ![](img/Formula_11_016.png), and gradually
+    increase the difficulty in the next lessons by expanding the ranges.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, a key question is how we should construct the curriculum, what the lessons
+    should look like (that is, what the next range of parameters after the agent succeeds
+    in the current lesson should be), and when to declare success for the existing
+    lesson. In this section, we discuss two methods for curriculum learning that automatically
+    generate and manage the curriculum for effective domain randomization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Automatic domain randomization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Automatic domain randomization** (**ADR**) is a method proposed by OpenAI
+    in their research of using a robot hand to manipulate a Rubik''s cube. It is one
+    of the most successful robotics applications of RL for several reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dexterous robots are notoriously difficult to control due to their high degrees
+    of freedom.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The policy is trained completely in simulation and then successfully transferred
+    to a physical robot, successfully bridging the sim2real gap.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: During test time, the robot succeeded under conditions that it had never seen
+    during training, such as the fingers being tied, having a rubber glove on, perturbations
+    with various objects, and so on.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These are phenomenal results in terms of the generalization capability of the
+    trained policy.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Info
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: You should check out the blog post for this important research at [https://openai.com/blog/solving-rubiks-cube/](https://openai.com/blog/solving-rubiks-cube/).
+    It contains great visualizations and insights into the results.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: ADR was the key method in the success of this application. Next, we will discuss
+    how ADR works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ADR algorithm
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Each environment we create during training is randomized over certain parameters,
+    such as friction and torque, in the preceding example. To denote this formally,
+    we say that an environment, ![](img/Formula_11_017.png), is parametrized by ![](img/Formula_11_018.png),
+    where ![](img/Formula_11_019.png) is the number of parameters (2, in this example).
+    When an environment is created, we sample ![](img/Formula_11_020.png) from a distribution,
+    ![](img/Formula_11_021.png). What ADR adjusts is ![](img/Formula_11_022.png) of
+    the parameter distribution, therefore changing the likelihood of different parameter
+    samples, making the environment more difficult or easier, depending on whether
+    the agent is successful in the current difficulty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An example, ![](img/Formula_11_023.png), would consist of uniform distributions
+    for each parameter dimension, ![](img/Formula_11_024.png), with ![](img/Formula_11_025.png).
+    Connecting with our example, ![](img/Formula_11_026.png) would correspond to the
+    friction coefficient, ![](img/Formula_11_027.png). Then, for the initial lesson,
+    we would have ![](img/Formula_11_028.png). This would be similar for the torque
+    parameter, ![](img/Formula_11_029.png). Then, ![](img/Formula_11_030.png) becomes
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_11_031.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'ADR suggests the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the training continues, allocate some of the environments for evaluation
+    to decide whether to update ![](img/Formula_11_032.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In each evaluation environment, pick a dimension, ![](img/Formula_11_033.png),
+    then pick either the upper or lower bound to focus on, such as ![](img/Formula_11_034.png)
+    and ![](img/Formula_11_035.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fix the environment parameter for the dimension picked to the bound chosen.
+    Sample the rest of the parameters from ![](img/Formula_11_036.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluate the agent's performance in the given environment and keep the total
+    reward obtained in that episode in a buffer associated with the dimension and
+    the bound (for example, ![](img/Formula_11_037.png)).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When there are enough results in the buffer, compare the average reward to the
+    success and failure thresholds you had chosen a priori.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the average performance for the given dimension and bound is above your success
+    threshold, expand the parameter range for the dimension; if it is below the failure
+    threshold, decrease the range.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In summary, ADR systematically evaluates the agent performance for each parameter
+    dimension at the boundaries of the parameter range, then expands or shrinks the
+    range depending on the agent performance. You can refer to the paper for pseudo-code
+    of the ADR algorithm, which should be easy to follow with the preceding explanations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's discuss another important method for automatic curriculum generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Absolute learning progress with Gaussian mixture models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Another method for automatic curriculum generation is the **absolute learning
+    progress with Gaussian mixture models** (**ALP-GMM**) method. The essence of this
+    approach is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To identify the parts of the environment parameter space that show the most
+    learning progress (called the ALP value)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To fit multiple GMM models to the ALP data, with ![](img/Formula_11_038.png)number
+    of kernels, then select the best one
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To sample the environment parameters from the best GMM model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This idea has roots in cognitive science and is used to model the early vocal
+    developments of infants.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The ALP score for a newly sampled parameter vector, ![](img/Formula_11_039.png),
+    is calculated as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_11_040.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_11_041.png) is the episode reward obtained with ![](img/Formula_11_042.png),
+    ![](img/Formula_11_043.png) is the closest parameter vector that was obtained
+    in a previous episode, and ![](img/Formula_11_044.png) is the episode reward associated
+    with ![](img/Formula_11_045.png). All the ![](img/Formula_11_046.png)) pairs are
+    kept in a database, denoted by ![](img/Formula_11_047.png), with which the ALP
+    scores are calculated. The GMM model, however, is obtained using the most recent
+    ![](img/Formula_11_048.png) ![](img/Formula_11_049.png) pairs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the parts of the parameter space that have high ALP scores are more
+    likely to be sampled to generate new environments. A high ALP score shows potential
+    for learning for that region, and it can be obtained by observing a large drop
+    or increase in episode reward with the newly sampled ![](img/Formula_11_050.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code repo of the ALP-GMM paper is available at [https://github.com/flowersteam/teachDeepRL](https://github.com/flowersteam/teachDeepRL),
+    which also contains animations that show how the algorithm works. We are not able
+    to go into the details of the repo here due to space limitations, but I highly
+    recommend you take a look at the implementation and the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we will present some additional resources on generalization for further
+    reading.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sunblaze environment
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We don't have space to cover all methods for generalization in this book, but
+    a useful resource for you to check out is a blog by Packer & Gao, 2019, which
+    introduces the sunblaze environments to systematically assess generalization approaches
+    for RL. These environments are modifications to the classic OpenAI Gym environments,
+    which are parametrized to test the interpolation and extrapolation performance
+    of algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find the blog post describing the sunblaze environments and the results
+    at [https://bair.berkeley.edu/blog/2019/03/18/rl-generalization/](https://bair.berkeley.edu/blog/2019/03/18/rl-generalization/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Terrific job! You have learned about one of the most important topics concerning
+    real-world RL! Next, we will look at a closely connected topic, which is overcoming
+    partial observability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using memory to overcome partial observability
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'At the beginning of the chapter, we described how memory is a useful structure
+    to handle partial observability. We also mentioned that the problem of generalization
+    can often be thought of as the result of partial observability:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A hidden state differentiating two environments, such as a simulation and the
+    real world, can be uncovered through memory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When we implement domain randomization, we aim to create many versions of our
+    training environment in which we expect the agent to build an overarching model
+    for the world dynamics.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Through memory, we hope that the agent can identify the characteristics of the
+    environment it is in, even if it had not seen that particular environment during
+    training, and then act accordingly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, memory for a model is nothing more than a way of processing a sequence
+    of observations as the input to the agent policy. If you have worked with other
+    types of sequence data with neural networks, such as in time-series prediction
+    or **natural language processing** (**NLP**), you can adopt similar approaches
+    to use observation memory as the input for your RL model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's go into more details of how this can be done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stacking observations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A simple way of passing an observation sequence to the model is to stitch them
+    together and treat this stack as a single observation. Denoting the observation
+    at time ![](img/Formula_11_051.png) as ![](img/Formula_11_052.png), we can form
+    a new observation, ![](img/Formula_11_053.png), to be passed to the model, as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_11_054.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_11_055.png) is the length of the memory. Of course, for
+    ![](img/Formula_11_056.png), we need to somehow initialize the earlier parts of
+    the memory, such as using vectors of zeros that are the same dimension as ![](img/Formula_11_057.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In fact, simply stacking observations is how the original DQN work handled
+    the partial observability in the Atari environments. In more detail, the steps
+    of that preprocessing are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A rescaled ![](img/Formula_11_058.png) RGB frame of the screen is obtained.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The Y channel (luminance) is extracted to further compress the frame into an
+    ![](img/Formula_11_059.png) image. That makes a single observation, ![](img/Formula_11_060.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_11_061.png) most recent frames are concatenated to an ![](img/Formula_11_062.png)image,
+    forming an observation with memory for the model, ![](img/Formula_11_063.png).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Note that only the last step is about the memory and the former steps are not
+    strictly necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The obvious benefit of this method is that it is super simple, and the resulting
+    model is easy to train. The downside is, though, that this is not the best way
+    of handling sequence data, which should not be surprising to you if you have dealt
+    with time-series problems or NLP before. Here is an example of why.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider the following sentence you speak to your virtual voice assistant,
+    such as Apple''s Siri:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*"Buy me a plane ticket from San Francisco to Boston."*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is the same as saying the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*"Buy me a plane ticket to Boston from San Francisco"*'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assuming each word is passed to an input neuron, it is hard for the neural network
+    to readily interpret them as the same sentences because normally, each input neuron
+    expects a specific input. In this structure, you would have to train your network
+    with all different combinations of this sentence. A further complexity is that
+    your input size is fixed, but each sentence could be of a different length. You
+    can extend this thought to RL problems as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, stacking observations is good enough in most problems, such as Atari games.
+    But if you are trying to teach your model how to play Dota 2, a strategy video
+    game, then you are out of luck.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fortunately, **recurrent** **neural** **networks** (**RNNs**) come to the rescue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using RNNs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'RNNs are designed to handle sequence data. A famous RNN variant, **long** **short-term**
+    **memory** (**LSTM**) networks, can be effectively trained to handle long sequences.
+    LSTM is usually the choice when it comes to handling partial observability in
+    complex environments: it is used in OpenAI''s Dota 2 and DeepMind''s StarCraft
+    II models, among many others.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Describing the full details of how RNNs and LSTMs work is beyond the scope
+    of this chapter. If you want a resource to learn more about them, Christopher
+    Olah''s blog is the place to go: [http://colah.github.io/posts/2015-08-Understanding-LSTMs/](http://colah.github.io/posts/2015-08-Understanding-LSTMs/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When using RLlib, the LSTM layer can be enabled as follows, say while using
+    PPO, followed by some optional hyperparameter changes over the default values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the input is first fed to the (preprocessing) "model" in RLlib, which
+    is typically a sequence of fully connected layers. The output of the preprocessing
+    is then passed to the LSTM layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The fully connected layer hyperparameters can be similarly overwritten:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After specifying the environment within the config as a Gym environment name
+    or your custom environment class, the config dictionary is then passed to the
+    trainer class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There are couple things to keep in mind when using an LSTM model as opposed
+    to the simple stacking of observations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: LSTM is often slower to train due to the sequential processing of a multi-step
+    input.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training LSTM may require more data compared to a feedforward network.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Your LSTM model could be more sensitive to hyperparameters, so you may have
+    to do some hyperparameter tuning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Speaking of hyperparameters, here are some values to try if your training is
+    not progressing well for an algorithm like PPO:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Learning rate (`config["lr"]`): ![](img/Formula_11_064.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'LSTM cell size (`config["model"]["lstm_cell_size"]`): 64, 128, 256.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Layer sharing between the value and policy network (`config["vf_share_layers"]`):
+    Try to make this false if your episode rewards are in the hundreds or above to
+    prevent the value function loss from dominating the policy loss. Alternatively,
+    you can also reduce `config["vf_loss_coeff"]`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Entropy coefficient (`config["entropy_coeff"]`): ![](img/Formula_11_065.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Passing reward and previous actions as input (`config["model"]["lstm_use_prev_action_reward"]`):
+    Try to make this true to provide more information to the agent in addition to
+    observations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Preprocessing model architecture (`config["model"]["fcnet_hiddens"]` and `config["model"]["fcnet_activation"]`):
+    Try single linear layers.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hopefully, these will be helpful to come up with a good architecture for your
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, let''s discuss one of the most popular architectures: Transformer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transformer architecture
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Over the past several years, the Transformer architecture has essentially replaced
+    RNNs in NLP applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Transformer architecture has several advantages over LSTM, the most used
+    RNN type:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An LSTM encoder packs all the information obtained from the input sequence into
+    a single embedding layer that is then passed to the decoder. This creates a bottleneck
+    between the encoder and the decoder. The Transformer model, however, allows the
+    decoder to look at each of the elements of the input sequence (at their embeddings,
+    to be precise).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Since LSTM relies on backpropagation through time, the gradients are likely
+    to explode or vanish throughout the update. The Transformer model, on the other
+    hand, simultaneously looks at each of the input steps and does not run into a
+    similar problem.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a result, Transformer models can effectively use much longer input sequences.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For these reasons, Transformer is potentially a competitive alternative to RNNs
+    for RL applications as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: A great tutorial on the Transformer architecture is by Jay Alammar, available
+    at [http://jalammar.github.io/illustrated-transformer/](http://jalammar.github.io/illustrated-transformer/),
+    if you would like to catch up on the topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite the advantages of the original Transformer model, it has been proven
+    to be unstable in RL applications. An improvement has been proposed (*Parisotto
+    et al., 2019*), named **Gated Transformer-XL** (**GTrXL**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'RLlib has GTrXL implemented as a custom model. It can be used as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This gives us another powerful architecture to try in RLlib.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Congratulations! We have arrived at the end of the chapter! We have covered
+    important topics that deserve more attention than what our limited space allows
+    here. Go ahead and read the sources in the *References* section and experiment
+    with the repos we introduced to deepen your understanding of the topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we covered an important topic in RL: generalization and partial
+    observability, which are key for real-world applications. Note that this is an
+    active research area: keep our discussion here as suggestions and the first methods
+    to try for your problem. New approaches come out periodically, so watch out for
+    them. The important thing is you should always keep an eye on generalization and
+    partial observability for a successful RL implementation outside of video games.
+    In the next section, we will take our expedition to yet another advanced level
+    with meta-learning. So, stay tuned!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Cobbe, K., Klimov, O., Hesse, C., Kim, T., & Schulman, J. (2018). *Quantifying
+    Generalization in Reinforcement Learning*: [https://arxiv.org/abs/1812.02341](https://arxiv.org/abs/1812.02341)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Lee, K., Lee, K., Shin, J., & Lee, H. (2020). *Network Randomization: A Simple
+    Technique for Generalization in Deep Reinforcement Learning*: [https://arxiv.org/abs/1910.05396](https://arxiv.org/abs/1910.05396)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Rivlin, O. (2019, November 21). *Generalization in Deep Reinforcement Learning*.
+    Retrieved from Towards Data Science: [https://towardsdatascience.com/generalization-in-deep-reinforcement-learning-a14a240b155b](https://towardsdatascience.com/generalization-in-deep-reinforcement-learning-a14a240b155b)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Rivlin, O. (2019). *Generalization in Deep Reinforcement Learning*. Retrieved
+    from Towards Data Science: [https://towardsdatascience.com/generalization-in-deep-reinforcement-learning-a14a240b155](https://towardsdatascience.com/generalization-in-deep-reinforcement-learning-a14a240b155)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Cobbe, K., Klimov, O., Hesse, C., Kim, T., & Schulman, J. (2018). *Quantifying
+    Generalization in Reinforcement Learning*: [https://arxiv.org/abs/1812.0234](https://arxiv.org/abs/1812.0234)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Lee, K., Lee, K., Shin, J., & Lee, H. (2020). *Network Randomization: A Simple
+    Technique for Generalization in Deep Reinforcement Learning*: [https://arxiv.org/abs/1910.0539](https://arxiv.org/abs/1910.0539)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Parisotto, E., et al. (2019). *Stabilizing Transformers for Reinforcement Learning*:
+    [http://arxiv.org/abs/1910.06764](http://arxiv.org/abs/1910.06764)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

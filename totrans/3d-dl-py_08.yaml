@@ -1,0 +1,801 @@
+- en: '7'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Exploring Controllable Neural Feature Fields
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, you learned how to represent a 3D scene using **Neural
+    Radiance Fields** (**NeRF**). We trained a single neural network on posed multi-view
+    images of a 3D scene to learn an implicit representation of it. Then, we used
+    the NeRF model to render the 3D scene from various other viewpoints and viewing
+    angles. With this model, we assumed that the objects and the background are unchanging.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But it is fair to wonder whether it is possible to generate variations of the
+    3D scene. Can we control the number of objects, their poses, and the scene background?
+    Can we learn about the 3D nature of things without posed images and without understanding
+    the camera parameters?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By the end of this chapter, you will learn that it is indeed possible to do
+    all these things. Concretely, you should have a better understanding of GIRAFFE,
+    a very novel method for controllable 3D image synthesis. This combines ideas from
+    the fields of image synthesis and implicit 3D representation learning using NeRF-like
+    models. This will become clear as we cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding GAN-based image synthesis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing compositional 3D-aware image synthesis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating feature fields
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Mapping feature fields to images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring controllable scene generation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training the GIRAFFE model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In order to run the example code snippets in this book, ideally, you need to
+    have a computer with a GPU that has around 8 GB of GPU memory. Running code snippets
+    with only CPUs is not impossible but will be extremely slow. The recommended computer
+    configuration is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A GPU device – for example, the Nvidia GTX series or the RTX series with at
+    least 8 GB of memory
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Python 3.7+
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Anaconda3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The code snippets for this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding GAN-based image synthesis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Deep generative models have been shown to produce photorealistic 2D images
+    when trained on a distribution from a particular domain. **Generative Adversarial
+    Networks** (**GANs**) are one of the most widely used frameworks for this purpose.
+    They can synthesize high-quality photorealistic images at resolutions of 1,024
+    x 1,024 and beyond. For example, they have been used to generate realistic faces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.1: Randomly generated faces as high-quality 2D images using StyleGAN2
+    ](img/B18217_07_1a.jpg)![Figure 7.1: Randomly generated faces as high-quality
+    2D images using StyleGAN2 ](img/B18217_07_1b.jpg)![Figure 7.1: Randomly generated
+    faces as high-quality 2D images using StyleGAN2 ](img/B18217_07_1c.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.1: Randomly generated faces as high-quality 2D images using StyleGAN2'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'GANs can be trained to generate similar-looking images from any data distribution.
+    The same StyleGAN2 model, when trained on a car dataset, can generate high-resolution
+    images of cars:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.2: Randomly generated cars as 2D images using StyleGAN2 ](img/B18217_07_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.2: Randomly generated cars as 2D images using StyleGAN2'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'GANs are based on a game-theoretic scenario where a generator neural network
+    generates an image. However, in order to be successful, it must fool the discriminator
+    into classifying it as a realistic image. This tug of war between the two neural
+    networks (that is, the generator and the discriminator) can lead to a generator
+    that produces photorealistic images. The generator network does this by creating
+    a probability distribution on a multi-dimensional latent space such that the points
+    on that distribution are realistic images from the domain of the training images.
+    In order to generate a novel image, we just need to sample a point on the latent
+    space and let the generator create an image from it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.3: A canonical GAN ](img/B18217_07_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.3: A canonical GAN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Synthesizing high-resolution photorealistic images is great, but it is not the
+    only desirable property of a generative model. More real-life applications open
+    if the generation process is disentangled and controllable in a simple and predictable
+    manner. More importantly, we need attributes such as object shape, size, and pose
+    to be as disentangled as possible so that we can vary them without changing other
+    attributes in the image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Existing GAN-based image generation approaches generate 2D images without truly
+    understanding the underlying 3D nature of the image. Therefore, there are no built-in
+    explicit controls for varying attributes such as object position, shape, size,
+    and pose. This results in GANs that have entangled attributes. For simplicity,
+    think about an example of a GAN model that generates realistic faces, where changing
+    the head pose also changes the perceived gender of the generated face. This can
+    happen if the gender and head pose attributes become entangled. This is undesirable
+    for most practical use cases. We need to be able to vary one attribute without
+    affecting any of the others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we are going to look at a high-level overview of a model
+    that can generate 2D images with an implicit understanding of the 3D nature of
+    the underlying scene.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing compositional 3D-aware image synthesis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Our goal is controllable image synthesis. We need control over the number of
+    objects in the image, their position, shape, size, and pose. The GIRAFFE model
+    is one of the first to achieve all these desirable properties while also generating
+    high-resolution photorealistic images. In order to have control over these attributes,
+    the model must have some awareness of the 3D nature of the scene.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let us look at how the GIRAFFE model builds on top of other established
+    ideas to achieve this. It makes use of the following high-level concepts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Learning 3D representation**: A NeRF-like model for learning implicit 3D
+    representation and feature fields. Unlike the standard NeRF model, this model
+    outputs a feature field instead of the color intensity. This NeRF-like model is
+    used to enforce a 3D consistency in the images generated.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Compositional operator**: A parameter-free compositional operator to compose
+    feature fields of multiple objects into a single feature field. This will help
+    in creating images with the desired number of objects in them.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Neural rendering model**: This uses the composed feature field to create
+    an image. This is a 2D **Convolutional Neural Network** (**CNN**) that upsamples
+    the feature field to create a higher dimensional output image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**GAN**: The GIRAFFE model uses the GAN model architecture to generate new
+    scenes. The preceding three components form the generator. The model also consists
+    of a discriminator neural network that distinguishes between fake images and real
+    images. Due to the presence of a NeRF model along with a composition operator,
+    this model will make the image generation process both compositional and 3D aware.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Generating an image is a two-step process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Volume-render a feature field given the camera viewing angle along with some
+    information about the objects you want to render. This object information is some
+    abstract vectors that you will learn about in future sections.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use a neural rendering model to map the feature field to a high-resolution image.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This two-step approach was found to be better at generating high-resolution
+    images as compared to directly generating the RGB values from the NeRF model output.
+    From the previous chapter, we know that a NeRF model is trained on images from
+    the same scene. A trained model can only generate an image from the same scene.
+    This was one of the big limitations of the NeRF model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In contrast, the GIRAFFE model is trained on images of unposed images from different
+    scenes. A trained model can generate images from the same distribution as what
+    it was trained on. Typically, this model is trained on the same kind of data.
+    That is, the training data distribution comes from a single domain. For example,
+    if we train a model on the *Cars* dataset, we can expect the images generated
+    by this model to be some version of a car. It cannot generate images from a completely
+    unseen distribution such as faces. While this is still a limitation of what the
+    model can do, it is much less limited as compared to the standard NeRF model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The fundamental concepts implemented in the GIRAFFE model that we have discussed
+    so far are summarized in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.4: The GIRAFFE model ](img/B18217_07_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.4: The GIRAFFE model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The generator model uses the chosen camera pose and *N*, the number of objects
+    (including the background), and the corresponding number of shape and appearance
+    codes along with affine transformations to first synthesize feature fields. The
+    individual feature fields corresponding to individual objects are then composed
+    together to form an aggregate feature field. It then volume renders the feature
+    field along the ray using the standard principles of volume rendering. Following
+    this, a neural rendering network transforms this feature field to a pixel value
+    in the image space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we gained a very broad understanding of the GIRAFFE model.
+    Now let us zoom into the individual components of it to get a more in-depth understanding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating feature fields
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The first step of the scene generation process is generating a feature field.
+    This is analogous to generating an RGB image in the NeRF model. In the NeRF model,
+    the output of the model is a feature field that happens to be an image made up
+    of RGB values. However, a feature field can be any abstract notion of the image.
+    It is a generalization of an image matrix. The difference here is that instead
+    of generating a three-channel RGB image, the GIRAFFE model generates a more abstract
+    image that we refer to as the feature field with dimensions HV, WV, and Mf, where
+    HV is the height of the feature field, WV is its width, and Mf is the number of
+    channels in the feature field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this section, let us assume that we have a trained GIRAFFE model. It has
+    been trained on some predefined dataset that we are not going to think about now.
+    To generate a new image, we need to do the following three things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specify the camera pose: This defines the viewing angle of the camera. As a
+    preprocessing step, we use this camera pose to cast a ray into the scene and generate
+    a direction vector (dj) along with sampled points (xij). We will project many
+    such rays into the scene.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Sample 2N latent codes: We sample two latent codes corresponding to each object
+    we wish to see in the rendered output image. One latent code corresponds to the
+    shape of the object and the other latent code corresponds to its appearance. These
+    codes are sampled from a standard normal distribution.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Specify *N* affine transformations: This corresponds to the pose of the object
+    in the scene.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The generator part of the model does the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For each expected object in the scene, use the shape code, the appearance code,
+    the object’s pose information (that is, the affine transformation), the viewing
+    direction vector, and a point in the scene (xij) to generate a feature field (a
+    vector) and a volume density for that point. This is the NeRF model in action.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Use the compositional operator to compose these feature fields and densities
+    into a single feature field and density value for that point. Here, the compositional
+    operator does the following:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_001.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](img/Formula_07_002.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The volume density at a point can be simply summed up. The feature field is
+    averaged by assigning importance proportional to the volume density of the object
+    at that point. One important benefit of such a simple operator is that it is differentiable.
+    Therefore, it can be introduced inside a neural network since the gradients can
+    flow through this operator during the model training phase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We use volume rendering to render a feature field for each ray generated for
+    the input camera pose by aggregating feature field values along the ray. We do
+    this for multiple rays to create a full feature field of dimension HV x WV. Here,
+    V is generally a small value. So, we are creating a low-resolution feature field.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Feature fields
+  prefs: []
+  type: TYPE_NORMAL
+- en: A feature field is an abstract notion of an image. They are not RGB values and
+    are typically in low spatial dimensions (such as 16 x 16 or 64 x 64) but high
+    channel dimensions. We need an image that is spatially high dimensional (for example,
+    512 x 512), but in three channels (RGB). Let us look at a way to do that with
+    a neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mapping feature fields to images
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After we generate a feature field of dimensions HV x WV x Mf, we need to map
+    this to an image of dimension H x W x 3\. Typically, HV < H, WV < W, and Mf >
+    3\. The GIRAFFE model uses the two-stage approach since an ablation analysis showed
+    it to be better than using a single-stage approach to generate the image directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The mapping operation is a parametric function that can be learned with data,
+    and using a 2D CNN is best suited for this task since it is a function in the
+    image domain. You can think of this function as an upsampling neural network like
+    a decoder in an auto-encoder. The output of this neural network is the rendered
+    image that we can see, understand, and evaluate. Mathematically, this can be defined
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This neural network consists of a series of upsampling layers done using *n*
+    blocks of nearest neighbor upsampling, followed by a 3 x 3 convolution and leaky
+    ReLU. This creates a series of *n* different spatial resolutions of the feature
+    field. However, in each spatial resolution, the feature field is mapped to a three-channel
+    image of the same spatial resolution via a 3 x 3 convolution. At the same time,
+    images from the previous spatial resolution are upsampled using a non-parametric
+    bilinear upsampling operator and added to the image of the new spatial resolution.
+    This is repeated until we reach the desired spatial resolution of H x W.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The skip connections from the feature field to a similar dimensional image help
+    with a strong gradient flow to the feature fields in each spatial resolution.
+    Intuitively, this ensures that the neural rendering model has a strong understanding
+    of the image in each spatial resolution. Additionally, the skip connections ensure
+    that the final image that is generated is a combination of the image understanding
+    at various resolutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This concept becomes very clear with the following diagram of the neural rendering
+    model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.5: Neural rendering model; this is a 2D CNN with a series of nearest
+    neighbor upsampling operators with a parallel mapping to the RGB image domain
+    ](img/B18217_07_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.5: Neural rendering model; this is a 2D CNN with a series of nearest
+    neighbor upsampling operators with a parallel mapping to the RGB image domain'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The neural rendering model takes the feature field output from the previous
+    stage and generates a high-resolution RGB image. Since the feature field is generated
+    using a NeRF-based generator, it should understand the 3D nature of the scene,
+    the objects in them, and their position, pose, shape, and appearance. And since
+    we use a compositional operator, the feature field also encodes the number of
+    objects in the scene.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, you will discover how we can control the scene generation
+    process and the control mechanisms we have to achieve it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring controllable scene generation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To truly appreciate and learn what a computer vision model generates, we need
+    to visualize the outputs of the trained model. Since we are dealing with a generative
+    approach, it is easy to do this by simply visualizing the images generated by
+    the model. In this section, we will explore pre-trained GIRAFFE models and look
+    at how well they can generate controllable scenes. We will use pre-trained checkpoints
+    provided by the creators of the GIRAFFE model. The instructions provided in this
+    section are based on the open source GitHub repository at [https://github.com/autonomousvision/giraffe](https://github.com/autonomousvision/giraffe).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Create the Anaconda environment called `giraffe` with the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the `conda` environment has been activated, you can start rendering images
+    for various datasets using their corresponding pre-trained checkpoints. The creators
+    of the GIRAFFE model have shared pre-trained models from five different datasets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cars dataset**: This consists of 136,726 images of 196 classes of cars.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**CelebA-HQ dataset**: This consists of 30,000 high-resolution face images
+    selected from the original *CelebA* dataset.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**LSUN Church dataset**: This consists of about 126,227 images of churches.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**CLEVR dataset**: This is a dataset primarily used for visual question-answering
+    research. It consists of 54,336 images of objects of different sizes, shapes,
+    and positions.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Flickr-Faces-HQ dataset**: This consists of 70,000 high-quality images of
+    faces obtained from Flickr.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will explore the model outputs on two different datasets just to get an understanding
+    of them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring controllable car generation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this subsection, we are going to explore a model trained on the *Cars* dataset.
+    The appearance and shape code provided to the model will generate cars since that
+    is what the model is trained on. You can run the following command to generate
+    image samples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, the `config` file specifies the path to the output folder where the generated
+    images are stored. The `render.py` script will automatically download the GIRAFFE
+    model checkpoints and use them to render images. The output images are stored
+    in `out/cars256_pretrained/rendering`. This folder will have the following subfolders:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Each of these folders contains images obtained when we change specific inputs
+    of the GIRAFFE model. For example, take a look at the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`interpolate_app`: This is a set of images to demonstrate what happens when
+    we slowly vary the object appearance code.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`interpolate_bg_app`: This demonstrates what happens when we vary the background
+    appearance code.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`interpolate_shape`: This demonstrates what happens when we vary the shape
+    code of the object.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`translation_object_depth`: This demonstrates what happens when we change the
+    object depth. This is part of the affine transformation matrix code that is part
+    of the input.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`translation_object_horizontal`: This demonstrates what happens when we want
+    to move the object sideways in the image. This is part of the affine transformation
+    matrix code that is part of the input.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`rotation_object`: This demonstrates what happens when we want to change the
+    object pose. This is part of the affine transformation matrix code that is part
+    of the input.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let us look at the images inside the `rotation_object` folder and analyze them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.6: The Rotation object model images ](img/B18217_07_6a.jpg)![Figure
+    7.6: The Rotation object model images ](img/B18217_07_6b.jpg)![Figure 7.6: The
+    Rotation object model images ](img/B18217_07_6c.jpg)![Figure 7.6: The Rotation
+    object model images ](img/B18217_07_6d.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.6: The Rotation object model images'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Images in each row were obtained by, first, choosing an appearance and shape
+    code and varying the affine transformation matrix to just rotate the object. The
+    horizontal and depth translation parts of the affine transformation code were
+    kept fixed. The background object code, appearance, and shape code of the object
+    were also kept fixed. Different rows were obtained by using different appearance
+    and shape code. Here are some observations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The background for all the images does not change across images for the same
+    object. This suggests that we have successfully disentangled the background for
+    the remaining parts of the image.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Color, reflection, and shadows: As the object is rotated, the image color and
+    reflection are fairly consistent as expected of a physical object rotation. This
+    is typical because of the usage of NeRF-like model architecture.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Left-right consistency: The left and right views of a car are consistent.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There are some unnatural artifacts such as blurry object edges and smudged backgrounds.
+    High-frequency variations in the image are not very well captured by the GIRAFFE
+    model.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can now explore other folders to understand the model’s consistency and
+    quality of the generated image when the object is translated or when the background
+    is varied.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring controllable face generation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this subsection, we are going to explore a model trained on the *CelebA-HQ*
+    dataset. The appearance and shape codes provided to the model will generate faces
+    since that is what the model is trained on. You can run the following command
+    to generate image samples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `config` file specifies the path to the output folder where the generated
+    images are stored. The output images are stored in `out/celebahq_256_pretrained
+    /rendering`. This folder will have the following subfolders:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let us look at images inside the `interpolate_app` folder and analyze them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.7: The interpolate app images ](img/B18217_07_7a.jpg)![Figure 7.7:
+    The interpolate app images ](img/B18217_07_7b.jpg)![Figure 7.7: The interpolate
+    app images ](img/B18217_07_7c.jpg)![Figure 7.7: The interpolate app images ](img/B18217_07_7d.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.7: The interpolate app images'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Images in each row were obtained by, first, choosing a shape code and varying
+    the appearance code to just change the appearance of the face. The affine transformation
+    matrix code was kept fixed too. Different rows were obtained by using different
+    shape code. Here are some observations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The shape of the generated face is largely fixed across a single row of faces.
+    This suggests that the shape code is robust to changes in appearance code.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The appearance of the face (features such as skin tone, skin shine, hair color,
+    eyebrow color, eye color, lip expression, and nose shape) changes as the appearance
+    code is changed. This suggests that the appearance code encodes facial appearance
+    features.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The shape code encodes the perceived gender of the face. This largely makes
+    sense since there is a large perceived variation between the facial shape of male
+    and female images in the training dataset.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let us look at images inside the `interpolate_shape` folder and analyze them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.8: The interpolate shape images ](img/B18217_07_8a.jpg)![Figure
+    7.8: The interpolate shape images ](img/B18217_07_8b.jpg)![Figure 7.8: The interpolate
+    shape images ](img/B18217_07_8c.jpg)![Figure 7.8: The interpolate shape images
+    ](img/B18217_08_8d.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.8: The interpolate shape images'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Images in each row were obtained by, first, choosing an appearance code and
+    varying the shape code to just change the shape of the face. The affine transformation
+    matrix code was kept fixed too. Different rows were obtained by using different
+    appearance code. Here are some observations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The appearance of the face (features such as skin tone, skin shine, hair color,
+    eyebrow color, eye color, lip expression, and nose shape) is largely the same
+    as the shape code is changed. This suggests that the appearance code is robust
+    to changes in facial shape features.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The shape of the generated face changes as the shape code is varied. This suggests
+    that the shape code is correctly encoding the shape features of the face.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The shape code encodes the perceived gender of the face. This largely makes
+    sense since there is a large perceived variation between the facial shape of male
+    and female images in the training dataset.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this section, we explored controllable 3D scene generation using the GIRAFFE
+    model. We generated cars using a model trained on the *Cars* dataset. Additionally,
+    we generated faces using a model trained on the *CelebA-HQ* dataset. In each of
+    these cases, we saw that the input parameters of the model are very well disentangled.
+    We used a pre-trained model provided by the creators of the GIRAFFE model. In
+    the next section, we will learn more about how to train such a model on a new
+    dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the GIRAFFE model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far in this chapter, we have understood how a trained GIRAFFE model works.
+    We have understood the different components that make up the generator part of
+    the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But to train the model, there is another part that we have not looked at so
+    far, namely, the discriminator. Like in any other GAN model, this discriminator
+    part of the model is not used during image synthesis, but it is a vital component
+    for training the model. In this chapter, we will investigate it in more detail
+    and gain an understanding of the loss function used. We will train a new model
+    from scratch using the training module provided by the authors of GIRAFFE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The generator takes as input the various latent code corresponding to object
+    rotation, background rotation, camera elevation, horizontal and depth translation,
+    and object size. This is used to first generate a feature field and then map it
+    to RGB pixels using a neural rendering module. This is the generator. The discriminator
+    is fed with two images: one is the real image from the training dataset and the
+    other is the image generated by the generator. The goal of the discriminator is
+    to classify the real image as real and the generated image as fake. This is the
+    GAN objective.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The training dataset is unlabeled. There is no annotation for the object pose
+    parameters, depth, or position in the image. However, for each dataset, we roughly
+    know the parameters such as object rotation rate, background rotation range, camera
+    elevation range, horizontal translation, depth translation range, and the object
+    scale range. During training, the inputs are randomly sampled from the range of
+    values assuming a uniform distribution within the range.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The discriminator is a 2D CNN that takes as input an image and outputs confidence
+    scores for real and fake images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Frechet Inception Distance
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In order to evaluate the quality of generated images, we use the **Frechet
+    Inception Distance** (**FID**). This is a measure of the distance between features
+    extracted from real and generated images. This is not a metric on a single image.
+    Rather, it is a statistic on the entire population of the images. Here is how
+    we calculate the FID score:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we make use of the InceptionV3 model (a popular deep learning backbone
+    used in many real-world applications) to extract a feature vector from the image.
+    Typically, this is the last layer of the model before the classification layer.
+    This feature vector summarizes the image in a low-dimensional space.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We extract feature vectors for the entire collection of real and generated images.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We calculate the mean and the covariance of these feature vectors separately
+    for the collection of real and generated images.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The mean and covariance statistics are used in a distance formula to derive
+    a distance metric.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training the model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let us look at how can initiate model training on the *Cars* dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The training parameters can be understood by looking at the configuration file,
+    `configs/256res/celebahq_256.yaml`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Data**: This section of the config file specifies the path to the training
+    dataset to use:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '**Model**: This specifies the modeling parameters:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`d`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Directory path and learning rate, among other things:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the model is a computationally intensive task. It would most likely
+    take anywhere between 1 and 4 days to fully train the model on a single GPU, depending
+    on the GPU device used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you explored controllable 3D-aware image synthesis using the
+    GIRAFFE model. This model borrows concepts from NeRF, GANs, and 2D CNNs to create
+    3D scenes that are controllable. First, we had a refresher on GANs. Then, we dove
+    deeper into the GIRAFFE model, how feature fields are generated, and how those
+    feature fields are then transformed into RGB images. We then explored the outputs
+    of this model and understood its properties and limitations. Finally, we briefly
+    touched on how to train this model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we are going to explore a relatively new technique used
+    to generate realistic human bodies in three dimensions called the SMPL model.
+    Notably, the SMPL model is one of the small numbers of models that do not use
+    deep neural networks. Instead, it uses more classical statistical techniques such
+    as principal component analysis to achieve its objectives. You will learn the
+    importance of good mathematical problem formulation in building models that use
+    classical techniques.
+  prefs: []
+  type: TYPE_NORMAL

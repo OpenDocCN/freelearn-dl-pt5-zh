@@ -1,0 +1,747 @@
+- en: Neural Collaborative Filtering Using Embeddings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, you learned how to implement a **multilayer perceptron**
+    (**MLP**) neural network for signal detection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, you will explore how to build a recommender system using collaborative
+    filtering with neural network-based embeddings. We will briefly introduce recommender
+    systems and then proceed from concept to implementation. Specifically, you will
+    learn how to use the custom Keras API to construct a neural network-based recommender
+    system with embedded layers to predict user ratings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter covers the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing recommender systems
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Collaborative filtering with neural networks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Preparing, preprocessing, and exploring data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Performing exploratory data analysis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating user and item embeddings
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building and training a neural recommender system
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluating results and tuning hyperparameters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We will use the Keras (TensorFlow API) library in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will be using the `steam200k.csv` dataset. This dataset was generated from
+    publicly available Steam data, which is one of the world's most popular gaming
+    hubs. This data contains a list of items (`game-title`), users (`user-id`), and
+    two user behaviors (`own` and `value`), where `value` represents the number of
+    hours played for each game. You can find the dataset at: [https://www.kaggle.com/tamber/steam-video-games/version/1#steam-200k.csv](https://www.kaggle.com/tamber/steam-video-games/version/1#steam-200k.csv).
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find the code files of this chapter on GitHub: [https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R](https://github.com/PacktPublishing/Hands-on-Deep-Learning-with-R).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing recommender systems
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recommender systems are information filtering systems designed to generate accurate
+    and relevant item suggestions for users based on available data. Netflix, Amazon,
+    YouTube, and Spotify are some popular services with recommender systems in commercial
+    use today.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three primary types of recommender systems:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Collaborative filtering**: Item recommendations reflect personalized preferences
+    based on similarity to other users. Preferences can be **explicit** (item ratings)
+    or **implicit** (item ratings per user-item interactions such as views, purchases,
+    and so on).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Content-based filtering**: Item recommendations reflect contextual factors
+    such as item attributes or user demographics; item suggestions can also use temporal
+    factors such as location, date, and time where applicable.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Hybrid**: Item recommendations combine a variety (ensemble) of collaborative
+    and content-based filtering methods, which have been used in notable competitions
+    such as the Netflix Prize (2009).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: See [https://www.netflixprize.com](https://www.netflixprize.com/) for historical
+    details about the Netflix Prize (2009) and various recommender system approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recommender systems often use data in the form of a sparse matrix of users and
+    the items you wish to recommend to them. As its name suggests, a sparse matrix
+    is a matrix whose data elements primarily comprise zero values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many recommender system algorithms seek to fill in a user-item interaction matrix
+    with item suggestions based on various types of interactions between users and
+    items. If there is no item preference or user interaction data available, this
+    is frequently referred to as a **cold start problem**, which can be addressed
+    with hybrid methods (collaborative and content-based filtering), contextual models
+    (temporal, demographic, and metadata), as well as random item and feedback sampling
+    strategies, among others. While these interventions are beyond the scope of this
+    chapter, it is important to be aware of the diverse, experimental, and rapidly
+    evolving types of techniques available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For purposes of illustration, we will focus our attention on collaborative filtering,
+    which is a popular technique that generates recommendations based on user-item
+    interactions. Moreover, collaborative filtering is particularly suitable for our
+    user-item dataset. In the absence of explicit ratings such as user-item preferences
+    (for example, 1 to 5, and like or dislike), we will create implicit preferences
+    of user-item ratings based on the hours of gameplay, which is available in our
+    dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Collaborative filtering with neural networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Collaborative filtering** (**CF**) is a core method used by recommender systems
+    to filter suggestions by collecting and analyzing preferences about other similar
+    users. CF techniques use available information and preference pattern data to
+    make predictions (filters) about a particular user''s interests.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The collaborative aspect of CF is associated with the notion that relevant recommendations
+    are derived from other user preferences. CF also assumes that two individuals
+    with similar preferences are more likely to share preferences for a particular
+    item than two other individuals selected at random. Accordingly, the primary task
+    of CF is to generate item suggestions (predictions) based on other (collaborative)
+    similar users within the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To identify similar users and find ratings (preferences) of unrated items, recommender
+    systems *typically* need an index of similarity between users and user-item preferences
+    based on available input data. Traditional memory-based approaches include calculating
+    similarity using distance metrics (cosine similarity, Jaccard), correlations (Pearson),
+    or taking a weighted average of user preferences. Other machine learning approaches
+    to determine user-item preferences of unrated items include generalized matrix
+    factorization methods such as **Principal Component Analysis** (**PCA**), **Singular
+    Value Decomposition** (**SVD**), and deep learning matrix factorization, among
+    others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring embeddings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Broadly speaking, deep neural networks seek to minimize the loss (error) associated
+    with non-linear data representations used for learning important features from
+    input data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition to traditional dimensionality reduction methods such as clustering
+    and KNN or matrix factorization (PCA, clustering, and other probabilistic techniques),
+    recommender systems can use neural network embeddings to support dimensionality
+    reduction and distributed, non-linear data representations in scalable and efficient
+    ways.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Embeddings** are low-dimensional representations (vectors) of continuous
+    numbers learned from representations (vectors) of discrete input variables in
+    neural networks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Neural network embeddings offer several advantages such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reduced computational time and costs (scalability)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Decreased amount of input data required for some learning activation functions
+    (sparsity)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Representations of complex, non-linear relationships (flexibility)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Automated feature importance and selection (efficiency)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's take a look at an introductory example of how to prepare data in order
+    to implement collaborative filtering using neural networks with embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing, preprocessing, and exploring data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Before we build a model, we need to first explore the input data to understand
+    what is available for user-item recommendations. In this section, we will prepare,
+    process, and explore the data, which includes users, items (games), and interactions
+    (hours of gameplay), using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s load some R packages for preparing and processing our input data:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let''s load the data into R:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s inspect the input data using `glimpse()`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fa9b5a1b-a7f1-4b6a-bd4a-bbebbf8df07e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s manually add column labels to organize this data:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s remove any blank columns or extraneous whitespace characters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we need to create sequential user and item IDs so we can later specify
+    an appropriate size for our lookup matrix via the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s rename the `item` and `value` fields to clarify we are exploring user-item
+    interaction data and implicitly defining user ratings based on the `value` field,
+    which represents the total number of hours played for a particular game:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This dataset contains user, item, and interaction data. Let''s use the following
+    code to identify the number of users and items available for analysis:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: We identified there are 11,350 users (players) and 3,598 items (games) to explore
+    for analysis and recommendations. Since we don't have explicit item ratings (yes/no,
+    1-5, for example), we will generate item (game) recommendations based on implicit
+    feedback (hours of gameplay) for illustration purposes. Alternatively, we could
+    seek to acquire additional user-item data (such as contextual, temporal, or content),
+    but we have enough baseline item-interaction data to build our preliminary CF-based
+    recommender system with neural network embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before proceeding, we need to normalize our rating (user-item interaction)
+    data, which can be implemented using standard techniques such as min-max normalization:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will split the data into training and test data:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now we will create matrices of users, items, and ratings for the training and
+    test data:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Prior to building our neural network models, we will first conduct **Exploratory
+    data analysis** (**EDA**) to better understand the scope, type, and characteristics
+    of the underlying data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Performing exploratory data analysis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recommender systems seek to use available information and preference pattern
+    data to generate predictions about a particular user's interests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a starting point, we can use EDA to identify important patterns and trends
+    in the underlying data to inform our understanding and subsequent analysis:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s identify the top 10 items based on implicit ratings constructed from
+    user-item interaction data using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Dota 2* is the most popular item (game) by collective hours played:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e104ac05-7f83-4e51-9df8-abed47b00ab7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s produce some summary statistics of user-item interactions to identify
+    insights with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'According to this exploratory analysis, Sid Meier''s *Civilization V* is the
+    most popular game by individual hours played:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/fd549d49-a53c-4123-9a22-cc43f45c77cc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, let''s identify and visualize the top 10 games by hours played:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d5bd6e83-92c3-4bff-b343-fa94a7bc9516.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Next, let''s identify the most popular games by total users:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f09f6a4c-bd55-43e2-b7af-cf1a8dd61c02.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, let''s calculate summary statistics of user-item interaction with the
+    following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a621b44c-ce34-4533-bddd-04c70ee80ba8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The summary statistics for overall user-item interaction show average (median)
+    interaction is `4.5` hours and average (mean) interaction is `48.88` hours, which
+    makes sense when you take into consideration the max (outlier) interaction value:
+    `11,754` hours of Sid Meier''s *Civilization V*!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let''s take a look at the distribution of items by individual hours played:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is the resultant output of items by hours played:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7f5c977a-db29-4f36-aeb2-0b6cb17c5f46.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Since it''s difficult to determine any clear user-item interaction patterns
+    with this approach, let''s re-examine items by hours played with a log transformation
+    of hours to reveal any other distributional patterns:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d22db659-6848-4e12-962b-fc68142da942.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By applying a simple log transformation of hours played, we can clearly see
+    the majority of games in this dataset are associated with 1,000 hours of gameplay
+    or less.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a better sense of the underlying data, let's focus our attention
+    on building a neural network with embeddings to predict user ratings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating user and item embeddings
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Recommender systems can use deep neural networks to support complex, non-linear
+    data representations in flexible, scalable, and efficient ways.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Embeddings are low-dimensional representations (vectors) of continuous numbers
+    learned from representations (vectors) of discrete input variables in neural networks.
+    As previously noted in this chapter, recommender systems *typically* need an index
+    of similarity between users and user-item preferences to identify similar users
+    and find ratings (preferences) of unrated items.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, unlike traditional collaborative filtering approaches that use generalized
+    matrix factorization methods to produce user-item affinity vectors, neural networks
+    can store important information about user-item affinity in a latent (hidden)
+    space using distributed, low-dimensional representational (embeddings).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Accordingly, as long as we have representations (embeddings) of users and items
+    (games) accessible within the same latent space, we can determine the mutual importance
+    of the relationship between users and items (games) using a dot product function.
+    Presuming user and item vectors have already been normalized, this is effectively
+    the same as using **cosine similarity**, cos(Θ), as a distance metric, where A[i]
+    and B[i] are components of vector A and B, respectively:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/1c38318b-5925-4998-a1ea-ea83007eb433.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By creating neural network embeddings for users and items, we can decrease the
+    amount of input data required for some learning activation functions, which is
+    especially helpful with the data sparsity conditions typically encountered with
+    user-item data in CF systems. In the next section, we will outline how to build,
+    compile, and train a neural recommender system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building and training a neural recommender system
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We are now going to build, compile, and train our model using our user-item
+    ratings data. Specifically, we will use Keras to construct a customized neural
+    network with embedded layers (one for users and one for items) and a lambda function
+    that computes the dot product to build a working prototype of a neural network-based
+    recommender system:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s get started using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding code, we defined a custom model with user and item embeddings
+    using the `keras_model_custom` function. You will notice that the input size of
+    each embedding layer is initialized to the size of the input data (`n_users` and
+    `n_items`, respectively).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following code, we define the size of the embedding parameter (`embedding_dim`)
+    and define the architecture of our neural collaborative filtering model and vector
+    representations (embeddings) to predict user ratings:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, let''s compile our model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let''s train our model with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/3c5f7a78-aca3-4c1e-beaf-468f314d3df9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, let''s inspect the baseline architecture of our model for reference:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is a printout of our model''s architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/856206c9-0157-49b2-a53a-97e0561b7592.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the following section, we will evaluate the model results, tune parameters,
+    and make some iterative adjustments to improve performance in terms of loss metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating results and tuning hyperparameters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Building a recommender system, evaluating its performance, and tuning the hyperparameters
+    is a highly iterative process. Ultimately, the goal is to maximize the model''s
+    performance and results. Now that we have built and trained our baseline model,
+    we can monitor and evaluate its performance during the training process using
+    the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following model performance output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8b359981-0508-44fd-beb9-0b47e5e4f604.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the following sections, we will experiment with tuning model parameters to
+    improve its performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hyperparameter tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s try changing the `embedding_dim` hyperparameter to `32` and the `batch_size` hyperparameter
+    to `50` to see if we get improved results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is a printout of the model''s architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/8574203f-50c1-4e3e-b135-ecea2d9bc01d.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, we will plot the results as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d9108ec2-4d64-43f3-be24-5603fd8b6936.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Unfortunately, these model performance results do not look significantly different
+    than our baseline model, so let's explore some additional model configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adding dropout layers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the following code, we will add dropout layers and encourage you to experiment
+    with different dropout rates to see what empirically leads to optimal results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the preceding code, we added dropout layers using `layer_dropout()`, which
+    adds some complexity to our preliminary model. In the following code, we define,
+    compile, and train our custom model with dropout layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/69700d96-0c27-40f1-8a41-5e98765e010e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, we print out a summary of our model, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here''s a summary of the model architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/cc77c7cb-1790-4300-b455-8cc778bf2d14.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, we will plot the results, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following model performance output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f87a7148-3617-4da2-899d-65aed9c043e4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: While we added dropout layers, the observed model improvements are minimal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's revisit our underlying assumptions and try another approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adjusting for user-item bias
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: It is important to recognize that some users, in reality, may interact with
+    items (games) differently than other users in terms of gaming frequency and affinity
+    by proxy. This discrepancy, in turn, could potentially translate to different
+    implicit ratings based on the user-item interaction (hours of gameplay) data available
+    for this particular analysis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Based on our previous findings, we will now modify the model to account for
+    user and item biases by including embeddings for average users and items (games)
+    using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the preceding code, we create a custom model with user and item embeddings
+    (`user_embedding` and `item_embedding`) and embeddings for user bias and item
+    bias (`user_bias` and `item_bias`). In the following code, we add dropout layers
+    for both users and items and encourage you to experiment with different dropout
+    rates for optimal results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let''s define, compile, and train our modified neural network model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ff39e817-e0be-4a77-95ba-624dcecb1ffd.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, we will print out the summary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'By adding these additional layers of embeddings and tuning the hyperparameters,
+    we have nearly doubled the total number of trainable parameters from our original
+    baseline neural network, as reflected in the following model summary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/43bb18d7-548f-4fd3-92b3-44883005f12f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, we plot the results of the model as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This results in the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d87d93c2-a800-44cc-96ee-774810eec733.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Through a succession of iterative configurations and empirically guided adjustments,
+    we have improved overfitting relative to our previous models and achieved a notable
+    RMSE below 0.1 on our validation dataset. With additional hyperparameter tuning
+    and dropout layer rate configurations, we might be able to further improve the
+    performance of this model. Future recommendations to build on this model would
+    be to acquire and implement explicit rating data, as well as to experiment with
+    additional contextual information and user demographic data to better understand
+    the relationships and factors associated with user-item interactions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you learned how to use the custom Keras API and embeddings
+    to construct a deep neural network recommender system. We briefly introduced collaborative
+    filtering concepts and saw how to prepare data for building a custom neural network.
+    During this iterative process, we created user and item embeddings, trained a
+    deep neural network using embedded layers, tuned hyperparameters, and evaluated
+    results using common performance metrics. In the next chapter, you will continue
+    applying neural network approaches to other domains, such as natural language
+    processing.
+  prefs: []
+  type: TYPE_NORMAL

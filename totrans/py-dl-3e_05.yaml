@@ -1,0 +1,2113 @@
+- en: '5'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Advanced Computer Vision Applications
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 4*](B19627_04.xhtml#_idTextAnchor107), we introduced **convolutional
+    networks** (**CNNs**) for computer vision and some of the most popular and best-performing
+    CNN models. In this chapter, we’ll continue with more of the same, but at a more
+    advanced level. Our *modus operandi* so far has been to provide simple classification
+    examples to support your theoretical knowledge of **neural networks** (**NNs**).
+    In the universe of computer vision tasks, classification is fairly straightforward
+    as it assigns a single label to an image. This also makes it possible to manually
+    create large, labeled training datasets. In this chapter, we’ll introduce **transfer
+    learning** (**TL**), a technique that will allow us to transfer the knowledge
+    of pre-trained NNs to a new and unrelated task. We’ll also see how TL makes it
+    possible to solve two interesting computer vision tasks – object detection and
+    semantic segmentation. We can say that these tasks are more complex compared to
+    classification because the model has to obtain a more comprehensive understanding
+    of the image. It has to be able to detect different objects as well as their positions
+    in the image. At the same time, the task’s complexity allows for more creative
+    solutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we’ll introduce a new class of algorithms called generative models,
+    which will help us generate new images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Transfer** **learning** (**TL**)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Object detection
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Semantic segmentation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Image generation with diffusion models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We’ll implement the example in this chapter using Python, PyTorch, Keras, and
+    Ultralytics YOLOv8 ([https://github.com/ultralytics/ultralytics](https://github.com/ultralytics/ultralytics)).
+    If you don’t have an environment set up with these tools, fret not – the example
+    is available as a Jupyter notebook on Google Colab. You can find the code examples
+    in this book’s GitHub repository: [https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter05](https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter05).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transfer learning (TL)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, we’ve trained small models on toy datasets, where the training took
+    no more than an hour. But if we want to work with large datasets, such as ImageNet,
+    we will need a much bigger network that trains for a lot longer. More importantly,
+    large datasets are not always available for the tasks we’re interested in. Keep
+    in mind that besides obtaining the images, they have to be labeled, and this could
+    be expensive and time-consuming. So, what does a humble engineer do when they
+    want to solve a real ML problem with limited resources? Enter TL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TL is the process of applying an existing trained ML model to a new, but related,
+    problem. For example, we can take a network trained on ImageNet and repurpose
+    it to classify grocery store items. Alternatively, we could use a driving simulator
+    game to train an NN to drive a simulated car, and then use the network to drive
+    a real car (but don’t try this at home!). TL is a general ML concept that applies
+    to all ML algorithms – we’ll also use TL in [*Chapter 8*](B19627_08.xhtml#_idTextAnchor220).
+    But in this chapter, we’ll talk about TL in CNNs. Here’s how it works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We start with an existing pre-trained net. The most common scenario is to take
+    a network pre-trained with ImageNet, but it could be any dataset. PyTorch, **TensorFlow**
+    (**TF**), and Keras all have popular ImageNet pre-trained neural architectures
+    that we can use. Alternatively, we can train our network with a dataset of our
+    choice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In [*Chapter 4*](B19627_04.xhtml#_idTextAnchor107), we mentioned how the **fully
+    connected** (**FC**) layers at the end of a CNN act as translators between the
+    network’s language (the abstract feature representations learned during training)
+    and our language, which is the class of each sample. You can think of TL as a
+    translation to another language. We start with the network’s features, which is
+    the output of the last convolutional or pooling layer. Then, we translate them
+    to a different set of classes for the new task. We can do this by removing the
+    last layers of an existing pre-trained network and replacing them with a different
+    set of layers, which represents the classes of the new problem. Here is a diagram
+    of the TL scenario:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1 – A TL scenario, where we replace the last layer(s) of a  pre-trained
+    network and repurpose it for a new problem](img/B19627_05_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.1 – A TL scenario, where we replace the last layer(s) of a
+  prefs: []
+  type: TYPE_NORMAL
+- en: pre-trained network and repurpose it for a new problem
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, we cannot do this mechanically and expect the new network to work
+    because we still have to train the new layer with data related to the new task.
+    We have two options to do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Use the original part of the network as a feature extractor and only train
+    the new layer(s)**: First, we feed the network a training batch of the new data
+    and propagate it forward and backward to see the network’s output and error gradients.
+    This part works just like regular training would. But during the weight updates
+    phase, we lock the weights of the original network and only update the weights
+    of the new layers. This is the recommended approach when we have limited training
+    data for the new problem. By locking most of the network weights, we prevent overfitting
+    on the new data.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Fine-tune the whole network**: We train the whole network and not just the
+    newly added layers at the end. It is possible to update all the network weights,
+    but we can also lock some of the weights in the first layers. The idea here is
+    that the initial layers detect general features – not related to a specific task
+    – and it makes sense to reuse them. On the other hand, the deeper layers may detect
+    task-specific features and it would be better to update them. We can use this
+    method when we have more training data and don’t need to worry about overfitting.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Before we continue, let’s note that TL is not limited to classification-to-classification
+    problems. As we’ll see later in this chapter, we can use pre-trained CNN as a
+    backbone NN for object detection and semantic segmentation tasks. With that, let’s
+    see how to implement TL in practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transfer learning with PyTorch
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll apply an advanced ImageNet pre-trained network on the
+    CIFAR-10 images. We’ll implement both types of TL. It’s preferable to run this
+    example on GPU:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To define the training dataset, we have to consider a few things:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use mini-batch with size 50.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The CIFAR-10 images are 32×32, while the ImageNet network expects 224×224 input.
+    As we are using an ImageNet-based network, we’ll upsample the 32×32 CIFAR images
+    to 224×224 using `transforms.``Resize`.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Standardize the CIFAR-10 data using the ImageNet mean and standard deviation,
+    because this is what the network expects.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Add minor data augmentation (flip).
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can do all this with the following code:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Follow the same steps with the validation data (except for the data augmentation):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Choose a device – preferably a GPU with a fallback on CPU:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: To train and validate the model, we’ll use the `train_model(model, loss_function,
+    optimizer, data_loader)` and `test_model(model, loss_function, data_loader)` functions.
+    We first implemented them in [*Chapter 3*](B19627_03.xhtml#_idTextAnchor079),
+    so we will not repeat the implementation here (it is available in the source code
+    example on GitHub).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Define the first TL scenario, where we use the pre-trained network as a feature
+    extractor:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We’ll use a popular network, `epochs` and evaluate the network accuracy after
+    each epoch.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use the `plot_accuracy` accuracy function, which plots the validation accuracy
+    on a `matplotlib` graph. We won’t include the full implementation here, but it
+    is available on GitHub.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following is the `tl_feature_extractor` function, which implements all
+    this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Implement the fine-tuning approach with the `tl_fine_tuning` function. This
+    function is similar to `tl_feature_extractor`, but now, we’ll train the whole
+    network:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can run the whole thing in one of two ways:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Call `tl_fine_tuning(epochs=5)` to use the fine-tuning approach for five epochs.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Call `tl_feature_extractor(epochs=5)` to train the network with the feature
+    extractor approach for five epochs.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: With a network as a feature extractor, we’ll get about 81% accuracy, while with
+    fine-tuning, we’ll get 89%. But if we run the fine-tuning for more epochs, the
+    network will start overfitting. Next, let’s see the same example but with Keras.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transfer learning with Keras
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll implement the two TL scenarios again, but this time
+    using Keras and TF. In this way, we can compare the two libraries. Again, we’ll
+    use the `MobileNetV3Small` architecture. In addition to Keras, this example also
+    requires the TF Datasets package ([https://www.tensorflow.org/datasets](https://www.tensorflow.org/datasets)),
+    a collection of various popular ML datasets. Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example is partially based on [https://github.com/tensorflow/docs/blob/master/site/en/tutorials/images/transfer_learning.ipynb](https://github.com/tensorflow/docs/blob/master/site/en/tutorials/images/transfer_learning.ipynb).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Define the mini-batch and input image sizes (the image size is determined by
+    the network architecture):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load the CIFAR-10 dataset with the help of TF datasets. The `repeat()` method
+    allows us to reuse the dataset for multiple epochs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the `train_format_sample` and `test_format_sample` functions, which
+    will transform the initial images into suitable CNN inputs. These functions play
+    the same roles that the `transforms.Compose` object plays, which we defined in
+    the *Implementing transfer learning with PyTorch* section. The input is transformed
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The images are resized to 224×224, which is the expected network input size
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each image is standardized by transforming its values so that it’s in the (-1;
+    1) interval
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The labels are converted into one-hot encodings
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The training images are randomly flipped horizontally and vertically
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s look at the actual implementation:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next is some boilerplate code that assigns these transformers to the train/test
+    datasets and splits them into mini-batches:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the feature extraction model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use Keras for the pre-trained network and model definition since it is an integral
+    part of TF
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Load the `MobileNetV3Small` pre-trained net, excluding the final FC layers
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Call `base_model.trainable = False`, which freezes all the network weights and
+    prevents them from training
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Add a `GlobalAveragePooling2D` operation, followed by a new and trainable FC
+    trainable layer at the end of the network
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following code implements this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the fine-tuning model. The only difference it has from the feature extraction
+    is that we only freeze some of the bottom pre-trained network layers (as opposed
+    to all of them). The following is the implementation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Implement the `train_model` function, which trains and evaluates the models
+    that are created by either the `build_fe_model` or `build_ft_model` function.
+    The `plot_accuracy` function is not implemented here but is available on GitHub:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can run either the feature extraction or fine-tuning TL using the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`train_model(build_ft_model())`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`train_model(build_fe_model())`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With a network as a feature extractor, we’ll get about 82% accuracy, while with
+    fine-tuning, we’ll get 89% accuracy. The results are similar to the PyTorch example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s turn our attention to object detection – a task we can solve with
+    the help of TL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Object detection
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Object detection** is the process of finding object instances of a certain
+    class, such as people, cars, and trees, in images or videos. Unlike classification,
+    object detection can detect multiple objects as well as their location in the
+    image.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An object detector would return a list of detected objects with the following
+    information for each object:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The class of the object (person, car, tree, and so on).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A probability (or objectness score) in the [0, 1] range, which conveys how confident
+    the detector is that the object exists in that location. This is similar to the
+    output of a regular binary classifier.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The coordinates of the rectangular region of the image where the object is located.
+    This rectangle is called a **bounding box**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can see the typical output of an object-detection algorithm in the following
+    figure. The object type and objectness score are above each bounding box:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2 – The output of an object detector. Source: https://en.wikipedia.org/wiki/File:2011_FIA_GT1_Silverstone_2.jpg](img/B19627_05_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.2 – The output of an object detector. Source: [https://en.wikipedia.org/wiki/File:2011_FIA_GT1_Silverstone_2.jpg](https://en.wikipedia.org/wiki/File:2011_FIA_GT1_Silverstone_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s outline the different approaches to solving an object detection
+    task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Approaches to object detection
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll outline three approaches:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Classic sliding window**: Here, we’ll use a regular classification network
+    (classifier). This approach can work with any type of classification algorithm,
+    but it’s relatively slow and error-prone:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Build an image pyramid**: This is a combination of different scales of the
+    same image (see the following figure). For example, each scaled image can be two
+    times smaller than the previous one. In this way, we’ll be able to detect objects
+    regardless of their size in the original image.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Slide the classifier across the whole image**: We’ll use each location of
+    the image as an input to the classifier, and the result will determine the type
+    of object that is in the location. The bounding box of the location is just the
+    image region that we used as input.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Multiple overlapping bounding boxes for each object**: We’ll use some heuristics
+    to combine them into a single prediction.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here is a figure showing the sliding window approach:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.3 – Sliding window plus image pyramid object detection](img/B19627_05_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.3 – Sliding window plus image pyramid object detection
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Two-stage detection methods**: These methods are very accurate but relatively
+    slow. As its name suggests, this involves two steps:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A special type of CNN, called a **Region Proposal Network** (**RPN**), scans
+    the image and proposes several possible bounding boxes, or **regions of interest**
+    (**RoI**), where objects might be located. However, this network doesn’t detect
+    the type of object, but only whether an object is present in the region.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The RoI is sent to the second stage for object classification, which determines
+    the actual object in each bounding box.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**One-stage (or one-shot) detection methods**: Here, a single CNN produces
+    both the object type and the bounding box. These approaches are usually faster
+    but less accurate than the two-stage methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the next section, we’ll introduce **YOLO** – an accurate and efficient one-stage
+    detection algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Object detection with YOLO
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'YOLO is one of the most popular one-stage detection algorithms. The name is
+    an acronym for the popular motto “You only live once”, which reflects the one-stage
+    nature of the algorithm. Since its original release, there have been multiple
+    YOLO versions, with different authors. For the sake of clarity, we’ll list all
+    versions here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*You Only Look Once: Unified, Real-Time Object Detection* ([https://arxiv.org/abs/1506.02640](https://arxiv.org/abs/1506.02640)),
+    by Joseph Redmon, Santosh Divvala, Ross Girshick, and Ali Farhadi.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*YOLO9000: Better, Faster, Stronger* ([https://arxiv.org/abs/1612.08242](https://arxiv.org/abs/1612.08242)),
+    by Joseph Redmon and Ali Farhadi.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*YOLOv3: An Incremental Improvement* ([https://arxiv.org/abs/1804.02767](https://arxiv.org/abs/1804.02767),
+    [https://github.com/pjreddie/darknet](https://github.com/pjreddie/darknet)), by
+    Joseph Redmon and Ali Farhadi.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*YOLOv4: Optimal Speed and Accuracy of Object Detection* ([https://arxiv.org/abs/2004.10934](https://arxiv.org/abs/2004.10934),
+    [https://github.com/AlexeyAB/darknet](https://github.com/AlexeyAB/darknet)), by
+    Alexey Bochkovskiy, Chien-Yao Wang, and Hong-Yuan Mark Liao.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**YOLOv5** and **YOLOv8** ([https://github.com/ultralytics/yolov5](https://github.com/ultralytics/yolov5),
+    [https://github.com/ultralytics/ultralytics](https://github.com/ultralytics/ultralytics)),
+    by Ultralitics ([https://ultralytics.com/](https://ultralytics.com/)). V5 and
+    v8 have no official paper.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*YOLOv6 v3.0: A Full-Scale Reloading* ([https://arxiv.org/abs/2301.05586](https://arxiv.org/abs/2301.05586),
+    [https://github.com/meituan/YOLOv6](https://github.com/meituan/YOLOv6)), by Chuyi
+    Li, Lulu Li, Yifei Geng, Hongliang Jiang, Meng Cheng, Bo Zhang, Zaidan Ke, Xiaoming
+    Xu, and Xiangxiang Chu.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*YOLOv7: Trainable bag-of-freebies sets new state-of-the-art for real-time
+    object detectors* ([https://arxiv.org/abs/2207.02696](https://arxiv.org/abs/2207.02696),
+    Mark L[https://github.com/WongKinYiu/yolov7](https://github.com/WongKinYiu/yolov7)),
+    by Chien-Yao Wang, Alexey Bochkovskiy, and Hong-Yuan iao.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'v3 is the last version, released by the original authors of the algorithm.
+    v4 is a fork of v3 and was endorsed by the main author of v1-v3, Joseph Redmon
+    ([https://twitter.com/pjreddie/status/1253891078182199296](https://twitter.com/pjreddie/status/1253891078182199296)).
+    On the other hand, v5 is an independent implementation, inspired by YOLO. This
+    sparked a controversy regarding the name of v5\. You can follow some of the discussion
+    at https://github.com/AlexeyAB/darknet/issues/5920, where Alexey Bochkovskiy,
+    the author of v4, has also posted. The authors of v5 have also addressed the controversy
+    here: [https://blog.roboflow.com/yolov4-versus-yolov5/](https://blog.roboflow.com/yolov4-versus-yolov5/).
+    Regardless of this discussion, v5 and v8 have proven to work and are popular detection
+    algorithms in their own right.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll discuss the YOLO properties shared among all versions and we’ll point
+    out some of the differences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start with the YOLO architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4 – The YOLO architecture](img/B19627_05_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.4 – The YOLO architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It contains the following components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Backbone**: This is a CNN model that’s responsible for extracting features
+    from the input image. These features are then passed to the next components for
+    object detection. Usually, the backbone is an ImageNet pre-trained CNN, similar
+    to the advanced models we discussed in [*Chapter 4*](B19627_04.xhtml#_idTextAnchor107).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The backbone is an example of TL – we take a CNN trained for classification
+    and repurpose it for object detection. The different YOLO versions use different
+    backbones. For example, v3 uses a special fully convolutional CNN called DarkNet-53
+    with 53 layers. Subsequent YOLO versions introduce various improvements to this
+    architecture, while others use their own unique backbone.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Neck**: This is an intermediate part of the model that connects the backbone
+    to the head. It concatenates the output at different stages of the backbone feature
+    maps before sending the combined result to the next component (the head). This
+    is an alternative to the standard approach, where we would just send the output
+    of the last backbone convolution for further processing. To understand the need
+    for the neck, let’s recall that our goal is to create a precise bounding box around
+    the edges of the detected object. The object itself might be big or small, relative
+    to the image. However, the receptive field of the deeper layers of the backbone
+    is large because it aggregates the receptive fields of all preceding layers. Hence,
+    the features detected at the deeper layers encompass large parts of the input
+    image. This runs contrary to our goal of fine-grained object detection, regardless
+    of the object’s size. To solve this, the neck combines the feature maps at different
+    backbone stages, which makes it possible to detect objects at different scales.
+    However, the feature maps at each backbone stage have different dimensions and
+    cannot be combined directly. The neck applies different techniques, such as upsampling
+    or downsampling, to equalize these dimensions, so that they can be concatenated.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Head**: This is the final component of the model, which outputs the detected
+    objects. Each detected object is represented by its bounding box coordinates and
+    its class.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'With that, we have gained a bird’s-eye view of the YOLO architecture. But it
+    doesn’t answer some inconvenient (yet intriguing) questions, such as how the model
+    detects multiple objects on the same image, or what happens if two or more objects
+    overlap and one is only partially visible. To find the answers to these questions,
+    let’s introduce the following diagram, which consists of two overlapping objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.5 – An object detection YOLO example with two overlapping objects
+    and their bounding boxes](img/B19627_05_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.5 – An object detection YOLO example with two overlapping objects and
+    their bounding boxes
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These are the steps that YOLO implements to detect them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Split the input image into a grid of *S×S* cells (the preceding diagram uses
+    a 3×3 grid):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The center of a cell represents the center of a region where an object might
+    be located.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The model can detect both objects that span multiple cells and ones that lie
+    entirely within the cell. Each object is associated with a single cell, even if
+    it covers multiple cells. In this case, we’ll associate the object with the cell,
+    where the center of its bounding box lies. For example, the two objects in the
+    diagram span multiple cells, but they are both assigned to the central cell because
+    their centers lie in it.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A cell can contain multiple objects (*1-to-n* relationship) or no objects at
+    all. We’re only interested in the cells with objects.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The model outputs multiple possible detected objects for each grid cell. Each
+    detected object is represented by the following array of values: ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>x</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>y</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/320.png).
+    Let’s discuss them:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>x</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>y</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/321.png)
+    describes the object bounding box. ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>x</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>y</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/322.png)
+    are the coordinates of the center of the box concerning the whole image. They
+    are normalized in the [0, 1] range. For example, if the image size is 100×100
+    and the center of the bounding box is located at [40, 70], then'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>x</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>y</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:mn>0.4,0.7</mml:mn></mml:mrow></mml:mfenced></mml:math>](img/323.png).
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/324.png)
+    represent the normalized bounding box height and width concerning the whole image.
+    If the bounding box’s size is 80×50, then ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:mn>0.8,0.5</mml:mn></mml:mrow></mml:mfenced></mml:math>](img/325.png)
+    for the same 100×100 image. In practice, a YOLO implementation usually includes
+    helper methods, which will allow us to obtain the absolute coordinates of the
+    bounding boxes.'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub></mml:math>](img/326.png)
+    is an objectness score, which represents the confidence of the model (in the [0,
+    1] range) that an object is present in the cell. If ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub></mml:math>](img/327.png)
+    is closer to 1, then the model is confident that an object is present and vice
+    versa.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/328.png)
+    is a one-hot encoding of the class of the detected object. For example, if we
+    have bicycle, flower, person, and fish classes, and the current object is a person,
+    its encoding will be [0, 0, 1, 0].'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'So far, we’ve demonstrated that the model can detect multiple objects on the
+    same image. Next, let’s focus on the trickier case with multiple objects in the
+    same cell. YOLO has an elegant solution to this problem in the form of **anchor
+    boxes** (also known as **priors**). To understand this concept, we’ll start with
+    the following diagram, which shows the grid cell (square, uninterrupted line)
+    and two anchor boxes – vertical and horizontal (dashed lines):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.6 – A grid cell (a square, uninterrupted line) with two anchor boxes
+    (dashed lines)](img/B19627_05_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.6 – A grid cell (a square, uninterrupted line) with two anchor boxes
+    (dashed lines)
+  prefs: []
+  type: TYPE_NORMAL
+- en: For each cell, we’ll have multiple candidate anchor boxes with different scales
+    and aspect ratios. If we have multiple objects in the same cell, we’ll associate
+    each object with a single anchor box. If an anchor box doesn’t have an associated
+    object, it will have an objectness score of zero (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>0</mml:mn></mml:math>](img/329.png)).
+    We can detect as many objects as there are anchor boxes per cell. For example,
+    our example 3×3 grid with two anchor boxes per cell can detect a total of 3*3*2
+    = 18 objects. Because we have a fixed number of cells (*S×S*) and a fixed number
+    of anchor boxes per cell, the size of the network output doesn’t change with the
+    number of detected objects. Instead, we’ll output results for all possible anchor
+    boxes, but we’ll only consider the ones with an objectness score of ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mn>1</mml:mn></mml:math>](img/330.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The YOLO algorithm uses the **Intersection over Union** (**IoU**) technique
+    both during training and inference to improve its performance:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.7 – Intersection over Union (IoU)](img/B19627_05_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.7 – Intersection over Union (IoU)
+  prefs: []
+  type: TYPE_NORMAL
+- en: IoU is the ratio between the area of the intersection and the area of the union
+    of the detected object bounding box and the ground truth (or another object’s)
+    bounding box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, we can compute the IoU between the anchor boxes and ground
+    truth bounding boxes. Then, we can assign each ground truth object to its highest
+    overlapping anchor box to generate labeled training data. In addition, we can
+    compute the IoU between the detected bounding box and the ground truth (label)
+    box. The higher value of IoU indicates a better overlap between ground truth and
+    prediction. This can help us evaluate the detector.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'During inference, the output of the model includes all possible anchor boxes
+    for each cell, regardless of whether an object is present in them. Many of the
+    boxes will overlap and predict the same object. We can filter the overlapping
+    objects with the help of IoU and **non-maximum suppression** (**NMS**). Here’s
+    how it works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Discard all bounding boxes with an objectness score of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub><mml:mo><</mml:mo><mml:mn>0.6</mml:mn></mml:math>](img/331.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Pick the box with the highest objectness score, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub></mml:math>](img/326.png),
+    from the remaining boxes.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Discard all boxes with IoU >= 0.5 with the box we selected in the previous step.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we are (hopefully) familiar with YOLO, let’s learn how to use it in
+    practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Ultralytics YOLOv8
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll demonstrate how to use the YOLOv8 algorithm, developed
+    by Ultralytics. For this example, you’ll need to install the `ultralytics` Python
+    package. Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import the YOLO module. We’ll load a pre-trained YOLOv8 model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use `model` to detect the objects on a Wikipedia image:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`results` is a list, composed of a single instance of the `ultralytics.yolo.engine.results.Results`
+    class. The instance contains the list of detected objects: their bounding boxes,
+    classes, and objectness scores.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We can display the results with the help of the `results[0].plot()` method,
+    which overlays the detected object on the input image. The result of this operation
+    is the first image, we introduced at the start of the *Introduction to object*
+    *detection* section:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This concludes our introduction to the YOLO family of single-shot object detection
+    models. Next, we’ll focus on a popular example of a two-shot detection algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Object detection with Faster R-CNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll discuss the **Faster R-CNN** (*Faster R-CNN: Towards
+    Real-Time Object Detection with Region Proposal Networks*, [https://arxiv.org/abs/1506.01497](https://arxiv.org/abs/1506.01497))
+    two-stage object detection algorithm. It is an evolution of the earlier two-stage
+    detectors, **Fast R-CNN** (*Fast R-CNN*, [https://arxiv.org/abs/1504.08083](https://arxiv.org/abs/1504.08083))
+    and **R-CNN** (*Rich feature hierarchies for accurate object detection and semantic*
+    *segmentation*, [https://arxiv.org/abs/1311.2524](https://arxiv.org/abs/1311.2524)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The general structure of the Faster R-CNN model is outlined in the following
+    diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.8 – The structure of Faster R-CNN. Source: https://arxiv.org/abs/1506.01497](img/B19627_05_8.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.8 – The structure of Faster R-CNN. Source: [https://arxiv.org/abs/1506.01497](https://arxiv.org/abs/1506.01497)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s keep this figure in mind while we explain the algorithm. Like YOLO, Faster
+    R-CNN starts with a backbone classification network trained on ImageNet, which
+    serves as a base for the different modules of the model. Originally, the authors
+    of the paper experimented with classic backbone architectures, such as **VGG-16**
+    (*Very Deep Convolutional Networks for Large-Scale Image Recognition*, [https://arxiv.org/abs/1409.1556](https://arxiv.org/abs/1409.1556))
+    and **ZFNet** (*Visualizing and Understanding Convolutional Networks*, [https://arxiv.org/abs/1311.2901](https://arxiv.org/abs/1311.2901)).
+    Today, the model is available with more contemporary backbones, such as ResNet
+    and MobileNet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unlike YOLO, Faster R-CNN doesn’t have a neck module and only uses the feature
+    maps of the last backbone convolutional layer as input to the next components
+    of the algorithm. More specifically, the backbone serves as a backbone (get it?)
+    to the two other components of the model (hence two-stage) – the **region proposal
+    network** (**RPN**) and the detection network. Let’s discuss the RPN first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The region proposal network
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the first stage, the RPN takes an image (of any size) as input and outputs
+    a set of rectangular RoI, where an object might be located. The RoI is equivalent
+    to the bounding box in YOLO. The RPN itself is created by taking the first *p*
+    convolutional layers of the backbone model (see the preceding diagram). Once the
+    input image is propagated to the last shared convolutional layer, the algorithm
+    takes the feature map of that layer and slides another small network over each
+    location of the feature map. The small network outputs whether an object is present
+    at any of the *k* anchor boxes (the concept of anchor box is the same as in YOLO),
+    as well as the coordinates of its potential bounding box. This is illustrated
+    on the left-hand side image of the following diagram, which shows a single location
+    of the RPN sliding over a single feature map of the last convolutional layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 5.9 – \uFEFFRPN proposals over a single location\uFEFF. Source: https://arxiv.org/abs/1506.01497](img/B19627_05_9.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.9 – RPN proposals over a single location. Source: https://arxiv.org/abs/1506.01497'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The small network takes an *n×n* region at the same location across all input
+    feature maps as input
+  prefs: []
+  type: TYPE_NORMAL
+- en: '(*n = 3* according to the paper). For example, if the final convolutional layer
+    has 512 feature maps, the small network’s input size at one location is 512*3*3
+    = 4608\. The 512 3×3 feature maps are flattened to a 4,608-dimensional vector.
+    It serves as input to a fully connected layer, which maps it to a lower dimensional
+    (usually 512) vector. This vector itself serves as input to the following two
+    parallel fully connected layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A classification layer with *2k* units organized into *k* 2-unit binary softmax
+    outputs. Like YOLO, the output of each softmax represents the objectness score
+    (in the [0, 1] range) of whether an object exists in each of the *k* anchor boxes.
+    During training, an object is assigned to an anchor box based on the IoU formula
+    in the same way as in YOLO.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A regression layer with *4k* units organized into *k* 4-unit RoI arrays. Like
+    YOLO, the first array elements represent the coordinates of the RoI center in
+    the [0:1] range relative to the whole image. The other two elements represent
+    the height and width of the region, relative to the whole image (again, similar
+    to YOLO).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The authors of the paper experimented with three scales and three aspect ratios,
+    resulting in nine possible anchor boxes over each location. The typical *H×W*
+    size of the final feature map is around 2,400, which results in 2,400*9 = 21,600
+    anchor boxes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RPN as a cross-channel convolution
+  prefs: []
+  type: TYPE_NORMAL
+- en: In theory, we slide the small network over the feature map of the last convolutional
+    layer. However, the small network weights are shared along all locations. Because
+    of this, the sliding can be implemented as a cross-channel convolution. Therefore,
+    the network can produce output for all anchor boxes in a single image pass. This
+    is an improvement over Fast R-CNN, which requires a separate network pass for
+    each anchor box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RPN is trained with backpropagation and stochastic gradient descent (what
+    a surprise!). The weights of the shared convolutional layers are initialized with
+    the pre-trained weights of the backbone network and the rest are initialized randomly.
+    The samples of each mini-batch are extracted from a single image. Each mini-batch
+    contains an equal number of positive (objects) and negative (background) anchor
+    boxes. There are two kinds of anchors with positive labels: the anchor/anchors
+    with the highest IoU overlap with a ground truth box and an anchor that has an
+    IoU overlap of higher than 0.7 with any ground truth box. If the IoU ratio of
+    an anchor is lower than 0.3, the box is assigned a negative label. Anchors that
+    are neither positive nor negative do not participate in the training.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As the RPN has two output layers (classification and regression), the training
+    uses the following composite cost function with classification (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/333.png))
+    and regression (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:math>](img/334.png))
+    parts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi>L</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:mfenced
+    open="{" close="}" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>,</mml:mo><mml:mfenced
+    open="{" close="}" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:munder
+    underaccent="false"><mml:mrow><mml:mfrac><mml:mrow><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>N</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal"> </mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msubsup><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">*</mml:mi></mml:mrow></mml:msubsup></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow><mml:mo>_</mml:mo></mml:munder><mml:mo>+</mml:mo><mml:munder
+    underaccent="false"><mml:mrow><mml:mi>λ</mml:mi><mml:mfrac><mml:mrow><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>N</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal"> </mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:msubsup><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">*</mml:mi></mml:mrow></mml:msubsup></mml:mrow></mml:mrow><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="normal">*</mml:mi></mml:mrow></mml:msubsup></mml:mrow></mml:mfenced></mml:mrow><mml:mo>_</mml:mo></mml:munder></mml:math>](img/335.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let’s discuss its components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*i*: The index of the anchor in the mini-batch.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/336.png):
+    The classification output, which represents the predicted objectness score of
+    an anchor, *i*, being an object or background. ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>*</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/337.png)
+    is the target data for the same (0 or 1).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/338.png):
+    The regression output vector with size 4, which represents the RoI parameters.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>*</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/339.png):
+    The target vector for the same.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/333.png):
+    A cross-entropy loss for the classification layer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>N</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/341.png):
+    A normalization term, equal to the mini-batch size.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:math>](img/342.png):
+    The regression loss, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>L</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>R</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>*</mml:mi></mml:mrow></mml:msubsup></mml:mrow></mml:mfenced></mml:math>](img/343.png),
+    where *R* is the mean absolute error ([https://en.wikipedia.org/wiki/Mean_absolute_error](https://en.wikipedia.org/wiki/Mean_absolute_error)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>N</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub></mml:math>](img/344.png):
+    A normalization term equal to the total number of anchor locations (around 2400).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*λ*: This helps combine the classification and regression components of the
+    cost function. Since ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>N</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>e</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub><mml:mo>∼</mml:mo><mml:mn>2400</mml:mn></mml:math>](img/345.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>N</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>256</mml:mn></mml:math>](img/346.png),
+    *λ* is set to 10 to preserve the balance between the two losses.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we’ve discussed the RPN, let’s focus on the detection network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detection network
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Let’s go back to the diagram that was shown at the beginning of the *Object
+    detection with Faster R-CNN* section. Recall that in the first stage, the RPN
+    has already generated the RoI coordinates and their objectness scores. The detection
+    network is a regular classifier, which determines the class of objects in the
+    current RoI. Both the RPN and the detection network share their first convolutional
+    layers, borrowed from the backbone network. In addition, the detection network
+    incorporates the proposed regions from the RPN, along with the feature maps of
+    the last shared layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But how do we combine the backbone feature maps and the proposed regions in
+    a unified input format? We can do this with the help of **RoI pooling**, which
+    is the first layer of the second part of the detection network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.10 – An example of 2×2 RoI pooling with a 10×7 feature map and a
+    5×5 RoI (bold rectangle)](img/B19627_05_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.10 – An example of 2×2 RoI pooling with a 10×7 feature map and a 5×5
+    RoI (bold rectangle)
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand how RoI pooling works, let’s assume that we have a single 10×7
+    feature map and a single RoI. As we learned in the *Region proposal network* section,
+    a RoI is defined by its center coordinates, width, and height. The RoI pooling
+    first converts these parameters into actual coordinates on the feature map. In
+    this example, the region size is *h×w = 5×5*. The RoI pooling is further defined
+    by its output height and width, *H* and *W*. In this example, *H×W = 2×2*, but
+    in practice, the values could be larger, such as 7×7\. The operation splits the
+    *h×w* RoI into a grid of subregions with different sizes (displayed in the figure
+    with different background colors). Once this is done, each subregion is downsampled
+    to a single output cell by taking the maximum value of that region. In other words,
+    RoI pooling can transform inputs with arbitrary sizes into a fixed-size output
+    window. In this way, the transformed data can propagate through the network in
+    a consistent format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we mentioned in the *Object detection with Faster R-CNN* section, the RPN
+    and the detection network share their initial layers. However, they start their
+    lives as separate networks. The training alternates between the two in a four-step
+    process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Train the RPN, which is initialized with the ImageNet weights of the backbone.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train the detection network, using the proposals from the freshly trained RPN
+    from *step 1*. The training also starts with the weights of the ImageNet backbone.
+    At this point, the two networks don’t share weights.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use the detection network shared layers to initialize the weights of the RPN.
+    Then, train the RPN again, but freeze the shared layers and fine-tune the RPN-specific
+    layers only. The two networks share their weights now.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train the detection network by freezing the shared layers and fine-tuning the
+    detection-net-specific layers only.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now that we’ve introduced Faster R-CNN, let’s discuss how to use it in practice
+    with the help of a pre-trained PyTorch model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Faster R-CNN with PyTorch
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll use a pre-trained PyTorch Faster R-CNN model with a
+    ResNet50 backbone for object detection. PyTorch has out-of-the-box support for
+    Faster R-CNN, which makes it easy for us to use. This example is implemented with
+    PyTorch. In addition, it uses the `torchvision` and `opencv-python` packages.
+    We will only include the relevant parts of the code, but you can find the full
+    version in this book’s GitHub repository. Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Load the pre-trained model with the latest available weights. Ensure this by
+    using the `DEFAULT` option:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We are going to use the model for inference and not for training, so we’ll
+    enable the `eval()` mode:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use `opencv-python` to read the RGB image located at `image_file_path`. We’ll
+    omit the code, which downloads the image from this book’s repository if it doesn’t
+    already exist locally:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, `img` is a three-dimensional `numpy` array of integers.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Implement the single-step image pre-processing pipeline. It transforms the
+    `img` `numpy` array into `torch.Tensor`, which will serve as input to the model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the detection model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here, `detected_objects` is a dictionary with three items:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`boxes`: A list of bounding boxes, represented by their top-left and bottom-right
+    pixel coordinates'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`labels`: A list of labels for each detected object'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`scores`: A list of objectness scores for each detected object'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Use the initial `img` array and `detected_objects` as parameters for the `draw_bboxes`
+    function, which overlays the bounding boxes and their labels on the original input
+    image (the implementation of `draw_bboxes` is available in the full example):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Display the result with `opencv-python`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output image looks like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.11 – Object detection with Faster R-CNN](img/B19627_05_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.11 – Object detection with Faster R-CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’re now familiar with two of the most popular object detection algorithms.
+    In the next section, we’ll focus on the next major computer vision task, called
+    **image segmentation**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing image segmentation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Image segmentation is the process of assigning a class label (such as person,
+    bicycle, or animal) to each pixel of an image. You can think of it as classification
+    but on a pixel level – instead of classifying the entire image under one label,
+    we’ll classify each pixel separately. The output of an image segmentation operation
+    is known as a **segmentation mask**. It is a tensor with the same dimensions as
+    the original input image, but instead of color, each pixel is represented by the
+    class of object, to which it belongs. There are two types of segmentation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Semantic segmentation**: This assigns a class to each pixel but doesn’t differentiate
+    between object instances. For example, the middle image in the following figure
+    shows a semantic segmentation mask, where the pixels of each separate vehicle
+    have the same value. Semantic segmentation can tell us that a pixel is part of
+    a vehicle but cannot make a distinction between two vehicles.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Instance segmentation**: This assigns a class to each pixel and differentiates
+    between object instances. For example, the image on the right in the following
+    figure shows an instance segmentation mask, where each vehicle is segmented as
+    a separate object.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following figure shows an example of semantic and instance segmentation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.12 – Left: input image; middle: semantic segmentation mask; right:
+    instance segmentation mask. Source: http://sceneparsing.csail.mit.edu/](img/B19627_05_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.12 – Left: input image; middle: semantic segmentation mask; right:
+    instance segmentation mask. Source: http://sceneparsing.csail.mit.edu/'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To train a segmentation algorithm, we’ll need a special type of ground truth
+    data, where the labels of each image are the segmented version of the image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The easiest way to segment an image is by using the familiar sliding-window
+    technique, which we described in the *Approaches to object detection* section
+    – that is, we’ll use a regular classifier, and we’ll slide it in either direction
+    with stride 1\. After we get the prediction for a location, we’ll take the pixel
+    that lies in the middle of the input region, and we’ll assign it to the predicted
+    class. Predictably, this approach is very slow because of the large number of
+    pixels in an image (even a 1,024×1,024 image has more than 1 million pixels).
+    Thankfully, there are faster and more accurate algorithms, which we’ll discuss
+    in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Semantic segmentation with U-Net
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The first approach to segmentation we’ll discuss is called **U-Net** (*U-Net:
+    Convolutional Networks for Biomedical Image Segmentation*, [https://arxiv.org/abs/1505.04597](https://arxiv.org/abs/1505.04597)).
+    The name comes from the visualization of the network architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.13 – The U-Net architecture. Source: https://arxiv.org/abs/1505.04597](img/B19627_05_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.13 – The U-Net architecture. Source: https://arxiv.org/abs/1505.04597'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'U-Net is a type of **fully convolutional network** (**FCN**), called so because
+    it contains only convolutional layers and doesn’t use any fully connected layers
+    at its output. An FCN takes the whole image as input and outputs its segmentation
+    map in a single pass. To better understand this architecture, let’s clarify the
+    figure notations first:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The horizontal dark blue arrows correspond to 3×3 cross-channel convolutions
+    with ReLU activation. The single light blue arrow at the end of the model represents
+    a 1×1 bottleneck convolution to reduce the number of channels.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All feature maps are denoted with blue boxes. The number of feature maps is
+    on top of the box, and the feature map’s size is at the lower-left edge of the
+    box.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The horizontal gray arrows represent copy and crop operation (more on that later).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The red vertical arrows represent 2×2 max pooling operations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The vertical green arrows represent 2×2 up-convolutions (or transposed convolutions;
+    see [*Chapter 4*](B19627_04.xhtml#_idTextAnchor107)).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can separate the U-Net model into two virtual components (in reality, this
+    is just a single network):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Encoder**: The first part of the network (the left part of the *U*) is similar
+    to a regular CNN but without the fully connected layers at the end. Its role is
+    to learn highly abstract representations of the input image (nothing new here).
+    The input image itself can be an arbitrary size, so long as the input feature
+    maps of every max pooling operation have even (and not odd) dimensions. Otherwise,
+    the output segmentation mask will be distorted. By default, the input size is
+    572×572\. From there, it continues like a regular CNN with alternating convolutional
+    and max pooling layers. The encoder consists of four identical blocks of two consecutive
+    valid (unpadded)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: cross-channel 3×3 convolutions with stride 1, optional batch normalization,
+    ReLU activations, and a 2×2 max pooling layer. Each downsampling step doubles
+    the number of feature maps. The final encoder convolution ends with 1,024 28×28
+    feature maps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Decoder**: The second part of the network (the right part of the *U*) is
+    symmetrical to the encoder. The decoder takes the innermost 28×28 encoder feature
+    maps and simultaneously upsamples and converts them into a 388×388 segmentation
+    map. It contains four identical upsampling blocks:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The upsampling works with 2×2 transposed cross-channel convolutions with stride
+    2.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The output of each upsampling step is concatenated with the cropped high-resolution
+    feature maps of the corresponding encoder step (gray horizontal arrows). The cropping
+    is necessary because of the loss of border pixels in every unpadded encoder and
+    decoder convolution.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each transposed convolution is followed by two regular convolutions to smooth
+    the expanded representation.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The upsampling steps halve the number of feature maps. The final output uses
+    a 1×1 bottleneck convolution to map the 64-component feature map tensor to the
+    desired number of classes (light blue arrow). The authors of the paper have demonstrated
+    the binary segmentation of medical images of cells.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The network’s output is a softmax over each pixel of the segmentation mask –
+    that is, the output contains as many independent softmax operations as the number
+    of pixels. The softmax output for one pixel determines the pixel class. U-Net
+    is trained like a regular classification network. However, the cost function is
+    a combination of the cross-entropy losses of the softmax outputs over all pixels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can see that because of the unpadded convolutions of the network, the output
+    segmentation map is smaller than the input image (388 versus 572). However, the
+    output map is not a rescaled version of the input image. Instead, it has a one-to-one
+    scale compared to the input, but only covers the central part of the input tile.
+    This is illustrated in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.14 – An overlap-tile strategy for segmenting large images. Source:
+    https://arxiv.org/abs/1505.04597](img/B19627_05_14.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.14 – An overlap-tile strategy for segmenting large images. Source:
+    https://arxiv.org/abs/1505.04597'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The unpadded convolutions are necessary so that the network doesn’t produce
+    noisy artifacts at the borders of the segmentation map. This makes it possible
+    to segment images with arbitrary large sizes using the so-called overlap-tile
+    strategy. The input image is split into overlapping input tiles, like the one
+    shown on the left of the preceding figure. The segmentation map of the small light
+    area in the image on the right requires the large light area (one tile) on the
+    left image as input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next input tile overlaps with the previous one in such a way that their
+    segmentation maps cover adjacent areas of the image. To predict the pixels in
+    the border region of the image, the missing context is extrapolated by mirroring
+    the input image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’re not going to implement a code example with U-Net, but you can check out
+    [https://github.com/mateuszbuda/brain-segmentation-pytorch](https://github.com/mateuszbuda/brain-segmentation-pytorch)
+    for U-Net brain MRI image segmentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instance segmentation with Mask R-CNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Mask R-CNN ([https://arxiv.org/abs/1703.06870](https://arxiv.org/abs/1703.06870))
+    is an extension of Faster R-CNN for instance segmentation. Faster R-CNN has two
+    outputs for each candidate object: bounding box parameters and class labels. In
+    addition to these, Mask R-CNN adds a third output – an FCN that produces a binary
+    segmentation mask for each RoI. The following diagram shows the structure of Mask
+    R-CNN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.15 – Mask R-CNN structure](img/B19627_05_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.15 – Mask R-CNN structure
+  prefs: []
+  type: TYPE_NORMAL
+- en: The segmentation and detection paths both use the RoI predictions of the RPN
+    but are otherwise independent and *parallel* to each other. The segmentation path
+    produces *I* *m×m* segmentation masks, one for each of the *I* RoIs. Since the
+    detection path handles the classification of the object, the segmentation mask
+    is *binary* and independent of the object class. The segmented pixels are automatically
+    assigned to the class produced by the detection path. This is opposed to other
+    algorithms, such as U-Net, where the segmentation is combined with classification
+    and an individual softmax is applied at each pixel. At training or inference,
+    only the mask related to the predicted object of the classification path is considered;
+    the rest are discarded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Mask R-CNN replaces the RoI max pooling operation with a more accurate RoI
+    align layer. The RPN outputs the anchor box center and its height and width as
+    four floating-point numbers. Then, the RoI pooling layer translates them into
+    integer feature map cell coordinates (quantization). Additionally, the division
+    of the RoI to *H×W* bins (the same size as the RoI pooling regions) also involves
+    quantization. The RoI example from the *Object detection with Faster R-CNN* section
+    shows that the bins have different sizes (3×3, 3×2, 2×3, 2×2). These two quantization
+    levels can introduce misalignment between the RoI and the extracted features.
+    The following diagram shows how RoI alignment solves this problem:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.16 – RoI align example. Source: https://arxiv.org/abs/1703.06870](img/B19627_05_16.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.16 – RoI align example. Source: https://arxiv.org/abs/1703.06870'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The dashed lines represent the feature map cells. The region with solid lines
+    in the middle is a 2×2 RoI overlaid on the feature map. Note that it doesn’t match
+    the cells exactly. Instead, it is located according to the RPN prediction without
+    quantization. In the same way, a cell of the RoI (the black dots) doesn’t match
+    one particular cell of the feature map. The **RoI align** operation computes the
+    value of a RoI cell with a bilinear interpolation of its adjacent cells. In this
+    way, RoI align is more accurate than RoI pooling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At training, a RoI is assigned a positive label if it has IoU with a ground
+    truth box of at least 0.5, and negative otherwise. The mask target is the intersection
+    between a RoI and its associated ground truth mask. Only the positive RoIs participate
+    in the segmentation path training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Mask R-CNN with PyTorch
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll use a pre-trained PyTorch Mask R-CNN model with a ResNet50
+    backbone for instance segmentation. Like Faster R-CNN, PyTorch has out-of-the-box
+    support for Mask R-CNN. The program structure and the requirements are the same
+    as the ones in the *Using Faster R-CNN with PyTorch* section. We will only include
+    the relevant parts of the code, but you can find the full version in this book’s
+    GitHub repository. Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Load the pre-trained model with the latest available weights, which you can
+    ensure by using the `DEFAULT` option:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We are going to use the model for inference and not for training, so we’ll
+    enable the `eval()` mode:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use `opencv-python` to read the RGB image located at `image_file_path`. We’ll
+    omit the code, which downloads the image from this book’s repository if it doesn’t
+    already exist locally:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, `img` is a three-dimensional `numpy` array of integers.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Implement the single-step image pre-processing pipeline. It transforms the
+    `img` `numpy` array into `torch.Tensor`, which will serve as input to the model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the detection model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Here, `segmented_objects` is a dictionary with four items: `boxes`, `labels`,
+    `scores`, and `masks`. The first three are the same as in Faster R-CNN. `masks`
+    is a tensor with a shape of `[number_of_detected_objects, 1, image_height, image_width]`.
+    We have one binary segmentation mask that covers the entire image for each detected
+    object. Each such mask has zeroes at all pixels, except the pixels where the object
+    is detected with a value of 1.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Use the initial `img` array and `segmented_objects` as parameters for the `draw_segmentation_masks`
+    function. It overlays the bounding boxes, the segmentation masks, and the labels
+    of the detected objects on the original input image (the implementation of `draw_segmentation_masks`
+    is available in the full example):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Display the result with `opencv`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output image looks like this:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 5.17 – Instance segmentation with Mask R-CNN](img/B19627_05_17.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.17 – Instance segmentation with Mask R-CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ve now discussed object detection and semantic segmentation. In the next
+    section, we’ll discuss how to use CNNs to generate new images, instead of simply
+    processing existing ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Image generation with diffusion models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'So far, we’ve used NNs as **discriminative models**. This simply means that,
+    given input data, a discriminative model will **map** it to a certain label (in
+    other words, a classification). A typical example is the classification of MNIST
+    images in one of ten digit classes, where the NN maps input data features (pixel
+    intensities) to the digit label. We can also say this in another way: a discriminative
+    model gives us the probability of *y* (class), given *x* (input). In the case
+    of MNIST, this is the probability of the digit when given the pixel intensities
+    of the image. In the next section, we’ll introduce NNs as generative models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing generative models
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A **generative model** learns the distribution of data. In a way, it is the
+    opposite of the discriminative model we just described. It predicts the probability
+    of the input sample, given its class, *y* – ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>X</mml:mi></mml:mrow><mml:mrow><mml:mi>Y</mml:mi><mml:mo>=</mml:mo><mml:mi>y</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/347.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, a generative model will be able to create an image based on textual
+    description. Most often, *y* is tensor, rather than scalar. This tensor exists
+    in the so-called **latent space** (or **latent feature space**), and we’ll refer
+    to it as the **latent representation** (or **latent space representation**) of
+    the original data, which itself exists in its own **feature space**. We can think
+    of the latent representation as a **compressed** (or simplified) version of the
+    original feature space. The digit-to-class case serves as an extreme example of
+    this paradigm – after all, we’re compressing an entire image into a single digit.
+    For the latent representation to work, it will have to capture the most important
+    hidden properties of the original data and discard the noise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because of its relative simplicity, we can reasonably expect that we have some
+    knowledge of the structure and properties of the latent space. This is opposed
+    to the feature space, which is complex beyond our comprehension. Therefore, if
+    we know the reverse mapping from the latent space to the feature space, we could
+    generate different feature space representations (that is, images) based on different
+    latent representations. More importantly, we can influence the output image properties
+    by modifying (in a conscious way) the initial latent representation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To illustrate this, let’s imagine that we’ve managed to create a reverse mapping
+    between latent vectors with *n=3* elements and full-fledged images of vehicles.
+    Each vector element represents one vehicle property, such as length, height, and
+    width (as shown in the following diagram):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.18 – An example of feature space-latent space and latent space-feature
+    space mapping](img/B19627_05_18.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.18 – An example of feature space-latent space and latent space-feature
+    space mapping
+  prefs: []
+  type: TYPE_NORMAL
+- en: Say that the average vehicle length is four meters. Instead of a discrete value,
+    we can represent this property as a **normal** (**Gaussian**) **distribution**
+    ([https://en.wikipedia.org/wiki/Normal_distribution](https://en.wikipedia.org/wiki/Normal_distribution))
+    with a mean of 4, making the latent space continuous (the same applies to the
+    other properties). Then, we can choose to sample new values for each element from
+    the ranges of their distributions. They will form a new latent vector (in this
+    case, a **latent variable**), which we can use as a seed to generate new images.
+    For example, we can create longer and lower vehicles
+  prefs: []
+  type: TYPE_NORMAL
+- en: (as illustrated previously).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second edition of this book included a whole chapter on NN-based generative
+    models, where we discussed two particular architectures: **variational autoencoders**
+    (**VAE**, *Auto-Encoding Variational Bayes*, [https://arxiv.org/abs/1312.6114](https://arxiv.org/abs/1312.6114))
+    and **generative adversarial networks** (**GAN**, [https://arxiv.org/abs/1406.2661](https://arxiv.org/abs/1406.2661)).
+    At the time, these were the state-of-the-art generative models for images. Since
+    then, they’ve been surpassed by a new class of algorithms called **diffusion models**.
+    As we have to move with the times, in this edition, we’ll omit VAEs and GANs,
+    and we’ll focus on diffusion models instead.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Denoising Diffusion Probabilistic Models
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Diffusion models** are a particular class of generative models, first introduced
+    in 2015 (*Deep Unsupervised Learning using Nonequilibrium Thermodynamics*, [https://arxiv.org/abs/1503.03585](https://arxiv.org/abs/1503.03585)).
+    In this section, we’ll focus on **Denoising Diffusion Probabilistic Models** (**DDPM**,
+    [https://arxiv.org/abs/2006.11239](https://arxiv.org/abs/2006.11239)), which form
+    the foundation of some of the most impressive generative tools such as **Stable**
+    **Diffusion** ([https://github.com/CompVis/stable-diffusion](https://github.com/CompVis/stable-diffusion)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'DDPM follows a similar pattern to the generative models we’ve already discussed:
+    it starts with a latent variable and uses it to generate a full-fledged image.
+    The DDPM training algorithm is split into two parts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Forward diffusion**: This starts with an initial image and then gradually
+    adds random **Gaussian noise** ([https://en.wikipedia.org/wiki/Gaussian_noise](https://en.wikipedia.org/wiki/Gaussian_noise))
+    to it through a series of small steps until the final (latent) representation
+    is pure noise.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Reverse diffusion**: This is the opposite of the forward process. It starts
+    with pure noise and gradually tries to restore the original image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following diagram illustrates the forward (top) and reverse (bottom) diffusion
+    processes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.19 – The forward (bottom) and reverse (top) diffusion processes.
+    Source: https://arxiv.org/abs/2006.11239](img/B19627_05_19.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.19 – The forward (bottom) and reverse (top) diffusion processes. Source:
+    https://arxiv.org/abs/2006.11239'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s discuss it in detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/348.png):
+    The initial image from the original feature space, represented as a tensor.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*T*: The number of steps in the forward and reverse processes. Originally,
+    the authors used *T=1000*. More recently, *T=4000* has been proposed (*Improved
+    Denoising Diffusion Probabilistic Models*). Each forward or reverse step adds
+    or removes small amounts of noise.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/349.png):
+    The final result of the forward diffusion, which represents pure noise. We can
+    think of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/349.png)
+    as a peculiar latent representation of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/351.png).
+    The two tensors have the same dimensions, unlike the example we discussed in the
+    *Introducing generative* *models* section.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png)
+    (note the lowercase *t*): The noise-augmented tensor at an intermediate step,
+    *t*. Again, it has the same dimensions as ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/348.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/349.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>q</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/355.png):
+    This is the **probability density function** (**PDF**) of the forward diffusion
+    process at an intermediate step, *t*. PDF sounds scary, but it isn’t. It simply
+    means that we add small amounts of Gaussian noise to the already noisy tensor,
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/356.png),
+    to produce a new, noisier, tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png)
+    (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png)
+    is conditioned on ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/359.png)).
+    The forward diffusion doesn’t involve ML or NNs and has no learnable parameters.
+    We just add noise and that’s it. Still, it represents a mapping from the original
+    feature space to the latent representation space.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Note that we need to know ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/360.png)
+    to produce ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/361.png),
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:math>](img/362.png)
+    for ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/360.png)
+    and so on – that is, we need all tensors ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/364.png)
+    to produce ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/365.png).
+    Thankfully, the authors have proposed an optimization that allows us to derive
+    the value of any ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png)
+    using only the initial tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/348.png):'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msqrt><mml:mover
+    accent="false"><mml:mrow><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mo>¯</mml:mo></mml:mover></mml:msqrt><mml:mi
+    mathvariant="normal"> </mml:mi><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msqrt><mml:mn>1</mml:mn><mml:mo>-</mml:mo><mml:mover
+    accent="false"><mml:mrow><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mo>¯</mml:mo></mml:mover></mml:msqrt><mml:mi
+    mathvariant="normal"> </mml:mi><mml:mi mathvariant="bold">ϵ</mml:mi><mml:mo>,</mml:mo><mml:mi
+    mathvariant="normal"> </mml:mi><mml:mi mathvariant="bold">ϵ</mml:mi><mml:mo>∼</mml:mo><mml:mi>N</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mn>0</mml:mn><mml:mo>,</mml:mo><mml:mi>I</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/368.png)(1)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:mn>0</mml:mn><mml:mo>:</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced></mml:math>](img/369.png)
+    is a coefficient, which changes on a pre-defined schedule, but generally increases
+    with *t*. **ϵ** is the Gaussian random noise tensor with the same size as ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png).
+    The square root ensures that the new ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png)
+    will still follow a Gaussian distribution. We can see that ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png)
+    is a mixture of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/373.png)
+    and **ϵ** and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/374.png)
+    determines the balance between the two. If ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mi>t</mi><mo>→</mo><mn>0</mn></mrow></mrow></math>](img/375.png),
+    then ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/376.png)
+    will have more weight. The more ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mi>t</mi><mo>→</mo><mi>T</mi></mrow></mrow></math>](img/377.png),
+    the more the noise, **ϵ**, will prevail. Because of this optimization, we don’t
+    have a real multi-step forward diffusion process. Instead, we generate the desired
+    noisy representation at step *t*, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png),
+    in a single operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/379.png):
+    This is the PDF of the reverse diffusion process at an intermediate step, *t-1*.
+    This is the opposite function of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>q</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/380.png).
+    It is a mapping from the latent space to the original feature space – that is,
+    we start from the pure noise tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/381.png),
+    and we gradually try to remove the noise until we reach the original image in
+    *T* steps. The reverse diffusion is a lot more challenging compared to simply
+    adding noise to an image, as in the forward phase. This is the primary reason
+    to split the denoising process into multiple steps with small amounts of noise
+    in the first place. Our best chance is to train an NN with the hope that it will
+    learn a reasonable approximation of the actual mapping between the latent and
+    the original feature spaces. Therefore, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/382.png)
+    is an NN, where the *θ* index indicates its weights. The authors have proposed
+    a **U-Net** type of network. It takes the noisy tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/365.png),
+    as input and outputs its approximation of the noise (that is, only the noise and
+    not the image itself) that was added to the original image, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/384.png).
+    The input and output tensors have the same dimensions. DDPM was released later
+    than the original U-Net, so their NN architecture uses some improvements that
+    were introduced in the meantime. These include residual blocks, **group normalization**
+    (an alternative to batch normalization), and **attention** (*Attention Is All
+    You Need*, [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)),
+    [https://arxiv.org/abs/1803.08494](https://arxiv.org/abs/1803.08494)), and **attention**
+    (*Attention Is All You* *Need*, [https://arxiv.org/abs/1706.03762](https://arxiv.org/abs/1706.03762)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Next, let’s focus on the DDPM training, which is displayed on the left in the
+    following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.20 – DDPM training (left); DDPM sampling (right). Source: https://arxiv.org/abs/2006.11239](img/B19627_05_20.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.20 – DDPM training (left); DDPM sampling (right). Source: https://arxiv.org/abs/2006.11239'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A single training episode involves the following steps (line 1):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start with a random sample (image), ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/348.png),
+    from the training set (line 2).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sample the random noise step, *t*, in the range [1:*T*] (line 3).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sample the random noise tensor, **ϵ**, from a Gaussian distribution (line 4).
+    Within the NN itself, the step, *t*, is embedded in the values of **ϵ** using
+    **sinusoidal position embeddings**. Don’t worry if you don’t understand the concept
+    of positional embeddings. We’ll discuss it in detail in [*Chapter 7*](B19627_07.xhtml#_idTextAnchor202),
+    as it was first introduced in that context. All we need to know now is that the
+    step number, *t*, is implicitly encoded in the elements of **ϵ**, in a way that
+    allows the model to use this information. The step-adjusted noise is denoted with
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
+    mathvariant="bold">ϵ</mml:mi><mml:mo>,</mml:mo><mml:mi>t</mml:mi></mml:math>](img/386.png)
+    in the preceding diagram.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Produce a corrupt image tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/387.png),
+    conditioned on the initial image, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/388.png),
+    and based on the sampled noise step, *t*, and the random noise, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">ϵ</mml:mi><mml:mo>,</mml:mo><mml:mi>t</mml:mi></mml:math>](img/389.png).
+    To do this, we’ll use formula (1), which we introduced earlier in this section.
+    Thanks to it, this single step constitutes the entire forward diffusion phase
+    (line 5).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Perform a single gradient descent step and weight update. The training uses
+    the **mean squared error** (**MSE**). It measures the difference between the sampled
+    noise, **ϵ** (line 4), and the noise predicted by the model, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/390.png)
+    (line 5). The loss equation seems deceptively simple. The paper’s authors made
+    a long chain of transformations and assumptions to reach this simple result. This
+    is one of the main contributions of the paper.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Once the model has been trained, we can use it to sample new images based on
+    random initial tensors, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/349.png).
+    We can do this with the following procedure (preceding diagram, right):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sample the initial random latent tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/349.png),
+    from a Gaussian distribution (line 1).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Repeat the next steps *T* times (line 2):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sample random noise tensor, **z**, from a Gaussian distribution (line 3). We
+    do this for all reverse steps, except for the final one.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use the trained U-Net model to predict the noise, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/384.png),
+    at step *t*. Subtract this noise from the current sample, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png),
+    to produce the new, less noisy, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/395.png)
+    (line 4). The scheduling coefficient, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>a</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/396.png),
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: also takes part in this formula, as it did in the forward phase. The formula
+    also preserves the mean and the variance of the original distribution.
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The final denoising step produces the generated image.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This concludes our introduction to DDPMs for now. However, we’ll revisit them
+    in [*Chapter 9*](B19627_09.xhtml#_idTextAnchor236), but in the context of Stable
+    Diffusion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we discussed some advanced computer vision tasks. We started
+    with TL, a technique that makes it possible to bootstrap our experiments with
+    the help of pre-trained models. We also introduced object detection and semantic
+    segmentation models, which benefit from TL. Finally, we focused on generative
+    models and DDPM in particular.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we’ll introduce language modeling and recurrent networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Part 3:'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Natural Language Processing and Transformers
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll start this part with an introduction to natural language processing, which
+    will serve as a backdrop for our discussion on recurrent networks and transformers.
+    Transformers will be the main focus of this section because they represent one
+    of the most significant deep learning advances in recent years. They are the foundation
+    of **large language models** (**LLM**), such as ChatGPT. We’ll discuss their architecture
+    and their core element – the attention mechanism. Then, we’ll discuss the properties
+    of LLMs. Finally, we’ll focus on some advanced LLM applications, such as text
+    and image generation, and learn how to build LLM-centered applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part has the following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 6*](B19627_06.xhtml#_idTextAnchor185), *Natural Language Processing
+    and Recurrent Neural Networks*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 7*](B19627_07.xhtml#_idTextAnchor202), *The Attention Mechanism and
+    Transformers*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 8*](B19627_08.xhtml#_idTextAnchor220), *Exploring Large Language
+    Models in Depth*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 9*](B19627_09.xhtml#_idTextAnchor236), *Advanced Applications of
+    Large Language Models*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

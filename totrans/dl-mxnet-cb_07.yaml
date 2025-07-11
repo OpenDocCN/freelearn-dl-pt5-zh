@@ -1,0 +1,2055 @@
+- en: '7'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Optimizing Models with Transfer Learning and Fine-Tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As models grow in size (the depth and number of processing modules per layer),
+    training them grows exponentially as more time is spent per epoch, and typically,
+    more epochs are required to reach optimum performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this reason, **MXNet** provides state-of-the-art pre-trained models via
+    **GluonCV** and **GluonNLP** libraries. As we have seen in previous chapters,
+    these models can help us solve a variety of problems when our final dataset is
+    similar to the one the selected model has been pre-trained on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, sometimes this is not good enough, and our final dataset might have
+    some nuances that the pre-trained model is not picking up. In these cases, it
+    would be ideal to combine the stored knowledge of the pre-trained model with our
+    final dataset. This is called transfer learning, where the knowledge of our pre-trained
+    model is transferred to a new task (final dataset).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will learn how to use GluonCV and GluonNLP, which are MXNet
+    Gluon libraries that are specific to **Computer Vision** (**CV**) and **Natural
+    Language Processing** (**NLP**), respectively. We will also learn how to retrieve
+    pre-trained models from their model zoos, and how to optimize our own networks
+    by transferring the learnings from these pre-trained models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specifically, we will cover the following topics in our recipes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding transfer learning and fine-tuning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Improving performance for classifying images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Improving performance for segmenting images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Improving performance for translating English to German
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Apart from the technical requirements specified in the *Preface*, the following
+    technical requirements apply:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensure that you have completed the first recipe, *Installing MXNet, Gluon, GluonCV
+    and GluonNLP*, from [*Chapter 1*](B16591_01.xhtml#_idTextAnchor016), *Up and Running*
+    *with MXNet*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ensure that you have completed [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with Computer Vision*, and [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121),
+    *Understanding Text with Natural* *Language Processing*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code for this chapter can be found at the following GitHub URL: [https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch07](https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch07).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, you can access each recipe directly from Google Colab; for example,
+    the first recipe of this chapter can be found here: [https://colab.research.google.com/github/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch07/7_1_Understanding_Transfer_Learning_and_Fine_Tuning.ipynb](https://colab.research.google.com/github/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch07/7_1_Understanding_Transfer_Learning_and_Fine_Tuning.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding transfer learning and fine-tuning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we saw how we could leverage MXNet, GluonCV, and GluonNLP
+    to retrieve pre-trained models in certain datasets (such as ImageNet, MS COCO,
+    and IWSLT2015) and use them for our specific tasks and datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will introduce a methodology called **transfer learning**,
+    which will allow us to combine the information from pre-trained models (on general
+    knowledge datasets) and the information from the new domain (the dataset from
+    the task we want to solve). There are two main significant advantages to this
+    approach. On the one hand, pre-training datasets are typically large-scale (ImageNet-22k
+    has 14 million images), and using a pre-trained model saves us that training time.
+    On the other hand, we use our specific dataset not only for evaluation but also
+    for training the model, improving its performance in the desired scenario. As
+    we will discover, there is not always an easy way to achieve this, as it requires
+    the capability to obtain a sizable dataset, or even one right way, as it might
+    not yield the expected results. We will also explore the optional next step after
+    transfer learning, called fine-tuning, where we will try to use our specific dataset
+    to modify the model parameters even further. We will put both techniques to the
+    test.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As for previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be looking at the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing transfer learning
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Describing the advantages of transfer learning and when to use it
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Understanding the fundamentals of representation learning
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Focusing on practical applications
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s dive into each of these steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing transfer learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous chapters, we learned how to train deep learning neural networks
+    from scratch, exploring problems in CV and NLP. As introduced in [*Chapter 3*](B16591_03.xhtml#_idTextAnchor052),
+    *Solving Regression Problems*, deep learning neural networks try to imitate the
+    biological networks in our brains. One interesting point of view is that when
+    we (and our brains) learn new tasks, we leverage previous knowledge we have acquired
+    in a very strong way. For example, a very good tennis player will become a relatively
+    good player at squash with a few hours of play. Transfer learning is a field of
+    study that contains different techniques to achieve similar results as in this
+    example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 7.1 – Comparison between traditional \uFEFFmachine \uFEFFlearning\
+    \ (ML) and transfer learning](img/B16591_07_1.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.1 – Comparison between traditional machine learning (ML) and transfer
+    learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 7**.1*, we can see a comparison between both paradigms where, in
+    transfer learning, the approach to solving Task 2 leverages the knowledge acquired
+    while solving Task 1\. This implies, however, that to solve a single desired task
+    (Task 2), we are training the model twice (for Task 1 and for Task 2 later). In
+    practice, as we will see in the next steps, we will work with pre-trained models
+    from MXNet’s GluonCV and GluonNLP model zoos, and therefore, we will only have
+    to train the model once, for Task 2.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Describing the advantages of transfer learning and when to use it
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are several reasons why using transfer learning offers advantages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Faster**: As we leverage pre-trained models from model zoos, the training
+    will converge much faster than training from scratch, requiring much fewer epochs
+    and less time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**More general**: Typically, pre-trained models have been trained in large-scale
+    datasets (such as ImageNet); therefore, the parameters (weights) learned are generalistic
+    and can then be reused for a large number of tasks. It is an objective that outputs
+    from the feature extraction part of the pre-trained model (also known as **representations**),
+    learned by training using large-scale datasets that are general and domain-invariant
+    (can be reused).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Requires less data**: To adapt a pre-trained model for a given new task,
+    the amount of data required is much less than for training that specific model
+    architecture from scratch. This is because representations can be reused (as mentioned
+    in the previous point).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**More environmentally friendly**: As the training time, datasets, and compute
+    requirements for transfer learning are much lower than training from scratch,
+    less pollution is required to train a model.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Performance improvements**: It has been proven (for example, in [https://www.cv-foundation.org/openaccess/content_cvpr_2014/papers/Oquab_Learning_and_Transferring_2014_CVPR_paper.pdf](https://www.cv-foundation.org/openaccess/content_cvpr_2014/papers/Oquab_Learning_and_Transferring_2014_CVPR_paper.pdf))
+    that using transfer learning with small-scale datasets yields strong performance
+    improvements, and on large-scale datasets, the same performance point is achieved
+    much faster than training from scratch.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In *Figure 7**.2*, different methods to compute representations are analyzed,
+    and although specialized networks can reach better performance, this is only possible
+    if large-scale datasets, high-end compute resources, and longer training times
+    are given.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.2 – Comparing different approaches for representations](img/B16591_07_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.2 – Comparing different approaches for representations
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a more general setting, there are different ways to achieve transfer learning,
+    as shown in the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.3 – Different types of transfer learning](img/B16591_07_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.3 – Different types of transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 7**.3*, we can see the different types of transfer learning, depending
+    on the similarity of the source and target domain and the availability of source
+    and target data. In this chapter, we will explore the usual setting of having
+    a pre-trained model in a similar domain to our intended task (equal source and
+    target domain), and the tasks will be slightly different, with some amount of
+    labeled data in the target domain (**inductive** **transfer learning**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Andrew Ng, chief scientist of Baidu and co-founder of Google Brain, said the
+    following in a tutorial in NIPS 2016 called *Nuts and Bolts of Building AI Applications
+    Using Deep Learning*: “*In the next few years, we’ll see a lot of concrete value
+    driven through transfer learning*,” and he was right.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the fundamentals of representation learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In this section, we will answer the question, from a more theoretical point
+    of view, about how to use transfer learning and why it works. In [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with Computer Vision*, and [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121),
+    *Understanding Text with Natural Language Processing*, we introduced the concept
+    of **representations** for features in images using GluonCV and for words/sentences
+    in text using GluonNLP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can revisit, in *Figure 7**.4*, the usual architecture of a CNN architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.4 – Refresher of Convolutional Neural Networks (CNNs)](img/B16591_07_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.4 – Refresher of Convolutional Neural Networks (CNNs)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 7**.5*, we can revisit the usual Transformer architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.5 – Refresh of the Transformer architecture (encoder on the left,
+    and decoder on the right)](img/B16591_07_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.5 – Refresh of the Transformer architecture (encoder on the left, and
+    decoder on the right)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The underlying idea is common in both fields; for example, the feature extractor
+    part of CNNs and the encoder in Transformers are representations, and the training
+    of these network sections is called **representation learning**, an active field
+    of study due to the capability of being able to train these networks in both supervised
+    and unsupervised settings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The main idea behind transfer learning is to transfer the representations learned
+    in a task to a different task; therefore, we will typically follow the next steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Retrieve a pre-trained model from MXNet’s Model Zoo (GluonCV or GluonNLP).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Remove the last layers (typically, a classifier). Keep the parameters in the
+    rest of the layers frozen (not updatable during training).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Add new layers (a new classifier) corresponding to the new task
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train the updated model (only the new layers, not frozen, will be updated during
+    training) with the target data.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If we have enough labeled data for the task that we want to solve (target task),
+    another step (that can be done after the previous step or substituting it) is
+    called **fine-tuning**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Fine-tuning takes into account that the representations originally learned
+    might not fit perfectly with the target task and, therefore, could also improve
+    with updating. In this scenario, the steps are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unfreeze the weights of the representation network.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Retrain the network with target data, typically with a smaller learning rate
+    as the representations should be close (same domain).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Both processes (transfer learning and fine-tuning) are summarized visually in
+    *Figure 7**.6*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.6 – Transfer learning and fine-tuning](img/B16591_07_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.6 – Transfer learning and fine-tuning
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both processes can be applied sequentially, with adequate **hyperparameters**
+    for each one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Focusing on practical applications
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this section, we will use what we have learned so far about representation
+    learning and we will apply it to a practical example: detecting cats and dogs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To do this, we will retrieve a model from the **GluonCV Model Zoo**; we will
+    remove the classifier (last layers) and keep the feature extraction stage. We
+    will then analyze how the representations of the cats and dogs have been learned.
+    To load the model, we can use this code snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the previous code snippet, for the `pretrained` parameter, we have assigned
+    the value of `True`, indicating that we want the pretrained weights to be retrieved
+    (and not only the architecture of the model).
+  prefs: []
+  type: TYPE_NORMAL
+- en: When trained correctly, CNNs learn hierarchical representations of the features
+    of the images in the training dataset, with each progressive layer learning more
+    and more complex patterns. Therefore, when an image is processed (when processing
+    on successive layers), the network can compute more complex patterns associated
+    with the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can use a new MXNet library, MXBoard (see the recipe for installation
+    instructions), with this model to evaluate the different steps that a dog image
+    goes through and see some examples of how a pre-trained model computes its representations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.7 – Cat and dog representations – convolutional filters](img/B16591_07_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.7 – Cat and dog representations – convolutional filters
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 7**.7*, we can see the convolutional filters corresponding to the
+    first convolutional layer of a ResNet152 pre-trained network (on ImageNet). Please
+    note how these filters focus on simple patterns such as specific shapes (vertical
+    and horizontal lines, circles, and so on) and specific colors (red blobs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s analyze the results with a specific image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.8 – Example image of a dog](img/B16591_07_8.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.8 – Example image of a dog
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We select an image from our *Dogs vs. Cats* dataset, such as the dog depicted
+    in *Figure 7**.8*. When passing this image through our network, we will find results
+    similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.9 – Output from convolutional filters](img/B16591_07_9.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.9 – Output from convolutional filters
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 7**.9*, we can see the output of the filters in *Figure 7**.7* for
+    our dog example. Note how different outputs highlight simple shapes such as the
+    eyes or the legs (larger values, closer to white).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, as the image traverses the network, its features are more and more
+    compressed, yielding (for ResNet152) a final vector of 2,048 elements. This vector
+    can be computed easily with networks retrieved using MXNet’s Model Zoo:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This code excerpt provides the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, we have a `2048` element.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we introduced the concepts of transfer learning and fine-tuning.
+    We explained when it made sense to use these two different techniques and their
+    advantages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also explored when these techniques can be useful and their connections to
+    representation learning, explaining how representations play a significant role
+    in the knowledge being transferred when using these techniques. We used a new
+    library, **MXBoard**, to produce visualizations for the representations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Moreover, we intuitively and practically showed how to apply these techniques
+    to CV and NLP tasks and computed a representation for a specific example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Transfer learning, including fine-tuning, is an active field of study. In this
+    recipe, we have only covered the most useful scenario for deep learning, inductive
+    transfer learning. For a more comprehensive but still easy-to-read introduction,
+    I recommend reading *Transfer learning: a friendly introduction*, which can be
+    found at: [https://journalofbigdata.springeropen.com/articles/10.1186/s40537-022-00652-w](https://journalofbigdata.springeropen.com/articles/10.1186/s40537-022-00652-w).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Moreover, the concept of transferring knowledge from one system to another
+    is not new, and there are references to concepts such as **learning to learn**
+    and **knowledge transfer** as early as 1995, when a **Neural Information Processing
+    Systems** (**NeurIPS**) workshop on the topic was presented. A summary of the
+    workshop can be found here: http://socrates.acadiau.ca/courses/comp/dsilver/nips95_ltl/nips95.workshop.pdf.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, as introduced 21 years later in the same venue, Andrew Ng was
+    able to correctly foresee the importance of transfer learning. His 2016 NeurIPS
+    tutorial can be found here (jump to 1h 37m for the transfer learning quote): [https://www.youtube.com/watch?v=F1ka6a13S9I](https://www.youtube.com/watch?v=F1ka6a13S9I).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Improving performance for classifying images
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: After introducing transfer learning and fine-tuning in the previous recipe,
+    in this one, we will apply it to **image classification**, a CV task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the second recipe, *Classifying images with MXNet – GluonCV Model Zoo, AlexNet,
+    and ResNet*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), *Analyzing Images
+    with Computer Vision*, we saw how we could use GluonCV to retrieve pre-trained
+    models and use them directly for an image classification task. In the first instance,
+    we looked at training them from scratch, effectively only leveraging past knowledge
+    by using the architecture of the pre-trained model, without leveraging any past
+    knowledge contained in the pre-trained weights, which were re-initialized, deleting
+    any past information. Afterward, the pre-trained models were used directly for
+    the task, effectively also leveraging the weights/parameters of the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will combine the weights/parameters of the model with the
+    target dataset, applying the techniques introduced in this chapter, transfer learning
+    and fine-tuning. The dataset used for the pre-training was `Dogs vs` `Cats` dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As for previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, we will be working with text datasets; therefore, we will revisit
+    some concepts already seen in the second recipe, *Classifying images with MXNet:
+    GluonCV Model Zoo, AlexNet, and ResNet*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with* *Computer Vision*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be looking at the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting the *ImageNet-1k* and *Dogs vs.* *Cats* datasets
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training a **ResNet** model from scratch with *Dogs* *vs Cats*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using a pre-trained ResNet model to optimize performance via transfer learning
+    from *ImageNet-1k* to *Dogs* *vs Cats*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained ResNet model on *Dogs* *vs Cats*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s look at these steps in detail next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting the ImageNet-1k and Dogs vs Cats datasets
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*ImageNet-1k* and *Dogs vs Cats* are both image classification datasets; however,
+    they are quite different. *ImageNet-1k* is a large-scale dataset containing ~1.2
+    million images labeled into 1,000 classes and has been used extensively in research
+    and academia for benchmarking. *Dogs vs Cats* is a small-scale dataset containing
+    1,400 images depicting either a dog or a cat, and its fame is mostly due to a
+    Kaggle competition launched in 2013.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: MXNet GluonCV does not provide methods to directly download any of the datasets.
+    However, we do not need the *ImageNet-1k* dataset (its size is ~133 GB), only
+    the pre-trained parameters for our chosen model. The pre-trained models can be
+    downloaded directly from the MXNet GluonCV Model Zoo, we have seen examples in
+    previous chapters and we will use them again in this one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some examples from *ImageNet-1k*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.10 – ImageNet-1k examples](img/B16591_07_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.10 – ImageNet-1k examples
+  prefs: []
+  type: TYPE_NORMAL
+- en: The source of the preceding figure is [https://cs.stanford.edu/people/karpathy/cnnembed/](https://cs.stanford.edu/people/karpathy/cnnembed/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For *Dogs vs Cats*, all the information on how to retrieve the dataset can
+    be found in the second recipe, *Classifying images with MXNet: GluonCV Model Zoo,
+    AlexNet, and ResNet*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), *Analyzing
+    Images with Computer Vision*. Taking that recipe’s code as a reference, we can
+    display some examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.11 – Dogs vs Cats dataset](img/B16591_07_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.11 – Dogs vs Cats dataset
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 7**.10* and *Figure 7**.11*, we can see how some images from *ImageNet-1k*
+    resemble some of the images from *Dogs* *vs Cats*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a ResNet model from scratch with Dogs vs Cats
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As described in the second recipe, *Classifying images with MXNet: GluonCV
+    Model Zoo, AlexNet, and ResNet*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with Computer Vision*, we will be using **softmax cross-entropy**
+    as the loss function and **accuracy** and the **confusion matrix** as evaluation
+    metrics.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We have the following evolution in the training using the ResNet model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.12 – ResNet training evolution (training loss and validation loss,
+    and validation accuracy) – training from scratch](img/B16591_07_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.12 – ResNet training evolution (training loss and validation loss,
+    and validation accuracy) – training from scratch
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the `accuracy` value obtained in the test
+    set is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The confusion matrix is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.13 – Confusion matrix in Dogs vs Cats for a ResNet model trained
+    from scratch](img/B16591_07_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.13 – Confusion matrix in Dogs vs Cats for a ResNet model trained from
+    scratch
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both the accuracy value obtained (75%) and *Figure 7**.13* show quite average
+    performance after training for several epochs (100, in this example). You are
+    encouraged to run your own experiments trying out different hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can also check how well our model is performing with an example
+    image. In our case, we chose the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.14 – Qualitative example of Cats vs Dogs, specifically a cat](img/B16591_07_14.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.14 – Qualitative example of Cats vs Dogs, specifically a cat
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can check the output of our model by running this image through it with
+    the following code snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These code statements will give us the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: As can be seen from the results, the image has been correctly classified as
+    a cat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a pre-trained ResNet model to optimize performance via transfer learning
+    from ImageNet-1k to Dogs vs Cats
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the previous recipe, we trained a new model from scratch using our dataset.
+    However, this has two important drawbacks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A large amount of data is required for training from scratch.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The training process can take a long time due to the large size of the dataset
+    and the number of epochs needed for the model to learn the task.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Therefore, in this recipe, we will follow a different approach: we will use
+    pre-trained models from MXNet GluonCV to solve the task. These models have been
+    trained in *ImageNet-1k*, a dataset that contains the classes we are interested
+    in (cats and dogs); therefore, we can use those learned representations and easily
+    transfer them to *Dogs vs Cats* (same domain).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a ResNet model, use the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see in the previous code snippet, following the discussion in this
+    chapter’s first recipe, *Understanding transfer learning and fine-tuning*, for
+    the `pretrained` parameter, we have assigned the value of `True`, indicating that
+    we want the pre-trained weights to be retrieved (and not only the architecture
+    of the model).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to adequately evaluate the improvements that transfer learning brings,
+    we are going to evaluate our pre-trained model directly (the source task is *ImageNet-1k*)
+    before applying transfer learning to *Dogs vs Cats* and after applying it. Therefore,
+    using our pre-trained model as is, we obtain the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The confusion matrix is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.15 – Confusion matrix in Dogs vs Cats for a pre-trained ResNet model](img/B16591_07_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.15 – Confusion matrix in Dogs vs Cats for a pre-trained ResNet model
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see, our pre-trained Transformer model is already showing good performance
+    values as it is the same domain; however, simply using a pre-trained model does
+    not yield better performance than training from scratch. The great advantage of
+    using pre-trained models is the time savings, as loading one just takes a few
+    lines of code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example. Note how the code slightly differs from the previous qualitative
+    image excerpt, as now we need to convert ImageNet classes (the output of our ResNet50
+    pre-trained model) to our classes (`0` for cats and `1` for dogs). The new code
+    is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These code statements will give us the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: As can be seen from the result, the image has been correctly classified as a
+    cat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a baseline for comparison, let’s apply transfer learning to
+    our task. From the first recipe, *Understanding transfer learning and fine-tuning*,
+    the first step was to retrieve a pre-trained model from the MXNet Model Zoo (GluonCV
+    or GluonNLP), which we have already done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second step was to remove the last layers (typically, a classifier), keeping
+    the parameters in the rest of the layers frozen (not updatable during training),
+    so let’s do it!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can replace the classifier with the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can freeze the ResNet feature extraction layers with the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can replace the classifier with the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can apply the usual training process with *Dogs vs Cats*, and we have
+    the following evolution in the training using the ResNet model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.16 – ResNet training evolution (training loss and validation loss)
+    – transfer learning](img/B16591_07_16.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.16 – ResNet training evolution (training loss and validation loss)
+    – transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the accuracy obtained in the test set
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The confusion matrix is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.17 – Confusion matrix in Dogs vs Cats for a ResNet model with transfer
+    learning](img/B16591_07_17.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.17 – Confusion matrix in Dogs vs Cats for a ResNet model with transfer
+    learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compared with our previous experiment of training from scratch, this experiment
+    yields much higher performance, and it took us literally minutes to get this model
+    to start working well for us in our intended task, whereas the training required
+    for the previous experiment took hours and required several tries to tune the
+    hyperparameters, which can then turn into several days of effort in total.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: As can be seen from the result, the image has been correctly classified as a
+    cat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained ResNet model on Dogs vs Cats
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous recipe, we *froze* the parameters in the encoder layers. However,
+    as the dataset we are currently working with (*Dogs vs Cats*) has enough data
+    samples, we can *unfreeze* those parameters and train the model, effectively allowing
+    the new training process to update the representations (with transfer learning,
+    we were working directly with the representations learned for *ImageNet-1k*).
+    This process is called fine-tuning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two variants of fine-tuning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying transfer learning by freezing the layers and unfreezing them afterward
+    (fine-tuning after transfer learning)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Directly applying fine-tuning without the preliminary step of freezing the layers
+    (fine-tuning directly)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s compute both experiments and draw conclusions by comparing the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the first experiment, we can take the network obtained in the previous
+    recipe, unfreeze the layers, and restart the training. In MXNet, to unfreeze the
+    encoder parameters, we can run the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can apply the usual training process with *Dogs vs Cats*, and we have
+    the following evolution in the training using the ResNet model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.18 – ResNet training evolution (training loss and validation loss)
+    – fine-tuning after transfer learning](img/B16591_07_18.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.18 – ResNet training evolution (training loss and validation loss)
+    – fine-tuning after transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the accuracy obtained in the test set
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The confusion matrix is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.19 – Confusion matrix in Dogs vs Cats for a ResNet model with fine-tuning
+    after transfer learning](img/B16591_07_19.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.19 – Confusion matrix in Dogs vs Cats for a ResNet model with fine-tuning
+    after transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compared with our previous experiment of transfer learning, this experiment
+    yields worse performance. This is due to a combination of the size of the dataset
+    and the hyperparameters chosen. You are encouraged to try your own experiments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: As can be seen from the results, the image has been correctly classified as
+    a cat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s continue now with the second fine-tuning experiment where, instead of
+    applying transfer learning, we apply fine-tuning directly to the whole model (no
+    frozen layers).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We need to again retrieve the pre-trained ResNet model for *ImageNet-1k*, with
+    the following code snippet for MXNet GluonCV:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And now, without freezing, we can apply the training process, which will update
+    all layers of our ResNet model, giving the following loss curves:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.20 – ResNet training evolution (training loss and validation loss)
+    – fine-tuning without freezing](img/B16591_07_20.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.20 – ResNet training evolution (training loss and validation loss)
+    – fine-tuning without freezing
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the accuracy obtained in the test set
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The value is similar to the previous experiment with transfer learning. For
+    the confusion matrix, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.21 – Confusion matrix in Dogs vs Cats for a ResNet model with fine-tuning
+    without freezing](img/B16591_07_21.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.21 – Confusion matrix in Dogs vs Cats for a ResNet model with fine-tuning
+    without freezing
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned, compared with our previous fine-tuning experiment, we can see
+    how this experiment yields higher performance. Empirically, this has been proven
+    to be a repeatable result and has been indicated to be because initially freezing
+    the encoder allows for the decoder to learn (using the encoder representations)
+    the new task at hand. From an information flow point of view, in this step, there
+    is a knowledge transfer from the feature extraction stage to the classifier. In
+    the secondary step when the feature extraction stage is unfrozen, the learned
+    parameters from the classifier perform auxiliary transfer learning – this time,
+    from the classifier to the feature extraction stage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: As can be seen from the results, the image has been correctly classified as
+    a cat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we applied the techniques of transfer learning and fine-tuning,
+    introduced at the beginning of the chapter, to the task of image classification,
+    which was also presented previously, in the second recipe, *Classifying images
+    with MXNet: GluonCV Model Zoo, AlexNet, and ResNet*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with* *Computer Vision*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We revisited two known datasets, *ImageNet-1k* and *Dogs vs Cats*, which we
+    intended to combine using knowledge transfer based on the former dataset and refining
+    that knowledge with the latter. Moreover, this was achieved by leveraging the
+    tools that MXNet GluonCV provided:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A pre-trained ResNet model for *ImageNet-1k*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Tools for easy-to-use access to *Dogs* *vs Cats*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Furthermore, we continued using the loss functions and metrics introduced for
+    image classification, softmax cross-entropy, accuracy, and the confusion matrix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having all these tools readily available within MXNet and GluonCV allowed us
+    to run the following experiments with just a few lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a model from scratch in *Dogs* *vs Cats*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a pre-trained model to optimize performance via transfer learning from
+    *ImageNet-1k* to *Dogs* *vs Cats*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained model on *Dogs vs Cats* (with and without freezing
+    layers)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After running the different experiments, we obtained an effective tie between
+    transfer learning and fine-tuning directly (accuracies of 0.985 and 0.98, respectively).
+    The actual results obtained when running these experiments might differ based
+    on model architecture, datasets, and hyperparameters chosen, so you are encouraged
+    to try out different techniques and variations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Transfer learning, including fine-tuning, is an active field of research. A
+    recent paper published in 2022 explores the latest advances in image classification.
+    The paper is titled *Deep Transfer Learning for Image Classification: A survey*,
+    and can be found here: [https://www.researchgate.net/publication/360782436_Deep_transfer_learning_for_image_classification_a_survey](https://www.researchgate.net/publication/360782436_Deep_transfer_learning_for_image_classification_a_survey).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a more general approach to CV use cases, a recent paper was published,
+    *Transfer Learning Methods as a New Approach in Computer Vision Tasks with Small
+    Datasets*, where the problem of small datasets is evaluated, and these techniques
+    are applied to solve medical imaging tasks. It can be found here: [https://www.researchgate.net/publication/344943295_Transfer_Learning_Methods_as_a_New_Approach_in_Computer_Vision_Tasks_with_Small_Datasets](https://www.researchgate.net/publication/344943295_Transfer_Learning_Methods_as_a_New_Approach_in_Computer_Vision_Tasks_with_Small_Datasets).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Improving performance for segmenting images
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this recipe, we will apply transfer learning and fine-tuning to **semantic
+    segmentation**, a CV task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the fourth recipe, *Segmenting objects in images with MXNet: PSPNet and
+    DeepLab-v3*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), *Analyzing Images
+    with Computer Vision*, we saw how we could use GluonCV to retrieve pre-trained
+    models and use them directly for a semantic segmentation task, effectively leveraging
+    past knowledge by using the architecture and the weights/parameters of the pre-trained
+    model.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will continue leveraging the weights/parameters of the model,
+    obtained for a task consisting of classifying images among a set of 21 classes
+    using semantic segmentation models. The dataset used for the pre-training was
+    *MS COCO* (source task) and we will run several experiments to evaluate our models
+    in a new (target) task, using the *Penn-Fudan Pedestrian* dataset. In these experiments,
+    we will also include knowledge from the target dataset to improve our semantic
+    classification performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As for previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, we will be working with text datasets; therefore, we will revisit
+    some concepts already seen in the fourth recipe, *Segmenting objects in images
+    with MXNet: PSPNet and DeepLab-v3*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with* *Computer Vision*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be looking at the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting the *MS COCO* and *Penn-Fudan* *Pedestrian* datasets
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training a **DeepLab-v3** model from scratch with *Penn-Fudan Pedestrian*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using a pre-trained DeepLab-v3 model to optimize performance via transfer learning
+    from *MS COCO* to *Penn-Fudan Pedestrian*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained DeepLab-v3 model on *Penn-Fudan Pedestrian*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s look at these steps in detail next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Revisiting the MS COCO and Penn-Fudan Pedestrian datasets
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*MS COCO* and *Penn-Fudan Pedestrian* are both object detection and semantic
+    segmentation datasets; however, they are quite different. *MS COCO* is a large-scale
+    dataset containing ~150k images labeled into 80 classes (21 main ones) and has
+    been used extensively in research and academia for benchmarking. *Penn-Fudan Pedestrian*
+    is a small-scale dataset containing 170 images of 423 pedestrians. For this recipe,
+    we will focus on the semantic segmentation task.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: MXNet GluonCV does not provide methods to directly download any of the datasets.
+    However, we do not need the *MS COCO* dataset (its size is ~19 GB), only the pre-trained
+    parameters for our chosen model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some examples from *MS COCO*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.22 – MS COCO example](img/B16591_07_22.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.22 – MS COCO example
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For *Penn-Fudan Pedestrian*, all the information on how to retrieve the dataset
+    can be found in the fourth recipe, *Segmenting objects in images with MXNet: PSPNet
+    and DeepLab-v3*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), *Analyzing
+    Images with Computer Vision*. Taking that recipe’s code as a reference, we can
+    display some examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.23 – Penn-Fudan Pedestrian dataset examples](img/B16591_07_23.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.23 – Penn-Fudan Pedestrian dataset examples
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figures 7.22* and *7.23*, we can see how some images from *MS COCO* resemble
+    some of the images from *Penn-Fudan Pedestrian*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a DeepLab-v3 model from scratch with Penn-Fudan Pedestrian
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As described in the fourth recipe, *Segmenting objects in images with MXNet:
+    PSPNet and DeepLab-v3*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098), *Analyzing
+    Images with Computer Vision*, we will be using softmax cross-entropy as the loss
+    function and pixel accuracy and **Mean Intersection over Union** (**mIoU**) as
+    evaluation metrics.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By following the code in our recipe, we have the following evolution while
+    training from scratch our *DeepLab-v3* model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.24 – DeepLab-v3 training evolution (training loss and validation
+    loss) – training from scratch](img/B16591_07_24.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.24 – DeepLab-v3 training evolution (training loss and validation loss)
+    – training from scratch
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the pixel accuracy and mIoU values obtained
+    in the test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Even after training for 40 epochs, the evaluation values obtained do not show
+    strong performance (an mIoU value of only 0.65).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can also check how well our model is performing with an example
+    image. In our case, we chose the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.25 – Image example of Penn-Fudan Pedestrian for qualitative results](img/B16591_07_25.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.25 – Image example of Penn-Fudan Pedestrian for qualitative results
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can check the output of our model by running this image through it with
+    the following code snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The preceding code snippet shows the ground truth segmentations and the prediction
+    from our model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.26 – Ground truth and prediction from DeepLab-v3 trained from scratch](img/B16591_07_26.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.26 – Ground truth and prediction from DeepLab-v3 trained from scratch
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from the results, the pedestrians have only started to be correctly
+    segmented. To improve the results, we will need to train for more epochs and/or
+    adjust the hyperparameters. However, a better, faster, and simpler approach would
+    be to use transfer learning and fine-tuning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a pre-trained DeepLab-v3 model to optimize performance via transfer learning
+    from MS COCO to Penn-Fudan Pedestrian
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the previous recipe, we trained a new model from scratch using our dataset.
+    However, this has three important drawbacks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A large amount of data is required for training from scratch.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The training process can take a very long time due to the large size of the
+    dataset and the number of epochs needed for the model to learn the task.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The compute resources required might be expensive or difficult to procure.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Therefore, in this recipe, we will follow a different approach. We will use
+    pre-trained models from the MXNet GluonCV Model Zoo to solve the task. These models
+    have been trained in *MS COCO*, a dataset that contains the classes we are interested
+    in (`person` in this case); therefore, we can use those learned representations
+    and easily transfer them to *Penn-Fudan Pedestrian* (same domain).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a DeepLab-v3 model, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see in the preceding code snippet, following the discussion in this
+    chapter’s first recipe, *Understanding Transfer-Learning and Fine-Tuning*, for
+    the `pretrained` parameter, we have assigned the value of `True`, indicating that
+    we want the pretrained weights to be retrieved (and not only the architecture
+    of the model).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to evaluate adequately the improvements that transfer learning brings,
+    we are going to directly evaluate our pre-trained model in our target task (the
+    task source is *MS COCO*) before applying transfer learning to *Penn-Fudan Pedestrian*
+    and after applying it. Therefore, using our pre-trained model as is, we obtain
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, our pre-trained Transformer model is already showing good performance
+    values as it is in the same domain. Moreover, the great advantage of using pre-trained
+    models is the time savings, as loading a pre-trained model just takes a few lines
+    of code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.27 – Ground truth and prediction from a DeepLab-v3 pre-trained model](img/B16591_07_27.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.27 – Ground truth and prediction from a DeepLab-v3 pre-trained model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen from the results, the pedestrians have been correctly segmented.
+    Please note a side advantage of using pre-trained models in *Figure 7**.27*: in
+    the ground truth image, the people in the background were not segmented, but the
+    pre-trained model correctly picked them up (which might explain the low mIoU values).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a baseline for comparison, let’s apply transfer learning to
+    our task. In the first recipe, *Understanding transfer learning and fine-tuning*,
+    the first step was to retrieve a pre-trained model from the MXNet Model Zoo (GluonCV
+    or GluonNLP), which we have already done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second step is to remove the last layers (typically, a classifier), keeping
+    the parameters in the rest of the layers frozen (not updatable during training),
+    so let’s do it!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can freeze the *DeepLab-v3* feature extraction layers with the following
+    snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Furthermore, we will also need to replace the segmentation task head. Previously,
+    it supported 21 classes from *MS COCO*. For our experiments, two classes are enough,
+    `background` and `person`. This is done with the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can apply the usual training process with *Penn-Fudan Pedestrian*,
+    and we have the following evolution in the training using the *DeepLab-v3* model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.28 – DeepLab-v3 training evolution (training loss and validation
+    loss) – transfer learning](img/B16591_07_28.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.28 – DeepLab-v3 training evolution (training loss and validation loss)
+    – transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the evaluation metrics obtained in the
+    test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared with our previous experiments of training from scratch and pre-training,
+    this experiment yields slightly better performance, and it took us literally minutes
+    to get this model to start working for us in our intended task, whereas the training
+    required for the training from scratch experiment took hours and required several
+    tries to tune the hyperparameters, which turned into several days of effort in
+    total.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.29 – Ground truth and prediction from the DeepLab-v3 pre-trained
+    model with transfer learning](img/B16591_07_29.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.29 – Ground truth and prediction from the DeepLab-v3 pre-trained model
+    with transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from the results, the pedestrians have been correctly segmented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained DeepLab-v3 model on Penn-Fudan Pedestrian
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous recipe, we *froze* the parameters in the encoder layers. However,
+    with the dataset we are currently working with (*Penn-Fudan Pedestrian*), we can
+    *unfreeze* those parameters and train the model, effectively allowing the new
+    training process to update the representations (with transfer learning, we were
+    working directly with the representations learned for *MS COCO*). As introduced
+    in this chapter, this process is called fine-tuning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two variants of fine-tuning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apply transfer learning by freezing the layers and unfreezing them afterward.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Directly apply fine-tuning without the preliminary step of freezing the layers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s compute both experiments and draw conclusions by comparing the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the first experiment, we can take the network obtained in the previous
+    recipe, unfreeze the layers, and restart the training. In MXNet, to unfreeze the
+    encoder parameters, we can run the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can apply the usual training process with *Penn-Fudan Pedestrian*,
+    and we have the following evolution in the training using the *DeepLab-v3* model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.30 – DeepLab-v3 training evolution (training loss and validation
+    loss) – fine-tuning after transfer learning](img/B16591_07_30.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.30 – DeepLab-v3 training evolution (training loss and validation loss)
+    – fine-tuning after transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the evaluation metrics obtained in the
+    test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared with our previous experiment in transfer learning, this experiment
+    yields ~3% better performance in mIoU, a very good increase taking into account
+    the low training time invested.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.31 – Ground truth and prediction from the DeepLab-v3 pre-trained
+    model with fine-tuning after transfer learning](img/B16591_07_31.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.31 – Ground truth and prediction from the DeepLab-v3 pre-trained model
+    with fine-tuning after transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from the results, the pedestrians have been correctly segmented.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s continue now with the second fine-tuning experiment, in which we do not
+    apply transfer learning (no frozen layers) and, instead, apply fine-tuning directly
+    to the whole model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We need to retrieve the pre-trained *DeepLab-v3* model for *MS COCO*, with
+    the following code snippet for MXNet GluonCV:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And now, without freezing, we can apply the training process, which will update
+    all layers of our *DeepLab-v3* model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.32 – DeepLab-v3 training evolution (training loss and validation
+    loss) – fine-tuning without freezing](img/B16591_07_32.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.32 – DeepLab-v3 training evolution (training loss and validation loss)
+    – fine-tuning without freezing
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the evaluation metrics obtained in the
+    test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared with our previous fine-tuning experiment, we can see how these experiments
+    yield very similar performance. Empirically, it has been proven that this fine-tuning
+    experiment can also yield slightly lower results because initially freezing the
+    encoder allows for the decoder to learn (using the encoder representations) the
+    new task at hand. From a point of view, in this step, there is a knowledge transfer
+    from the encoder to the decoder. In a secondary step, when the encoder is unfrozen,
+    the learned parameters from the decoder perform auxiliary transfer learning, this
+    time from thedecoder to the encoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    image example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.33 – Ground truth and prediction from the DeepLab-v3 pre-trained
+    model with fine-tuning without freezing](img/B16591_07_33.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.33 – Ground truth and prediction from the DeepLab-v3 pre-trained model
+    with fine-tuning without freezing
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from the results, the pedestrians have been correctly segmented,
+    although, as mentioned, if we look at the person on the right, the arm closer
+    to the person on the left could be segmented better. As discussed, sometimes this
+    version of fine-tuning yields slightly lower results than other approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we applied the techniques of transfer learning and fine-tuning,
+    introduced at the beginning of the chapter, to the task of image classification,
+    which was also presented previously, in the fourth recipe, *Segmenting objects
+    in images with MXNet: PSPNet and DeepLab-v3*, in [*Chapter 5*](B16591_05.xhtml#_idTextAnchor098),
+    *Analyzing Images with* *Computer Vision*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We revisited two known datasets, *MS COCO* and *Penn-Fudan Pedestrian*, which
+    we intended to combine using knowledge transfer based on the former dataset and
+    refining that knowledge with the latter. Moreover, MXNet GluonCV provided the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A pre-trained *DeepLab-v3* model for *MS COCO*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Tools for easy-to-use access to *Penn-Fudan Pedestrian*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Furthermore, we continued using the loss functions and metrics introduced for
+    semantic segmentation, softmax cross-entropy, pixel accuracy, and mIoU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having all these tools readily available within MXNet and GluonCV allowed us
+    to run the following experiments with just a few lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a model from scratch with *Penn-Fudan Pedestrian*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a pre-trained model to optimize performance via transfer learning from
+    *MS COCO* to *Penn-Fudan Pedestrian*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained model on *Penn-Fudan Pedestrian* (with and without
+    freezing layers)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After running the different experiments and taking into account the qualitative
+    results and the quantitative results, transfer learning (with a pixel accuracy
+    of 0.95 and mIoU of 0.88) has been the best experiment for our task. The actual
+    results obtained when running these experiments might differ based on model architecture,
+    datasets, and hyperparameters chosen, so you are encouraged to try out different
+    techniques and variations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Transfer learning, including fine-tuning, is an active field of research. A
+    recent paper published in 2022 explores the latest advances in image classification.
+    The paper is titled *Deep Transfer Learning for Image Classification: A survey*,
+    and can be found here: [https://www.researchgate.net/publication/360782436_Deep_transfer_learning_for_image_classification_a_survey](https://www.researchgate.net/publication/360782436_Deep_transfer_learning_for_image_classification_a_survey).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An interesting paper that combines transfer learning and semantic segmentation
+    is *Semantic Segmentation with Transfer Learning for Off-Road Autonomous Driving*,
+    in which a change of domain is also studied by the usage of synthetic data. It
+    can be found here: [https://www.researchgate.net/publication/333647772_Semantic_Segmentation_with_Transfer_Learning_for_Off-Road_Autonomous_Driving](https://www.researchgate.net/publication/333647772_Semantic_Segmentation_with_Transfer_Learning_for_Off-Road_Autonomous_Driving).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A more general overview is given in this paper: *Learning Transferable Knowledge
+    for Semantic Segmentation with Deep Convolutional Neural Network*, accepted for
+    **Computer Vision and Pattern Recognition** (**CVPR**) symposium in 2016\. It
+    can be found here: [https://openaccess.thecvf.com/content_cvpr_2016/papers/Hong_Learning_Transferrable_Knowledge_CVPR_2016_paper.pdf](https://openaccess.thecvf.com/content_cvpr_2016/papers/Hong_Learning_Transferrable_Knowledge_CVPR_2016_paper.pdf).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Improving performance for translating English to German
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous recipes, we have seen how we can leverage pre-trained models
+    and new datasets for transfer learning and fine-tuning applied to CV tasks. In
+    this recipe, we will follow a similar approach, but with an NLP task, translating
+    from English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the fourth recipe, *Translating text from Vietnamese to English*, in [*Chapter
+    6*](B16591_06.xhtml#_idTextAnchor121), *Understanding Text with Natural Language
+    Processing*, we saw how we could use GluonNLP to retrieve pre-trained models and
+    use them directly for a translation task, training them from scratch, effectively
+    only leveraging past knowledge by using the architecture of the pre-trained model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will also leverage the weights/parameters of the model, obtained
+    for a task consisting of translating text from English to German using **machine
+    translation** models. The dataset that we will use for pre-training will be *WMT2014*
+    (task source), and we will run several experiments to evaluate our models in a
+    new (target) task, using the dataset *WMT2016* dataset (with a ~20% increased
+    vocabulary of words and sentences for German-English pairs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As for previous chapters, in this recipe, we will be using some matrix operations
+    and linear algebra, but it will not be hard at all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, we will be working with text datasets; therefore, we will revisit
+    some concepts already seen in the fourth recipe, *Understanding text datasets
+    – load, manage, and visualize Enron Emails dataset* from [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    *Working with MXNet and Visualizing Datasets: Gluon* *and DataLoader*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will be looking at the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing the *WMT2014* and *WMT2016* datasets
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Training a Transformer model from scratch with *WMT2016*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using a pre-trained Transformer model to optimize performance via transfer learning
+    from *WMT2014* to *WMT2016*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained Transformer model on *WMT2016*
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let’s look at these steps in detail next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing the WMT2014 and WMT2016 datasets
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '*WMT2014* and *WMT2016* are multi-modal (multi-language) translation datasets,
+    including Chinese, English, and German corpus. *WMT2014* was first introduced
+    in 2014 in *Proceedings of the Ninth Workshop on Statistical Machine Translation*,
+    as part of the evaluation campaign of the translation models. This workshop was
+    upgraded to its own conference in 2016, and *WMT2016* was introduced as part of
+    the evaluation campaign of translation models in *Proceedings of the First Conference
+    on Machine Translation*. Both datasets are very similar, retrieving information
+    from news sources, and the largest difference is the corpus (the size of the vocabulary
+    used for both). WMT2014 is about ~140k distinct words, whereas WMT2016 is slightly
+    larger with ~150k words, and specifically for German-English pairs, an increase
+    of ~20% of words and sentences.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'MXNet GluonNLP provides ready-to-use versions of these datasets. For our case,
+    we will work with *WMT2016*, which only contains *train* and *test* splits. We
+    will further split the test set to obtain *validation* and *test* splits. Here
+    is the code to load the dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is the code to generate *validation* and *test* splits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After splitting, our *WMT2016* datasets provide the following data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: From the large number of instances on each of the datasets, we can confirm that
+    these are suitable for our experiments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a Transformer model from scratch in WMT2016
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As described in the fourth recipe, *Translating text from Vietnamese to English*,
+    in [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121), *Understanding Text with Natural
+    Language Processing*, we will be using **Perplexity** for our *per-batch computations*
+    in training, and **BLEU** for *per-epoch computations*, which will show us the
+    evolution of our training process, as part of the typically used training and
+    validation losses. We will also use them for quantitative evaluation, and for
+    qualitative evaluation, we will choose a sentence (feel free to use any other
+    sentence you can come up with).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We have the following evolution in the training using the Transformer model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.34 – Transformer training evolution (training loss) – training from
+    scratch](img/B16591_07_34.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.34 – Transformer training evolution (training loss) – training from
+    scratch
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the loss, perplexity, and BLEU score (multiplied
+    by 100) obtained in the test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: Current **State-of-the-Art** (**SOTA**) models can yield above 30 points in
+    the BLEU score; we reach about halfway with 10 epochs, reaching SOTA performance
+    in ~30 epochs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can also check how well our model is performing with a sentence
+    example. In our case, we chose: `"I learn new things every day"`, and this can
+    be verified with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These code statements will give us the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence means *I think that’s the case here*; therefore, as can
+    be seen from this result, the text has not been correctly translated from English
+    to German, and we would need to invest more time in training to achieve the right
+    results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a pre-trained Transformer model to optimize performance via transfer learning
+    from WMT2014 to WMT2016
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the previous recipe, we trained a new model from scratch using our dataset.
+    However, this has two important drawbacks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A large amount of data is required for training from scratch.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The training process can take a very long time due to the large size of the
+    dataset and the number of epochs needed for the model to learn the task.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Therefore, in this recipe, we will follow a different approach. We will use
+    pre-trained models from MXNet GluonNLP to solve the task. These models have been
+    trained on *WMT2014* a very similar dataset, so the representations learned for
+    this task can be easily transferred to *WMT2016* (same domain).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a Transformer model, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output shows us the size of the vocabulary of the *WMT2014* dataset (the
+    pre-trained English to German translation task):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is a subset of the whole corpus available for *WMT2014*. As we can also
+    see in the preceding code snippet, following the discussion in this chapter’s
+    first recipe, *Understanding transfer learning and fine-tuning*, for the `pretrained`
+    parameter, we have assigned the value of `True`, indicating that we want the pretrained
+    weights to be retrieved (and not only the architecture of the model).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to evaluate adequately the improvements that transfer learning brings,
+    we are going to directly evaluate our pre-trained model (task source is *WMT2014*)
+    before applying transfer learning to *WMT2016* and after applying it. Therefore,
+    using our pre-trained model as is, we obtain the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, our pre-trained Transformer model is already showing very good
+    performance values as it is the same domain; however, simply using a pre-trained
+    model does not yield SOTA performance, which can be achieved if training from
+    scratch. The great advantage of using pre-trained models is the time and compute
+    savings as loading a pre-trained model just takes a few lines of code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    sentence example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence means *I learn new things that arise in every case*; therefore,
+    as can be seen from the results, the text has not yet been correctly translated
+    from English to German, but this time, was much closer than our previous experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a baseline for comparison, let’s apply transfer learning to
+    our task. In the first recipe, *Understanding transfer learning and fine-tuning*,
+    the first step was to retrieve a pre-trained model from the MXNet Model Zoo (GluonCV
+    or GluonNLP), which we have already done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second step is to remove the last layers (typically, a classifier), keeping
+    the parameters in the rest of the layers frozen (not updatable during training),
+    so let’s do it!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can freeze all parameters except the classifier with the following snippet,
+    keeping the parameters frozen (we will unfreeze them in a later experiment):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can apply the usual training process with *WMT2016*, and we have the
+    following evolution in the training using the Transformer model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.35 – Transformer training evolution (training loss) – transfer learning](img/B16591_07_35.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.35 – Transformer training evolution (training loss) – transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the loss, perplexity, and BLEU score (multiplied
+    by 100) obtained in the test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared with our previous experiments, this experiment yields slightly lower
+    numerical performance; however, it took us literally minutes to get this model
+    to start working for us in our intended task, whereas training from scratch in
+    our previous experiment took hours and required several tries to tune the hyperparameters,
+    becoming several days of effort in total.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also check how well our model is performing qualitatively with the same
+    sentence example and code. The output is given as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence means *I learn new things every time*; therefore, as can
+    be seen from the results, the text has been almost correctly translated from English
+    to German, improving from our previous experiment (pre-trained model), although
+    the (better) quantitative results were suggesting otherwise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained Transformer model on WMT2016
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous recipe, we froze all the parameters except the classifier. However,
+    as the dataset we are currently working with (*WMT2016*) has enough data samples,
+    we can unfreeze those parameters and train the model, effectively allowing the
+    new training process to update the representations (with transfer learning, we
+    were working directly with the representations learned for *WMT2014*). This process,
+    as we know, is called fine-tuning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two variants of fine-tuning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apply transfer learning by freezing the layers and unfreezing them afterward.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Directly apply fine-tuning without the preliminary step of freezing the layers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s compute both experiments and draw conclusions by comparing the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the first experiment, we can take the network obtained in the previous
+    recipe, unfreeze the layers, and restart the training. In MXNet, to unfreeze the
+    encoder parameters, we can run the following snippet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can apply the usual training process with *WMT2016*, and we have the
+    following evolution in the training using the Transformer model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.36 – Transformer training evolution (training loss) – fine-tuning
+    after transfer learning](img/B16591_07_36.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.36 – Transformer training evolution (training loss) – fine-tuning after
+    transfer learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the loss, perplexity, and BLEU score (multiplied
+    by 100) obtained in the test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared with our previous experiment in transfer learning, this experiment
+    yields a slightly worse quantitative performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can also check how well our model is performing with a sentence
+    example. In our case, we chose `"I learn new things every day"`, and the output
+    obtained is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence means *I learn something new every time*; therefore, as
+    can be seen from the results, the text has been almost correctly translated from
+    English to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s continue now with the second fine-tuning experiment, where we do not apply
+    transfer learning (no frozen layers), and instead apply fine-tuning directly to
+    the whole model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We need to retrieve again the pre-trained Transformer model for *WMT2014*,
+    with the following code snippet for MXNet GluonNLP:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And now, without freezing, we can apply the training process, which will update
+    all layers of our Transformer model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.37 – Transformer training evolution (training loss) – fine-tuning
+    without freezing](img/B16591_07_37.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.37 – Transformer training evolution (training loss) – fine-tuning without
+    freezing
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, for the best iteration, the loss, perplexity, and BLEU score (multiplied
+    by 100) obtained in the test set are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: Compared with our previous fine-tuning experiment, we can see how this experiment
+    yields a slightly higher performance. Empirically, however, the opposite results
+    were expected (for this experiment to yield a slightly lower performance). This
+    has been proven to be a repeatable result because initially freezing the encoder
+    allows for the decoder to learn (using the encoder representations) the new task
+    at hand. From a point of view, in this step, there is a knowledge transfer from
+    the encoder to the decoder. In a secondary step, when the encoder is unfrozen,
+    the learned parameters from the decoder perform auxiliary transfer learning –
+    this time, from the decoder to the encoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can also check how well our model is performing with a sentence
+    example. In our case, we chose `"I learn new things every day"`, and the output
+    obtained is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: The German sentence means *I learn new things every time*; therefore, as can
+    be seen from the results, the text has been almost correctly translated from English
+    to German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we applied the techniques of transfer learning and fine-tuning,
+    introduced at the beginning of the chapter, to the task of machine translation,
+    which was also presented previously, in the fourth recipe, *Translating text from
+    Vietnamese to English*, in [*Chapter 6*](B16591_06.xhtml#_idTextAnchor121), *Understanding
+    Text with Natural* *Language Processing*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We explored two new datasets, *WMT2014* and *WMT2016*, which, among other language
+    pairs, support translations between German and English. Moreover, MXNet GluonNLP
+    provided the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A pre-trained Transformer model for *WMT2014*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A data loader ready to be used with *WMT2016*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Furthermore, we continued using the metrics introduced for machine translation,
+    perplexity, and BLEU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having all these tools readily available within MXNet and GluonNLP allowed
+    us to run the following experiments with just a few lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a model from scratch with *WMT2016*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a pre-trained model to optimize performance via transfer learning from
+    *WMT2014* to *WMT2016*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fine-tuning our pre-trained model on *WMT2016* (with and without freezing layers)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We compared the results and derived the best approach for this particular task,
+    which was applying transfer learning and fine-tuning afterward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we introduced two new datasets, *WMT2014* and *WMT2016*. These
+    datasets were introduced as challenges in the **Workshop on Statistical Machine
+    Translation** (**WMT**) conference. The results for 2014 and 2016 are the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Findings of the 2014 Workshop on Statistical Machine** **Translation:** https://aclanthology.org/W14-3302.pdf'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Findings of the 2016 Conference on Machine Translation (****WMT16):** [https://aclanthology.org/W16-2301.pdf](https://aclanthology.org/W16-2301.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Transfer learning, including fine-tuning, for machine translation is an active
+    area of research. A paper published in 2020 explores its applications, titled
+    *In Neural Machine Translation, What Does Transfer Learning Transfer?* and can
+    be found here: [https://aclanthology.org/2020.acl-main.688.pdf](https://aclanthology.org/2020.acl-main.688.pdf).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a more general approach to NLP use cases, a recent paper was published,
+    *A Survey on Transfer Learning in Natural Language Processing*, and can be found
+    here: [https://www.researchgate.net/publication/342801560_A_Survey_on_Transfer_Learning_in_Natural_Language_Processing](https://www.researchgate.net/publication/342801560_A_Survey_on_Transfer_Learning_in_Natural_Language_Processing).'
+  prefs: []
+  type: TYPE_NORMAL

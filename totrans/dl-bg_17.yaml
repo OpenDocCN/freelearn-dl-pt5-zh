@@ -1,0 +1,800 @@
+- en: Generative Adversarial Networks
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reading about making sushi is easy; actually cooking a new kind of sushi is
+    harder than we might think. In deep learning, the creative process is harder,
+    but not impossible. We have seen how to build models that can classify numbers,
+    using dense, convolutional, or recurrent networks, and today we will see how to
+    build a model that can create numbers. This chapter introduces a learning approach
+    known as generative adversarial networks, which belong to the family of adversarial
+    learning and generative models. The chapter explains the concepts of generators
+    and discriminators and why having good approximations of the distribution of the
+    training data can lead to the success of the model in other areas such as *data
+    augmentation*. By the end of the chapter, you will know why adversarial training
+    is important; you will be able to code the necessary mechanisms for training a
+    generator and a discriminator on questionable data; and you will code a **Generative
+    Adversarial Network** (**GAN**) to generate images from a learned latent space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter is organized as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing adversarial learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training a GAN
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Comparing GANs and VAEs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Thinking about the ethical implications of generative models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing adversarial learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Recently, there has been interest in adversarial training using adversarial
+    neural networks (Abadi, M., et al. (2016)). This is due to adversarial neural
+    networks that can be trained to protect the model itself from AI-based adversaries.
+    We could categorize adversarial learning into two major branches:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Black box**: In this category, a machine learning model exists as a black
+    box, and the adversary can only learn to attack the black box to make it fail.
+    The adversary arbitrarily (within some bounds) creates fake input to make the
+    black box model fail, but it has no access to the model it is attacking (Ilyas,
+    A., et al. (2018)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Insider**: This type of adversarial learning is meant to be part of the training
+    process of the model it aims to attack. The adversary has an influence on the
+    outcome of a model that is trained *not* to be fooled by such an adversary (Goodfellow,
+    I., et al. (2014)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There are pros and cons to each of these:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Black box pros** | **Black box cons** | **Insider pros** | **Insider cons**
+    |'
+  prefs: []
+  type: TYPE_TB
+- en: '| It gives the ability to explore more generative approaches. | Does not have
+    a way to influence or change the black box model. | The model that is trained
+    adversarially can be more robust to specific black box attacks. | The options
+    for generating attacks are currently limited. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| It is usually fast and likely to find a way to break a model. | The generator
+    usually focuses only on perturbing existing data. | The generator can be used
+    to *augment* datasets. | It is usually slower. |'
+  prefs: []
+  type: TYPE_TB
+- en: '|  | The generator may not be usable in *augmenting* datasets. |  |  |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Since this book is for beginners, we will focus on one of the simplest models:
+    an insider model known as a GAN. We will look at its parts and discuss the batch
+    training of it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: GANs have historically been used to generate realistic images (Goodfellow, I., et
+    al. (2014)), generally solving multi-agent problems (Sukhbaatar, S., *et al.*
+    (2016)), and even cryptography (Rivas, P., et al. (2020)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's briefly discuss adversarial learning and GANs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Learning using an adversary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A machine learning model can learn traditionally to do classification or regression
+    and other tasks, among which there may be a model trying to learn to distinguish
+    whether the input is legitimate or fake. In this scenario, an machine learning
+    model can be created to be an adversary that produces fake inputs, as shown in
+    *Figure 14.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/91180858-c5ad-465e-a34a-2a50c08f263e.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.1 - Adversarial learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this paradigm, a machine learning model needs to learn to distinguish between
+    true inputs and fake ones. When it makes a mistake, it needs to *learn* to adjust
+    itself to make sure it properly recognizes true input. On the other hand, the
+    adversary will need to keep producing fake inputs with the aim of making the model
+    fail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is what success looks like for each model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **machine learning main model** is successful if it can successfully distinguish
+    fake from real input.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The **Adversary model** is successful if it can fool the machine learning main
+    model into passing fake data as real.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As you can see, they are competing against each other. One's success is the
+    failure of the other, and vice versa.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During the learning process, the machine learning main model will continuously
+    call for batches of real and fake data to learn, adjust, and repeat until we are
+    satisfied with the performance, or some other stopping criteria have been met.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general in adversarial learning, there is no specific requirement on the
+    adversary, other than to produce fake data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Adversarial robustness** is a new term that is used to certify that certain
+    models are robust against adversarial attacks. These certificates are usually
+    designated for particular types of adversaries. See Cohen, J. M., *et al.* (2019)
+    for further details.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A popular type of adversarial learning takes place within a GAN, which we will
+    discuss next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GANs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A GAN is one of the simplest neural-based models that implements adversarial
+    learning, and was initially conceived in a bar in Montreal by Ian Goodfellow and
+    collaborators (Goodfellow, I., et al. (2014)). It is based on a min-max optimization
+    problem that can be posed as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0b573800-6bdf-4433-8909-35c9a245825c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'There are several parts to this equation that require an explanation, so here
+    we go:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/530da91e-fd4b-408a-9c71-b41264bb9b22.png): In a GAN, this is the discriminator,
+    which is a neural network that takes input data ![](img/cc202992-bba0-4e9f-8a96-2438a06b6f27.png) and
+    determines whether it is fake or real, as shown in *Figure 14.2*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/b29516df-1c42-4df7-b399-1cb96d67038b.png): In a GAN, this is the generator,
+    which is also a neural network, but its input is random noise, ![](img/7e4747cc-6204-46b0-a126-eeaab1448a2b.png),
+    with the probability ![](img/3db1149e-bb25-4f0c-8c17-d75a8d6624f7.png):'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/09cb1a8f-dc00-4c81-86ca-0e958b50a8ec.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.2 - GAN main paradigm
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ideally, we want to maximize the correct predictions of the discriminator ![](img/612c1e2c-f7da-4500-9b2c-56397fee42b0.png),
+    while, at the same time, we want to minimize the error of the generator, ![](img/90d6dec2-992d-4841-9a0b-27f5b6b5610a.png), producing
+    a sample that does not fool the discriminator, which is expressed as ![](img/12e9c0b3-a3e2-45a1-aac7-1bdff68ccaf0.png).
+    The formulation of expectations and logarithms comes from the standard cross-entropy
+    loss function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To recap, in a GAN, the generator and the discriminator are neural networks.
+    The generator draws random noise from a random distribution, and uses that noise
+    to generate *fake* input to fool the discriminator.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this in mind, let's proceed and code a simple GAN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a GAN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We will begin our implementation with a simple MLP-based model, that is, our
+    generator and discriminator will be dense, fully connected, networks. Then, we
+    will move on to implementing a convolutional GAN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An MLP model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We will now focus in creating the model shown in *Figure 14.3*. The model has
+    a generator and discriminator that are distinct in terms of their numbers of layers
+    and total parameters. It is usually the case that the generator takes more resources
+    to build than the discriminator. This is intuitive if you think about it: the
+    creative process is usually more complex than the process of recognition. In life,
+    it might be easy to recognize a painting from Pablo Picasso if you see all of
+    his paintings repeatedly.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, it might be much harder, in comparison, to actually paint like Picasso:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5abff9d3-4f0b-4129-a969-40b777d0c526.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.3 - MLP-based GAN architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: This figure depicts an icon that simply represents the fact that the discriminator
+    will be taking both fake and valid data and learning from both worlds. One thing
+    that you must always remember about GANs is that they **generate **data from **random
+    noise**. Just think about that for a minute and you will realize that this is
+    very cool.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, the architecture in *Figure 14.3* does not have any new items we have not
+    discovered before. However, the design itself is what is original. Also, the way
+    to create it in Keras is quite the task. So, we will show the whole code, with
+    as many comments as possible to make things clear.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the full code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we define the generator as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we can define the discriminator as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next step is to put things together as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will make the training happen inside a loop that will run for as many
+    epochs as we want:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This produces output similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: This might look different in your system because this is all based on **random**
+    noise. This randomness aspect will most likely take your model in a different
+    direction. However, what you will see is that your generator's loss should decrease
+    gradually, and if the generator is working properly, the accuracy should be getting
+    closer to random change, that is, close to 50%. If your discriminator is always
+    100%, then your generator is not good enough, and if your discriminator is around
+    50% accuracy, then your generator might be too good or your discriminator too
+    weak.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's plot a couple of things; the learning curves (losses and accuracy),
+    and the samples generated across epochs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code will plot the learning curves:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This generates the plot shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/54e97377-4afd-4ae0-bec1-940d89686a15.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.4 - Loss of generator and discriminator across epochs. Accuracy across
+    epochs for an MLP-based GAN
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the plot indicates, the loss of the discriminator is initially low, as also
+    indicated by the accuracy. However, as epochs advance, the generator gets better
+    (loss decreases) and accuracy slowly decreases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 14.5* shows a couple of images at every sampled epoch that were produced
+    from random noise:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0692c795-14c9-40d4-a63e-9c561043e645.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.5 - GAN-generated images across epochs
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see, the initial images look noisy, while the later images have
+    more detail and familiar shapes. This would confirm the decrease in the discriminator
+    accuracy since these images can easily pass as real. *Figure 14.5* was produced
+    using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s consider a few takeaways from this model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The model, as it has been presented, has room for improvements if we make the
+    model larger where needed.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If what we need is a good generator, we can extend the generator, or change
+    it into a convolutional one (next section).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If we want, we could save the `discriminator` and retrain it (fine-tune it)
+    for the classification of digits.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If we want, we could use the `generator` to augment the dataset with as many
+    images as we want.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In spite of the *decent* quality of the MLP-based GAN, we can appreciate that
+    the shapes might not be as well defined as original samples. However, convolutional
+    GANs can help.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's proceed and change the MLP-based model into a convolutional one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A convolutional model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The convolutional approach to a GAN was made popular by Radford, A., *et al.*
+    (2015). The proposed model was called **Deep Convolutional GAN** (**DCGAN**).
+    The primary goal is to make a series of convolutional layers learn feature representations
+    to produce *fake* images or to *distinguish* between valid or fake images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Moving forward, we will be **intentionally** using a different name for the
+    discriminator network, which we will call **critic**. Both terms are used in the
+    literature. However, there is a new trend to use the term *critic* and the old
+    term may go away at some point. Regardless, you should know that both terms refer
+    to the same thing: a network that is tasked with determining whether input is
+    valid (from the original dataset) or fake (from an adversarial generator).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will be implementing the model depicted in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0ef4b620-6eac-4a91-9886-7b8fa5c1bb55.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.6 - CNN-based GAN architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: This model has something new never before seen in this book: `Conv2DTranspose`.
+    This type of layer is exactly like the traditional convolutional layer, `Conv2D`,
+    except that it works in the exact opposite direction. While a `Conv2D` layer learns
+    filters (feature maps) that split the input into filtered information, a `Conv2DTranspose` layer
+    takes filtered information and joins it together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some people refer to `Conv2DTranspose` as *deconvolution*. However, I personally
+    think it is incorrect to do so since *deconvolution* is a mathematical operation
+    significantly different from what `Conv2DTranspose` does. Either way, you need
+    to remember that if you read *deconvolution* in the context of CNNs, it means `Conv2DTranspose`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The remainder of the elements in the model are things that we have already
+    discussed previously. The full code, which omits comments, is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next we define the generator as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we define the critic networks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next we put things together and set the parameters of the model as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then we train using the following cycle:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'About 70% of the preceding code is the same as before. However, the convolutional
+    network design was new. The code would print summaries for both the generator
+    and critic. Here is the summary for the generator:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is the summary for the critic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A sample output for the training steps would look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'From the training output, we can see that the convolutional network is able
+    to reduce the loss of the generator faster than its MLP counterpart. It appears
+    that for the remainder of the epochs, the critic learns slowly to be more robust
+    against the generator of fake input. This can be more clearly observed by plotting
+    the results using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The code produces the plot shown in *Figure 14.7*. From the diagram, we can
+    appreciate the claims made on faster convergence to small losses and slow recovery
+    of the critic''s accuracy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/0c37a8ce-3502-4c4a-8f69-986f32a2abaf.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.7 - Learning curves for CNN-based GANs
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also display the samples generated as the convolutional GAN was being
+    trained. The results are shown in *Figure 14.8*. These results are consistent
+    with a poor-quality generator trained under 2,000 epochs. After 5,000 epochs,
+    the generator is able to produce well-defined numerals that can easily pass as
+    valid:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4b8424b6-2de1-4879-a650-d6d4318e39dd.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.8 - Samples generated during training
+  prefs: []
+  type: TYPE_NORMAL
+- en: For reference, we can compare *Figure 14.5* and *Figure 14.8* for the MLP-based
+    and convolutional-based approach, respectively. Such a comparison can offer insights
+    on the fundamental differences between a general-purpose GAN (MLP-based) or a
+    GAN specialized in spatial relationships (CNN-based).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we would like to discuss briefly the generative abilities that **Variational
+    Autoencoders** (**VAEs**) and GANs bring to the table.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing GANs and VAEs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In [Chapter 9](c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml), *Variational Autoencoders*,
+    we discussed VAEs as a mechanism for dimensionality reduction that aims to learn
+    the parameters of the distribution of the input space, and effect reconstruction
+    based on random draws from the latent space using the learned parameters. This
+    offered a number of advantages we already discussed in [Chapter 9](c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml), *Variational
+    Autoencoders*, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to reduce the effect of noisy inputs, since it learns the distribution
+    of the input, not the input itself
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The ability to generate samples by simply querying the latent space
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'On the other hand, GANs can also be used to generate samples, like the VAE.
+    However, the learning of both is quite different. In GANs, we can think of the
+    model as having two major parts: a critic and a generator. In VAEs, we also have
+    two networks: an encoder and a decoder.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we were to make any connection between the two, it would be that the decoder
+    and generator play a very similar role in VAEs and GANs, respectively. However,
+    an encoder and a critic have very different goals. An encoder will learn to find
+    a rich latent representation, usually with very few dimensions compared to the
+    input space. Meanwhile, a critic does not aim to find any representations, but
+    to solve a growing complex binary classification problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We could make a case that the critic is certainly learning features from the
+    input space; however, the claim that features in the deepest layers are similar
+    in both the critic and encoder requires more evidence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One thing we can do to make a comparison is to take the deep VAE model shown
+    in [Chapter 9](c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml), *Variational Autoencoders*,
+    *Figure 14.7*, train it, and draw some random samples from the generator in the
+    VAE, and do the same for the convolutional GAN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can start by displaying the samples from the convolutional GAN and executing
+    the following code immediately after the last piece of code in the previous section,
+    which contains the trained GAN. Here is the code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This code will produce 400 numerals from random noise! The plot is shown in
+    *Figure 14.9*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b787b620-e438-4ddd-b25c-8715396e7cee.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.9 - 400 numerals produced by a convolutional GAN
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recall that these numerals were produced after 12,000 epochs. The quality seems
+    relatively good. Most of these numerals could actually fool a human being into
+    thinking they were really written by a human.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we want to take a look at the quality of the numerals generated with a
+    VAE. For this, you will need to go to [Chapter 9](c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml), *Variational
+    Autoencoders*, and use the code provided to implement the deep VAE and train it
+    for, say, 5,000 epochs. After training it, you can use the decoder to generate
+    samples from random noise by choosing random parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is the code you should use *once* the training of the VAE is complete:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A couple of visible differences is that the VAE assumes that the parameters
+    of the latent space follow a normal distribution; also, the output needs to be
+    reshaped to 28x28, as opposed to the GAN, which gives the output already in its
+    correct shape thanks to the 2D convolutional output layer. The output of this
+    code is shown in *Figure 14.10*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/84984cdc-549e-4db3-ad8c-921d787020f6.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.10 - 400 samples of numerals generated by the decoder of a VAE using
+    random noise
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see from the diagram, some of these numerals look very good; some
+    might say too good. They look smooth, well-rounded, and perhaps we can say noise-free.
+    The numerals produced by the VAE lack the distinctive quality of looking noisy
+    compared to the ones produced by the GAN. However, this can be a good thing or
+    a bad thing depending on what you want to do.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Say that you want to have clean-looking samples that might be easily identified
+    as *fake,* then a VAE is the best choice. Now, say that we want samples that can
+    easily fool a human into thinking they are not produced by a machine; here, perhaps
+    a GAN fits better.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regardless of these differences, both can be used to augment your datasets if
+    you need to have more data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thinking about the ethical implications of GANs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Some ethical thoughts about generative models have already been provided in
+    [Chapter 9](c7b8496e-70e6-47ab-8746-d5893a10493d.xhtml), *Variational Autoencoders*.
+    However, a second round of thoughts is in order given the adversarial nature of
+    GANs. That is, there is an implicit demand from a GAN to *trick *a critic in a
+    min-max game where the generator needs to come out victorious (or the critic as
+    well). This concept generalized to adversarial learning provides the means to *attack*
+    existing machine learning models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Very successful computer vision models such as VGG16 (a CNN model) have been
+    attacked by models that perform adversarial attacks. There are *patches* that
+    you can print, put on a t-shirt, cap, or any object, and as soon as the patch
+    is present in the input to the models being attacked, they are fooled into thinking
+    that the existing object is a completely different one (Brown, T. B., et al. (2017)).
+    Here is an example of an adversarial patch that tricks a model into thinking that
+    a banana is a toaster: [https://youtu.be/i1sp4X57TL4](https://youtu.be/i1sp4X57TL4).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that these types of adversarial attacks are known to exist, researchers
+    have found vulnerabilities in their current systems. Therefore, it has become
+    almost an obligation for us, the deep learning practitioners, to make sure our
+    models are robust against adversarial attacks. This is particularly important
+    for systems that involve sensitive information, or systems that make decisions
+    that affect human life.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, a deep learning model that is deployed in an airport to assist
+    security efforts needs to be tested so as to avoid a person wearing a t-shirt
+    with a printed adversarial patch aiming to avoid being recognized as a person
+    in a restricted area. This is critical for the security of the population. However,
+    a deep learning system to automatically tune the audio of a person singing might
+    not be particularly critical.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is required from you is to look into testing your models for adversarial
+    attacks. There are several resources online being updated frequently that you
+    can easily find if you search for them. If you come to find a vulnerability in
+    a deep learning model, you should report it to the creators immediately, for the
+    well-being of our society.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This advanced chapter showed you how to create GAN networks. You learned the
+    major components of GANs, a generator and a critic, and their role in the learning
+    process. You learned about adversarial learning in the context of breaking models
+    and making them robust against attacks. You coded an MLP-based and a convolutional-based
+    GAN on the same dataset and observed the differences. At this point, you should
+    feel confident explaining why adversarial training is important. You should be
+    able to code the necessary mechanisms to train a generator and a discriminator
+    of a GAN. You should feel confident about coding a GAN and comparing it to a VAE
+    to generate images from a learned latent space. You should be able to design generative
+    models, considering the societal implications and the responsibilities that come
+    with using generative models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: GANs are very interesting and have yielded amazing research and applications.
+    They have also exposed the vulnerabilities of other systems. The present state
+    of deep learning involves combinations of AEs, GANs, CNNs, and RNNs, using specific
+    components of each, and gradually increasing the potential of applications of
+    deep learning across different fields. The world of deep learning is exciting
+    right now, and you are now ready to embrace it and dive deeper into whatever area
+    you feel you like. [Chapter 15](216a275e-ae7e-451c-a8c6-f31eac314d3f.xhtml), *Final
+    Remarks on the Future of Deep Learning*, will present brief comments on how we
+    see the future of deep learning. It attempts to use some kind of *prophetic* voice
+    about the things to come. But before you go, quiz yourself with the following
+    questions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions and answers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Who is the adversary in a GAN?**'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The generator. It acts as a model whose sole purpose is to make the critic fail;
+    it is the critic's adversary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Why is the generator model bigger than the critic? **'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This is not always the case. The models discussed here were more interesting
+    as generators of data. However, we could use the critic and retrain it for classification,
+    in which case, the critic model might be bigger.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**What is adversarial robustness?**'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: It is a new field in deep learning tasked with researching ways to certify that
+    deep learning models are robust against adversarial attacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Which is better – a GAN or a VAE?**'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This depends on the application. GANs tend to produce more "interesting" results
+    than VAEs, but VAEs are more stable. Also, it is often faster to train a GAN than
+    a VAE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Are there any risks associated with GANs?**'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Yes. There is a known problem called *mode collapse*, which refers to the inability
+    of a GAN to produce novel, different, results across epochs. It seems like the
+    network gets stuck on a few samples that can cause sufficient confusion in the
+    critic so as to produce a low loss, while having no diversity of generated data.
+    This is still an open problem with no universal solution. A lack of diversity
+    in a GAN's generator is an indication that it has collapsed. To find out more
+    about mode collapse, read Srivastava, A., et al. (2017).
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Abadi, M., and Andersen, D. G. (2016). *Learning to protect communications with
+    adversarial neural cryptography*. *arXiv preprint* arXiv:1610.06918.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ilyas, A., Engstrom, L., Athalye, A., and Lin, J. (2018). *Black box adversarial
+    attacks with limited queries and information*. *arXiv preprint* arXiv:1804.08598.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Goodfellow, I., Pouget-Abadie, J., Mirza, M., Xu, B., Warde-Farley, D., Ozair,
+    S., and Bengio, Y. (2014). *Generative adversarial nets*. In *Advances in neural
+    information processing systems* (pp. 2672-2680).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sukhbaatar, S., and Fergus, R. (2016). *Learning multi-agent communication with
+    backpropagation*. In *Advances in neural information processing systems* (pp.
+    2244-2252).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Rivas, P., and Banerjee, P. (2020). *Neural-Based Adversarial Encryption of
+    Images in ECB Mode with 16-bit Blocks*. In *International Conference on Artificial
+    Intelligence*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cohen, J. M., Rosenfeld, E., and Kolter, J. Z. (2019). *Certified adversarial
+    robustness via randomized smoothing*. *arXiv preprint* arXiv:1902.02918.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Radford, A., Metz, L., and Chintala, S. (2015). *Unsupervised representation
+    learning with deep convolutional generative adversarial networks*. *arXiv preprint*
+    arXiv:1511.06434.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Brown, T. B., Mané, D., Roy, A., Abadi, M., and Gilmer, J. (2017). *Adversarial
+    patch*. *arXiv preprint* arXiv:1712.09665.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Srivastava, A., Valkov, L., Russell, C., Gutmann, M. U., and Sutton, C. (2017).
+    *Veegan: Reducing mode collapse in GANs using implicit variational learning*.
+    In *Advances in Neural Information Processing Systems* (pp. 3308-3318).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

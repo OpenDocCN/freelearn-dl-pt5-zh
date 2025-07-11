@@ -1,0 +1,1276 @@
+- en: '*Chapter 10*: Machine Teaching'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The great excitement about **reinforcement learning** (**RL**) is, to a significant
+    extent, due to its similarities to human learning: an RL agent learns from experience.
+    This is also why many consider it as the path to artificial general intelligence.
+    On the other hand, if you think about it, reducing human learning to just trial
+    and error would be a gross underestimation. We don''t discover everything we know,
+    in science, art, engineering, and so on, from scratch when we are born! Instead,
+    we build on knowledge and intuition that have been accumulated over thousands
+    of years! We transfer this knowledge among us through different, structured or
+    unstructured, forms of **teaching**. This capability makes it possible for us
+    to gain skills relatively quickly and advance common knowledge.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When we think about it from this perspective, what we are doing with machine
+    learning seems quite inefficient: we dump a bunch of raw data into algorithms,
+    or expose them to an environment, in the case of RL, and train them with virtually
+    no guidance. This is partly why machine learning requires so much data and fails
+    at times.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Machine teaching** (**MT**) is an emerging approach that shifts the focus
+    to extracting knowledge from a teacher, rather than raw data, which guides the
+    process of training machine learning algorithms. In turn, learning new skills
+    and mappings is achieved more efficiently and with less data, time, and compute.
+    In this chapter, we will introduce the components of MT for RL and some of its
+    most important methods, such as reward function engineering, curriculum learning,
+    demonstration learning, and action masking. At the end, we will also discuss the
+    downsides and the future of MT. More concretely, we will cover the following topics
+    in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduction to MT
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Engineering the reward function
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Curriculum learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Warm starts and demonstration learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Action masking
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Concept networks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Downsides and the promises of MT
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'All the code for the chapter can be found at the following GitHub URL:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python](https://github.com/PacktPublishing/Mastering-Reinforcement-Learning-with-Python)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduction to MT
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: MT is the name of a general approach and collection of methods to efficiently
+    transfer knowledge from a teacher – a subject matter expert – to a machine learning
+    algorithm. With that, we aim to make the training much more efficient, and even
+    feasible for tasks that would be impossible to achieve otherwise. Let's talk about
+    what MT is in more detail, why we need it, and what its components are.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the need for MT
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Did you know that the United States is expected to spend about 1.25 trillion
+    dollars, around 5% of its gross domestic product, on education in 2021? This should
+    speak to the existential significance of education to our society and civilization
+    (and many would argue that we should spend more). We humans have built such a
+    giant education system, which we expect people to spend many years in, because
+    we don''t expect ourselves to be able to decipher the alphabet or math on our
+    own. Not just that, we continuously learn from teachers around us, about how to
+    use software, how to drive, how to cook, and so on. These teachers don''t have
+    to be human teachers: books, blog posts, manuals, and course materials all distill
+    valuable information for us so that we can learn, not just in school but throughout
+    our lives.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I hope this convinces you of the importance of teaching. But if you found this
+    example too populist and perhaps a bit irrelevant to RL, let's discuss how MT
+    could specifically help in RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Feasibility of learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Have you ever felt overwhelmed when trying to learn something on your own, without
+    a (good) teacher? This is akin to an RL agent not figuring out a good policy for
+    the problem at hand due to an overwhelming number of possible policies. One of
+    the main obstacles in this process is the lack of proper feedback about their
+    quality. You can also think of **hard exploration problems** with sparse rewards
+    in the same context, a serious challenge in RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider the following example: an RL agent is trying to learn chess against
+    a competitive opponent with a reward of +1 for winning, 0 for draw, and -1 for
+    losing at the end of the game. The RL agent needs to stumble upon tens of "good
+    moves," one after another, and among many alternative moves at each step, to be
+    able to get its first 0 or +1 reward. Since this is a low likelihood, the training
+    is likely to fail without a huge exploration budget. A teacher, on the other hand,
+    might guide the exploration so that the RL agent knows at least a few ways to
+    succeed, from which it can gradually improve upon the winning strategies.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: When DeepMind created its AlphaStar agent to play StarCraft II, they used supervised
+    learning to train the agent on past human game logs before going into RL-based
+    training. Human players in some sense were the first teachers of the agent, and
+    without them, the training would be impractical/too costly. To support this argument,
+    you can take the example of the OpenAI Five agent trained to play Dota 2\. It
+    took almost a year to train the agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following figure shows the agent in action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.1 – DeepMind''s AlphaStar agent in action (source: The AlphaStar
+    Team, 2019)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_10_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 10.1 – DeepMind''s AlphaStar agent in action (source: The AlphaStar
+    Team, 2019)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In summary, having access to a teacher could make the learning feasible in a
+    reasonable amount of time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Time, data, and compute efficiency
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Let's say you have enough compute resources and can afford to try an enormous
+    number of sequences of moves for the RL agent to discover winning strategies in
+    an environment. Just because you can, doesn't mean that you should do it and waste
+    all those resources. A teacher could help you to greatly reduce the training time,
+    data, and compute. You can use the resources you saved to iterate on your ideas
+    and come up with better agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Do you have mentors in your life to help you with your career, education, marriage,
+    and so on? Or do you read books about these topics? What is your motivation? You
+    don't want to repeat the mistakes of others or reinvent what others already know
+    just to waste your time, energy, and opportunities, do you? MT similarly helps
+    your agent jumpstart its task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The benefit of MT goes beyond the feasibility of learning or its efficiency.
+    Next, let''s talk about another aspect: the safety of your agent.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensuring the safety of the agent
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A teacher is a subject matter expert on a topic. Therefore, a teacher usually
+    has a pretty good idea about what actions under which conditions can get the agent
+    in trouble. The teacher can inform the agent about these conditions by limiting
+    the actions it could take to ensure its safety. For example, while training an
+    RL agent for a self-driving car, it is natural to limit the speed of the car depending
+    on the conditions of the road. This is especially needed if the training happens
+    in the real world so that the agent does not blindly explore crazy actions to
+    discover how to drive. Even when the training happens in a simulation, imposing
+    these limitations will help with the efficient use of the exploration budget,
+    related to the tip in the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Democratizing machine learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When teachers train students, they do not worry about the details of the biological
+    mechanisms of learning, such as which chemicals are transferred between which
+    brain cells. Those details are abstracted away from the teacher; neuroscientists
+    and experts who study the brain put out research about effective teaching and
+    learning techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just like how teachers don't have to be neuroscientists, subject matter experts
+    don't have to be machine learning experts to train machine learning algorithms.
+    The MT paradigm suggests abstracting the low-level details of machine learning
+    away from the machine teacher by developing effective and intuitive teaching methods.
+    With that, it would be much easier for subject matter experts to infuse their
+    knowledge into machines. Eventually, this would lead to the democratization of
+    machine learning and its much greater use in many applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data science, in general, requires combining business insights and expertise
+    with mathematical tools and software to create value. When you want to apply RL
+    to business problems, the situation is the same. This often requires either the
+    data scientist to learn about the business or the subject matter expert to learn
+    about data science, or people from both fields working together in a team. This
+    poses a high bar for the adoption of (advanced) machine learning techniques in
+    many settings, because it is rare for these two types of people to exist at the
+    same time in the same place.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: A McKinsey study shows that lack of analytical talent is a major barrier to
+    unlocking the value in data and analytics. MT, its specific tools aside, is a
+    paradigm to overcome these barriers by lowering the bar for entry for non-machine
+    learning experts through the creation of intuitive tools to this end. To check
+    out the study, visit [https://mck.co/2J3TFEj](https://mck.co/2J3TFEj).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This vision we have just mentioned is aimed more for the long term as it requires
+    a lot of research and abstractions on the machine learning side. The methods we
+    will cover in this section will be pretty technical. For example, we will discuss
+    the **action masking** method to limit the available actions for the agent depending
+    on the state it is in, which will require coding and modifying the neural network
+    outcomes. However, you can imagine an advanced MT tool listening to the teacher
+    saying "don''t go over 40 miles per hour within the city limits," parsing that
+    command, and implementing action masking under the hood for a self-driving car
+    agent:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.2 – The future of MT?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_10_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.2 – The future of MT?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before closing this section and diving into the details of MT, let me put out
+    a necessary disclaimer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Disclaimer
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the most vocal proponents of the MT approach is Microsoft and its Autonomous
+    Systems division. As of the time of writing this book, I am an employee of the
+    Autonomous Systems organization of Microsoft, working toward the mission of using
+    MT to create intelligent systems. However, my goal here is not to promote any
+    Microsoft product or discourse, but to tell you about this emerging topic that
+    I find important. In addition, I do not officially represent Microsoft in any
+    capacity and my views on the topic may not necessarily align with the company's.
+    If you are curious about Microsoft's view on MT, check out the blog post at [https://blogs.microsoft.com/ai/machine-teaching/](https://blogs.microsoft.com/ai/machine-teaching/)
+    and the Autonomous Systems website at [https://www.microsoft.com/en-us/ai/autonomous-systems](https://www.microsoft.com/en-us/ai/autonomous-systems).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, it is time to make the discussion more concrete. In the next section, let's
+    look at the elements of MT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the elements of MT
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As MT is an emerging field, it is hard to formally define its elements. Still,
+    let's look into some of the common components and themes used in it. We have already
+    discussed who the machine teacher is, but let's start with that for the sake of
+    completeness. Then, we will look into concepts, lessons, curriculum, training
+    data, and feedback.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Machine teacher
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The **machine teacher**, or simply the **teacher**, is the subject matter expert
+    of the problem at hand. In the absence of abstractions that decouple machine learning
+    from teaching, this will be the data scientist – you – but this time with the
+    explicit concern of guiding the training using your knowledge of the problem domain.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concept
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The **concept** is a specific part of the skillset that is needed to solve
+    the problem. Think about training a basketball player in real life. Training does
+    not consist of only practice games but is divided into mastering individual skills
+    as well. Some of these skills are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shooting
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Passing
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Dribbling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Stopping and landing
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Conventional training of an RL agent playing basketball would be through playing
+    entire games, with which we would expect the agent to pick up these individual
+    skills. MT suggests breaking the problem down into smaller concepts to learn,
+    such as the skills we listed previously. This has several benefits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A monolithic task often comes with sparse rewards, which is challenging for
+    an RL agent to learn from. For example, winning the basketball game would be +1
+    and losing would be -1\. However, the machine teacher would know that winning
+    a game would be possible through mastering individual skills. To train the agent
+    on individual skills and concepts, there will be rewards assigned to them. This
+    is helpful to get around the sparse reward issue and provide more frequent feedback
+    to the agent in a manner that facilitates learning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The credit assignment problem is a serious challenge in RL, which is about the
+    difficulty of attributing the reward in later stages to individual actions in
+    the earlier ones. When the training is broken down into concepts, it is easier
+    to see the concepts that the agent is not good at. To be specific, this does not
+    solve the credit assignment problem in itself. It is still the teacher that determines
+    whether mastering a particular concept is important. But once these concepts are
+    defined by the teacher, it is easier to isolate what the agent is and isn't good
+    at.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a corollary to the preceding point, the teacher can allocate more of the
+    training budget to concepts that need more training and/or are difficult to learn.
+    This results in more efficient use of time and compute resources.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For all these reasons, a task that is impractical or costly to solve monolithically
+    can be efficiently solved by breaking it down into concepts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lessons and curriculum
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Another important element in MT is called **curriculum learning**. While training
+    the agent on a concept, exposing it to an expert-level difficulty may derail the
+    training. Instead, what makes more sense is to start with some easy settings and
+    increase the difficulty gradually. Each of these difficulty levels makes a separate
+    **lesson**, and they, together with the success thresholds that define the transition
+    criteria from one lesson to the next, comprise a **curriculum**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Curriculum learning is one of the most important research areas in RL and we
+    will elaborate more on it later. A curriculum may be designed by hand by the teacher,
+    or an **auto-curriculum** algorithm can be used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training material/data
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Related to the previous point, another aspect of MT is to engineer the data
+    that the agent will learn from. For example, the machine teacher could seed the
+    training with data that includes successful episodes while using off-policy methods,
+    which can overcome hard exploration tasks. This data could be obtained from an
+    existing non-RL controller or the teacher's actions. This approach is also called
+    **demonstration learning**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Demonstration learning is a popular method to train RL agents, especially in
+    robotics. An ICRA paper by Nair et al. shows robots how to pick and place objects
+    to seed the training of an RL agent. Check out the video at [https://youtu.be/bb_acE1yzDo](https://youtu.be/bb_acE1yzDo).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conversely, the teacher could steer the agent away from bad actions. An effective
+    way of achieving this is through **action masking**, which limits the available
+    action space given for observation to a desirable set of actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another way of engineering the training data that the agent consumes is to monitor
+    the performance of the agent, identify the parts of the state space that it needs
+    more training in, and expose the agent to these states to improve the performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Feedback
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: RL agents learn through feedback in the form of rewards. Engineering the reward
+    function to make the learning easy – and even feasible in some cases that would
+    have been infeasible otherwise – is one of the most important tasks of the machine
+    teacher. This is usually an iterative process. It is common to revise the reward
+    function many times during the course of a project to get the agent to learn the
+    desired behavior. A futuristic MT tool could involve interacting with the agent
+    through natural language to provide this feedback, which shapes the reward function
+    used under the hood.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this, we have introduced you to MT and its elements. Next, we will look
+    into specific methods. Rather than going over an entire MT strategy for a sample
+    problem, we will next focus on individual methods. You can use them as building
+    blocks of your MT strategy depending on what your problem needs. We will start
+    with the most common one, reward function engineering, which you might have already
+    used before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Engineering the reward function
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Reward function engineering means crafting the reward dynamics of the environment
+    in an RL problem so that it reflects the exact objective you have in mind for
+    your agent. How you define your reward function might make the training easy,
+    difficult, or even impossible for the agent. Therefore, in most RL projects, significant
+    effort is dedicated to designing the reward. In this section, we will cover some
+    specific cases where you will need to do it and how, then provide a specific example,
+    and finally, discuss the challenges that come with engineering the reward function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When to engineer the reward function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Multiple times in this book, including in the previous section when we discussed
+    concepts, we have mentioned how sparse rewards pose a problem for learning. One
+    way of dealing with this is to **shape the reward** to make it non-sparse. The
+    sparse reward case, therefore, is a common reason why we may want to do reward
+    function engineering. Yet, it is not the only one. Not all environments/problems
+    have a predefined reward for you like in an Atari game. In addition, in some cases,
+    there are multiple objectives that you want your agent to achieve. For all these
+    reasons, many real-life tasks require the machine teacher to specify the reward
+    function based on their expertise. Let's look into these cases next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sparse rewards
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When the reward is sparse, meaning that the agent sees a change in the reward
+    (from a constant 0 to positive/negative, from a constant negative to positive,
+    and so on) with an unlikely sequence of random actions, the learning gets difficult.
+    That is because the agent needs to stumble upon this sequence through random trial
+    and error, which makes the problem exploration hard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Learning chess against a competitive player where the reward is +1 for winning,
+    0 for draw, and -1 for losing at the very end is a good example of an environment
+    with sparse rewards. A classic example used in RL benchmarks is Montezuma''s Revenge,
+    an Atari game in which the player needs to collect equipment (keys, torch, and
+    so on), open doors, and so on to be able to make any progress, which is very unlikely
+    just by taking random actions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.3 – Montezuma''s Revenge'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_10_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.3 – Montezuma's Revenge
+  prefs: []
+  type: TYPE_NORMAL
+- en: In such hard exploration problems, a common strategy is **reward shaping**,
+    which is to modify the reward to steer the agent toward high rewards. For example,
+    a reward shaping strategy could be to give -0.1 reward to the agent learning chess
+    if it loses the queen, and smaller penalties when other pieces are lost. With
+    that, the machine teacher conveys their knowledge about the queen being an important
+    piece in the game to the agent, although not losing the queen or any other pieces
+    (except the king) in itself is not the game's objective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will talk more about reward shaping in detail later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Qualitative objectives
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Let's say you are trying to teach a humanoid robot how to walk. Well, what is
+    walking? How can you define it? How can you define it mathematically? What kind
+    of walking gets a high reward? Is it just about moving forward or are there some
+    elements of aesthetics? As you can see, it is not easy to put what you have in
+    your mind about walking into mathematical expressions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In their famous work, researchers at DeepMind used the following reward function
+    for the humanoid robot they trained to walk:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_10_001.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_10_002.png) and ![](img/Formula_10_003.png) are velocities
+    along the ![](img/Formula_10_004.png) and ![](img/Formula_10_005.png) axes, ![](img/Formula_10_006.png)
+    is the position on the ![](img/Formula_10_007.png) axis, ![](img/Formula_10_008.png)
+    is a cutoff for the velocity reward, and ![](img/Formula_05_281.png) is the control
+    applied on the joints. As you can see, there are many arbitrary coefficients that
+    are likely to differ for other kinds of robots. In fact, the paper uses three
+    separate functions for three separate robot bodies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you are curious about how the robot walks after being trained with this
+    reward, watch this video: [https://youtu.be/gn4nRCC9TwQ](https://youtu.be/gn4nRCC9TwQ).
+    The way the robot walks is, how can I put it, a bit weird…'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, in short, qualitative objectives require crafting a reward function to obtain
+    the behavior intended.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-objective tasks
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A common situation in RL is to have multi-objective tasks. On the other hand,
+    conventionally, RL algorithms optimize a scalar reward. As a result, when there
+    are multiple objectives, they need to be reconciled into a single reward. This
+    often results in mixing apples and oranges, and appropriately weighing them in
+    the reward could be quite painful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the task objective is qualitative, it is often also multi-objective. For
+    example, the task of driving a car includes elements of speed, safety, fuel efficiency,
+    equipment wear and tear, comfort, and so on. You can guess that it is not easy
+    to express what comfort means mathematically. But there are also many tasks in
+    which multiple quantitative objectives need to be optimized concurrently. An example
+    of this is to control an HVAC system to keep the room temperature as close to
+    the specified setpoint as possible while minimizing the cost of energy. In this
+    problem, it is the machine teacher's duty to balance these trade-offs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is very common for an RL task to involve one or more of the preceding situations.
+    Then, engineering the reward function becomes a major challenge.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this much discussion, let's focus on reward shaping a little bit more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reward shaping
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The idea behind reward shaping is to incentivize the agent to move toward success
+    states and discourage it from reaching failure states using positive and negative
+    rewards that are relatively smaller in magnitude with respect to the actual reward
+    (and punishment). This will usually shorten the training time as the agent will
+    not spend as much time trying to discover how to reach a success state. Here is
+    a simple example to make our discussion more concrete.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Simple robot example
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Suppose that a robot is moving on a horizontal axis with 0.01 step sizes. The
+    goal is to reach +1 and avoid -1, which are the terminal states, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.4 – Simple robot example with sparse rewards'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_10_4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.4 – Simple robot example with sparse rewards
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can imagine, it is very difficult for the robot to discover the trophy
+    when we use sparse rewards, such as giving +1 for reaching the trophy and -1 for
+    reaching the failure state. If there is a timeout for the task, let's say after
+    200 steps, the episode is likely to end with that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, we can guide the robot by giving a reward that increases as
+    it moves toward the trophy. A simple choice could be setting ![](img/Formula_10_010.png),
+    where ![](img/Formula_10_011.png) is the position on the axis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two potential problems with this reward function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As the robot moves right, the incremental relative benefit of moving even further
+    right gets smaller. For example, going from ![](img/Formula_10_012.png) to ![](img/Formula_10_013.png)
+    increases the step reward by 10% but going from ![](img/Formula_10_014.png) to
+    ![](img/Formula_10_015.png) only increases it by 1.1%.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Since the goal of the agent is to maximize the total cumulative reward, it is
+    not in the best interest of the agent to reach the trophy since that will terminate
+    the episode. Instead, the agent might choose to hang out at 0.99 forever (or until
+    the time limit is reached).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can address the first issue by shaping the reward in such a way that the
+    agent gets increasing additional rewards for moving toward the success state.
+    For example, we can set the reward to be ![](img/Formula_10_016.png) within the
+    ![](img/Formula_10_017.png) range:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.5 – A sample reward shaping where'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_10_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.5 – A sample reward shaping where ![](img/Formula_10_018.png)
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this, the amount of incentive accelerates as the robot gets closer to the
+    trophy, encouraging the robot even further to go right. The situation is similar
+    for the punishment for going to left.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To address the latter, we should encourage the agent to finish the episode as
+    soon as possible. We need to do that by punishing the agent for every time step
+    it spends in the environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This example shows two things: designing the reward function can get tricky
+    even in such simple problems, and we need to consider the design of the reward
+    function together with the terminal conditions we set.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before going into specific suggestions for reward shaping, let's also discuss
+    how terminal conditions play a role in agent behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Terminal conditions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Since the goal of the agent is to maximize the expected cumulative reward over
+    an episode, how the episode ends will directly affect the agent's behavior. So,
+    we can and should leverage a good set of terminal conditions to guide the agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can talk about several types of terminal conditions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Positive terminal** indicates the agent has accomplished the task (or part
+    of it, depending on how you define success). This terminal condition comes with
+    a significant positive reward to encourage the agent to reach it.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Negative terminal** indicates a failure state and yields a significant negative
+    reward. The agent will try to avoid these conditions.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Neutral terminal** is neither success nor failure in itself, but it indicates
+    that the agent has no path to success, and the episode is terminated with a zero
+    reward in the last step. The machine teacher doesn''t want the agent to spend
+    any time after that point in the environment but to reset back to the initial
+    conditions. Although this does not directly punish the agent, it prevents it from
+    collecting additional rewards (or penalties). So, it is implicit feedback to the
+    agent.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Time limit** bounds the number of time steps spent in the environment. It
+    encourages the agent to seek high rewards within this budget, rather than wandering
+    around forever. It works as feedback about what sequences of actions are rewarding
+    in a reasonable amount of time and which ones are not.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In some environments, terminal conditions are preset; but in most cases, the
+    machine teacher has the flexibility to set them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have all the components described, let's discuss some practical
+    tips for reward shaping.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practical tips for reward shaping
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here are some general guidelines you should keep in mind while designing the
+    reward function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Keep the step reward between ![](img/Formula_10_019.png) and ![](img/Formula_10_020.png)
+    for numerical stability, whenever possible.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Express your reward (and state) with terms that are generalizable to other versions
+    of your problem. For example, rather than rewarding the agent for reaching a point,
+    ![](img/Formula_10_021.png), you can incentivize reducing the distance to the
+    target, based on ![](img/Formula_10_022.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Having a smooth reward function will provide the agent with feedback that is
+    easy to follow.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The agent should be able to correlate the reward with its observations. In other
+    words, observations must contain some information about what is leading to high
+    or low rewards. Otherwise, there won't be much for the agent to base its decisions
+    on.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The total incentive for getting close to the target states should not outweigh
+    the actual reward of reaching the target state. Otherwise, the agent will prefer
+    to focus on accumulating the incentives, rather than achieving the actual goal.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you would like your agent to complete a task as soon as possible, assign
+    a negative reward to each time step. The agent will try to finish the episode
+    to avoid accumulating negative rewards.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the agent can collect more positive rewards by not reaching a terminal state,
+    it will try to collect them before reaching a terminal condition. If the agent
+    is likely to collect only negative rewards by staying inside an episode (such
+    as when there is a penalty per time step), it will try to reach a terminal condition.
+    The latter can result in suicidal behavior if the life is too painful for the
+    agent, meaning that the agent can seek any terminal state, including natural ones
+    or failure states, to avoid incurring excessive penalties by staying alive.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, we will look at an example of reward shaping using OpenAI.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Example – reward shaping for a mountain car
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In OpenAI''s mountain car environment, the goal of the car is to reach the
+    goal point on top of one of the hills, which is illustrated in *Figure 10.6*.
+    The action space is to push the car to the left, push to the right, or apply no
+    force:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.6 – Mountain car environment'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_10_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 10.6 – Mountain car environment
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the force we apply is not enough to climb the hill and reach the goal,
+    the car needs to gradually accumulate potential energy by climbing in opposite
+    directions. Figuring this out is non-trivial, because the car does not know what
+    the goal is until it reaches it, which can be achieved after 100+ steps of correct
+    actions. The only reward in the default environment is -1 per time step to encourage
+    the car to reach the goal as quickly as possible to avoid accumulating negative
+    rewards. The episode terminates after 200 steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will use various MT techniques to train our agent throughout the chapter.
+    To that end, we will have a custom training flow and a customized environment
+    with which we can experiment with these methods. Let's get things set up first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Our custom `MountainCar` environment wraps OpenAI''s `MountainCar-v0`, which
+    looks like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/custom_mcar.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you visit that file now, it may look complicated since it includes some add-ons
+    we are yet to cover. For now, just know that this is the environment we will use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will use Ray/RLlib''s Ape-X DQN throughout the chapter to train our agents.
+    Make sure that you have them installed, preferably within a virtual environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: With that, next, let's get a baseline performance by training an agent without
+    any MT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting a baseline performance
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We will use a single script for all of the training. We define a `STRATEGY`
+    constant at the top of the script, which will control the strategy to be used
+    in the training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/mcar_train.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: For each strategy, we will kick off five different training sessions of 2 million
+    time steps each, so we set `NUM_TRIALS = 5` and `MAX_STEPS = 2e6`. At the end
+    of each training session, we will evaluate the trained agent over `NUM_FINAL_EVAL_EPS
+    = 20` episodes. Therefore, the result for each strategy will reflect the average
+    length of 100 test episodes, where a lower number indicates better performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For most of the strategies, you will see that we have two variants: with and
+    without dueling networks enabled. When the dueling network is enabled, the agent
+    achieves a near-optimal result (around 100 steps to reach the goal), so it becomes
+    uninteresting for our case. Moreover, when we implement action masking later in
+    the chapter, we won''t use dueling networks to avoid complexities in RLlib. Therefore,
+    we will focus on the no-dueling network case in our example. Finally, note that
+    the results of the experiments will be written to `results.csv`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With that, let''s train our first agents. When I used no MT, in my case, I
+    obtained the following average episode lengths:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The outcome is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Let's see next whether reward shaping helps us here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solving the problem with a shaped reward
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Anyone looking at the mountain car problem could tell that we should encourage
+    the car to go right, at least eventually. In this section, that is what we''ll
+    do. The dip position of the car corresponds to an ![](img/Formula_10_023.png)
+    position of -0.5\. We modify the reward function to give a quadratically increasing
+    reward to the agent for going beyond this position toward the right. This happens
+    inside the custom `MountainCar` environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Of course, feel free to try your own reward shaping here to gain a better idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying a constant reward, such as -1, is an example of sparse reward, although
+    the step reward is not 0\. That is because the agent does not get any feedback
+    until the very end of the episode; none of its actions change the default reward
+    for a long time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can enable the custom (shaped) reward strategy with the following flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The outcome we get is something like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is obviously a significant gain, so kudos to our shaped reward function!
+    Admittedly, though, it took me several iterations to figure out something that
+    brings in significant improvement. This is because the behavior we encourage is
+    more complex than just going right: we want the agent to go between left and right
+    to speed up. This is a bit hard to capture in a reward function, and it could
+    easily give you headaches.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reward function engineering in general can get quite tricky and time-consuming
+    – so much so that this topic deserves a dedicated section to discuss, which we
+    will turn to next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Challenges with engineering the reward function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The objective of RL is to find a policy that maximizes the expected cumulative
+    reward the agent collects. We design and use very sophisticated algorithms to
+    overcome this optimization challenge. In some problems, we use billions of training
+    samples to this end and try to squeeze out a little extra reward. After all this
+    hassle, it is not uncommon to observe that your agent obtains a great reward,
+    but the behavior it exhibits is not exactly what you intended. In other words,
+    the agent learns something different than what you want it to learn. If you run
+    into such a situation, don't get too mad. That is because the agent's sole purpose
+    is to maximize the reward you specified. If that reward does not exactly reflect
+    the objective you had in mind, which is much more challenging than you may think,
+    neither will the behavior of the agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A famous example of a misbehaving agent due to an incorrectly specified reward
+    is OpenAI''s CoastRunners agent. In the game, the agent is expected to finish
+    the boat race as quickly as possible while collecting rewards along the way. After
+    training, the agent figured out a way of collecting higher rewards without having
+    to finish the race, defeating the original purpose. You can read more about it
+    on OpenAI''s blog: [https://openai.com/blog/faulty-reward-functions/](https://openai.com/blog/faulty-reward-functions/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a result, it is of tremendous importance that you specify a good reward function
+    for your task, especially when it includes qualitative and/or complex objectives.
+    Unfortunately, designing a good reward function is more of an art than science,
+    and you will gain intuition through practice and trial and error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alex Irpan, a machine learning researcher at Google, beautifully expresses
+    how important and challenging designing the reward function is: "I''ve taken to
+    imagining deep RL as a demon that''s deliberately misinterpreting your reward
+    and actively searching for the laziest possible local optima. It''s a bit ridiculous,
+    but I''ve found it''s actually a productive mindset to have." (Irpan, 2018). François
+    Chollet, the author of Keras, says "loss function engineering is probably going
+    to be a job title in the future." ([https://youtu.be/Bo8MY4JpiXE?t=5270](https://youtu.be/Bo8MY4JpiXE?t=5270)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Despite these challenges, the tricks we have just covered should give you a
+    running start. The rest will come with experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let's conclude our discussion on reward function engineering. This
+    was a long yet necessary one. In the next section, we will discuss another topic,
+    curriculum learning, which is important not just in MT but in RL as a whole.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Curriculum learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we learn a new skill, we start with the basics. Bouncing and dribbling
+    are the first steps when learning basketball. Doing alley-oops is not something
+    to try to teach in the first lesson. You need to gradually proceed to advanced
+    lessons after getting comfortable with the earlier ones. This idea of following
+    a curriculum, from the basics to advanced levels, is the basis of the whole education
+    system. The question is whether machine learning models can benefit from the same
+    approach. It turns out that they can!
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the context of RL, when we create a curriculum, we similarly start with "easy"
+    environment configurations for the agent. This way, the agent can get an idea
+    about what success means early on, rather than spending a lot of time blindly
+    exploring the environment with the hope of stumbling upon success. We then gradually
+    increase the difficulty if we observe that the agent is exceeding a certain reward
+    threshold. Each of these difficulty levels is considered a **lesson**. Curriculum
+    learning has been shown to increase training efficiency and makes tasks that are
+    infeasible to achieve feasible for the agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing lessons and transition criteria is a non-trivial undertaking. It requires
+    significant thought and subject matter expertise. Although we follow manual curriculum
+    design in this chapter, when we revisit the topic in [*Chapter 11*](B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239),
+    *Generalization and Partial Observability*, and [*Chapter 14*](B14160_14_Final_SK_ePub.xhtml#_idTextAnchor306),
+    *Robot Learning*, we will discuss automatic curriculum generation methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our mountain car example, we create lessons by modifying the initial conditions
+    of the environment. Normally, as the episode beginnings, the environment randomizes
+    the car position around the valley dip (![](img/Formula_10_024.png)) and sets
+    the velocity (![](img/Formula_08_050.png)) to 0\. In our curriculum, the car will
+    start in the first lesson close to the goal and with a high velocity toward the
+    right. With that, it will easily reach the goal. We will make things gradually
+    closer to the original difficulty as the curriculum progresses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specifically, here is how we define the lessons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Lesson 0**: ![](img/Formula_10_026.png), ![](img/Formula_10_027.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Lesson 1**: ![](img/Formula_10_028.png), ![](img/Formula_10_029.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Lesson 2**: ![](img/Formula_10_030.png), ![](img/Formula_10_031.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Lesson 3**: ![](img/Formula_10_032.png), ![](img/Formula_10_033.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Lesson 4 (final / original)**: ![](img/Formula_10_034.png), ![](img/Formula_10_035.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This is how it is set inside the environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will let the agent proceed to the next lesson once it has been successful
+    enough in the current one. We define this threshold as having an average episode
+    length of less than 150 over 10 evaluation episodes. We set the lessons in training
+    and the evaluation workers with the following functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These are then used inside the training flow:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'So, this is how we implement a manual curriculum. Say you train the agent with
+    this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: You will see that the performance we get is near optimal!
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You just taught a machine something using a curriculum! Pretty cool, isn't it?
+    Now it should feel like MT!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we will look at another interesting approach: MT using demonstrations.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Warm starts and demonstration learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A popular technique to demonstrate to the agent a way to success is to train
+    it on data that is coming from a reasonably successful controller, such as humans.
+    In RLlib, this can be done by saving the human play data from the mountain car
+    environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter10/mcar_demo.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: This data can then be fed to the training, which is implemented in `Chapter10/mcar_train.py`.
+    When I tried it, RLlib got stuck with NaNs in multiple attempts when the training
+    was seeded using this method. So, now that you know about it, we will leave the
+    details of this to RLlib's documentation at [https://docs.ray.io/en/releases-1.0.1/rllib-offline.html](https://docs.ray.io/en/releases-1.0.1/rllib-offline.html)
+    and not focus on it here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Action masking
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'One final MT approach we will use is action masking. With that, we can prevent
+    the agent from taking certain actions in certain steps based on conditions we
+    define. For the mountain car, assume that we have this intuition of building momentum
+    before trying to climb the hill. So, we want the agent to apply force to the left
+    if the car is already moving left around the valley. So, for these conditions,
+    we will mask all the actions except left:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order to be able to use this masking, we need to build a custom model. For
+    the masked actions, we push down all the logits to negative infinity:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, when using this model, we turn off dueling to avoid an overly complicated
+    implementation. Also, we register our custom model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order to train your agent with this strategy, set the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The performance will be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is definitely an improvement over the default case, yet it is behind the
+    reward shaping and curriculum learning approaches. Having smarter masking conditions
+    and adding dueling networks can further help with the performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the end of the MT techniques we use for the mountain car problem. Before
+    we wrap up, let's check one more important topic in MT.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Concept networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An important part of the MT approach is to divide the problem into concepts
+    that correspond to different skills to facilitate learning. For example, for an
+    autonomous car, training separate agents for cruising on a highway and passing
+    a car could help with performance. In some problems, divisions between concepts
+    are even more clear. In those cases, training a single agent for the entire problem
+    will often result in better performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before closing this chapter, let's talk about some of the potential downsides
+    of the MT approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Downsides and the promises of MT
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are two potential downsides of the MT approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, it is usually non-trivial to come up with good reward shaping, a good
+    curriculum, a set of action masking conditions, and so on. This also in some ways
+    defeats the purposes of learning from experience and not having to do feature
+    engineering. On the other hand, whenever we are able to do so, feature engineering
+    and MT could be immensely helpful for the agent to learn and increase its data
+    efficiency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Second, when we adopt a MT approach, it is possible to inject the bias of the
+    teacher to the agent, which could prevent it from learning better strategies.
+    The machine teacher needs to avoid such biases whenever possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Awesome job! We have reached the end of an exciting chapter here. Let's summarize
+    what we have covered next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we covered an emerging paradigm in artificial intelligence,
+    MT, which is about effectively conveying the expertise of a subject matter expert
+    (teacher) to machine learning algorithms. We discussed how this is similar to
+    how humans are educated: by building on others'' knowledge, usually without reinventing
+    it. The advantage of this approach is that it greatly increases data efficiency
+    in machine learning, and, in some cases, makes learning possible that would have
+    been impossible without a teacher. We discussed various methods in this paradigm,
+    including reward function engineering, curriculum learning, demonstration learning,
+    action masking, and concept networks. We observed how some of these methods have
+    improved vanilla use of Ape-X DQN significantly. At the end, we also introduced
+    potential downsides of this paradigm, namely the difficulty of designing the teaching
+    process and tools, and possible bias introduced into learning. Despite these downsides,
+    MT will become a standard part of an RL scientist''s toolbox in the near future.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will discuss generalization and partial observability,
+    a key topic in RL. In doing so, we will visit curriculum learning again and see
+    how it helps in creating robust agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See you on the other side!
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Bonsai. (2017). *Deep Reinforcement Learning Models: Tips & Tricks for Writing
+    Reward Functions*. Medium. URL: [https://bit.ly/33eTjBv](https://bit.ly/33eTjBv)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Weng, L. (2020). *Curriculum for Reinforcement Learning*. Lil''Log. URL: [https://bit.ly/39foJvE](https://bit.ly/39foJvE)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'OpenAI. (2016). *Faulty Reward Functions in the Wild*. OpenAI blog. URL: [https://openai.com/blog/faulty-reward-functions/](https://openai.com/blog/faulty-reward-functions/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Irpan, A. (2018). *Deep Reinforcement Learning Doesn''t Work Yet*. Sorta Insightful.
+    URL: [https://www.alexirpan.com/2018/02/14/rl-hard.html](https://www.alexirpan.com/2018/02/14/rl-hard.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Heess, N. et al. (2017). *Emergence of Locomotion Behaviours in Rich Environments*.
+    arXiv.org. URL: [http://arxiv.org/abs/1707.02286](http://arxiv.org/abs/1707.02286)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bonsai. (2017). *Writing Great Reward Functions* – Bonsai. YouTube. URL: [https://youtu.be/0R3PnJEisqk](https://youtu.be/0R3PnJEisqk)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Badnava, B. & Mozayani, N. (2019). *A New Potential-Based Reward Shaping for
+    Reinforcement Learning Agent*. arXiv.org. URL: [http://arxiv.org/abs/1902.06239](http://arxiv.org/abs/1902.06239)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Microsoft Research. (2019). *Reward Machines: Structuring Reward Function Specifications
+    and Reducing Sample Complexity*. YouTube. URL: [https://youtu.be/0wYeJAAnGl8](https://youtu.be/0wYeJAAnGl8)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'US Government Finances. (2020). URL: [https://www.usgovernmentspending.com/](https://www.usgovernmentspending.com/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The AlphaStar team. (2019). *AlphaStar: Mastering the Real-Time Strategy Game
+    StarCraft II*. DeepMind blog. URL: [https://bit.ly/39fpDIy](https://bit.ly/39fpDIy)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

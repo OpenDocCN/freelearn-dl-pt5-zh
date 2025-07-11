@@ -1,0 +1,701 @@
+- en: '10'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Mesh R-CNN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter is dedicated to a state-of-the-art model called Mesh R-CNN, which
+    aims to combine two different but important tasks into one end-to-end model. It
+    is a combination of the well-known image segmentation model Mask R-CNN and a new
+    3D structure prediction model. These two tasks were researched a lot separately.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mask R-CNN is an object detection and instance segmentation algorithm that got
+    the highest precision scores in benchmark datasets. It belongs to the R-CNN family
+    and is a two-stage end-to-end object detection model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mesh R-CNN goes beyond the 2D object detection problem and outputs a 3D mesh
+    of detected objects as well. If we think of the world, people see in 3D, which
+    means the objects are 3D. So, why not have a detection model that outputs objects
+    in 3D as well?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we are going to understand how Mesh R-CNN works. Moreover,
+    we will dive deeper into understanding different elements and techniques used
+    in models such as voxels, meshes, graph convolutional networks, and Cubify operators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will explore the GitHub repository provided by the authors of the Mesh
+    R-CNN paper. We will try the demo on our image and visualize the results of the
+    prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we will discuss how we can reproduce the training and testing of Mesh
+    R-CNN and understand the benchmark of the model accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding mesh and voxel structures
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the structure of the model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding what a graph convolution is
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Trying the demo of Mesh R-CNN
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding the training and testing process of the model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To run the example code snippets in this book, ideally, you need to have a computer
+    with a GPU. However, running the code snippets with only CPUs is not impossible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following are the recommended computer configurations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A GPU from, for example, the NVIDIA GTX series or RTX series with at least 8
+    GB of memory
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Python 3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The PyTorch library and PyTorch3D libraries
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Detectron2
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Mesh R-CNN repository, which can be found at [https://github.com/facebookresearch/meshrcnn](https://github.com/facebookresearch/meshrcnn)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The code snippets for this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overview of meshes and voxels
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As mentioned earlier in this book, meshes and voxels are two different 3D data
+    representations. Mesh R-CNN uses both representations to get better quality 3D
+    structure predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A mesh is the surface of a 3D model represented as polygons, where each polygon
+    can be represented as a triangle. Meshes consist of vertices connected by edges.
+    The edge and vertex connection creates faces that have a commonly triangular shape.
+    This representation is good for faster transformations and rendering:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.1: Example of a polygon mesh ](img/B18217_10_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.1: Example of a polygon mesh'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Voxels are the 3D analogs of 2D pixels. As each image consists of 2D pixels,
+    it is logical to use the same idea to represent 3D data. Each voxel is a cube,
+    and each object is a group of cubes where some of them are the outer visible parts,
+    and some of them are inside the object. It’s easier to visualize 3D objects with
+    voxels, but it’s not the only use case. In deep learning problems, voxels can
+    be used as input for 3D convolutional neural networks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.2: Example of a voxel ](img/B18217_10_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.2: Example of a voxel'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mesh R-CNN uses both types of 3D data representations. Experiments have shown
+    that predicting voxels and then converting them into the mesh, and then refining
+    the mesh, helps the network learn better.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll look at the Mesh R-CNN architecture to see how the aforementioned
+    3D representations of data are created from image input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mesh R-CNN architecture
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '3D shape detection has captured the interest of many researchers. Many models
+    have been developed that have gotten good accuracy, but they mostly focused on
+    synthetic benchmarks and isolated objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.3: 3D object examples of the ShapeNet dataset ](img/B18217_10_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.3: 3D object examples of the ShapeNet dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the same time, 2D object detection and image segmentation problems have had
+    rapid advances as well. Many models and architectures solve this problem with
+    high accuracy and speed. There are solutions for localizing objects and detecting
+    the bounding boxes and masks. One of them is called Mask R-CNN, which is a model
+    for object detection and instance segmentation. This model is state-of-the-art
+    and has a lot of real-life applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, we see the world in 3D. The authors of the Mesh R-CNN paper decided
+    to combine these two approaches into a single solution: a model that detects the
+    object on a realistic image and outputs the 3D mesh instead of the mask. The new
+    model takes a state-of-the-art object detection model, which takes an RGB image
+    as input and outputs the class label, segmentation mask, and 3D mesh of the objects.
+    The authors have added a new branch to Mask R-CNN that is responsible for predicting
+    high-resolution triangle meshes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.5: Mesh R-CNN general structure ](img/B18217_10_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.5: Mesh R-CNN general structure'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The authors aimed to create one model that is end-to-end trainable. That is
+    why they took the state-of-the-art Mask R-CNN model and added a new branch for
+    mesh prediction. Before diving deeper into the mesh prediction part, let’s quickly
+    recap Mask R-CNN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.6: Mask R-CNN structure (Reference: https://arxiv.org/abs/1703.06870)
+    ](img/B18217_10_005Redraw.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.6: Mask R-CNN structure (Reference: https://arxiv.org/abs/1703.06870)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Mask R-CNN takes an RGB image as input and outputs bounding boxes, category
+    labels, and instance segmentation masks. First, the image passes through the backbone
+    network, which is typically based on ResNet – for example, ResNet-50-FPN. The
+    backbone network outputs the feature map, which is the input of the next network:
+    the **region proposal network** (**RPN**). This network outputs proposals. The
+    object classification and mask prediction branches then process the proposals
+    and output classes and masks, respectively.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This structure of Mask R-CNN is the same for Mesh R-CNN as well. However, in
+    the end, a mesh predictor was added. A mesh predictor is a new module that consists
+    of two branches: the voxel branch and the mesh refinement branch.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The voxel branch takes proposed and aligned features as input and outputs the
+    coarse voxel predictions. These are then given as input to the mesh refinement
+    branch, which outputs the final mesh. The losses of the voxel branch and mesh
+    refinement branch are added to the box and mask losses and the model is trained
+    end to end:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.7: Mesh R-CNN architecture ](img/B18217_10_006.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.7: Mesh R-CNN architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Graph convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Before we look at the structure of the mesh predictor, let’s understand what
+    a graph convolution is and how it works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Early variants of neural networks were adopted for structured Euclidean data.
+    However, in the real world, most data is non-Euclidian and has graph structures.
+    Recently, many variants of neural networks have started to adapt to graph data
+    as well, with one of them being convolutional networks, which are called **graph
+    convolutional networks** (**GCNs**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Meshes have this graph structure, which is why GCNs are applicable in 3D structure
+    prediction problems. The basic operation of a CNN is convolution, which is done
+    using filters. We use the sliding window technique for convolution, and the filters
+    include weights that the model should learn. GCNs use a similar technique for
+    convolution, though the main difference is that the number of nodes can vary,
+    and the nodes are unordered:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.8: Example of a convolution operation in Euclidian and graph data
+    (Source: https://arxiv.org/pdf/1901.00596.pdf) ](img/B18217_10_007Redraw.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.8: Example of a convolution operation in Euclidian and graph data
+    (Source: https://arxiv.org/pdf/1901.00596.pdf)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 10.9* shows an example of a convolutional layer. The input of the network
+    is the graph and adjacency matrix, which represents the edges between the nodes
+    in forward propagation. The convolution layer encapsulates information for each
+    node by aggregating information from its neighborhood. After that, nonlinear transformation
+    is applied. Later, the output of this network can be used in different tasks,
+    such as classification:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.9: Example of a convolutional neural network (Source: https://arxiv.org/pdf/1901.00596.pdf)
+    ](img/B18217_10_008Redraw.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.9: Example of a convolutional neural network (Source: https://arxiv.org/pdf/1901.00596.pdf)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Mesh predictor
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The mesh predictor module aims to detect the 3D structure of an object. It is
+    the logical continuation of the `RoIAlign` module, and it is responsible for predicting
+    and outputting the final mesh.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we get 3D meshes from real-life images, we can’t use fixed mesh templates
+    with fixed mesh topologies. That is why the mesh predictor consists of two branches.
+    The combination of the voxel branch and mesh refinement branch helps reduce the
+    issue with fixed topologies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The voxel branch is analogous to the mask branch from Mask R-CNN. It takes aligned
+    features from `ROIAlign` and outputs a G x G x G grid of voxel occupancy probabilities.
+    Next, the Cubify operation is used. It uses a threshold for binarizing voxel occupancy.
+    Each occupied voxel is replaced with a cuboid triangle mesh with 8 vertices, 18
+    edges, and 12 faces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The voxel loss is binary cross-entropy, which minimizes the predicted probabilities
+    of voxel occupancy with ground truth occupancies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The mesh refinement branch is a sequence of three different operations: vertex
+    alignment, graph convolution, and vertex refinement. Vertex alignment is similar
+    to ROI alignment; for each mesh vertex, it yields an image-aligned feature.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Graph convolution takes image-aligned features and propagates information along
+    mesh edges. Vertex refinement updates vertex positions. It aims to update vertex
+    geometry by keeping the topology fixed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.10: Mesh refinement branch ](img/B18217_10_009.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.10: Mesh refinement branch'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As shown in *Figure 10.10*, we can have multiple stages of refinement. Each
+    stage consists of vertex alignment, graph convolution, and vertex refinement operations.
+    In the end, we get a more accurate 3D mesh.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The final important part of the model is the mesh loss function. For this branch,
+    chamfer and normal losses are used. However, these techniques need sampled points
+    from predicted and ground-truth meshes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following mesh sampling method is used: given vertices and faces, the points
+    are uniformly sampled from a probability distribution of the surface of the mesh.
+    The probability of each face is proportional to its area.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using these sampling techniques, a point cloud from the ground truth, *Q*, and
+    a point cloud from the prediction, *P*, are sampled. Next, we calculate *Λ*PQ,
+    which is the set of pairs (*p*,*q*) where *q* is the nearest neighbor of *p* in
+    *Q*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Chamfer distance is calculated between *P* and *Q*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_10_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Next, the absolute normal distance is calculated:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_10_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *u*p and *u*q are the units normal to points *p* and *q*, respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, only these two losses degenerated meshes. This is why, for high-quality
+    mesh production, a shape regularizer was added, which was called edge loss:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_10_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The final mesh loss is the weighted average of three presented losses: chamfer
+    loss, normal loss, and edge loss.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In terms of training, two types of experiments were conducted. The first one
+    was to check the mesh predictor branch. Here, the ShapeNet dataset was used, which
+    includes 55 common categories of classes. This is widely used in benchmarking
+    for 3D shape prediction; however, it includes CAD models, which have separate
+    backgrounds. Due to this, the mesh predictor model reached state-of-the-art status.
+    Moreover, it solves issues regarding objects with holes that previous models couldn’t
+    detect well:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.11: Mesh predictor on the ShapeNet dataset ](img/B18217_10_010.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.11: Mesh predictor on the ShapeNet dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The third row represents the output of the mesh predictor. We can see that
+    it predicts the 3D shape and that it handles the topology and geometry of objects
+    very well:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.12: The output of the end-to-end Mesh R-CNN model ](img/B18217_10_011.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.12: The output of the end-to-end Mesh R-CNN model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next step is to perform experiments on real-life images. For this, the Pix3D
+    dataset was used, which includes 395 unique 3D models placed in 10,069 real-life
+    images. In this case, benchmark results are not available, because the authors
+    were the first to try this technique. However, we can check the output results
+    from the training in *Figure 10.11*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we have discussed the Mesh R-CNN architecture. Now, we can get hands-on
+    and use Mesh R-CNN to find objects in test images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Demo of Mesh R-CNN with PyTorch
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will use the Mesh R-CNN repository to run the demo. We will
+    try the model on our image and render the output `.obj` file to see how the model
+    predicts the 3D shape. Moreover, we will discuss the training process of the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Installing Mesh R-CNN is pretty straightforward. You need to install Detectron2
+    and PyTorch3D first, then build Mesh R-CNN. `Detectron2` is a library from Facebook
+    Research that provides state-of-the-art detection and segmentation models. It
+    includes Mask R-CNN as well, the model on which Mesh R-CNN was built. You can
+    install `detectron2` by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If this doesn’t work for you, check the website for alternative ways to install
+    it. Next, you need to install PyTorch3D, as described earlier in this book. When
+    both requirements are ready, you just need to build Mesh R-CNN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Demo
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The repository includes a `demo.py` file, which is used to demonstrate how
+    the end-to-end process of Mesh R-CNN works. The file is located in `meshrcnn/demo/demo.py`.
+    Let’s look at the code to understand how the demo is done. The file includes the
+    `VisualizationDemo` class, which consists of two main methods: `run_on_image`
+    and `visualize_prediction`. The method names speak for themselves: the first takes
+    an image as input and outputs predictions of the model, while the other visualizes
+    the detection of the mask, and then saves the final mesh and the image with predictions
+    and confidence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For the demo, you just need to run the preceding command from the terminal.
+    The command has the following parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`--config-file` takes the path to the config file, which can be found in the
+    `configs` directory'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`--input` takes the path to the input image'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`--output` takes the path to the directory where predictions should be saved'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`--onlyhighest`, if `True`, outputs only one mesh and mask that has the highest
+    confidence'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, let’s run and check the output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the demo, we will use the image of the apartment that we used in the previous
+    chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.13: The input image for the network ](img/B18217_10_012.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.13: The input image for the network'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We give the path to this image to `demo.py`. After prediction, we get the mask
+    visualization and mesh of the image. Since we used the `--onlyhighest` argument,
+    we only got one mask, which is the prediction of the sofa object. This has an
+    88.7% confidence score. The mask prediction is correct – it covers almost the
+    entire sofa:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.14: The output of the demo.py file ](img/B18217_10_013.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.14: The output of the demo.py file'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Besides the mask, we also got the mesh in the same directory, which is a `.obj`
+    file. Now, we need to render images from the 3D object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code is from the `chapt10/viz_demo_results.py` file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let’s import all the libraries used in the code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we are going to define arguments to run the code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We need input for `path_to_mesh` – that is, the output `.obj` file of `demo.py`.
+    We also need to specify the path where the rendered output should be saved, then
+    specify the distance from the camera, elevation angle, and rotation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we must load and initialize the mesh object. First, we must load the
+    `.obj` file with the `load_obj` function from `pytorch3d`. Then, we must make
+    the vertexes white. We will use the `Meshes` structure from `pytorch3d` to create
+    a mesh object:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The next step is to initialize the perspective camera. Then, we need to set
+    blend parameters that will be used to blend faces. `sigma` controls opacity, whereas
+    `gamma` controls the sharpness of edges:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we must define settings for rasterization and shading. We will set the
+    output image size to 256*256 and set `faces_per_pixel` to 100, which will blend
+    100 faces for one pixel. Then, we will use rasterization settings to create a
+    silhouette mesh renderer by composing a rasterizer and a shader:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We need to create one more `RasterizationSettings` object since we will use
+    the Phong renderer as well. It will only need to blend one face per pixel. Again,
+    the image output will be 256\. Then, we need to add a point light in front of
+    the object. Finally, we need to initialize the Phong renderer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we must create the position of the camera based on spheral angles. We
+    will use the `look_at_view_transform` function and add the `distance`, `elevation`,
+    and `azimuth` parameters that were mentioned previously. Lastly, we must get the
+    rendered output from the silhouette and Phong renderer by giving them the mesh
+    and camera position as input:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The last step is to visualize the results. We will use `matplotlib` to plot
+    both rendered images:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output of the preceding code will be a `.png` image that will be saved
+    in the `save_path` folder given in the arguments. For this parameter and the image
+    presented here, the rendered mesh will look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.16: Rendered 3D output of the model ](img/B18217_10_014.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.16: Rendered 3D output of the model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see from this angle, the mesh looks very similar to the sofa, not
+    counting some defects on not visible parts. You can play with camera position
+    and lighting to render an image of the object from another point of view.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The repository also provides an opportunity to run and reproduce the experiments
+    described in the Mesh R-CNN paper. It allows you to run both the Pix3D experiment
+    and the ShapeNet experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned earlier, the Pix3D data includes real-life images of different
+    IKEA furniture. This data was used to evaluate the whole Mesh R-NN from end to
+    end.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To download this data, you need to run the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The data contains two splits named S1 and S2 and the repository provides weights
+    for both splits. After downloading the data, you can reproduce the training by
+    running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You just need to be careful with the configs. The original model was distributed
+    and trained on 8 GB of GPU. If you don’t have that much capacity, it probably
+    won’t reach the same accuracy, so you need to tune your hyperparameters for better
+    accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can use your trained weights or you can simply run an evaluation on the
+    pre-trained models provided by the authors:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding command will evaluate the model for the specified checkpoint file.
+    You can find the checkpoints by going to the model’s GitHub repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, if you want to run the experiment on ShapeNet, you need to download the
+    data, which can be done by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will download the training, validation, and test sets. The authors have
+    also provided the preprocessing code for the ShapeNet dataset. Preprocessing will
+    reduce the loading time. The following command will output zipped data, which
+    is convenient for training in clusters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, to reproduce the experiment, you just need to run the `train_net_shapenet.py`
+    file with corresponding configs. Again, be careful when adjusting the training
+    process to your hardware capacity:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, you can always evaluate your model, or the checkpoints provided by
+    the authors, by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can compare your results with the results provided in the paper. The following
+    chart shows the scale-normalized protocol training results that the authors got:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.17: The results of evaluation on the ShapeNet dataset ](img/B18217_10_015.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 10.17: The results of evaluation on the ShapeNet dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The chart includes the category name, number of instances per category, chamfer,
+    normal losses, and the F1 scores.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we presented a new way of looking at the object detection task.
+    The 3D world requires solutions that work accordingly, and this is one of the
+    first approaches toward that goal. We learned how Mesh R-CNN works by understanding
+    the architecture and the structure of the model. We dove deeper into some interesting
+    operations and techniques that are used in the model, such as graph convolutional
+    networks, Cubify operations, the mesh predictor structure, and more. Finally,
+    we learned how this model can be used in practice to detect objects on the image
+    that the network has never seen before. We evaluated the results by rendering
+    the 3D object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Throughout this book, we have covered 3D deep learning concepts, from the basics
+    to more advanced solutions. First, we learned about the various 3D data types
+    and structures. Then, we delved into different types of models that solve different
+    types of problems such as mesh detection, view synthesis, and more. In addition,
+    we added PyTorch 3D to our computer vision toolbox. By completing this book, you
+    should be ready to tackle real-world problems related to 3D computer vision and
+    much more.
+  prefs: []
+  type: TYPE_NORMAL

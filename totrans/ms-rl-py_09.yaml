@@ -1,0 +1,2259 @@
+- en: '*Chapter 7*: Policy-Based Methods'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Value-based methods, which we covered in the previous chapter, achieve great
+    results in many environments with discrete control spaces. However, a lot of applications,
+    such as robotics, require continuous control. In this chapter, we'll go into another
+    important class of algorithms, called policy-based methods, which enable us to
+    solve continuous-control problems. In addition, these methods directly optimize
+    a policy network and hence stand on a stronger theoretical foundation. Finally,
+    policy-based methods are able to learn truly stochastic policies, which are needed
+    in partially observable environments and games, and which value-based methods
+    cannot learn. All in all, policy-based approaches complement value-based methods
+    in many ways. This chapter goes into the details of policy-based methods, so you
+    will gain a strong understanding of how they work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In particular, we''ll discuss the following topics in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why should we use policy-based methods?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Vanilla policy gradient
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Actor-critic methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Trust-region methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Off-policy methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A comparison of the policy-based methods in Lunar Lander
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to pick the right algorithm
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Open source implementations of policy-based methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's dive right in!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why should we use policy-based methods?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We'll start this chapter by first discussing why we need policy-based methods
+    as we have already introduced many value-based methods. Policy-based methods i)
+    are arguably more principled as they directly optimize based on the policy parameters,
+    ii) allow us to use continuous action spaces, and iii) are able to learn truly
+    random stochastic policies. Let's now go into the details of each of these points.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A more principled approach
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In Q-learning, a policy is obtained in an indirect manner by learning action
+    values, which are then used to determine the best action(s). But do we really
+    need to know the value of an action? Most of the time we don't, as they are only
+    proxies to get us to optimal policies. Policy-based methods learn function approximations
+    that directly give policies without such an intermediate step. This is arguably
+    a more principled approach because we can take gradient steps directly to optimize
+    the policy, not the proxy action-value representation. The latter is especially
+    inefficient when there are many actions with similar values, perhaps all uninteresting
+    to us because they are all bad actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to use continuous action spaces
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: All of the methods we mentioned in the previous section about value-based methods
+    worked with discrete action spaces. On the other hand, there are many use cases
+    for which we need to use continuous action spaces, such as robotics, where the
+    discretization of actions results in poor agent behavior. But what is the issue
+    with using continuous action spaces with value-based methods? Neural networks
+    can certainly learn value representations for continuous actions – after all,
+    we don't have such a restriction on states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, remember how we used maximization over actions while calculating the
+    target values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_001.png) and while obtaining the best action to act in the
+    environment using ![](img/Formula_07_002.png). It is not very straightforward
+    to do these maximizations over continuous action spaces, although we can make
+    it work using approaches such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: During maximization, sample discrete actions from the continuous action space
+    and use the action with the maximum value. Alternatively, fit a function to the
+    values of the sampled actions and do the maximization over that function, which
+    is called the **cross-entropy method (CEM)**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Instead of using a neural network, use a function approximator such as a function
+    quadratic in actions, the maximum of which can be analytically calculated. An
+    example of this is **Normalized Advantage Functions (NAF)** (*Gu et al, 2016*
+    **).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Learn a separate function approximation to obtain the maximum, such as in the
+    **Deep Deterministic Policy Gradient (DDPG)** algorithm.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Now, the downside of CEM and NAF is that they are less powerful compared to
+    a neural network that directly represents a continuous-action policy. DDPG, on
+    the other hand, is still a competitive alternative, which we will cover later
+    in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most policy-based methods work with both discrete and continuous action spaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ability to learn truly random stochastic policies
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Throughout Q-learning, we used soft-policies such as ![](img/Formula_05_272.png)-greedy
+    to enable the agent to explore the environment during training. Although this
+    approach works pretty well in practice, and it can be made more sophisticated
+    by annealing the ![](img/Formula_07_004.png), it is still not a learned parameter.
+    Policy-based methods can learn random policies that lead to a more principled
+    exploration during training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Perhaps a bigger issue is that we may need to learn random policies not just
+    for training but also for inference. There are two reasons why we might want to
+    do this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In **partially observable environments** (**POMDPs**), we may have what are
+    called **aliased states**, which emit the same observation although the states
+    themselves are different, for which the optimal actions might be different. Consider
+    the following example:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 7.1 – Robot in a partially observable environment'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.1 – Robot in a partially observable environment
+  prefs: []
+  type: TYPE_NORMAL
+- en: The agent only observes the shapes of the states it is in but cannot tell what
+    the state is. The agent is randomly initialized in a state other than 3, and its
+    goal is to reach the coins in state 3 in the minimum number of steps by going
+    left or right. The optimal action when the agent observes a hexagon is a random
+    one because a deterministic policy (say, to always go left) would make the agent
+    get stuck either between 1 and 2 (if left is always chosen) or 4 and 5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In game settings with adversarial agents, there could be cases where the only
+    optimal policy is a random one. The canonical example for this is rock-paper-scissors,
+    where the optimal policy is to select an action uniformly at random. Any other
+    policy could be exploited by the opponents in the environment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Value-based methods don't have the ability to learn such random policies for
+    inference whereas policy-based methods allow that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the environment is fully observable, and it is not a game setting, there
+    is always a deterministic policy that is optimal (although there could be more
+    than one optimal policy and some of them could be random). In such cases, we don't
+    need a random policy during inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this introduction, let's dive into the most popular policy-based methods.
+    Next, we will give an overview of the vanilla policy gradient to set the stage
+    for more complex algorithms that we will cover later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The vanilla policy gradient
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We''ll start by discussing the policy-based methods with the most fundamental
+    algorithm: a vanilla policy gradient approach. Although such an algorithm is rarely
+    useful in realistic problem settings, it is very important to understand it to
+    build a strong intuition and a theoretical background for the more complex algorithms
+    we will cover later.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The objective in policy gradient methods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In value-based methods, we focused on finding good estimates for action values,
+    with which we then obtained policies. Policy gradient methods, on the other hand,
+    directly focus on optimizing the policy with respect to the reinforcement learning
+    objective – although, we will still make use of value estimates. If you don''t
+    remember what this objective was, it is the expected discounted return:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This is a slightly more rigorous way of writing this objective compared to
+    how we wrote it before. Let''s unpack what we have here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The objective is denoted by ![](img/Formula_07_006.png) and it is a function
+    of the policy at hand, ![](img/Formula_07_007.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The policy itself is parametrized by ![](img/Formula_07_008.png), which we are
+    trying to determine.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The trajectory the agent observes, ![](img/Formula_07_009.png), is a random
+    one, with a probability distribution ![](img/Formula_07_010.png). It is, as you
+    would expect, a function of the policy, hence a function of ![](img/Formula_07_011.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_012.png) is a function (unknown to the agent) that gives
+    a reward based on the environment dynamics given the state ![](img/Formula_07_013.png)
+    and the action ![](img/Formula_07_014.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now, we have an objective function ![](img/Formula_07_015.png) that we want
+    to maximize, which depends on parameter ![](img/Formula_07_016.png), which we
+    can control. A natural thing to do is to take a gradient step in the ascending
+    direction:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_017.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_018.png) is some step size. That's the main idea behind
+    policy gradient methods, which, again, directly optimize the policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, the million-dollar question (okay, maybe not that much) is how to figure
+    out the gradient term. Let's look into it next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figuring out the gradient
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Understanding how the gradient of the objective function with respect to the
+    policy parameters, ![](img/Formula_07_019.png), is obtained is important to get
+    the idea behind different variants of policy gradient methods. Let's derive what
+    we use in the vanilla policy gradient step by step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A different way of expressing the objective function
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'First, let''s express the objective function slightly differently:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_020.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](img/Formula_07_021.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, we just expressed the trajectory and the reward that corresponds to it
+    as a whole rather than individual state-action pairs, ![](img/Formula_07_022.png).
+    Then, we used the definition of an expectation to write it as an integral (with
+    a slight abuse of notation since we use the same ![](img/Formula_07_023.png) both
+    to denote the random variable and a realization of it, but it should be apparent
+    from the context). Keep in mind that the probability of observing a particular
+    trajectory ![](img/Formula_07_024.png) is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_025.jpg)![](img/Formula_07_026.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is simply a chain of products for probabilities of observing a state, taking
+    a particular action with the policy given the state and observing the next state.
+    Here, ![](img/Formula_07_027.png) denotes the environment transition probabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we use this to find a convenient formula for the gradient.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Coming up with a convenient expression for the gradient
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Now let''s go back to the objective function. We can write the gradient of
+    it as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_028.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](img/Formula_07_029.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now we have the term ![](img/Formula_07_030.png) we need to deal with. We will
+    do a simple trick to get rid of it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_031.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'which just follows from the definition of ![](img/Formula_07_032.png). Putting
+    it back to the integral, we end up with an expectation for the gradient of the
+    objective (be careful – not for the objective itself):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_033.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](img/Formula_07_034.png) ![](img/Formula_07_035.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now, this will turn out to be a very convenient formula for the gradient. Taking
+    a step back, we now have an expectation for the gradient. Of course, we cannot
+    fully evaluate it because we don't know ![](img/Formula_07_036.png), but we can
+    take samples from the environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: Whenever you see an expectation in RL formulations, you can reasonably expect
+    that we will use samples from the environment to evaluate it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This formulation forms the essence of the policy gradient methods. Next, let's
+    see how we can conveniently do it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obtaining the gradient
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Before going into estimating the gradient from samples, we need to get rid
+    of one more term, ![](img/Formula_07_037.png), because we don''t really know what
+    that is. It turns out that we can do so by writing the explicit probability product
+    for the trajectory:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_038.jpg)![](img/Formula_07_039.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When we take the gradient with respect to ![](img/Formula_06_096.png), the
+    first and last terms in the sum drop since they don''t depend on ![](img/Formula_07_041.png).
+    With that, we can write this gradient in terms of what we know, namely, ![](img/Formula_07_042.png),
+    the policy that we possess:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_043.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can then estimate the gradient from a batch of ![](img/Formula_07_044.png)
+    trajectories as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_045.jpg)![](img/Formula_07_046.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This gradient aims to increase the likelihood of trajectories that have high
+    total rewards, and reduce the ones (or increase them less) with low total rewards.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This gives us all the ingredients to put together a policy gradient algorithm,
+    namely REINFORCE, which we turn to next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: REINFORCE
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The REINFORCE algorithm, one of the earliest policy gradient methods, uses the
+    ingredients we presented above. We will need a lot of improvements on top of this
+    to come up with methods with which we can attack realistic problems. On the other
+    hand, understanding REINFORCE is useful to formalize these ideas in the context
+    of an algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'REINFORCE works as follows in finite horizon problems with the discount factors
+    ignored:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Initialize a policy ![](img/Formula_07_047.png):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*while some stopping criterion is not met do:*'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Collect ![](img/Formula_07_048.png) trajectories ![](img/Formula_07_049.png)
+    from the environment using ![](img/Formula_07_050.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calculate
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_051.png).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Update ![](img/Formula_07_052.png):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*end while*'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The REINFORCE algorithm simply suggests sampling trajectories from the environment
+    using the policy on hand, then estimating the gradient using these samples and
+    taking a gradient step to update the policy parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The fact that the sampled trajectories are used to obtain a gradient estimate
+    for the policy parameters at hand makes policy gradient methods **on-policy**.
+    Therefore, we cannot use samples obtained under a different policy to improve
+    the existing policy, unlike in value-based methods. Having said that, we will
+    have a section at the end of the chapter to discuss several off-policy approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The REINFORCE algorithm requires complete trajectories for network updates,
+    therefore it is a Monte Carlo method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's discuss why we need improvements on top of REINFORCE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem with REINFORCE and all policy gradient methods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The most important issue with the policy gradient algorithms, in general, is
+    the high variance in the ![](img/Formula_07_053.png) estimates. If you think about
+    it, there are many factors contributing to this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Randomness in the environment** could lead to many different trajectories
+    for the agent even with the same policy, whose gradients are likely to vary significantly.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The length of sample trajectories** could vary significantly, resulting in
+    very different sums for the log and reward terms.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Environments with sparse rewards** could be especially problematic (by the
+    definition of sparse reward).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The size of** ![](img/Formula_07_054.png) is usually kept at a few thousand
+    to make the learning practical, but it may not be enough to capture the full distribution
+    of trajectories.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a result, the gradient estimates we obtain from samples could have a high
+    variance, which is likely to destabilize the learning. Reducing this variance
+    is an important goal to make learning feasible, and we employ various tricks towards
+    this end. Next, we cover the first of those tricks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Replacing the reward sum with reward-to-go
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s first rearrange the terms in the gradient estimation as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_055.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This original form implies that each of the ![](img/Formula_07_056.png) terms
+    are weighed by the total reward obtained throughout the entire trajectory. Intuition,
+    on the other hand, tells us that we should be weighing the log term only by the
+    sum of rewards following that state-action pair as they cannot affect what came
+    before it (causality). More formally, we can write the gradient estimate as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_057.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: It turns out that this still gives us an unbiased estimate of the gradient.
+    The variance also reduces as the sums get smaller as we add fewer reward terms,
+    and as a result, the weights that multiply the log terms get smaller. The ![](img/Formula_07_058.png)
+    is called the reward-to-go at time ![](img/Formula_07_059.png). Notice how this
+    is actually an estimate for ![](img/Formula_07_060.png). We will make use of it
+    later in the actor-critic algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This improvement over the REINFORCE algorithm is a form of a *vanilla policy
+    gradient* method. Next, we'll show how to use the RLlib vanilla policy gradient
+    implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vanilla policy gradient using RLlib
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: RLlib allows us to use the vanilla policy gradient with multiple rollout workers
+    (actors) to parallelize the sample collection. You will notice that, unlike in
+    value-based methods, the sample collection will be synchronized with network weight
+    updates as the vanilla policy gradient algorithm is an on-policy method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since policy gradient methods are on-policy, we need to make sure that the samples
+    we use to update the neural network parameters (weights) come from the existing
+    policy suggested by the network. This dictates synchronizing the policy in use
+    across the rollout workers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The overall architecture of the parallelized vanilla policy gradient is therefore
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.2 – Vanilla policy gradient architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.2 – Vanilla policy gradient architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, it is worth noting that RLlib implementation transmits samples
+    as ![](img/Formula_07_061.png) from actors to the learner and concatenates them
+    in the learner to restore the full trajectories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the vanilla policy gradient in RLlib is pretty simple and very similar
+    to how we used value-based methods in the previous chapter. Let's train a model
+    for the OpenAI Lunar Lander environment with continuous action space. Follow along!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, to avoid running into issues with the Gym and Box2D packages, install
+    Gym using the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then go to implementing the Python code. Import the packages we need for argument
+    parsing, `ray` and `tune`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Import the vanilla **policy** **gradient** (**PG**) trainer class and the corresponding
+    config dictionary:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that this part will be different when we want to use different algorithms.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Create a main function, which receives the Gym environment name as an argument:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Modify the config dictionary with the number of GPUs we want to use for training
+    and the number of CPUs we want to use for sample collection and evaluation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The `print` statement is for you to see what other configurations are available
+    to you if you want to change it. You can modify things like the learning rate,
+    for example. For now, we are not going into such hyperparameter optimization details.
+    And for the vanilla policy gradient, the number of hyperparameters is considerably
+    less than a more sophisticated algorithm would involve. One final note: the reason
+    we set a separate set of evaluation workers is to make the training consistent
+    with the off-policy algorithms we will introduce later. Normally, we don''t need
+    to do that since on-policy methods follow the same policy during training and
+    evaluation.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Implement the section to initialize `ray` and train the agent for a given number
+    of iterations:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Save this code in a Python file, say, `pg_agent.py`. You can then train the
+    agent as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Monitor the training on TensorBoard:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The training progress will look like the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 7.3 – Training progress for a vanilla policy gradient agent in Gym''s
+    continuous Lunar Lander'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.3 – Training progress for a vanilla policy gradient agent in Gym's
+    continuous Lunar Lander
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'That''s it about the vanilla policy gradient method! Not a bad performance
+    for an algorithm without many of the improvements that we will introduce in the
+    upcoming sections. Feel free to try this algorithm with the other Gym environments.
+    Hint: the Pendulum environment could give you some headaches.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To save the best performing models while training the model with Tune, you
+    will need to write a simple wrapper training function, which is described here:
+    [https://github.com/ray-project/ray/issues/7983](https://github.com/ray-project/ray/issues/7983).
+    You save the model whenever you observe an improvement in the evaluation score.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we''ll cover a more powerful class of algorithms: actor-critic methods.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Actor-critic methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Actor-critic methods propose further remedies to the high variance problem in
+    the policy gradient algorithm. Just like REINFORCE and other policy gradient methods,
+    actor-critic algorithms have been around for decades now. Combining this approach
+    with deep reinforcement learning, however, has enabled them to solve more realistic
+    RL problems. We'll start this section by presenting the ideas behind the actor-critic
+    approach, and later, we'll define them in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reducing the variance in policy-based methods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Remember that, earlier, to reduce the variance in gradient estimates, we replaced
+    the reward sum obtained in a trajectory with a reward-to-go term. Although a step
+    in the right direction, it is usually not enough. We'll now introduce two more
+    methods to further reduce this variance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Estimating the reward-to-go
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The reward-to-go term, ![](img/Formula_07_062.png), obtained in a trajectory
+    is an estimate of the action-value ![](img/Formula_07_063.png) under the existing
+    policy ![](img/Formula_07_064.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice the difference between the action-value estimate we use here, ![](img/Formula_07_065.png),
+    and what the Q-learning methods estimate, ![](img/Formula_07_066.png). The former
+    estimates the action-value under the existing behavior policy ![](img/Formula_05_046.png),
+    whereas the latter estimates the action-value under the target policy that is
+    ![](img/Formula_07_068.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, every trajectory that visits a particular ![](img/Formula_07_069.png) pair
+    is likely to yield a different reward-to-go estimate. This adds to the variance
+    in gradient estimates. What if we could use a single estimate for a given ![](img/Formula_07_070.png)
+    in a policy update cycle? That would eliminate the variance caused by those noisy
+    reward-to-go (action-value) estimates. But how do we obtain such an estimate?
+    The answer is to train a neural network that will generate that estimate for us.
+    We then train this network using the sampled reward-to-go values. When we query
+    it to obtain an estimate for a specific state-action pair, it gives us a single
+    number rather than many different estimates, which, in turn, reduces the variance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In essence, what such a network does is it evaluates the policy, which is why
+    we call it the **critic**, while the policy network tells the agent how to **act**
+    in the environment – hence the name **actor-critic**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: We don't train the critic network from scratch after each policy update. Instead,
+    just like the policy network, we apply gradient updates with new sampled data.
+    As a result, the critic is biased towards the old policies. However, we are willing
+    to make this trade-off to reduce the variance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Last but not least, we use baselines to reduce the variance, which we turn to
+    next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a baseline
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The intuition behind the policy gradient methods is that we would like to adjust
+    the parameters of the policy so that actions that result in high-reward trajectories
+    become more likely, and ones that led to low-reward trajectories become less likely:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_071.jpg)![](img/Formula_07_072.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'One shortcoming in this formulation is that the direction and the magnitude
+    of the gradient steps are heavily determined by the total reward in the trajectory,
+    ![](img/Formula_07_073.png). Consider the following two examples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A maze environment that the agent tries to exit in the minimum time. The reward
+    is the negative of the time elapsed until the exit is reached.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The same maze environment but the reward is $1M, minus a dollar penalty for
+    each second that passes until the exit is reached.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Mathematically, these two are the same optimization problems. Now, think about
+    what gradient steps a particular trajectory obtained under some policy ![](img/Formula_07_074.png)
+    would lead to under these two different reward structures. The first reward structure
+    would lead to a negative gradient step for all trajectories (although some smaller
+    than others) regardless of the quality of the policy, and the second reward structure
+    would (almost certainly) lead to a positive gradient step. Moreover, under the
+    latter, the impact of the elapsed seconds would be negligible since the fixed
+    reward is too big, making the learning for the policy network very difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ideally, we want to measure the **relative** reward performance observed in
+    a particular trajectory as a result of the sequence of actions taken in it compared
+    to the other trajectories. This way, we can take positive gradient steps in the
+    direction of the parameters that result in high-reward trajectories and take negative
+    gradient steps for the others. To measure the relative performance, a simple trick
+    is to subtract a baseline ![](img/Formula_07_075.png) from the reward sum:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_076.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The most obvious choice for the baseline is the average trajectory reward,
+    sampled as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_077.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: It turns out that subtracting such a term still gives an unbiased estimate for
+    the gradient, but with less variance, and the difference could be dramatic in
+    some settings. So, using baselines is almost always good.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When combined with using reward-to-go estimates, a natural choice for the baseline
+    is the state value, which results in the following gradient estimate:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_078.jpg)![](img/Formula_07_079.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_080.png) is the **advantage** term, which measures
+    how much the agent is better off by taking action ![](img/Formula_07_081.png)
+    in state ![](img/Formula_07_082.png) as opposed to following the existing policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having a critic estimating the advantage, directly or indirectly, gives rise
+    to the **advantage actor-critic** algorithms, which we'll cover next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantage Actor-Critic – A2C
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: What we have covered so far is almost sufficient to put together what is known
+    as the A2C algorithm. Let's discuss in a bit more detail how to estimate the advantage
+    term before going into the full algorithm and the RLlib implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to estimate the advantage
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are different ways of estimating the advantage using a critic. The critic
+    network could do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Directly estimate ![](img/Formula_07_083.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Estimate ![](img/Formula_07_084.png), from which we can recover ![](img/Formula_07_085.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Note that both of these approaches involve maintaining a network that gives
+    outputs that depend on both the state and the action. However, we can get away
+    with a simpler structure. Remember the definition of action-value:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_086.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'When we sample a transition of a single step, we already observe the reward
+    and the next state and obtain a tuple ![](img/Formula_07_087.png). We can therefore
+    obtain the estimate ![](img/Formula_07_088.png) as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_089.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_090.png) is some estimate of the true state value ![](img/Formula_05_021.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice the nuances in the notation. ![](img/Formula_07_092.png) and ![](img/Formula_07_093.png)
+    represent the true values where ![](img/Formula_07_094.png) and ![](img/Formula_07_095.png)
+    are their estimates. ![](img/Formula_07_096.png), and ![](img/Formula_07_097.png)
+    are random variables, whereas ![](img/Formula_07_098.png), and ![](img/Formula_07_099.png)
+    are their realizations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can finally estimate the advantage as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_100.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This allows us to use a neural network that simply estimates the state values
+    to obtain an advantage estimate. To train this network, we can do bootstrapping
+    to obtain the target values for state values. So, using a sampled tuple ![](img/Formula_07_101.png),
+    the target for ![](img/Formula_07_102.png) is calculated as ![](img/Formula_07_103.png)
+    (the same as the ![](img/Formula_07_104.png) estimate because we happen to obtain
+    the actions from the existing stochastic policy).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before presenting the full A2C algorithm, let's take a look at the implementation
+    architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A2C architecture
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A2C suggests a synchronized sample collection between different agents, that
+    is, all of the rollout workers use the same policy network at a given time to
+    collect samples. Those samples are then passed to the learner to update the actor
+    (policy network) and the critic (value network). In this sense, the architecture
+    is pretty much the same with the vanilla policy gradient, for which we provided
+    the schema above. Except, this time, we have a critic network. Then, the question
+    is how to bring the critic network in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The design of the actor and critic can range from completely isolated neural
+    networks, as shown in the following figure on the left, to a completely shared
+    design (except the last layers):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.4 – Isolated versus shared neural networks'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.4 – Isolated versus shared neural networks
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advantage of the isolated design is that it is usually more stable. This
+    is because the variance and the magnitude of the target values of the actor and
+    critic targets could be very different. Having them share the neural network requires
+    careful tuning of hyperparameters such as the learning rate, otherwise, the learning
+    would be unstable. On the other hand, using a shared architecture has the advantage
+    of cross-learning and using common feature extraction capabilities. This could
+    be especially handy when feature extraction is a major part of training, such
+    as when observations are images. Of course, any architecture in between is also
+    possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, it is time to present the A2C algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The A2C algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s put all these ideas together and form the A2C algorithm:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize the actor and critic network(s), ![](img/Formula_07_105.png) and
+    ![](img/Formula_07_106.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*while some stopping criterion is not met do:*'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Collect a batch of ![](img/Formula_07_107.png) samples ![](img/Formula_07_108.png)
+    from the (parallel) environment(s) using ![](img/Formula_07_109.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Obtain the state-value targets ![](img/Formula_07_110.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use gradient descent to update ![](img/Formula_07_111.png) with respect to a
+    loss function ![](img/Formula_07_112.png), such as squared loss.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Obtain the advantage value estimates:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_113.png).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Calculate
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_114.png).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Update
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_115.png).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Broadcast the new ![](img/Formula_07_116.png) to the rollout workers.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*end while*'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Note that we could also use multi-step learning rather than using single-step
+    estimation for advantage estimates and state value targets. We will present a
+    generalized version of multi-step learning at the end of the actor-critic section.
+    But now, let's see how you can use RLlib's A2C algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A2C using RLlib
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To train an RL agent in RLlib using A2C is very similar to how we did it for
+    the vanilla policy gradient. Therefore, rather than presenting the full flow again,
+    we''ll just describe what the difference is. The main difference is importing
+    the A2C class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can then train the agent the same way as the vanilla policy gradient agent.
+    Instead of presenting the results from our training here, we will compare all
+    the algorithms at the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we present another famous actor-critic algorithm: A3C.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Asynchronous Advantage Actor-Critic: A3C'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A3C is pretty much the same as A2C in terms of the loss functions and how it
+    uses the critic. In fact, A3C is a predecessor of A2C, although we presented them
+    here in reverse order for pedagogical reasons. The differences between A2C and
+    A3C are architectural and how the gradients are calculated and applied. Next,
+    let's discuss the A3C architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A3C architecture
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A3C architecture differs from that of A2C as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The asynchrony in A3C is due to the fact the rollout workers pull the ![](img/Formula_07_117.png)
+    parameters from the main policy network at their own pace, not in sync with other
+    workers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a result, the workers are likely to be using different policies at the same
+    time.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To avoid calculating gradients at the central learner using samples that are
+    likely to have been obtained under different policies, the gradients are calculated
+    by the rollout workers with respect to the policy parameters in use at that time
+    in the worker.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What is passed to the learner is therefore not the samples but the gradients.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Those gradients are applied to the main policy network, again, asynchronously
+    as they arrive.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following diagram depicts the A3C architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.5 – A3C architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.5 – A3C architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two important downsides to A3C:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The gradients that update the main policy network are likely to be obsolete
+    and obtained under a different ![](img/Formula_07_011.png) than what is in the
+    main policy network. This is theoretically problematic as those are not the true
+    gradients for the policy network parameters.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Passing around gradients, which could be a large vector of numbers, especially
+    when the neural network is big, could create a significant communication overhead
+    compared to passing only samples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The main motivation behind A3C despite these disadvantages is obtaining decorrelated
+    samples and gradient updates, similar to the role played by experience replay
+    in deep Q-learning. On the other hand, in many experiments, people found A2C to
+    be as good as A3C, and sometimes even better. As a result, A3C is not very commonly
+    used. Still, we have presented it so you understand how these algorithms have
+    evolved and what are the key differences between them. Let's also look into how
+    you can use RLlib's A3C module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A3C using RLlib
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'RLlib''s A3C algorithm can simply be accessed by importing the corresponding
+    trainer class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Then, you can train an agent following the code we provided earlier in the section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we'll close the discussion in this section with a generalization of
+    multi-step RL in the context of policy gradient methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generalized advantage estimators
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We previously mentioned that you can use multi-step estimates for the advantage
+    function. Namely, instead of using only a single step transition as in the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_119.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'using ![](img/Formula_05_231.png)-step transitions could yield a more accurate
+    estimate of the advantage function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_121.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Of course, when ![](img/Formula_07_122.png), we are simply back to using sampled
+    reward-to-go, which we had abandoned to reduce the variance in the advantage estimation.
+    On the other hand, ![](img/Formula_07_123.png) is likely to introduce too much
+    bias towards the existing ![](img/Formula_07_124.png) estimates. Therefore, the
+    hyper-parameter ![](img/Formula_07_125.png) is a way to control the bias-variance
+    trade-off while estimating the advantage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A natural question is then whether we have to use a "single" ![](img/Formula_05_193.png)
+    in the advantage estimation. For example, we can calculate advantage estimates
+    using ![](img/Formula_07_127.png), ![](img/Formula_07_128.png), and ![](img/Formula_07_129.png),
+    and take their average. What about taking a weighted average (convex combination)
+    of all possible ![](img/Formula_07_130.png), up to infinity? That is exactly what
+    the **generalized advantage estimator (GAE)** does. More specifically, it weighs
+    the ![](img/Formula_07_131.png) terms in an exponentially decaying fashion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_132.jpg)![](img/Formula_07_133.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_134.png) and ![](img/Formula_07_135.png) is a hyperparameter.
+    Therefore, GAE gives us another knob to control the bias-variance trade-off. Specifically,
+    ![](img/Formula_07_136.png) results in ![](img/Formula_07_137.png), which has
+    high bias; and ![](img/Formula_07_138.png) results in ![](img/Formula_07_139.png),
+    which is equivalent to using the sampled reward-to-to minus the baseline, which
+    has high bias. Any value of ![](img/Formula_07_140.png) is a compromise between
+    the two.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's close this section by noting that you can turn on or off the GAE in RLlib's
+    actor-critic implementations using the config flag `"use_gae"` along with `"lambda"`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our discussion on actor-critic functions. Next, we'll look into
+    a recent approach called **trust-region methods**, which have resulted in significant
+    improvements over A2C and A3C.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Trust-region methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the important developments in the world of policy-based methods has been
+    the evolution of trust-region methods. In particular, TRPO and PPO algorithms
+    have led to a significant improvement over algorithms such as A2C and A3C. For
+    example, the famous Dota 2 AI agent, which reached expert-level performance in
+    competitions, was trained using PPO and GAE. In this section, we'll go into the
+    details of those algorithms to help you gain a solid understanding of how they
+    work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prof. Sergey Levine, who co-authored the TRPO and PPO papers, goes deep into
+    the details of the math behind these methods in his online lecture more than we
+    do in this section. That lecture is available at [https://youtu.be/uR1Ubd2hAlE](https://youtu.be/uR1Ubd2hAlE)
+    and I highly recommend you watch it to improve your theoretical understanding
+    of these algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Without further ado, let's dive in!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Policy gradient as policy iteration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the earlier chapters, we described how most of the RL algorithms can be
+    thought of as a form of policy iteration, alternating between policy evaluation
+    and improvement. You can think of policy gradient methods in the same context:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Sample collection and advantage estimation: policy evaluation'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Gradient step: policy improvement'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now we will use a policy iteration point of view to set the stage for the upcoming
+    algorithms. First, let's look at how we can quantify the improvement in the RL
+    objective.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Quantifying the improvement
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In general, a policy improvement step aims to improve the policy on hand as
+    much as possible. More formally, the objective is the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_141.jpg)![](img/Formula_07_142.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'where ![](img/Formula_06_036.png) is the existing policy. Using the definition
+    of ![](img/Formula_07_144.png) and some algebra, we can show the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_145.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let''s unpack what this equation tells us:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The improvement obtained by a new policy ![](img/Formula_07_146.png) over an
+    existing policy ![](img/Formula_06_154.png) can be quantified using the advantage
+    function under the existing policy.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The expectation operation we need for this calculation is under the new policy
+    ![](img/Formula_07_148.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Remember that it is almost never practical to fully calculate such expectations
+    or advantage functions. We always estimate them using the policy on hand, ![](img/Formula_07_149.png)
+    in this case, and interacting with the environment. Now, the former is a happy
+    point since we know how to estimate advantages using samples – the previous section
+    was all about this. We also know that we can collect samples to estimate expectations,
+    which is what we have in ![](img/Formula_07_150.png). The problem here, though,
+    is that the expectation is with respect to a new policy ![](img/Formula_07_151.png).
+    We don't know what ![](img/Formula_07_152.png) is, in fact, that is what we are
+    trying to find out. So we cannot collect samples from the environment using ![](img/Formula_07_153.png).
+    Everything from here on will be about how to get around this problem so that we
+    can iteratively improve the policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting rid of ![](img/Formula_07_154.png)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s expand this expectation and write it down in terms of the marginal probabilities
+    that compose ![](img/Formula_07_155.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_156.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'which uses the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_157.jpg)![](img/Formula_07_158.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can get rid of the ![](img/Formula_07_159.png) in the inner expectation
+    using importance sampling:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_160.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Now, getting rid of the ![](img/Formula_07_153.png) in the outer expectation
+    is the challenging part. *The key idea is to stay "sufficiently close" to the
+    existing policy during the optimization, that is,* ![](img/Formula_07_162.png).
+    In that case, it can be shown that ![](img/Formula_07_163.png), and we can replace
+    the former with the latter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the key questions here is how to measure the "closeness" of the policies
+    so that we can make sure the preceding approximation is valid. A popular choice
+    for such measurements, due to its nice mathematical properties, is the **Kullback-Leibler**
+    (**KL**) divergence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you are not too familiar with the KL divergence or if you need to refresh
+    your mind, a nice explanation of it is available here: [https://youtu.be/2PZxw4FzDU?t=226](https://youtu.be/2PZxw4FzDU?t=226).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using the approximation due to the closeness of the policies and bounding this
+    closeness results in the following optimization function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_164.jpg)![](img/Formula_07_165.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_05_272.png) is some bound.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's see how we can use other approximations to further simplify this
+    optimization problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Taylor series expansion in the optimization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now that we have a function ![](img/Formula_07_167.png) and we know that we
+    evaluate it in close proximity to another point ![](img/Formula_07_168.png), this
+    should ring bells to use Taylor series expansion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you need to refresh your mind on Taylor series, or deepen your intuition,
+    a great resource is this video: [https://youtu.be/3d6DsjIBzJ4](https://youtu.be/3d6DsjIBzJ4).
+    I also recommend subscribing to the channel – 3Blue1Brown is one of the best resources
+    to visually internalize many math concepts.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The first order expansion at ![](img/Formula_07_169.png) is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_170.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice that the first term does not depend on ![](img/Formula_07_171.png), so
+    we can get rid of it in the optimization. Also note that the gradient term is
+    with respect to ![](img/Formula_07_172.png) rather than ![](img/Formula_07_173.png),
+    which should come in handy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Our goal then becomes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_174.jpg)![](img/Formula_07_175.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Finally, let's look into how we can calculate the gradient term.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Calculating ![](img/Formula_07_176.png)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'First, let''s look at what ![](img/Formula_07_177.png) looks like. Remember
+    that we can write the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_178.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'because, by definition, ![](img/Formula_07_179.png). Then we can write:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_180.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, remember that we are looking for ![](img/Formula_07_181.png), not ![](img/Formula_07_182.png).
+    Replacing all ![](img/Formula_07_183.png) with ![](img/Formula_07_184.png) results
+    in the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_185.jpg)![](img/Formula_07_186.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We have arrived at a result that should look familiar! The ![](img/Formula_07_187.png)
+    is exactly what goes into the gradient estimate ![](img/Formula_07_188.png) in
+    advantage actor-critic. The objective of maximizing the policy improvement between
+    policy updates has led us to the same objective with a regular gradient ascent
+    approach. Of course, we should not forget the constraint. So, the optimization
+    problem we aim to solve has become the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_189.jpg)![](img/Formula_07_190.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This is a key result! Let''s unpack what we have obtained so far:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regular actor-critic with gradient ascent and trust-region methods have the
+    same objective of moving in the direction of the gradient.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The trust-region approach aims to stay close to the existing policy by limiting
+    the KL divergence.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Regular gradient ascent, on the other hand, moves in the direction of the gradient
+    by a particular step size, as in ![](img/Formula_07_191.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Regular gradient ascent, therefore, aims to keep ![](img/Formula_07_192.png)
+    closer to ![](img/Formula_07_193.png), as opposed to keeping ![](img/Formula_07_194.png)
+    close to ![](img/Formula_07_195.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using a single step size for all dimensions in ![](img/Formula_07_196.png),
+    as regular gradient ascent does, may result in very slow convergence, or not converging
+    at all, since some dimensions in the parameter vector could have a much greater
+    impact on the policy (change) than others.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Tip
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The key objective in the trust-region methods is to stay sufficiently close
+    to the existing policy ![](img/Formula_07_197.png) while updating the policy to
+    some ![](img/Formula_07_198.png). This is different than simply aiming to keep
+    ![](img/Formula_07_199.png) closer to ![](img/Formula_07_200.png), which is what
+    regular gradient ascent does.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: So, we know that ![](img/Formula_07_201.png) and ![](img/Formula_07_202.png)
+    should be close, but have not discussed how to achieve this. In fact, two different
+    algorithms, TRPO and PPO will handle this requirement differently. Next, we turn
+    to details of the TRPO algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TRPO – Trust Region Policy Optimization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: TRPO is an important algorithm that precedes PPO. Let's understand in this section
+    how it handles the optimization problem we arrived at above and what the challenges
+    are with the TRPO solution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Handling the KL divergence
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The TRPO algorithm approximates the KL divergence constraint with its second-order
+    Taylor expansion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_203.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'where ![](img/Formula_07_204.png) is called the Fisher information matrix and
+    defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_205.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where the expectation is to be estimated from the samples. Note that if ![](img/Formula_07_206.png)
+    is an ![](img/Formula_07_207.png) dimensional vector, ![](img/Formula_07_208.png)
+    becomes an ![](img/Formula_07_209.png) matrix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Fisher information matrix is an important concept that you might want to
+    learn more about, and the Wikipedia page is a good start: [https://en.wikipedia.org/wiki/Fisher_information](https://en.wikipedia.org/wiki/Fisher_information).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This approximation results in the following gradient update step (we omit the
+    derivation):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_210.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_211.png) and ![](img/Formula_05_254.png) are hyperparameters,
+    ![](img/Formula_07_213.png) and ![](img/Formula_07_214.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If this looks scary to you, you are not alone! TRPO is indeed not the easiest
+    algorithm to implement. Let's next look into what kind of challenges TRPO involves.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Challenges with TRPO
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here are some of the challenges involved in implementing TRPO:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the KL divergence constraint is approximated with its second-order Taylor
+    expansion, there could be cases where the constraint is violated.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'This is where the ![](img/Formula_07_215.png) term comes in: It shrinks the
+    magnitude of the gradient update until the constraint is satisfied. To this end,
+    there is a line search followed once ![](img/Formula_07_216.png) and ![](img/Formula_07_217.png)
+    are estimated: Starting with ![](img/Formula_07_218.png), ![](img/Formula_07_219.png)
+    increases by one until the magnitude of the update shrinks enough so that the
+    constraint is satisfied.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Remember that ![](img/Formula_07_220.png) is an ![](img/Formula_07_221.png)
+    matrix, which could be huge depending on the size of the policy network and therefore
+    expensive to store.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Since ![](img/Formula_07_222.png) is estimated through samples, given its size,
+    there could be a lot of inaccuracies introduced during the estimation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Calculating and storing ![](img/Formula_07_223.png) is an even more painful
+    step.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To avoid the complexity of dealing with ![](img/Formula_07_224.png) and ![](img/Formula_07_225.png),
+    the authors use the conjugate gradient algorithm, which allows you to take gradient
+    steps without building the whole matrix and taking the inverse.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As you can see, implementing TRPO could be complex and we have omitted the details
+    of its implementation. That is why a simpler algorithm that works along the same
+    lines, PPO, is more popular and more widely used, which we'll cover next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PPO – Proximal Policy Optimization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'PPO is again motivated by maximizing the policy improvement objective:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_226.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'while keeping ![](img/Formula_07_227.png) close to ![](img/Formula_07_228.png).
+    There are two variants of PPO: PPO-Penalty and PPO-Clip. The latter is simpler,
+    which we''ll focus on here.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: PPO-clip surrogate objective
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A simpler way of achieving the closeness between the old and new policy compared
+    to TRPO is to clip the objective so that deviating from the existing policy would
+    not bring in additional benefits. More formally, PPO-clip maximizes the surrogate
+    objective here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_229.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Where ![](img/Formula_07_230.png) is defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_231.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This simply says, if the advantage ![](img/Formula_07_232.png) is positive,
+    then the minimization takes the form:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_233.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: which therefore clips the maximum value the ratio can take. This means even
+    if the tendency is to increase the likelihood of taking action ![](img/Formula_07_234.png)
+    in state ![](img/Formula_07_235.png) because it corresponds to a positive advantage,
+    we clip how much this likelihood can deviate from the existing policy. As a result,
+    further deviation does not contribute to the advantage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Conversely, if the advantage is negative, the expression instead becomes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_236.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: which in similar ways, limits how much the likelihood of taking action ![](img/Formula_07_237.png)
+    in state ![](img/Formula_07_238.png) can decrease. This ratio is bounded by ![](img/Formula_07_239.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's lay out the full PPO algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The PPO algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The PPO algorithm works as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize the actor and critic network(s), ![](img/Formula_07_117.png) and
+    ![](img/Formula_07_241.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*while some stopping criterion is not met do:*'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Collect a batch of ![](img/Formula_07_242.png) samples ![](img/Formula_07_243.png)
+    from the (parallel) environment(s) using ![](img/Formula_07_244.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Obtain the state-value targets ![](img/Formula_07_245.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use gradient descent to update ![](img/Formula_07_246.png) with respect to a
+    loss function ![](img/Formula_07_247.png), such as squared loss.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Obtain the advantage value estimates
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_248.png).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Take a gradient ascent step towards maximizing the surrogate objective function![](img/Formula_07_249.jpg)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: and update ![](img/Formula_07_250.png). Although we don't provide the explicit
+    form of this gradient update, it can be easily achieved through packages such
+    as TensorFlow.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Broadcast the new ![](img/Formula_06_096.png) to the rollout workers.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '*end while*'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Finally, note that the architecture of a PPO implementation would be very similar
+    to that of A2C with synchronous sampling and policy updates in the rollout workers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PPO using RLlib
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Very similar to how we imported the agent trainer classes for the earlier algorithms,
+    the PPO class can be imported as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, we will present the training results later in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That concludes our discussion on trust-region methods. The last class of algorithms
+    we'll present in this chapter is off-policy approaches for policy-based methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Off-policy methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'One of the challenges with policy-based methods is that they are on-policy,
+    which requires collecting new samples after every policy update. If it is costly
+    to collect samples from the environment, then training on-policy methods could
+    be really expensive. On the other hand, the value-based methods we covered in
+    the previous chapter are off-policy but they only work with discrete action spaces.
+    Therefore, there is a need for a class of methods that work with continuous action
+    spaces and off-policy. In this section, we''ll cover such algorithms. Let''s start
+    with the first one: Deep Deterministic Policy Gradient.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: DDPG – Deep Deterministic Policy Gradient
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: DDPG, in some sense, is an extension of deep Q-learning to continuous action
+    spaces. Remember that deep Q-learning methods learn a representation for action
+    values,![](img/Formula_07_252.png). The best action is then given by ![](img/Formula_07_253.png)
+    in a given state ![](img/Formula_05_010.png). Now, if the action space is continuous,
+    learning the action-value representation is not a problem. However, then, it would
+    be quite cumbersome to execute the max operation to get the best action over a
+    continuous action space. DDPG addresses this issue. Let's see how next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How DDPG handles continuous action spaces
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'DDPG simply learns another approximation, ![](img/Formula_07_255.png), that
+    estimates the best action given the state. If you wonder why this works, consider
+    the following thought process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: DDPG assumes that the continuous action space is differentiable with respect
+    to ![](img/Formula_07_256.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For a moment, also assume that the action values, ![](img/Formula_07_257.png),
+    are known or have been learned.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Then the problem simply becomes learning a function approximation, ![](img/Formula_07_258.png),
+    whose input is ![](img/Formula_05_048.png), output is ![](img/Formula_07_260.png),
+    and the parameters are ![](img/Formula_07_261.png). The "reward" for the optimization
+    procedure is simply provided by ![](img/Formula_07_262.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can therefore use a gradient ascent method to optimize ![](img/Formula_07_246.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Over time, the learned action values will hopefully converge and be less of
+    a moving target for the policy function training.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Info
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Because DDPG assumes the differentiability of the policy function with respect
+    to action, it can only be used with continuous action spaces.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Next, let's look into a few more details about the DDPG algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The DDPG algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Since DDPG is an extension of deep Q-learning, plus learning a policy function,
+    we don''t need to write the full algorithm here. In addition, many approaches
+    we discussed in the previous chapter, such as prioritized experience replay and
+    multi-step learning, can be used to form a DDPG variate. The original DDPG algorithm,
+    on the other hand, is closer to the DQN algorithm and uses the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A **replay buffer** to store experience tuples, from which the sampling is done
+    uniformly at random.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A **target** **network**, which is updated using Polyak averaging as in ![](img/Formula_07_264.png),
+    rather than syncing it with the behavior network every ![](img/Formula_07_265.png)
+    steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'DDPG then replaces the target calculation in the DQN algorithm:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_266.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'with this one:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_267.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Another important difference between DQN and DDPG is that DQN uses ![](img/Formula_07_269.png)-greedy
+    actions during training. The policy network in DDPG, however, provides a deterministic
+    action for a given state, hence the word "deterministic" in the name. To enable
+    exploration during training, some noise is added to the action. More formally,
+    the action is obtained as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_270.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_05_272.png) can be chosen as white noise (although the
+    original implementation uses what is called OU noise). In this operation, ![](img/Formula_07_272.png)
+    and ![](img/Formula_07_273.png) represent the boundaries of the continuous action
+    space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's what DDPG is about. Let's look into how it can be parallelized next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ape-X DDPG
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Given the similarity between deep Q-learning and DDPG, parallelization for DDPG
+    can easily be achieved using the Ape-X framework. In fact, the original Ape-X
+    paper presents DDPG next to DQN in their implementation. It improves the regular
+    DDPG performance by several orders of magnitude in some benchmarks. The authors
+    also show that the wall-clock time performance consistently increased with the
+    increased number of rollout workers (actors).
+  prefs: []
+  type: TYPE_NORMAL
+- en: DDPG and Ape-X DPG using RLlib
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The trainer class and the configs for DDPG can be imported as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Similarly, for Ape-X DDPG, we import the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: That's it! The rest is pretty much the same as the training flow we described
+    at the beginning of the chapter. Now, before going into algorithms that improve
+    DDPG, let's discuss where the DDPG algorithm falls short.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DDPG's shortcomings
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Despite its initial popularity, there are several issues that the algorithm
+    runs into:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It can be quite sensitive to hyperparameter selections.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It runs into the issue of maximization bias while learning action values.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Spikes in the action-value estimates (which are potentially erroneous) are exploited
+    by the policy network and derail the learning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, we'll look into the TD3 algorithm, which introduces a set of improvements
+    to address these issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TD3 – Twin Delayed Deep Deterministic Policy Gradient
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The deal with the TD3 algorithm is that it addresses the function approximation
+    errors in DDPG. As a result, it greatly outperforms DDPG, PPO, TRPO, and SAC in
+    terms of the maximum reward in OpenAI's continuous control benchmarks. Let's look
+    into what TD3 proposes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TD3 improvements over DDPG
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are three main improvements in TD3 over DDPG:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It learns two (twin) Q networks rather than one, which in turn creates two
+    target Q networks. The ![](img/Formula_07_274.png) targets are then obtained using
+    the following:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_275.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_276.png) is the target action for a given state ![](img/Formula_07_277.png).
+    This is a form of double Q-learning to overcome the maximization bias.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, the policy and the target networks are updated more slowly
+    compared to the Q network updates, where the recommended cycle is to have a policy
+    update for every two Q network updates, hence the word "delayed" in the algorithm
+    name.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The target action, ![](img/Formula_07_278.png), is obtained after some noise
+    is added to the policy network outcome:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_279.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_05_272.png) is some white noise. Note that this is different
+    noise than what is used to explore in the environment. The role of this noise
+    is to act as a regularizer and prevent the policy network from exploiting some
+    action values that are incorrectly estimated by the Q network as very high and
+    non-smooth in its region.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Just like DDPG, TD3 can only be used with continuous action spaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's see how you can train an RL agent using RLlib's TD3 implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TD3 using RLlib
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The TD3 trainer class can be imported as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: On the other hand, if you look into the code in the `td3.py` module of RLlib,
+    you will see that it simply modifies the default DDPG configs and uses the DDPG
+    trainer class under the hood. This means that TD3 improvements are optionally
+    available in the DDPG trainer class, and you can modify them to obtain an Ape-X
+    TD3 variant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's it with TD3\. Next, we'll discuss SAC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SAC – Soft actor-critic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'SAC is another popular algorithm that brings even further improvements to TD3\.
+    It uses entropy as part of the reward to encourage exploration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_07_281.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_07_282.png) is the entropy term and ![](img/Formula_07_283.png)
+    is the corresponding weight.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: SAC can be used both with continuous and discrete action spaces.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To import the SAC trainer, use the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The final algorithm we will discuss is IMPALA.
+  prefs: []
+  type: TYPE_NORMAL
+- en: IMPALA – Importance Weighted Actor-Learner Architecture
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'IMPALA is an algorithm that is of the policy-gradient type, as opposed to DDPG,
+    TD3, and SAC, which are essentially value-based methods. As a result, IMPALA is
+    not completely an off-policy method. Actually, it is similar to A3C but with the
+    following key differences:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unlike A3C, it sends sampled experiences (asynchronously) to the learner(s)
+    rather than parameter gradients. This significantly reduces the communication
+    overhead.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When a sample trajectory arrives, chances are it was obtained under a policy
+    that is several updates behind the policy in the learner. IMPALA uses truncated
+    importance sampling to account for the policy lag while calculating the value
+    function targets.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: IMPALA allows multiple synchronous worker learners to calculate gradients from
+    samples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The IMPALA trainer class can be imported in to RLlib as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: This concludes our discussion on algorithms. Now the fun part! Let's compare
+    their performance in OpenAI's continuous-control Lunar Lander environment!
+  prefs: []
+  type: TYPE_NORMAL
+- en: A comparison of the policy-based methods in Lunar Lander
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Here is a comparison of evaluation reward performance progress for different
+    policy-based algorithms over a single training session in the Lunar Lander environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.6 – Lunar Lander training performance of various policy-based algorithms'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.6 – Lunar Lander training performance of various policy-based algorithms
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To also give a sense of how long each training session took and what the performance
+    at the end of the training was, here is a TensorBoard tooltip for the preceding
+    plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.7 – Wall-clock time and end-of-training performance comparisons'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_07_7.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 7.7 – Wall-clock time and end-of-training performance comparisons
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before going into further discussions, let''s make the following disclaimer:
+    The comparisons here should not be taken as a benchmark of different algorithms
+    for multiple reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We did not perform any hyperparameter tuning,
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The plots come from a single training trial for each algorithm. Training an
+    RL agent is a highly stochastic process and a fair comparison should include the
+    average of at least 5-10 training trials.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use RLlib's implementations of these algorithms, which could be less or more
+    efficient than other open source implementations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'After this disclaimer, let''s discuss what we observe in these results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: PPO attains the highest reward at the end of the training.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The vanilla policy gradient algorithm is the fastest (in terms of wall-clock
+    time) to reach a "reasonable" reward.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TD3 and DDPG are really slow in terms of wall-clock time, although they achieve
+    higher rewards than A2C and IMPALA.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The TD3 training graph is significantly more unstable compared to other algorithms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At some point, TD3 achieved higher rewards than PPO with the same number of
+    samples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: IMPALA was super-fast to reach (and go beyond) 2M samples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can extend this list, but the idea here is that different algorithms could
+    have different advantages and disadvantages. Next, let's discuss what criteria
+    you should consider in picking an algorithm for your application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to pick the right algorithm
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As in all machine learning domains, there is no silver bullet in terms of which
+    algorithm to use for different applications. There are many criteria you should
+    consider, and in some cases, some of them will be more important than others.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are different dimensions of algorithm performance that you should look
+    into when picking your algorithm:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Highest reward**: When you are not bound by compute and time resources and
+    your goal is simply to train the best possible agent for your application, the
+    highest reward is the criterion you should pay attention to. PPO and SAC are promising
+    alternatives here.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Sample efficiency**: If your sampling process is costly/time-consuming, then
+    sample efficiency (achieving higher rewards using fewer samples is important).
+    When this is the case, you should look into off-policy algorithms as they reuse
+    past experience for training as on-policy methods are often incredibly wasteful
+    in how they consume samples. SAC is a good starting point in this case.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Wall-clock time efficiency**: If your simulator is fast and/or you have resources
+    to do massive parallelization, PPO, IMPALA, and Ape-X SAC are often good choices.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Stability**: Your ability to achieve good rewards without running many trials
+    with the same algorithm and them improving consistently during training is also
+    important. Off-policy algorithms could be hard to stabilize. PPO is often a good
+    choice in this respect.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Generalization**: If an algorithm requires extensive tuning for each environment
+    you train it for, this could cost you a lot of time and resources. SAC, due to
+    its use of entropy in its reward, is known to be less sensitive to hyperparameter
+    choices.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Simplicity**: Having an algorithm that is easy to implement is important
+    to avoid bugs and ensure maintainability. That is the reason TRPO has been abandoned
+    in favor of PPO.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: That is the end of the discussion on the algorithm picking criteria. Lastly,
+    let's go into some resources where you can find easy-to-understand implementations
+    of these algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Open source implementations of policy-gradient methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have covered many algorithms. It is not quite possible to
+    explicitly implement all these algorithms given the space limitations here. We
+    instead relied on RLlib implementations to train agents for our use case. RLlib
+    is open source, so you can go to [https://github.com/ray-project/ray/tree/ray-0.8.5/rllib](https://github.com/ray-project/ray/tree/ray-0.8.5/rllib)
+    and dive into implementations of these algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having said that, RLlib implementations are built for production systems and
+    therefore involve many other implementations regarding error-handling and preprocessing.
+    In addition, there is a lot of code reuse, resulting in implementations with multiple
+    class inheritances. A much easier set of implementations is provided by OpenAI's
+    Spinning Up repo at [https://github.com/openai/spinningup](https://github.com/openai/spinningup).
+    I highly recommend you go into that repo and dive into the implementation details
+    of the algorithms we discussed in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: OpenAI's Spinning Up is also a great resource to see an overview of RL topics
+    and algorithms, available at [https://spinningup.openai.com](https://spinningup.openai.com).
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's it! We have come a long way and covered policy-based methods in depth.
+    Congratulations on reaching this important milestone!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we covered an important class of algorithms called policy-based
+    methods. These methods directly optimize a policy network, unlike the value-based
+    methods we covered in the previous chapter. As a result, they have a stronger
+    theoretical foundation. In addition, they can be used with continuous action spaces.
+    With this, we have covered model-free approaches in detail. In the next chapter,
+    we go into model-based methods, which aim to learn the dynamics of the environment
+    the agent is in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Kinds of RL Algorithms*: [https://spinningup.openai.com/en/latest/spinningup/rl_intro2.html](https://spinningup.openai.com/en/latest/spinningup/rl_intro2.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Policy Gradient Methods for Reinforcement Learning with Function Approximation*,
+    Richard S. Sutton, David McAllester, Satinder Singh, Yishay Mansour: [https://papers.nips.cc/paper/1713-policy-gradient-methods-for-reinforcement-learning-with-function-approximation.pdf](https://papers.nips.cc/paper/1713-policy-gradient-methods-for-reinforcement-learning-with-function-approximation.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement
+    Learning*, Ronald J. Williams: [https://link.springer.com/content/pdf/10.1007/BF00992696.pdf](https://link.springer.com/content/pdf/10.1007/BF00992696.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Dota 2 with Large Scale Deep Reinforcement Learning*, Christopher Berner,
+    Greg Brockman, et. al: [https://arxiv.org/pdf/1912.06680.pdf](https://arxiv.org/pdf/1912.06680.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

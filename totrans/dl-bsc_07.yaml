@@ -1,0 +1,1516 @@
+- en: 6\. Training Techniques
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter describes important ideas in neural network training, including
+    the optimization techniques that are used to search for optimal weight parameters,
+    the initial values of weight parameters, and the method for setting hyperparameters—all
+    of which are important topics when it comes to neural network training. We will
+    look at regularization methods such as weight decay and dropout to prevent overfitting
+    and implement them. Lastly, we will look at batch normalization, which has been
+    used in a lot of research in recent years. By using the methods described in this
+    chapter, you will be able to promote neural network training efficiently to improve
+    recognition accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Updating Parameters
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The purpose of neural network training is to find the parameters that minimize
+    the value of the loss function. The problem is finding the optimal parameters—a
+    process called **optimization**. Unfortunately, the optimization is difficult
+    because the parameter space is very complicated, and the optimal solution is difficult
+    to find. You cannot do this by solving an equation to obtain the minimum value
+    immediately. In a deep network, it is more difficult because the number of parameters
+    is huge.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we have depended on the gradients (derivatives) of the parameters to
+    find the optimal parameters. By repeatedly using the gradients of the parameters
+    to update the parameters in the gradient direction, we approach the optimal parameters
+    gradually. This is a simple method called **stochastic gradient descent** (**SGD**),
+    but it is a "smarter" method than searching the parameter space randomly. However,
+    SGD is a simple method, and (for some problems) there are some methods that work
+    better. So, let's first consider the disadvantage of SGD and introduce other optimization
+    techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Story of an Adventurer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Before moving on to the main topic, we can consider an allegory to describe
+    the situation we are in regarding optimization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: There is a strange adventurer. He travels through a vast dry region to find
+    a deep valley floor every day. His goal is to reach the deepest valley bottom,
+    which he calls the "deep place." It is the reason why he travels. In addition,
+    he has put two strict "restrictions" on himself. One of them is to not use a map,
+    while the other is to cover his eyes. Therefore, he does not know where the deepest
+    valley bottom exists in the vast land, and he cannot see anything. Under these
+    strict conditions, how can this adventurer look for the "deep place"? How can
+    he move to find the "deep place" efficiently?
+  prefs: []
+  type: TYPE_NORMAL
+- en: The situation we are in when searching for the optimal parameters is a world
+    of darkness just like that of this adventurer. We must look for the "deep place"
+    blindfolded and without a map in a vast and complicated landscape
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is important in this difficult situation is the "inclination" of the ground.
+    The adventurer cannot see around him, but he knows the inclination of the ground
+    due to where he stands (his feet can feel it). So, moving in the direction where
+    the inclination is the steepest is the strategy of SGD. "By repeating this, I
+    may be able to reach the "deep place" someday," the brave adventurer thinks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SGD
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Now that we understand the difficulty of this optimization problem, let''s
+    start by reviewing SGD. Equation 6.1 represents SGD as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![65](img/Figure_6.1a.png) | (6.1) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Here, the weight parameters to update are W and the gradients of the loss function
+    for W are ![66](img/Figure_6.1b.png). η is the learning rate. We need to predefine
+    it as a value, such as 0.01 or 0.001\. `<-` in the equation indicates that the
+    value on the right-hand side is used to update the value on the left-hand side.
+    As equation 6.1 shows, SGD is a simple method that moves a certain distance in
+    the gradient direction. Now, we will implement `SGD` as a class in Python:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, the argument at initialization, `lr`, is the learning rate. The learning
+    rate is retained as an instance variable. We will also define the `update(params,
+    grads)` method, which is called repeatedly in SGD. The arguments, `params` and
+    `grads`, are dictionary variables (as in the implementation of neural networks
+    so far). Like `params[''W1'']` and `grads[''W1'']`, each element stores a weight
+    parameter or a gradient. By using the `SGD` class, you can update the parameters
+    in a neural network as follows (the following code is pseudocode that doesn''t
+    run):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The name of the variable that appears here, `optimizer`, means a "person who
+    optimizes." Here, SGD plays this role. The `optimizer` variable takes responsibility
+    for updating the parameters. All we need to do here is pass information regarding
+    the parameters and gradients to the optimizer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thus, separately implementing the class that optimizes facilitates the modularization
+    of the features. For example, we will soon implement another optimization technique
+    called `update(params, grads)`. Then, we can switch from SGD to Momentum by changing
+    the `optimizer = SGD()` statement to `optimizer = Momentum()`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In many deep learning frameworks, various optimization techniques are implemented,
+    and a mechanism is provided so that we can switch between them easily. For example,
+    in a deep learning framework called Lasagne, optimization techniques are implemented
+    as functions in the `updates.py` file ([http://github.com/Lasagne/Lasagne/blob/master/lasagne/updates.py](http://github.com/Lasagne/Lasagne/blob/master/lasagne/updates.py)).
+    The user can select the desired optimization technique from them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Disadvantage of SGD
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Although SGD is simple and easy to implement, it may be inefficient for some
+    problems. To discuss the disadvantage of SGD, let''s consider a problem that calculates
+    the minimum value of the following function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![67](img/Figure_6.1c.png) | (6.2) |'
+  prefs: []
+  type: TYPE_TB
+- en: The shape of the function represented by equation 6.2 looks like a "bowl" stretched
+    in the x-axis direction, as shown in the following plots. Actually, the contour
+    lines of equation 6.2 look like ellipses extended in the x-axis direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's look at the gradients of the function that are represented by equation
+    6.2\. *Figure 6.2* shows the gradients. These gradients are large in the y-axis
+    direction and small in the x-axis direction. In other words, the inclination in
+    the y-axis direction is steep, while in the x-axis direction, it's gradual. Note
+    that the position of the minimum value of equation 6.2 is `(x, y) = (0, 0)` but
+    that the gradients in *Figure 6.2* do not point to the (0, 0) direction in many
+    places.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s apply SGD to the function that has the shape shown in the following
+    plots. It starts searching at (x, y) = (−7.0, 2.0) (initial values). *Figure 6.3*
+    shows the result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1: Graph of  (left) and its contour lines (right)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.1: Graph of ![69](img/Figure_6.1d.png) (left) and its contour lines
+    (right)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: '![Figure 6.2: Gradients of'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.2: Gradients of ![68](img/Figure_6.1e.png)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'SGD moves in a zigzag, as shown in the following plot. The disadvantage of
+    SGD is that its search path becomes inefficient if the shape of a function is
+    not isotropic—that is, if it is elongated. So, we need a method that is smarter
+    than SGD that moves only in the gradient direction. The root cause of SGD''s search
+    path being inefficient is that the gradients do not point to the correct minimum
+    values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.3: Update path of optimization by SGD – inefficient because it moves'
+  prefs: []
+  type: TYPE_NORMAL
+- en: in a zigzag to the minimum value (0, 0)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.3: Update path of optimization by SGD – inefficient because it moves
+    in a zigzag to the minimum value (0, 0)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'To improve the disadvantage of SGD, we will introduce three alternative methods:
+    Momentum, AdaGrad, and Adam. We will describe each of them briefly and show their
+    equations and implementations in Python.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Momentum
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Momentum is related to physics; it means the "quantity of motion." The Momentum
+    technique is represented by the following equations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![70](img/Figure_6.3a.png) | (6.3) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ![71](img/Figure_6.3b.png) | (6.4) |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Just like SGD, W is the weight parameter to update, ![72](img/Figure_6.3c.png)
+    is the gradients of the loss function for W, and η is the learning rate. A new
+    variable that appears here, v, is the "velocity" in physics. Equation 6.3 represents
+    a physical law stating that an object receives a force in the gradient direction
+    and is accelerated by this force. In Momentum, update functions are used as if
+    a ball had been rolled on the ground, as shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.4: Image of Momentum – a ball rolls on the slope of the ground'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.4: Image of Momentum – a ball rolls on the slope of the ground'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'The term αv in equation 6.3 slows the object down gradually when it receives
+    no force (a value such as 0.9 is set for α). This is the friction created by the
+    ground or air resistance. The following code shows the implementation of Momentum
+    (the source code is located at `common/optimizer.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The instance variable, `v`, retains the velocity of the object. At initialization,
+    `v` retains nothing. When `update()` is called, it retains the data of the same
+    structure as a dictionary variable. The remaining implementation is simple: it
+    just implements equations 6.3 and 6.4.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's use Momentum to solve the optimization problem of equation 6.2\.
+    The following image shows the result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in the following plot, the update path moves like a ball being rolled
+    around in a bowl. You can see that "the degree of zigzag" is reduced compared
+    to SGD. The force in the x-axis direction is very small, but the object always
+    receives the force in the same direction and is accelerated constantly in the
+    same direction. On the other hand, the force in the y-axis direction is large,
+    but the object receives the forces in the positive and negative directions alternately.
+    They cancel each other out, so the velocity in the y-axis direction is unstable.
+    This can accelerate the motion in the x-axis direction and reduce the zigzag motion
+    compared to SGD:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.5: Update path for optimization by Momentum'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.5: Update path for optimization by Momentum'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: AdaGrad
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In neural network training, the value of the learning `rate--η` in the `equation--`
+    is important. If it is too small, training takes too long. If it is too large,
+    divergence occurs, and correct training cannot be achieved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is an effective technique for the learning rate called **learning rate
+    decay**. It uses a lower learning rate as training advances. This method is often
+    used in neural network training. A neural network learns "much" first and learns
+    "less" gradually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Reducing the learning rate gradually is the same as reducing the values of
+    the learning rates for all the parameters collectively. AdaGrad ( *John Duchi,
+    Elad Hazan, and Yoram Singer (2011): Adaptive Subgradient Methods for Online Learning
+    and Stochastic Optimization. Journal of Machine Learning Research 12, Jul (2011),
+    2121 – 2159.*) is an advanced version of this method. AdaGrad creates a custom-made
+    value for each parameter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'AdaGrad adjusts the learning rate for each element of the parameter adaptively
+    for training (the "Ada" in AdaGrad comes from "Adaptive"). Now, we will show AdaGrad''s
+    update method with equations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![73](img/Figure_6.5a.png) | (6.5) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ![74](img/Figure_6.5b.png) | (6.6) |'
+  prefs: []
+  type: TYPE_TB
+- en: Just like SGD, W is the weight parameters to update, ![75](img/Figure_6.5c.png)
+    is the gradients of the loss function for W, and η is the learning rate. Here,
+    a new variable, h, appears. The h variable stores the sum of the squared gradient
+    values thus far, as shown in equation 6.5 (⊙ in equation 6.5 indicates multiplication
+    between array elements). When updating parameters, AdaGrad adjusts the scale of
+    learning by multiplying ![76](img/Figure_6.5d.png). For the parameter element
+    that moved significantly (i.e., was updated heavily), the learning rate becomes
+    smaller. Thus, you can attenuate the learning rate for each parameter element
+    by gradually reducing the learning rate of the parameter that moved significantly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'AdaGrad records all the past gradients as the sum of squares. Therefore, as
+    learning advances, the degree of update becomes small. When learning is conducted
+    infinitely, the degree of update becomes 0, resulting in no update. The RMSProp
+    (*Tieleman, T., & Hinton, G. (2012): Lecture 6.5—RMSProp: Divide the gradient
+    by a running average of its recent magnitude. COURSERA: Neural Networks for Machine
+    Learning*) method solves this problem. It does not add all the past gradients
+    equally. It forgets the past gradients gradually and conducts addition so that
+    the information about new gradients is clearly reflected. This reduces the scale
+    of the past gradients exponentially, which is called the "exponential moving average."'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s implement AdaGrad. You can implement AdaGrad as follows (the source
+    code is located at `common/optimizer.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that a small value of `1e-7` was added in the last line. This prevents
+    division by `0` when `self.h[key]` contains `0`. In many deep learning frameworks,
+    you can configure this small value as a parameter, but here, a fixed value, `1e-7`,
+    is used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s use AdaGrad to solve the optimization problem of equation 6.2\.
+    The following image shows the result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.6: Update path for optimization by AdaGrad'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.6: Update path for optimization by AdaGrad'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: The result shown in the preceding image shows that the parameters are moving
+    efficiently to the minimum value. The parameters move a lot at first because the
+    gradient in the y-axis direction is large. Adjustment is conducted in proportion
+    to the large motion so that the update step becomes small. Thus, the degree of
+    update in the y-axis direction is weakened, reducing the zigzag motion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adam
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In Momentum, the parameters move based on physical law, such as a ball rolled
+    in a bowl. AdaGrad adjusts the update step adaptively for each parameter element.
+    So, what happens when the two techniques, Momentum and AdaGrad, are combined?
+    This is the basic idea of the technique called Adam (this explanation of Adam
+    is intuitive and lacking some of the finer technical details. For a more granular
+    definition, please see the original article).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Adam is a new technique that was proposed in 2015\. The theory is slightly
+    complicated. Intuitively, it is like a combination of Momentum and AdaGrad. By
+    combining the advantages of these two techniques, we can expect to search the
+    parameter space efficiently. The "bias correction" of hyperparameters is also
+    a characteristic of Adam. For more details, please see the original paper (*Diederik
+    Kingma and Jimmy Ba. (2014): Adam: A Method for Stochastic Optimization. arXiv:1412.6980[cs]
+    (December 2014)*). It is implemented in Python as the `Adam` class in `common/optimizer.py`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's use Adam to solve the optimization problem of equation 6.2\. The
+    following figure shows the result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.7: Update path for optimization by Adam'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_7.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.7: Update path for optimization by Adam'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As shown in *Figure 6.7*, the update path by Adam moves as if a ball has been
+    rolled in a bowl. The motion is similar to that in Momentum, but the left and
+    right motions of the ball are smaller. This advantage is caused by the adaptive
+    adjustment of the learning rate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Adam has three hyperparameters. The first is the learning rate (appearing as
+    α in the paper). The others are the coefficient for the primary moment, β1, and
+    the coefficient for the secondary moment, β2\. The article states that the standard
+    values are 0.9 for β1 and 0.999 for β2, which are effective in many cases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Which Update Technique Should We Use?
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: We have considered four-parameter updating techniques so far. Here, we will
+    compare their results (the source code is located at `ch06/optimizer_compare_naive.py`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in *Figure 6.8*, different techniques use different paths to update
+    the parameters. This image seems to show that AdaGrad is the best, but note that
+    the results vary depending on the problems being solved. Naturally, the results
+    also vary depending on the values of the hyperparameters (such as the learning
+    rate):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.8: Comparison of optimization techniques – SGD, Momentum, AdaGrad,
+    and Adam'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_8.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.8: Comparison of optimization techniques – SGD, Momentum, AdaGrad,
+    and Adam'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'So far, we have looked at four techniques: SGD, Momentum, AdaGrad, and Adam.
+    But which should we use? Unfortunately, there is no one technique currently known
+    that is good at solving all problems. Each has its own distinct characteristics
+    and advantages, which make it better suited to certain problems over others. Therefore,
+    it''s important to know which technique works best given a specific set of circumstances.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: SGD is still used in a lot of research. Momentum and AdaGrad are also worth
+    trying. Recently, many researchers and engineers seem to prefer Adam. This book
+    mainly uses SGD and Adam. You can try the other techniques as you like.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the MNIST Dataset to Compare the Update Techniques
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For handwritten digit recognition, we will compare the four techniques we''ve
+    described so far: SGD, Momentum, AdaGrad, and Adam. Let''s explore how each technique
+    works in the progress of training. *Figure 6.9* shows the results (the source
+    code is located at `h06/optimizer_compare_mnist.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.9: Using the MNIST dataset to compare the four update techniques
+    – the horizontal axis indicates the iterations of learning, while the vertical
+    axis indicates the values of the loss function'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_9.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.9: Using the MNIST dataset to compare the four update techniques –
+    the horizontal axis indicates the iterations of learning, while the vertical axis
+    indicates the values of the loss function'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: This experiment used a five-layer neural network, and each layer had 100 neurons.
+    ReLU was used as the activation function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The result of *Figure 6.9* shows that other techniques learned faster than SGD.
+    It seems that the remaining three techniques learned similarly quickly. When we
+    look closer, it seems that AdaGrad learned a little faster. In this experiment,
+    note that the results are different depending on the hyperparameter of the learning
+    rate and the structure of the neural network (the number of layers). However,
+    generally, the other three techniques can learn faster than SGD and sometimes
+    achieve better final recognition performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initial Weight Values
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The initial weight values are especially important in neural network training.
+    What values are set as the initial weight values often determines the success
+    or failure of neural network training. In this section, we will explain the recommended
+    initial weight values, then conduct an experiment to check that they accelerate
+    neural network learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How About Setting the Initial Weight Values to 0?
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Later, we will look at a technique called weight decay, which reduces overfitting
+    and improves generalization performance. In short, weight decay is a technique
+    that reduces the values of the weight parameters to prevent overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we want the weights to be small, starting with the smallest possible initial
+    values is probably a good approach. Here, we use an initial weight value such
+    as `0.01 * np.random.randn(10, 100)`. This small value is the value generated
+    from the Gaussian distribution multiplied by 0.01—a Gaussian distribution with
+    a standard deviation of 0.01.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we want the weight values to be small, how about setting all the initial
+    weight values to 0? This is a bad idea as it prevents us from training correctly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why should the initial weight values not be 0? Or in other words, why should
+    the weights not be uniform values? Well, because all weight values are updated
+    uniformly (in the same way) in backpropagation. So, say that layers 1 and 2 have
+    0 as their weights in a two-layer neural network. Then, in forward propagation,
+    the same value is propagated to all the neurons in layer 2 because the weight
+    of the input layer is 0\. When the same values are entered for all the neurons
+    in layer 2, all the weights in layer 2 are updated similarly in backward propagation
+    (please remember "backward propagation in a multiplication node"). Therefore,
+    the weights are updated with the same value and become symmetrical values (duplicate
+    values). Due to this, there is no meaning in having many weights. To prevent the
+    weights from being uniform or breaking their symmetrical structure, random initial
+    values are required.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distribution of Activations in the Hidden Layers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Observing the distribution of activations (referring here to the output data
+    after the activation function, though some literature calls the data that flows
+    between layers an "activation") in the hidden layers provides a lot of information.
+    Here, we will conduct a simple experiment to see how the initial weight values
+    change the activations in the hidden layers. We will enter some randomly generated
+    data into a five-layer neural network (using a sigmoid function as the activation
+    function) and show the data distribution of the activations in each layer in a
+    histogram. This experiment is based on the CS231n (*CS231n: Convolutional Neural
+    Networks for Visual Recognition* ([http://cs231n.github.io/](http://cs231n.github.io/)))
+    course at Stanford University.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The source code for the experiment is located at `ch06/weight_init_activation_histogram.py`.
+    The following is part of this code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, there are five layers and that each layer has 100 neurons. As input data,
+    1,000 pieces of data are generated at random with Gaussian distribution and are
+    provided to the five-layer neural network. A sigmoid function is used as the activation
+    function, and the activation results of each layer are stored in the `activations`
+    variable. Please note the weight scale. Here, a Gaussian distribution with a standard
+    deviation of 1 is being used. The purpose of this experiment is to observe how
+    the distribution of `activations` changes by changing this scale (standard deviation).
+    Now, let''s show the data of each layer that is stored in `activations` in a histogram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Executing this code creates the histograms shown in the following image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This image shows that the activations of each layer are mainly 0 and 1\. The
+    sigmoid function that's being used here is an S-curve function. As the output
+    of the sigmoid function approaches 0 (or 1), the value of the differential approaches
+    0\. Therefore, when the data is mainly 0s and 1s, the values of the gradients
+    in backward propagation get smaller until they vanish. This is a problem called
+    **gradient vanishing**. In deep learning, where there's a large number of layers,
+    gradient vanishing can be a more serious problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let''s conduct the same experiment, but this time with the standard deviation
+    of the weights as 0.01\. To set the initial weight values, you will need to modify
+    the previous code, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![Figure 6.10: Distribution of the activations of each layer when a Gaussian
+    distribution with a standard deviation of 1 is used for the initial weight values'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_10.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.10: Distribution of the activations of each layer when a Gaussian
+    distribution with a standard deviation of 1 is used for the initial weight values'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'Observe the results. The following image shows the distribution of the activations
+    of each layer when a Gaussian distribution with a standard deviation of 0.01 is
+    used:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.11: Distribution of the activations of each layer when a Gaussian
+    distribution with a standard deviation of 0.01 is used for the initial weight
+    values'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_11.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.11: Distribution of the activations of each layer when a Gaussian
+    distribution with a standard deviation of 0.01 is used for the initial weight
+    values'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Now, the activations concentrate around 0.5\. Unlike the previous example, they
+    are not biased toward 0 and 1\. The problem of gradient vanishing does not occur.
+    However, when activations are biased, it causes a large problem in terms of its
+    representation. If multiple neurons output almost the same values, there is no
+    meaning in the existence of multiple neurons. For example, when 100 neurons output
+    almost the same values, one neuron can represent almost the same thing. Therefore,
+    the biased activations cause a problem because representation is limited.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: The distribution of the activations in each layer needs to be spread properly.
+    This is because, when moderately diverse data flows in each layer, a neural network
+    learns efficiently. On the other hand, when biased data flows, training may not
+    go well because of the gradient vanishing and "limited representation."
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we will use the initial weight values that were recommended in a paper
+    by Xavier Glorot et al. (*Xavier Glorot and Yoshua Bengio (2010): Understanding
+    the difficulty of training deep feedforward neural networks. In Proceedings of
+    the International Conference on Artificial Intelligence and Statistics (AISTATS2010).
+    Society for Artificial Intelligence and Statistics*). This is called "Xavier initialization."
+    Currently, the Xavier initializer is usually used in ordinary deep learning frameworks.
+    For example, in the Caffe framework, you can specify the `xavier` argument for
+    the initial weight setting to use the Xavier initializer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Xavier''s paper obtained the appropriate scale of weights so that the activation
+    of each layer was spread similarly. It concluded that distribution with a standard
+    deviation of ![6a](img/Figure_6.11a.png) should be used when the number of nodes
+    in the previous layer is n (Xavier''s paper suggested setting values that consider
+    both the number of input nodes in the previous layer and the number of output
+    nodes in the next layer. However, in framework implementations such as Caffe,
+    the values are only calculated based on the input nodes in the previous layer
+    for simplification, as described here). This can be seen in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.12: Xavier initializer – when n nodes in the previous layer are
+    connected, a distribution with the standard deviation of  is used for initial
+    values'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_12.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.12: Xavier initializer – when n nodes in the previous layer are connected,
+    a distribution with the standard deviation of ![6b](img/Figure_6.12a.png) is used
+    for initial values'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'When the Xavier initializer is used, since the number of nodes in the previous
+    layer is larger, the weight scale that is set for the initial values for the target
+    nodes is smaller. Now, let''s use the Xavier initializer to complete some experiments.
+    You only have to modify the initial weight value, as follows (the implementation
+    is simplified here because the number of nodes is 100 in all the layers):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: '![Figure 6.13: Distribution of the activations of each layer when the Xavier
+    initializer is used as the initial weight value'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_13.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.13: Distribution of the activations of each layer when the Xavier
+    initializer is used as the initial weight value'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: The preceding image shows the results when the Xavier initializer is used. It
+    shows that distributions are spread more widely, although a higher layer has a
+    more distorted shape. We can expect that training is conducted efficiently because
+    the data that flows in each layer is spread properly, and the representation of
+    the sigmoid function is not limited.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Also, the distributions of the upper layers are slightly distorted in terms
+    of their shape. The distorted shape is improved when a `tanh` function (hyperbolic
+    function) is used instead of a `sigmoid` function. Actually, when a `tanh` function
+    is used, distributions will have a bell shape. The `tanh` function is an S-curve
+    function, like a `sigmoid` function. The `tanh` function is symmetrical about
+    the origin (0, 0), while the `sigmoid` function is symmetrical about `(x, y) =
+    (0, 0.5)`. It is best to use the `tanh` function so that the activation function
+    is symmetrical about the origin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initial Weight Values for ReLU
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The Xavier initializer is based on the assumption that the activation function
+    is linear. The Xavier initializer is suitable because the `sigmoid` and `tanh`
+    functions are symmetrical and can be regarded as linear functions around their
+    centers. Meanwhile, for ReLU, using the initial value is recommended. This is
+    known as the He initializer and was recommended by Kaiming He and et. al. *(Kaiming
+    He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun (2015): Delving Deep into Rectifiers:
+    Surpassing Human-Level Performance on ImageNet Classification. In 1026 – 1034*).
+    The He initializer uses a Gaussian distribution with a standard deviation of ![6d](img/Figure_6.13a.png)
+    when the number of nodes in the previous layer is n. When we consider that the
+    Xavier initializer is ![6e](img/Figure_6.13b.png), we can assume (intuitively)
+    that the coefficient must be doubled to provide more spread because a negative
+    area is 0 for ReLU.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's look at the distribution of activations when ReLU is used as the activation
+    function. We will consider the results of three experiments after using a Gaussian
+    distribution with a standard deviation of 0.01 (that is, `std=0.01`), the Xavier
+    initializer, and the He initializer, which is specifically used for ReLU (*Figure
+    6.14*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The results indicate that the activations of each layer are very small (the
+    averages of the distributions are as follows: layer 1: 0.0396, layer 2: 0.00290,
+    layer 3: 0.000197, layer 4: 1.32e-5, and layer 5: 9.46e-7) for `std=0.01`. When
+    small data flows through a neural network, the gradients of the weights in backward
+    propagation are also small. This is a serious problem as training will barely
+    advance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's look at the results from using the Xavier initializer. This shows
+    that the bias becomes larger little by little as the layers become deeper—as do
+    the activations. Gradient vanishing will be a problem when it comes to training.
+    On the other hand, for the He initializer, the spread of Gaussian distribution
+    in each layer is similar. The spread of data is similar even when the layers are
+    deeper. So, we can expect that appropriate values also flow for backward propagation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In summary, when you use ReLU as the activation function, use the He initializer,
+    and for S-curve functions such as `sigmoid` and `tanh`, use the Xavier initializer.
+    As of the time of writing, this is the best practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the MNIST Dataset to Compare the Weight Initializers
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Let''s use actual data to see how neural network learning is affected by different
+    weight initializers. We will use `std=0.01`, the Xavier initializer, and the He
+    initializer in our experiments (the source code is located at `ch06/weight_init_compare.py`).
+    The following image shows the results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.14: Change of activation distribution by weight initializers when
+    ReLU is used'
+  prefs: []
+  type: TYPE_NORMAL
+- en: as the activation function
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_14.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.14: Change of activation distribution by weight initializers when
+    ReLU is used as the activation function'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'This experiment uses a five-layer neural network (100 neurons in each layer)
+    and ReLU as the activation function. The results shown in the following image
+    reveal that no learning is conducted for `std=0.01`. This is because small values
+    (data near 0) flow in forward propagation, as we observed in the distribution
+    of activations earlier. Thus, the gradients to obtain are also small in backward
+    propagation, resulting in few updates occurring for the weights. On the other
+    hand, training is performed smoothly for the Xavier and He initializers. The following
+    image also shows that training advances fast for the He initializer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.15: Using the MNIST dataset to compare the weight initializers –
+    the horizontal axis indicates the iterations of training, while the vertical axis
+    indicates the values of the loss function'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_15.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.15: Using the MNIST dataset to compare the weight initializers – the
+    horizontal axis indicates the iterations of training, while the vertical axis
+    indicates the values of the loss function'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: As we have seen, the initial weight values are very important in neural network
+    training. They often determine their success or failure. Although the importance
+    of the initial weight values is sometimes overlooked, the starting (initial) value
+    is important for everything.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Batch Normalization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous section, we observed the distribution of activations in each
+    layer. We learned that the appropriate initial weight values provide a proper
+    spread for the distribution of activations of each layer, thus enabling smooth
+    training. So, how about adjusting the distribution of activations "forcefully"
+    so that there's a proper spread in each layer?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This technique is based on the idea of batch normalization (*Sergey Ioffe and
+    Christian Szegedy (2015): Batch Normalization: Accelerating Deep Network Training
+    by Reducing Internal Covariate Shift. arXiv:1502.03167[cs] (February 2015)*).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Batch Normalization Algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Batch normalization (also known as batch norm) was first proposed in 2015\.
+    Although batch norm is a new technique, it is widely used by many researchers
+    and engineers. In fact, in competitions surrounding machine learning, batch norm
+    often achieves excellent results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Batch norm attracts a lot of attention due to the following advantages:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It can accelerate learning (it can increase the learning rate).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not as dependent on the initial weight values (you do not need to be cautious
+    about the initial values).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It reduces overfitting (it reduces the necessity of dropout).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first advantage is particularly attractive because deep learning takes a
+    lot of time. With batch norm there's no need to be anxious about the initial weight
+    values, and due to it reducing overfitting, it removes this cause of anxiety from
+    deep learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we described earlier, the purpose of batch norm is to adjust the distribution
+    of the activations in each layer so that it has a proper spread. To do that, the
+    layer that normalizes data distribution is inserted into a neural network as the
+    batch normalization layer (also known as the batch norm layer), as shown in the
+    following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.16: Neural network example that uses batch normalization (the batch
+    norm layers'
+  prefs: []
+  type: TYPE_NORMAL
+- en: are shown in gray)
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_16.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.16: Neural network example that uses batch normalization (the batch
+    norm layers are shown in gray)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'As its name indicates, batch norm normalizes each mini-batch that is used for
+    training. Specifically, it normalizes data so that the average is 0 and the variance
+    is 1\. The following equation shows this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![77](img/Figure_6.16a.png) | (6.7) |'
+  prefs: []
+  type: TYPE_TB
+- en: Here, a set of m input data, b ![78](img/Figure_6.16d.png), is treated as a
+    mini-batch and its average, ![79](img/Figure_6.16e.png), and variance, ![80](img/Figure_6.16f.png),
+    are calculated. The input data is normalized so that its average is 0 and its
+    variance is 1 for the appropriate distribution. In equation 6.7, ε is a small
+    value (such as 10e-7). This prevents division by 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Equation 6.7 simply converts the input data for a mini-batch, ![81](img/Figure_6.16g.png),
+    into data with an average of 0 and a variance of 1, ![82](img/Figure_6.16h.png).
+    By inserting this process before (or after) the activation function (see (*Sergey
+    Ioffe and Christian Szegedy (2015): Batch Normalization: Accelerating Deep Network
+    Training by Reducing Internal Covariate Shift. arXiv:1502.03167[cs] (February
+    2015)*) and (*Dmytro Mishkin and Jiri Matas (2015): All you need is a good init.
+    arXiv:1511.06422[cs] (November 2015)*) for a discussion (and experiments) on whether
+    batch normalization should be inserted before or after the activation function),
+    you can reduce the distribution bias of the data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition, the batch norm layer converts the normalized data with a peculiar
+    scale and shift. The following equation shows this conversion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| ![83](img/Figure_6.16i.png) | (6.8) |'
+  prefs: []
+  type: TYPE_TB
+- en: Here, γ and β are parameters. They start with γ = 1 and β = 0 and will be adjusted
+    to the appropriate values through training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the algorithm of batch norm. This algorithm provides the forward propagation
+    in a neural network. By using a computational graph, as described in *Chapter
+    5*, *Backpropagation*, we can represent batch norm as follows.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We won''t go into detail about how to derive backward propagation in batch
+    norm here because it is a little complicated. When you use a computational graph,
+    such as the one shown in the following image, you can derive the backward propagation
+    of batch norm relatively easily. Frederik Kratzert''s blog, *Understanding the
+    Backward Pass through the Batch Normalization Layer* ([https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html](https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html)),
+    provides a detailed description of this. Please refer to it if you are interested:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.17: Computational graph of batch normalization'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_17.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.17: Computational graph of batch normalization'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: '*Figure 6.17* is cited from reference, *Frederik Kratzert''s blog "Understanding
+    the backward pass through Batch Normalization Layer"* ([https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html](https://kratzert.github.io/2016/02/12/understanding-the-gradient-flow-through-the-batch-normalization-layer.html)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating Batch Normalization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Now, let's use the batch norm layer to conduct some experiments. First, we will
+    use the MNIST dataset to see how the progress of learning changes with and without
+    the batch norm layer (the source code can be found at `ch06/batch_norm_test.py`).
+    *Figure 6.18* shows the result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 6.18* shows that batch norm accelerates training. Next, let''s see
+    how the progress of training changes when various scales for the initial values
+    are used. *Figure 6.19* contains graphs that show the progress of training when
+    the standard deviations of the initial weight values are changed.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This indicates that batch norm accelerates training in almost all cases. In
+    fact, when batch norm is not used, training does not advance at all without a
+    good scale of initial values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we have seen, using batch norm can accelerate training and provides robustness
+    to the initial weight values ("robustness to the initial values" means having
+    a little dependence on them). Batch norm will play an active part in many situations
+    because it has such wonderful characteristics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Regularization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Overfitting** often creates difficulties in machine learning problems. In
+    overfitting, the model fits the training data too well and cannot properly handle
+    other data that is not contained in the training data. Machine learning aims at
+    generalizing performance. It is desirable for the model to properly recognize
+    unknown data that is not contained in the training data. While you can create
+    a complicated and representative model this way, reducing overfitting is also
+    important:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.18: Effect of batch norm – batch norm accelerates learning'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_18.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.18: Effect of batch norm – batch norm accelerates learning'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Overfitting
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The main two causes of overfitting are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The model has many parameters and is representative.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The training data is insufficient.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here, we will generate overfitting by providing these two causes. Out of 60,000
+    pieces of training data in the MNIST dataset, only 300 are provided, and a seven-layer
+    network is used to increase the network''s complexity. It has 100 neurons in each
+    layer. ReLU is used as the activation function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.19: The solid lines show the results of using batch norm, while
+    the dotted lines show the results without it – the title of each graph indicates
+    the standard deviation of the initial weight values'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_19.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.19: The solid lines show the results of using batch norm, while the
+    dotted lines show the results without it – the title of each graph indicates the
+    standard deviation of the initial weight values'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'The following is part of the code for this experiment (the source file is at
+    `ch06/overfit_weight_decay.py`). First, the code loads the data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following code conducts training. Here, the recognition accuracy is calculated
+    for each epoch for all the training data and all the test data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `train_acc_list` and `test_acc_list` lists store the recognition accuracies
+    for each epoch. An epoch indicates that all the training data has been used. Let's
+    draw graphs based on these lists (`train_acc_list` and `test_acc_list`). The following
+    plot shows the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The recognition accuracies that were measured using the training data reached
+    almost 100% after 100 epochs, but the recognition accuracies on the test data
+    are far below 100%. These large differences are caused by overfitting the training
+    data. This graph shows that the model cannot handle general data (test data) that
+    was not used in training properly:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.20: Transition of recognition accuracies for the training data (train)
+    and test data (test)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_20.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.20: Transition of recognition accuracies for the training data (train)
+    and test data (test)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Weight Decay
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The **weight decay** technique has often been used to reduce overfitting. It
+    avoids overfitting by imposing a penalty on large weights during training. Overfitting
+    often occurs when a weight parameter takes a large value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As described earlier, the purpose of neural network training is to reduce the
+    value of the loss function. For example, you can add the squared norm (L2 norm)
+    of the weight to the loss function. Then, you could prevent the weight from being
+    large. When the weights are W, the L2 norm of the weight decay is ![84](img/Figure_6.20a.png).
+    This ![85](img/Figure_6.20b.png) is added to the loss function. Here, λ is the
+    hyperparameter that controls the strength of regularization. If you set a larger
+    value to λ, you can impose a stronger penalty on a large weight. ![88](img/Figure_6.20c.png)
+    at the beginning of ![86](img/Figure_6.20b.png) is a constant for adjustment so
+    that the differential of ![87](img/Figure_6.20b.png) is λW.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Weight decay adds ![89](img/Figure_6.20b.png) to the loss function for all weights.
+    Therefore, the differential of the regularization term, λW, is added to the result
+    of backpropagation when calculating the gradient of a weight.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The L2 norm is the sum of squares of each element. In addition to the L2 norm,
+    L1 and L ∞ norms also exist. The L1 norm is the sum of absolute values, that is,
+    |w1| + |w2| + ... + |wn|. The L ∞ norm is also called the max norm. It is the
+    largest among the absolute values of all the elements. You can use any of these
+    norms as a regularization term. Each has its own characteristics, but we will
+    only implement the L2 norm here since it's the most commonly used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s conduct an experiment. We will apply the weight decay of λ= 0.1
+    to the preceding experiment. The following plot shows the results (the network
+    that supports weight decay is located at `common/multi_layer_net.py` and the code
+    for the experiment is located at `ch06/overfit_weight_decay.py`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.21: Transition of recognition accuracies for the training data (train)
+    and test data (test) when weight decay is used'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_21.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.21: Transition of recognition accuracies for the training data (train)
+    and test data (test) when weight decay is used'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: The preceding image shows that the recognition accuracies of the training data
+    and test data are different, but that the difference is smaller than in the one
+    shown in *Figure 6.20* where weight decay was not used. This indicates that overfitting
+    was reduced. Note that the recognition accuracies of the training data have not
+    reached 100% (1.0).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dropout
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The previous section described the weight decay technique. It adds the L2 norm
+    of the weights to the loss function to reduce overfitting. Weight decay is easy
+    to implement and can reduce overfitting to some extent. However, as a neural network
+    model becomes more complicated, weight decay is often insufficient. This is when
+    the dropout technique (*N. Srivastava, G. Hinton, A. Krizhevsky, I. Sutskever,
+    and R. Salakhutdinov (2014): Dropout: A simple way to prevent neural networks
+    from overfitting. The Journal of Machine Learning Research, pages 1929 – 1958,
+    2014*) is often used.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Dropout erases neurons at random during training. During training, it selects
+    neurons in a hidden layer at random to erase them. As shown in the following image,
+    the erased neurons do not transmit signals. During training, the neurons to be
+    erased are selected at random each time data flows. During testing, the signals
+    of all the neurons are propagated. The output of each neuron is multiplied by
+    the rate of the erased neurons during training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.22: Concept of dropout'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_22.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.22: Concept of dropout'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: '*Figure 6.22* is cited from reference, *N. Srivastava, G. Hinton, A. Krizhevsky,
+    I. Sutskever, and R. Salakhutdinov (2014): Dropout: A simple way to prevent neural
+    networks from overfitting. The Journal of Machine Learning Research pages 1929–1958,
+    2014*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The left-hand image shows an ordinary neural network, while the right-hand image
+    shows a network that dropout has been applied to. Dropout selects neurons at random
+    and erases them to stop the transmission of subsequent signals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s implement dropout. Simplicity is emphasized in the implementation
+    here. If appropriate calculation is conducted during training, we only have to
+    flow data through forward propagation (without multiplying the rate of the erased
+    neurons). Such an implementation is conducted in deep learning frameworks. For
+    efficient implementation, the dropout implemented in the Chainer framework, for
+    example, may be useful:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Please note that, in each forward propagation, the neurons to erase are stored
+    as `False` in `self.mask`. `self.mask` generates an array of the same shape as
+    `x` at random and sets the elements to `True` when their values are larger than
+    `dropout_ratio`. The behavior in backward propagation is the same as that in ReLU.
+    If a neuron is passed a signal in forward propagation, it passes the received
+    signal without changing it in backward propagation. If a neuron doesn't pass a
+    signal in forward propagation, it stops the received signal in backward propagation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will use the MNIST dataset to validate the effect of dropout. The source
+    code can be found in `ch06/overfit_dropout.py`. It uses the `Trainer` class to
+    simplify implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `Trainer` class is implemented in `common/trainer.py`. It conducts network
+    training that has been conducted so far in this chapter. For details, please see
+    `common/trainer.py` and `ch06/overfit_dropout.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To experiment with dropout, we'll use a seven-layer network (where 100 neurons
+    exist in each layer and ReLU is used as the activation function), as in the previous
+    experiment. One of the experiments will use dropout, while the other won't. The
+    following image shows the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see, using dropout reduces the difference between the recognition
+    accuracies of training data and test data. It also indicates that the recognition
+    accuracy of the training data has not reached 100%. Due to this, you can use dropout
+    to reduce overfitting, even in a representative network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.23: The left-hand image shows the experiment without dropout, while
+    the right-hand image shows the experiment with dropout (dropout_rate=0.15)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_23.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.23: The left-hand image shows the experiment without dropout, while
+    the right-hand image shows the experiment with dropout (dropout_rate=0.15)'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In machine learning, ensemble learning is often used in which multiple models
+    learn separately, and their multiple outputs are averaged through prediction.
+    For example, when we use it in a neural network, we prepare five networks with
+    the same (or similar) structure and train each of them. Then, we average the five
+    outputs during testing to obtain the result. Experiments have shown that ensemble
+    learning improves a neural network's recognition accuracy by several percent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensemble learning is close to dropout. Erasing neurons at random while training
+    in dropout can be interpreted as providing a different model to learn data each
+    time. While predicting, the output from the neurons is multiplied by the rate
+    of the erasures (0.5, for example) to average the models. Thus, we can say that
+    dropout simulates ensemble learning in one network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Validating Hyperparameters
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A neural network uses many hyperparameters, as well as parameters such as weights
+    and biases. The hyperparameters here include the number of neurons in each layer,
+    batch size, the learning rate for updating parameters, and weight decay. Setting
+    the hyperparameters to inappropriate values deteriorates the performance of the
+    model. The values of these hyperparameters are very important, but determining
+    them usually requires a lot of trial and error. This section describes how to
+    search for hyperparameter values as efficiently as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Validation Data
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the dataset we've used so far, the training data and test data are separate.
+    The training data is used to train a network, while the test data is used to evaluate
+    generalization performance. Thus, you can determine whether or not the network
+    conforms too well only to the training data (that is, whether overfitting occurs)
+    and how large the generalization performance is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will use various hyperparameter settings for validation. Please note that
+    you must not use test data to evaluate the performance of hyperparameters. This
+    is very important but is often overlooked.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, why can't we use test data to evaluate the performance of hyperparameters?
+    Well, if we use test data to adjust hyperparameters, the hyperparameter values
+    will overfit the test data. In other words, it uses test data to check that the
+    hyperparameter values are "good," so the hyperparameter values are adjusted so
+    that they only fit the test data. Here, the model may provide low generalization
+    performance and cannot fit other data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Therefore, we need to use verification data (called **validation data**) to
+    adjust them. This validation data is used to evaluate the quality of our hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training data is used for learning parameters (weights and biases). Validation
+    data is used to evaluate the performance of hyperparameters. Test data is used
+    (once, ideally) at the end of training to check generalization performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some datasets provide training data, validation data, and test data separately.
+    Some provide only training data and test data, while some provide only one type
+    of data. In that case, you must separate the data manually. For the MNIST dataset,
+    the simplest way to obtain the validation data is to separate 20% of the training
+    data beforehand and use that as validation data. The following code shows this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the input data and labeled data are shuffled before separating the training
+    data. This is because some datasets may have biased data (for example, numbers
+    "0" to "10" are arranged in this order). The `shuffle_dataset` function uses `np.random.shuffle`
+    and is contained in `common/util.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's use validation data to look at the technique that's used for optimizing
+    hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing Hyperparameters
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: What is important when optimizing hyperparameters is to gradually narrow down
+    the range where "good" hyperparameter values exist. To do this, we will set a
+    broad range initially, select hyperparameters at random from the range (sampling),
+    and use the sampled values to evaluate the recognition accuracy. Next, we will
+    repeat these steps several times and observe the result of the recognition accuracy.
+    Based on the result, we will narrow down the range of "good" hyperparameter values.
+    By repeating this procedure, we can gradually limit the range of appropriate hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It has been reported that random sampling before a search provides better results
+    than a systematic search, such as a grid search, to optimize hyperparameters in
+    a neural network (*James Bergstra and Yoshua Bengio (2012): Random Search for
+    Hyper-Parameter Optimization. Journal of Machine Learning Research 13, Feb (2012),
+    281 – 305*). This is because the degree by which the final recognition accuracy
+    will be affected is different among different hyperparameters.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specifying a "broad" range of hyperparameters is effective. We will specify
+    the range in "powers of 10," such as from 0.001 (10−3) to 1,000 (103) (this is
+    also called "specifying on a log scale").
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Please note that when optimizing hyperparameters, deep learning takes a lot
+    of time (even a few days or weeks). Therefore, any hyperparameters that seem inappropriate
+    must be abandoned while searching for them. When optimizing hyperparameters, it
+    is effective to reduce the size of epoch for training to shorten the time that
+    one evaluation takes. We discussed the optimization of hyperparameters previously.
+    The following summarizes this discussion:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 0**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Specify the range of the hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 1**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sample the hyperparameters from the range at random.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 2**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use the hyperparameter values sampled in *Step 1* for training and use the validation
+    data to evaluate the recognition accuracy (set small epochs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Step 3**'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Repeat *steps 1* and *2* a certain number of times (such as 100 times) and narrow
+    down the range of hyperparameters based on the result of the recognition accuracy.
+    When the range is narrowed down to some extent, select one hyperparameter value
+    from it. This is one practical approach to optimizing hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'However, you may feel that this approach is the "wisdom" of engineers rather
+    than science. If you need a more refined technique for optimizing hyperparameters,
+    you can use **Bayesian optimization**. It makes good use of mathematical theories
+    such as Bayes'' theorem to provide stricter and more efficient optimization. For
+    details, please see the paper *Practical Bayesian Optimization of Machine Learning
+    Algorithms* (*Jasper Snoek, Hugo Larochelle, and Ryan P. Adams (2012): Practical
+    Bayesian Optimization of Machine Learning Algorithms. In F. Pereira, C. J. C.
+    Burges, L. Bottou, & K. Q. Weinberger, eds. Advances in Neural Information Processing
+    Systems 25\. Curran Associates, Inc., 2951 – 2959*).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing Hyperparameter Optimization
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Now, let''s use the MNIST dataset to optimize some hyperparameters. We will
+    look for two hyperparameters: the learning rate and the weight decay rate. The
+    weight decay rate controls the strength of weight decay. This problem and solution
+    are based on the *CS231n* (*CS231n: Convolutional Neural Networks for Visual Recognition*
+    ([http://cs231n.github.io/](http://cs231n.github.io/))) course at Stanford University.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As described earlier, hyperparameters are validated by sampling them at random
+    from the range on a log scale, such as from 0.001 (10−3) to 1,000 (103). We can
+    write this as `10 ** np.random.uniform(-3, 3)` in Python. This experiment will
+    start with a range from 10−8 to 10−4 for the weight decay rate and from 10−6 to
+    10−2 for the learning rate. In this case, we can write the random sampling of
+    the hyperparameters as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the hyperparameters were sampled at random, and the sampled values were
+    used for training. Then, training is repeated several times by using various hyperparameter
+    values to find where the appropriate hyperparameters exist. Here, the details
+    of implementation have been omitted, and only the result has been shown. The source
+    code for optimizing hyperparameters is located at `ch06/hyperparameter_optimization.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When we have a range of 10−8 to 10−4 for the weight decay rate and a range
+    of 10−6 to 10−2 for the learning rate, we get the following results. Here, we
+    can see the transitions in learning the validation data in descending order of
+    high-recognition accuracies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.24: The solid lines show the recognition accuracies of the validation
+    data, while the dotted lines show the recognition accuracies of the training data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/fig06_24.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.24: The solid lines show the recognition accuracies of the validation
+    data, while the dotted lines show the recognition accuracies of the training data'
+  prefs:
+  - PREF_H6
+  type: TYPE_NORMAL
+- en: 'This indicates that the training advanced smoothly from `Best-1` to `Best-5`.
+    Let''s check the hyperparameter values (that is, the learning rate and weight
+    decay rate) of `Best-1` to `Best-5`. These are the results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we can see that when the learning rate was 0.001 to 0.01 and the weight
+    decay rate was 10−8 to 10−6, learning advanced well. Due to this, the range of
+    the hyperparameters where training is likely to succeed is observed to narrow
+    the range of values. You can repeat the same procedure in the narrowed range.
+    Thus, you can narrow the range where appropriate hyperparameters exist and select
+    each of the final hyperparameters at a certain stage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'This chapter described some important techniques that are used for neural network
+    training. How to update parameters, how to specify initial weight values, batch
+    normalization, and dropout are all essential techniques that are used in modern
+    neural networks. The techniques described here are often used in state-of-the-art
+    deep learning. In this chapter, we learned about the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Four famous methods for updating parameters: Momentum, AdaGrad, Adam, and SGD.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to specify initial weight values, which is very important if we wish to
+    train correctly.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Xavier initializer and He initializer, which are effective as initial weight
+    values.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Batch normalization accelerates training and provides robustness to the initial
+    weight values.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Weight decay and dropout are regularization techniques that are used to reduce overfitting.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To search for good hyperparameters, gradually narrowing down the range where
+    appropriate values exist is an efficient method.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

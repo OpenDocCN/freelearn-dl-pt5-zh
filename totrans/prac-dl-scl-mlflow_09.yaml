@@ -1,0 +1,1159 @@
+- en: '*Chapter 6*: Running Hyperparameter Tuning at Scale'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Hyperparameter tuning** or **hyperparameter optimization** (**HPO**) is a
+    procedure that finds the best possible deep neural network structures, types of
+    pretrained models, and model training process within a reasonable computing resource
+    constraint and time frame. Here, hyperparameter refers to parameters that cannot
+    be changed or learned during the ML training process, such as the number of layers
+    inside a deep neural network, the choice of a pretrained language model, or the
+    learning rate, batch size, and optimizer of the training process. In this chapter,
+    we will use HPO as a shorthand to refer to the process of hyperparameter tuning
+    and optimization. HPO is a critical step for producing a high-performance ML/DL
+    model. Given that the search space of the hyperparameter is very large, efficiently
+    running HPO at scale is a major challenge. The complexity and high cost of evaluating
+    a DL model, compared to classical ML models, further compound the challenges.
+    Therefore, we will need to learn state-of-the-art HPO approaches and implementation
+    frameworks, implement increasingly complex and scalable HPO methods, and track
+    them with MLflow to ensure a reproducible tuning process. By the end of this chapter,
+    you will be comfortable with implementing scalable HPO for DL model pipelines.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, first, we will give an overview of the different automatic
+    HPO frameworks and applications of DL model tuning. Additionally, we will understand
+    what to optimize and when to choose what frameworks to use. We will compare three
+    popular HPO frameworks: **HyperOpt**, **Optuna**, and **Ray Tune**. We will show
+    which of these is the best choice for running HPO at scale. Then, we will focus
+    on learning how to create HPO-ready DL model codes that can use Ray Tune and MLflow.
+    Following this, we will show how we can switch to using different HPO algorithms
+    easily with Optuna as a primary example.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''ll cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding automatic HPO for DL pipelines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating HPO-ready DL models using Ray Tune and MLflow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running the first Ray Tune HPO experiment with MLflow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running Ray Tune HPO with Optuna and HyperBand
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To understand the examples in this chapter, the following key technical requirements
+    are needed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ray Tune 1.9.2: This is a flexible and powerful hyperparameter tuning framework
+    ([https://docs.ray.io/en/latest/tune/index.html](https://docs.ray.io/en/latest/tune/index.html)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Optuna 2.10.0: This is an imperative and define-by-run hyperparameter tuning
+    Python package ([https://optuna.org/](https://optuna.org/)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code for this chapter can be found in the following GitHub URL, which also
+    includes the `requirements.txt` file that contains the preceding key packages
+    and other dependencies: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter06](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter06).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding automatic HPO for DL pipelines
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Automatic HPO has been studied for over two decades since the first known paper
+    on this topic was published in 1995 ([https://www.sciencedirect.com/science/article/pii/B9781558603776500451](https://www.sciencedirect.com/science/article/pii/B9781558603776500451)).
+    It has been widely understood that tuning hyperparameters for an ML model can
+    improve the performance of the model – sometimes, dramatically. The rise of DL
+    models in recent years has triggered a new wave of innovation and the development
+    of new frameworks to tackle HPO for DL pipelines. This is because a DL model pipeline
+    imposes many new and large-scale optimization challenges that cannot be easily
+    solved by previous HPO methods. Note that, in contrast to the model parameters
+    that can be learned during the model training process, a set of hyperparameters
+    must be set before training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Difference between HPO and Transfer Learning's Fine-Tuning
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this book, we have been focusing on one successful DL approach called **Transfer
+    Learning** (please refer to [*Chapter 1*](B18120_01_ePub.xhtml#_idTextAnchor015),
+    *Deep Learning Life Cycle and MLOps Challenges*, for a full discussion). The key
+    step of a transfer learning process is to fine-tune a pretrained model with some
+    task- and domain-specific labeled data to get a good task-specific DL model. However,
+    the fine-tuning step is just a special kind of model training step that also has
+    lots of hyperparameters to optimize. That's where HPO comes into play.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Types of hyperparameters and their challenges
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are several types of hyperparameters that you can use for a DL pipeline:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**DL model type and architecture**: In the case of transfer learning, choosing
+    which pretrained models to use is one possible hyperparameter. For example, there
+    are over 27,000 pretrained models in the **Hugging Face** model repository ([https://huggingface.co/models](https://huggingface.co/models)),
+    including **BERT**, **RoBERTa**, and many more. For a particular prediction task,
+    we might want to try a few of them to decide which is the best one to use.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Learning- and training-related parameters**: These include different types
+    of optimizers such as **stochastic gradient descent** (**SGD**) and **Adam** (you
+    can view a list of PyTorch optimizers at [https://machinelearningknowledge.ai/pytorch-optimizers-complete-guide-for-beginner/](https://machinelearningknowledge.ai/pytorch-optimizers-complete-guide-for-beginner/)).
+    It also includes the associated parameters such as learning rate and batch size.
+    It is recommended that, when applicable, the following parameters should be first
+    tuned in their order of importance for a neural network model: learning rate,
+    momentum, mini-batch size, the number of hidden layers, learning rate decay, and
+    regularization ([https://arxiv.org/abs/2003.05689](https://arxiv.org/abs/2003.05689)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Data and pipeline configurations**: A DL pipeline can include data processing
+    and transformation steps that could impact model training. For example, if we
+    want to compare the performance of a classification model for an email message
+    with or without the signature text body, then a hyperparameter for whether to
+    include an email signature is needed. Another example is when we don''t have enough
+    data or variations of data; we could try to use various data augmentation techniques
+    that will lead to different sets of input for the model training ([https://neptune.ai/blog/data-augmentation-nlp](https://neptune.ai/blog/data-augmentation-nlp)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a reminder, not all hyperparameters are tunable or require tuning. For example,
+    it is not necessary for the **number of epochs** in a DL model to be tuned. This
+    is because training should stop when the accuracy metric stops improving or does
+    not hold any promise to do better than other hyperparameter configurations. This
+    is called early stopping or pruning and is one of the key techniques underpinning
+    some recent state-of-the-art HPO algorithms (for more discussions on early stopping,
+    please refer to [https://databricks.com/blog/2019/08/15/how-not-to-scale-deep-learning-in-6-easy-steps.html](https://databricks.com/blog/2019/08/15/how-not-to-scale-deep-learning-in-6-easy-steps.html)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that all these three categories of hyperparameters can be mixed and matched,
+    and the configuration of the entire hyperparameter space can be very large. For
+    example, if we want to choose the type of pretrained model we want to use as a
+    hyperparameter (for example, the choice could be **BERT** or **RoBERTa**), two
+    learning-related parameters (such as the learning rate and batch size), and two
+    different data augmentation techniques for NLP texts (such as random insertion
+    and synonym replacement), then we have five hyperparameters to optimize. Note
+    that each hyperparameter can have quite a few different candidate values to choose
+    from, and if each hyperparameter has 5 different values, then we will have a total
+    of 55 = 3125 combinations of hyperparameters to try. In practice, it is very common
+    to have dozens of hyperparameters to try, and each hyperparameter could have dozens
+    of choices or distributions to sample from. This quickly leads to a curse of dimensionality
+    problem ([https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a](https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a)).
+    This high-dimensional search space challenge is compounded by the expensive training
+    and evaluation costs of DL models; we know that even 1 epoch of a tiny BERT, which
+    we tried in the previous chapters, with a tiny set of training and validation
+    dataset can take 1–2 mins. Now imagine a realistic production-grade DL model with
+    HPO that could take hours, days, or even weeks if not executed efficiently. In
+    general, the following is a list of the main challenges that require the application
+    of high-performance HPO at scale:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The high-dimensional search space of hyperparameters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The high cost of model training and evaluation time for increasingly large DL
+    models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Time-to-production and deployment for DL models used in production
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Performing Model Training and HPO Simultaneously
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: It is possible to change the hyperparameters dynamically during the training
+    process. This is a hybrid approach that does model training and HPO simultaneously,
+    such as **Population-Based Training** (**PBT**; [https://deepmind.com/blog/article/population-based-training-neural-networks](https://deepmind.com/blog/article/population-based-training-neural-networks)).
+    However, this does not change the fact that when starting a new epoch of training,
+    a set of hyperparameters needs to be predefined. This PBT is one of the innovations
+    that tries to reduce both the cost of searching for high-dimensional hyperparameter
+    space and the training cost of a DL model. Interested readers should consult the
+    *Further reading* section to dive deeper into this topic.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now that we understand the general challenges and categories of hyperparameters
+    to optimize, let's look at how HPO works and how to choose a framework for our
+    usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How HPO works and which ones to choose
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are different ways to understand how HPO works. The classical HPO methods
+    include grid search and random search, where a set of hyperparameters are chosen
+    with a range of candidate values. Each one is run independently to completion,
+    and then we pick the best hyperparameter configuration from the set of trials
+    we run, given the best model performance metric we found. Although this type of
+    search is easy to implement and might not even require a sophisticated framework
+    to support it, it is inherently inefficient and might not even find the best configuration
+    of hyperparameters due to the non-convex nature of HPO. The term non-convex means
+    that multiple local minimal or maximal points exist, and an optimization method
+    might not be able to find a global optimal (that is, minimum or maximum). Put
+    simply, a modern HPO needs to do two things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The adaptive sampling of hyperparameters (also known as **Configuration Selection**
+    or **CS**): This means it needs to find which set of hyperparameters to try by
+    taking advantage of prior knowledge. This is mostly about using different variants
+    of Bayesian optimization to adaptively identify new configurations based on previous
+    trials in a sequential way. This has been proven to outperform traditional grid
+    search and random search methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The adaptive evaluation of the performance of a set of hyperparameters (also
+    known as **Configuration Evaluation** or **CE**): These approaches focus on adaptively
+    allocating more resources to promising hyperparameter configurations while quickly
+    pruning the poor ones. Resources can be in different forms such as the size of
+    the training dataset (for example, only using a small fraction of the training
+    dataset) or the number of iterations (for example, only using a few iterations
+    to decide which ones to terminate without running to convergence). There is a
+    family of methods called multi-armed bandit algorithms, such as the **Asynchronous
+    Successive Halving Algorithm** (**ASHA**). Here, all trials start with an initial
+    budget, then the worst half is removed, the budget is adjusted for the remaining
+    ones, and this repeats until only one trial is left.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In practice, we want to select a suitable HPO framework using the following
+    five criteria:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Callback integration with MLflow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Scalability and support of GPU clusters
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Ease of use and flexible APIs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Integration with cutting edge HPO algorithms (**CS** and **CE**)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Support of DL frameworks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In this book, three frameworks have been compared, and the results are summarized
+    in *Figure 6.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1: Comparison of Ray Tune, Optuna, and HyperOpt'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_06_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.1: Comparison of Ray Tune, Optuna, and HyperOpt'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As you can see from *Figure 6.1*, the winner is **Ray Tune** ([https://docs.ray.io/en/latest/tune/index.html](https://docs.ray.io/en/latest/tune/index.html)),
+    when compared to **Optuna** ([https://optuna.org/](https://optuna.org/)) and **HyperOpt**
+    ([https://hyperopt.github.io/hyperopt/](https://hyperopt.github.io/hyperopt/)).
+    Let''s explain the five criteria, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Callback integration with MLflow**: Optuna''s support of the MLflow callback
+    is still an experimental feature, while HyperOpt does not support callback at
+    all, leaving additional work for users to manage the MLflow tracking for each
+    trial run.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Only Ray Tune supports both the Python mixin decorator and callback integration
+    with MLflow. Python mixin is a pattern that allows a standalone function to be
+    mixed in whenever needed. In this case, the MLflow functionality is automatically
+    mixed in during model training through the `mlflow_mixin` decorator. This can
+    turn any training function into a Ray Tune trainable function, automatically configuring
+    MLflow and creating a run in the same process as each Tune trial. You can then
+    use the MLflow API inside the training function and it will automatically get
+    reported to the correct run. Additionally, it supports MLflow''s autologging,
+    which means that all of the MLflow tracking information will be logged into the
+    correct trial. For example, the following code snippet shows that our previous
+    DL fine-tuning function can be turned into a `mlflow_mixin` Ray Tune function,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that when we define the trainer, we can add `TuneReportCallback` as one
+    of the callbacks, which will pass the metrics back to Ray Tune, while the MLflow
+    autologging does its job of logging all the tracking results simultaneously. In
+    the next section, we will show you how to turn the previous chapter's example
+    of fine-tuning the DL model into a Ray Tune trainable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Scalability and support of GPU clusters**: Although Optuna and HyperOpt support
+    parallelization, they both have dependencies on some external databases (relational
+    databases or MongoDB) or SparkTrials. Only Ray Tune supports parallel and distributed
+    HPO through the Ray distributed framework natively, and it is also the only one
+    that supports running on a GPU cluster among these three frameworks.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Ease of use and flexibility of the APIs**: Among all the three frameworks,
+    only Optuna supports **define-by-run** APIs, which allows you to dynamically define
+    the hyperparameters in a Pythonic programming style, including loops and branches
+    ([https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html)).
+    This is in contrast to the **define-and-run** APIs, which both Ray Tune and HyperOpt
+    support, where the search space is defined by a predefined dictionary prior to
+    evaluating the objective function. These two terms, **define-by-run** and **define-and-run**,
+    were actually coined by the DL framework''s development community. In the early
+    days, when TensorFlow 1.0 was initially released, a neural network needed to be
+    defined first and then lazily executed later, which is called define-and-run.
+    These two phases, 1) the construction of the neural network phase and 2) the evaluation
+    phases, are sequentially executed, and the neural network structure cannot be
+    changed after the construction phase. The newer DL frameworks, such as TensorFlow
+    2.0 (or the eager execution version of TensorFlow) and PyTorch, support the **define-by-run**
+    neural network computation. There are no two separate phases for constructing
+    and evaluating neural networks. Users can directly manipulate the neural networks
+    while doing the computation. While the **define-by-run** API provided by Optuna
+    can be used to directly define the hyperparameter search space dynamically, it
+    does have some drawbacks. The main problem is that the parameter concurrence is
+    not known until runtime, which could complicate the implementation of the optimization
+    method. This is because knowing the parameter concurrence beforehand is well supported
+    for many sampling methods. Thus, in this book, we prefer using **define-and-run**
+    APIs. Also, note that Ray Tune can support the **define-by-run** API through integration
+    with Optuna (you can see an example in Ray Tune''s GitHub repository at [https://github.com/ray-project/ray/blob/master/python/ray/tune/examples/optuna_define_by_run_example.py#L35](https://github.com/ray-project/ray/blob/master/python/ray/tune/examples/optuna_define_by_run_example.py#L35)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Integration with cutting-edge HPO algorithms** (**CS and CE**): On the **CS**
+    side, among these three frameworks, HyperOpt has the least active development
+    to support or integrate with the latest cutting-edge HPO sampling and search methods.
+    Its primary search method is **Tree-Structured Parzen Estimators** (**TPE**),
+    which is a Bayesian optimization variant that''s especially effective for a mixed
+    categorical and conditional hyperparameter search space. Similarly, Optuna''s
+    primary sampling method is TPE. On the contrary, Ray Tune supports all cutting-edge
+    searching methods, including the following:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: DragonFly ([https://dragonfly-opt.readthedocs.io/en/master/](https://dragonfly-opt.readthedocs.io/en/master/)),
+    which is a highly scalable Bayesian optimization framework
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: BlendSearch ([https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function/#hyperparameter-optimization-algorithm](https://microsoft.github.io/FLAML/docs/Use-Cases/Tune-User-Defined-Function/#hyperparameter-optimization-algorithm))
+    from Microsoft Research
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition, Ray Tune also supports TPE through integration with Optuna and
+    HyperOpt.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the **CE** side, HyperOpt does not support any pruning or schedulers to stop
+    the non-promising hyperparameter configuration. Both Optuna and Ray Tune support
+    quite a few pruners (in Optuna) or schedulers (in Ray Tune). However, only Ray
+    Tune supports PBT. Given the active development community and flexible API developed
+    by Ray Tune, it is possible for Ray tune to continue to integrate and support
+    any emerging schedulers or pruners in a timely fashion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Support of DL frameworks**: HyperOpt is not specifically designed or integrated
+    with any DL frameworks. This does not mean you cannot use HyperOpt for tuning
+    DL models. However, HyperOpt does not offer any pruning or scheduler support to
+    perform early stopping for unpromising hyperparameter configuration, which is
+    a major disadvantage for HyperOpt to be used for DL model tuning. Both Ray Tune
+    and Optuna have integration with popular DL frameworks such as PyTorch Lightning
+    and TensorFlow/Keras.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition to the major criteria that we just discussed, Ray Tune also has
+    the best documentation, extensive code examples, and a vibrant open source developer
+    community, which is why we prefer to use Ray Tune for our learning in this chapter.
+    In the following sections, we will learn how to create HPO-ready DL models with
+    Ray Tune and MLflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating HPO-ready DL models with Ray Tune and MLflow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To use Ray Tune with MLflow for HPO, let''s use the fine-tuning step in our
+    DL pipeline example from [*Chapter 5*](B18120_05_ePub.xhtml#_idTextAnchor060),
+    *Running DL Pipelines in Different Environments*, to see what needs to be set
+    up and what code changes we need to make. Before we start, first, let''s review
+    a few key concepts that are specifically relevant to our usage of Ray Tune:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Objective function**: An objective function can be either to minimize or
+    maximize some metric values for a given configuration of hyperparameters. For
+    example, in the DL model training and fine-tuning scenarios, we would like to
+    maximize the F1-score for the accuracy of an NLP text classifier. This objective
+    function needs to be wrapped as a trainable function, where Ray Tune can do HPO.
+    In the following section, we will illustrate how to wrap our NLP text sentiment
+    model.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tune.report` for reporting model metrics ([https://docs.ray.io/en/latest/tune/api_docs/trainable.html#function-api](https://docs.ray.io/en/latest/tune/api_docs/trainable.html#function-api)).
+    A class-based API requires the model training function (trainable) to be a subclass
+    of `tune.Trainable` ([https://docs.ray.io/en/latest/tune/api_docs/trainable.html#trainable-class-api](https://docs.ray.io/en/latest/tune/api_docs/trainable.html#trainable-class-api)).
+    A class-based API provides more control of how Ray Tune controls the model training
+    processing. This might be very helpful if you start writing a new piece of architecture
+    for a neural network model. However, when using a pretrained foundation model
+    for fine-tuning, it is much easier to use a function-based API since we can leverage
+    packages such as PyTorch Lightning Flash to do HPO.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tune.run`, where Ray Tune will orchestrate the HPO process.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tune.loguniform`) or from some categorical variables (for example, `tune.choice([''a'',
+    ''b'' ,''c''])` can allow you to choose these three choices uniformly). Usually,
+    this search space is defined as a Python dictionary variable called `config`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tune.suggest` API ([https://docs.ray.io/en/latest/tune/api_docs/suggestion.html#tune-search-alg](https://docs.ray.io/en/latest/tune/api_docs/suggestion.html#tune-search-alg)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`tune.suggest` API provides the optimization algorithms for searching, it does
+    not offer the early stopping or pruning capability to halt the obviously unpromising
+    trials after just a few iterations. Since early stopping or pruning can significantly
+    speed up the HPO process, it is highly recommended that you use a scheduler in
+    conjunction with a searcher. Ray Tune provides many popular schedulers through
+    its scheduler API (`tune.schedulers`), such as ASHA, HyperBand, and more. (Please
+    visit [https://docs.ray.io/en/latest/tune/api_docs/schedulers.html#trial-schedulers-tune-schedulers](https://docs.ray.io/en/latest/tune/api_docs/schedulers.html#trial-schedulers-tune-schedulers).)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Having reviewed the basic concepts and APIs of Ray Tune, in the next section,
+    we will be setting up Ray Tune and MLflow to run HPO experiments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up Ray Tune and MLflow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now that we understand the basic concepts and APIs of Ray Tune, let''s see
+    how we can set up Ray Tune to perform HPO for the fine-tuning step of our previous
+    NLP sentiment classifier. You might want to download this chapter''s code ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/))
+    to follow along with these instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install Ray Tune by typing the following command into your conda virtual environment,
+    `dl_model_hpo`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This will install Ray Tune in the virtual environment where you will launch
+    the HPO runs for your DL model fine-tuning. Note that we have also provided the
+    complete `requirements.txt` file in this chapter''s GitHub repository ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/requirements.txt](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter06/requirements.txt)),
+    where you should be able to run the following installation command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The complete instructions in the `README.md` file, which are in the same folder,
+    should give you more guidance if you need to know how to set up a proper virtual
+    environment.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'For the MLflow setup, assuming you already have a full-fledged MLflow tracking
+    server set up, the only thing you need to pay attention to is making sure that
+    you have the environment variables set up correctly to access the MLflow tracking
+    server. Run the following in your shell to set them up. Alternatively, you can
+    overwrite your environmental variables by calling `os.environ["environmental_name"]=value`
+    in the Python code. As a reminder, we have shown the following environment variables
+    that can be set in the command lines per Terminal session:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the step of `download_data` to download the raw data to the local folder
+    under the `chapter06` parent folder:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: When the preceding execution is done, you should be able to find the IMDB data
+    under the **chapter06/data/** folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now we are ready to create an HPO step to fine-tune the NLP sentiment model
+    we built earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Ray Tune trainable for the DL model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'There are multiple changes that we need to make to allow Ray Tune to run HPO
+    to fine-tune the DL model that we developed in previous chapters. Let''s walk
+    through the steps, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s identify the list of possible hyperparameters (both tunable and
+    non-tunable) in our previous fine-tuning code. Recall that our fine-tuning code
+    looks similar to the following (only the key lines of code are shown here; the
+    complete code can be found in `chapter05` in the GitHub repository at [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter05/pipeline/fine_tuning_model.py#L19](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter05/pipeline/fine_tuning_model.py#L19)):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The preceding code has four major pieces:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The `datamodule` variable: This defines the data sources for training, validation,
+    and testing. There is a `batch_size` parameter with a default value of `1`, which
+    is not shown here, but it is one of the most important hyperparameters to tune.
+    For more details, please see the explanation in the `lightning-flash` code documentation
+    ([https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/core/data/data_module.py#L64](https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/core/data/data_module.py#L64)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`classifier_model`: This defines a classifier with the exposed parameters through
+    the `TextClassifier` API of `lightning-flash`. There are multiple hyperparameters
+    in the input arguments that could be tuned, including `learning_rate`, the `backbone`
+    foundation model, `optimizer`, and more. You can see the complete list of input
+    arguments in the `lightning-flash` code documentation for the `TextClassifier`
+    API ([https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/text/classification/model.py#L44](https://github.com/PyTorchLightning/lightning-flash/blob/450902d713980e0edefcfd2d2a2a35eb875072d7/flash/text/classification/model.py#L44)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`trainer`: This defines a trainer variable that can be used for fine-tuning.
+    Here, there are a few hyperparameters that need to be set, but not necessarily
+    tuned, such as `num_epochs`, as discussed earlier.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`trainer.finetune`: This does the actual finetuning (transfer learning). Note
+    that there is also a possible hyperparameter **strategy** that could be tuned.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For learning purposes, we will pick `learning_rate` and `batch_size` as the
+    two hyperparameters to tune, as these two are the most important hyperparameters
+    to optimize for a DL model. Once you finish this chapter, you should be able to
+    easily add additional hyperparameters to the list of candidates for optimization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Ray Tune requires a trainable function to be passed into `tune.run`. This means
+    we need to create a trainable function. By default, a trainable function only
+    takes one required input parameter, `config`, which contains a dictionary of key-value
+    pairs of hyperparameters and other parameters for identifying an execution environment
+    such as an MLflow tracking URL. However, Ray Tune provides a wrapper function,
+    called `tune.with_parameters`, which allows you to pass along additional arbitrary
+    parameters and objects ([https://docs.ray.io/en/latest/tune/tutorials/overview.html#how-can-i-pass-further-parameter-values-to-my-trainable](https://docs.ray.io/en/latest/tune/tutorials/overview.html#how-can-i-pass-further-parameter-values-to-my-trainable)).
+    First, let''s create a function called `finetuning_dl_model` to encapsulate the
+    logic that we just examined regarding the fine-tuning step, using a `mlflow_mixin`
+    decorator. This allows MLflow to be initialized automatically when this function
+    is called:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This function takes a `config` dictionary as input where a list of hyperparameters
+    and MLflow configurations can be passed in. Additionally, we add three additional
+    arguments to the function signature: `data_dir` for the location of the directory,
+    `num_epochs` for the maximum number of epochs for each trial to run, and `num_gpus`
+    for the number of GPUs for each trial to use if there is any.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this `mlflow_mixin` decorated function, we can use all the MLflow tracking
+    APIs if necessary, but as of MLflow version 1.22.0, since MLflow''s autologging
+    support no longer is an experimental feature, but a mature production quality
+    feature ([https://github.com/mlflow/mlflow/releases/tag/v1.22.0](https://github.com/mlflow/mlflow/releases/tag/v1.22.0)),
+    we should just use autologging in our code, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This is efficient and requires no change. However, the `batch_size` hyperparameter
+    is not automatically captured by autologging, so we need to add one more logging
+    statement after the fine-tuning is done, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the rest of the implementation body of the `finetuning_dl_model` function,
+    the majority of the code is the same as before. There are a few changes. In the
+    `datamodule` variable assignment statement, we add `batch_size=config[''batch_size'']`
+    to allow the mini-batch size of the training data to be tunable, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'When defining the `classifier_model` variable, instead of using the default
+    values of the set of hyperparameters, now we need to pass in the `config` dictionary
+    to assign these values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we need to modify the trainer assignment code. Here, we need to do two
+    things: first, we need to define a metrics key-value dictionary to pass from PyTorch
+    Lightning to Ray Tune. The key in this metrics dictionary is the name to be referenced
+    in the Ray Tune trial run, while the value of the key in this dictionary is the
+    corresponding metric name reported by PyTorch Lightning.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Metric Names in the PyTorch Lightning's Validation Step
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: When passing the metrics to Ray Tune, first, we need to know the metric names
+    used in PyTorch Lightning during the validation step since HPO only uses validation
+    data for evaluation, not the hold-out test datasets. It turns out PyTorch Lightning
+    has a hardcoded convention to prefix all metrics with the corresponding training,
+    validation, and testing step names and an underscore. A metric named `f1` will
+    be reported in PyTorch Lightning as `train_f1` during the training step, `val_f1`
+    during the validation step, and `test_f1` during the testing step. (You can view
+    the PyTorch Lightning code logic at [https://github.com/PyTorchLightning/lightning-flash/blob/8b244d785c5569e9aa7d2b878a5f94af976d3f55/flash/core/model.py#L462](https://github.com/PyTorchLightning/lightning-flash/blob/8b244d785c5569e9aa7d2b878a5f94af976d3f55/flash/core/model.py#L462)).
+    In our example, we can pick `cross_entropy` and `f1` as the metrics during the
+    validation step, which are named `val_cross_entropy` and `val_f1`, to pass back
+    to Ray Tune as `loss` and `f1`, respectively. That means, in Ray Tune's trial
+    run, we reference these two metrics as simply `loss` and `f1`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'So, here we define two metrics that we want to pass from the PyTorch Lightning
+    validation step, `val_cross_entropy` and `val_f1`, to Ray Tune as `loss` and `f1`,
+    respectively:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can pass this metrics dictionary to the trainer assignment, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that the metrics dictionary is passed through `TuneReportCallBack` when
+    the `validation_end` event happens. This means that when the validation step is
+    done in PyTorch Lightning, it will automatically trigger the Ray Tune report function
+    to report the list of metrics back to Ray Tune for evaluation. The supported list
+    of valid events for `TuneReportCallback` to use can be found in Ray Tune's integration
+    with the PyTorch Lightning source code ([https://github.com/ray-project/ray/blob/fb0d6e6b0b48b0a681719433691405b96fbea104/python/ray/tune/integration/pytorch_lightning.py#L170](https://github.com/ray-project/ray/blob/fb0d6e6b0b48b0a681719433691405b96fbea104/python/ray/tune/integration/pytorch_lightning.py#L170)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we can call `trainer.finetune` to execute the fine-tuning step. Here,
+    we can pass `finetuning_strategies` as one of the tunable hyperparameters to the
+    argument list:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This completes the changes to the original function of fine-tuning the DL model.
+    Now we have a new `finetuning_dl_model` function that''s ready to be wrapped in
+    `tune.with_parameters` to become a Ray Tune trainable function. It should be called
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that there is no need to pass the `config` parameter, as it is implicitly
+    assumed that it's the first parameter of `finetuning_dl_model`. The other three
+    parameters need to be passed to the `tune.with_parameters` wrapper. Also, make
+    sure this statement to create a trainable object for Ray Tune is placed outside
+    of the `finetuning_dl_model` function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the next section, it will be placed inside Ray Tune's HPO running function
+    called `run_hpo_dl_model`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Ray Tune HPO run function
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now, let''s create a Ray Tune HPO run function to do the following five things:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Define the MLflow runtime configuration parameters including a tracking URI
+    and an experiment name.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Define the hyperparameter search space using Ray Tune's random distributions
+    API ([https://docs.ray.io/en/latest/tune/api_docs/search_space.html#random-distributions-api](https://docs.ray.io/en/latest/tune/api_docs/search_space.html#random-distributions-api))
+    to sample the list of hyperparameters we identified earlier.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Define a Ray Tune trainable object using `tune.with_parameters`, as shown toward
+    the end of the previous subsection.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Call `tune.run`. This will execute the HPO run and return Ray Tune's experiment
+    analysis object when it has been completed.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Log the best configuration parameters when the entire HPO run is finished.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let''s walk through the implementation to see how this function can be implemented:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s define the hyperparameter''s `config` dictionary, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will take `tracking_uri` and `experiment_name` of MLflow as the input parameters
+    and set them up correctly. If this is the first time you're running this, MLflow
+    will also create the experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, we can define the `config` dictionary, which can include both tunable
+    and non-tunable parameters, and the MLflow configuration parameters. As discussed
+    in the previous section, we will tune `learning_rate` and `batch_size` but will
+    also include other hyperparameters for bookkeeping and future tuning purposes:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As you can see from the `config` dictionary, we called `tune.loguniform` to
+    sample a log uniform distribution between `1e-4` and `1e-1` to select a learning
+    rate. For the batch size, we called `tune.choice` to select one of three distinct
+    values uniformly. For the rest of the key-value pairs, they are non-tunable since
+    they do not use any sampling methods but are needed to run the trials.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Define the trainable object using `tune.with_parameters` with all of the extra
+    parameters except for the `config` parameter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In the next statement, this will be called the `tune.run` function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we are ready to run the HPO by calling `tune.run`, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, the objective is to find the set of hyperparameters that maximizes the
+    F1-score among all of the trials, so the mode is `max` and the metric is `f1`.
+    Note that this metric name, `f1`, is from the `metrics` dictionary that we defined
+    in the previous `finetuning_dl_model` function, where we mapped PyTorch Lightning's
+    `val_f1` to `f1`. This `f1` value is then passed to Ray Tune at the end of each
+    trial's validation step. The `trainable` object is passed to `tune.run` as the
+    first parameter, which will be executed as many times as the parameter of `num_samples`
+    allows. Following this, `resources_per_trial` defines the CPU and GPU to use.
+    Note that in the preceding example, we haven't specified any search algorithms.
+    This means it will use `tune.suggest.basic_variant` by default, which is a grid
+    search algorithm. There is also no scheduler defined, so, by default, there is
+    no early stopping, and all trials will be run in parallel with the maximum number
+    of CPUs allowed on the execution machine. When the run finishes, an `analysis`
+    variable is returned, which contains the best hyperparameters found, along with
+    other information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Log the best configuration of the hyperparameters found. This can be done by
+    using the returned `analysis` variable from `tune.run`, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: That's it. Now we can give it a try. If you download the complete code from
+    this chapter's GitHub repository, you should be able to find the `hpo_finetuning_model.py`
+    file under the `pipeline` folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With the preceding change, now we are ready to run our first HPO experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running the first Ray Tune HPO experiment with MLflow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now that we have set up Ray Tune, MLflow, and created the HPO run function,
+    we can try to run our first Ray Tune HPO experiment, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After a couple of seconds, you will see the following screen, *Figure 6.2*,
+    which shows that all 10 trials (that is, the values that we set for `num_samples`)
+    are running concurrently:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.2 – Ray Tune running 10 trials in parallel on a local multi-core
+    laptop'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_06_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.2 – Ray Tune running 10 trials in parallel on a local multi-core laptop
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After approximately 12–14 mins, you will see that all the trials have finished
+    and the best hyperparameters will be printed out on the screen, as shown in the
+    following (your results might vary due to the stochastic nature, the limited number
+    of samples, and the use of grid search, which does not guarantee a global optimal):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: You can find the results for each trial under the result log directory, which,
+    by default, is in the current user's `ray_results` folder. From *Figure 6.2*,
+    we can see that the results are in `/Users/yongliu/ray_results/hpo_tuning_dl_model`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You will see the final output of the best hyperparameters on your screen, which
+    means you have completed running your first HPO experiment! You can see that all
+    10 trials are logged in the MLflow tracking server, and you can visualize and
+    compare all 10 runs using the parallel coordinates plot provided by the MLflow
+    tracking server. You can produce such a plot by going to the MLflow experiment
+    page and selecting the 10 trials you just finished and then clicking on the **Compare**
+    button near the top of the page (see *Figure 6.3*). This will bring you to the
+    side-by-side comparison page with the plotting options being displayed at the
+    bottom of the page:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.3 – Clicking Compare to compare all 10 trial runs on the MLflow
+    experiment page'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_06_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.3 – Clicking Compare to compare all 10 trial runs on the MLflow experiment
+    page
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can click on the **Parallel Coordinates Plot** menu item, which allows
+    you to select the parameters and metrics to plot. Here, we select **lr** and **batch_size**
+    as the parameters and **val_f1** and **val_cross_entropy** as the metrics. The
+    plot is shown in *Figure 6.4*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.4 –Parallel Coordinates Plot for comparing the HPO trial results'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_06_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.4 –Parallel Coordinates Plot for comparing the HPO trial results
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see in *Figure 6.4*, it is very easy to see that **batch_size** of
+    128 and **lr** of 0.02874 produce the best **val_f1** score of 0.6544 and **val_cross_entropy**
+    (the loss value) of 0.62222\. As mentioned earlier, this HPO run did not use any
+    advanced search algorithms and schedulers, so let's see whether we can do better
+    with more experiments in the following sections using early stopping and pruning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running HPO with Ray Tune using Optuna and HyperBand
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now, let's do some experiments with different search algorithms and schedulers.
+    Given that Optuna is such a great TPE-based search algorithm, and ASHA is a great
+    scheduler that does asynchronous parallel trials with early termination of the
+    unpromising ones, it would be interesting to see how many changes we need to do
+    to make this work.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It turns out the change is very minimal based on what we have already done
+    in the previous section. Here, we will illustrate the four main changes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Install the **Optuna** package. This can be done by running the following command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will install Optuna in the same virtual environment that we had before.
+    If you have already run `pip install -r requirements.text`, then Optuna has already
+    been installed and you can skip this step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import the relevant Ray Tune modules that integrate with Optuna and the ASHA
+    scheduler (here, we use the HyperBand implementation of ASHA) as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now we are ready to add the search algorithm variable and scheduler variable
+    to the HPO execution function, `run_hpo_dl_model`, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that the `searcher` variable is now using Optuna, and we set the maximal
+    number of concurrent runs to `4` for this `searcher` variable to try at any given
+    time during the HPO search process. The scheduler is initialized with the HyperBand
+    scheduler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Assign the searcher and scheduler to the corresponding parameters of the `tune.run`
+    call, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that `searcher` is assigned to the `search_alg` parameter, and `scheduler`
+    is assigned to the `scheduler` parameter. That's it. Now we are ready to run HPO
+    with Optuna under the unified Ray Tune framework, with all of the MLflow integration
+    that's already been provided by Ray Tune.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We have provided the complete Python code in the `hpo_finetuning_model_optuna.py`
+    file under the `pipeline` folder. Let''s run this HPO experiment as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You will immediately notice the following in the console output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This means that we are now using Optuna as the search algorithm. Additionally,
+    you will notice that there are four concurrent trials in the status output displayed
+    on the screen. As time goes by, some trials will be terminated after one or two
+    iterations (epochs) before completion. This means ASHA is at work and has eliminated
+    those unpromising trials to save computing resources and speed up the searching
+    process. *Figure 6.5* shows one of the outputs during the run where three trials
+    were terminated with only one iteration. You can find `num_stopped=3` in the status
+    output (the third line in *Figure 6.5*), where it says `Using AsynHyerBand: num_stopped=3`.
+    This means that `AsyncHyperBand` terminated these three trials before they were
+    completed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.5 – Running HPO with Ray Tune using Optuna and AsyncHyperBand'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_06_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.5 – Running HPO with Ray Tune using Optuna and AsyncHyperBand
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the end of the run, you will see the following results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice that the total run time was only 10 minutes. Compared with the previous
+    section that used grid search without early stopping, this saves 2–4 minutes.
+    Now, this might seem brief, but remember that we are only using a tiny BERT model
+    here with only 3 epochs. In a production HPO run, using a large pretrained foundation
+    model with 20 epochs is not uncommon, and the speed of searching will be significant
+    with a good search algorithm combined with a scheduler such as the Asynchronous
+    HyperBand scheduler. The integration of MLflow provided by Ray Tune comes for
+    free, as we can now switch to a different search algorithm and/or a scheduler
+    under a single framework.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While this section only shows you how to use Optuna within the Ray Tune and
+    MLflow framework, replacing Optuna with HyperOpt is a simple drop-in change. Instead
+    of initializing a searcher with `OptunaSearch`, we can use `HyperOptSearch` (you
+    can see an example at [https://github.com/ray-project/ray/blob/d6b0b9a209e3f693afa6441eb284e48c02b10a80/python/ray/tune/examples/hyperopt_conditional_search_space_example.py#L80](https://github.com/ray-project/ray/blob/d6b0b9a209e3f693afa6441eb284e48c02b10a80/python/ray/tune/examples/hyperopt_conditional_search_space_example.py#L80)),
+    and the rest of the code is the same. We leave this as an exercise for you to
+    explore.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Different Search Algorithms and Schedulers with Ray Tune
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that not all search algorithms can work with any scheduler. What search
+    algorithms and schedulers you choose depends on the model complexity and evaluation
+    cost. For a DL model, since the cost of running one epoch is usually high, it
+    is very desirable to use a modern search algorithm such as TPE, Dragonfly, and
+    BlendSearch, coupled with an ASHA type scheduler such as the HyperBand scheduler
+    that we use. For more detailed guidance on which search algorithms and schedulers
+    to use, you should consult the following documentation on the Ray Tune website:
+    [https://docs.ray.io/en/latest/tune/tutorials/overview.html#which-search-algorithm-scheduler-should-i-choose](https://docs.ray.io/en/latest/tune/tutorials/overview.html#which-search-algorithm-scheduler-should-i-choose).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we understand how to use Ray Tune and MLflow to do highly parallel
+    and efficient HPO for DL models, this builds the foundation for us to do more
+    advanced HPO experiments at scale in the future.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we covered the fundamentals and challenges of HPO, why it is
+    important for the DL model pipeline, and what a modern HPO framework should support.
+    We compared three popular frameworks – Ray Tune, Optuna, and HyperOpt – and picked
+    Ray Tune as the winner for running state-of-the-art HPO at scale. We saw how to
+    create HPO-ready DL model code using Ray Tune and MLflow and ran our first HPO
+    experiment with Ray Tune and MLflow. Additionally, we covered how to switch to
+    other search and scheduler algorithms once we have our HPO code framework set
+    up, using the Optuna and HyperBand schedulers as an example. The learnings from
+    this chapter will help you to competently carry out large-scale HPO experiments
+    in real-life production environments, allowing you to produce high-performance
+    DL models in a cost-effective way. We have also provided many references in the
+    *Further reading* section at the end of this chapter to encourage you to study
+    further.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our next chapter, we will continue learning how to build preprocessing and
+    postprocessing steps for a model inference pipeline using MLflow, which is a typical
+    scenario in a real production environment after having an HPO-tuned DL model that's
+    ready for production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*Best Tools for Model Tuning and Hyperparameter Optimization*: [https://neptune.ai/blog/best-tools-for-model-tuning-and-hyperparameter-optimization](https://neptune.ai/blog/best-tools-for-model-tuning-and-hyperparameter-optimization%20)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Comparison between Optuna and HyperOpt: [https://neptune.ai/blog/optuna-vs-hyperopt](https://neptune.ai/blog/optuna-vs-hyperopt)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*How (Not) to Tune Your Model with Hyperopt*: [https://databricks.com/blog/2021/04/15/how-not-to-tune-your-model-with-hyperopt.html](https://databricks.com/blog/2021/04/15/how-not-to-tune-your-model-with-hyperopt.html%20)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Why Hyper parameter tuning is important for your model?*: [https://medium.com/analytics-vidhya/why-hyper-parameter-tuning-is-important-for-your-model-1ff4c8f145d3](https://medium.com/analytics-vidhya/why-hyper-parameter-tuning-is-important-for-your-model-1ff4c8f145d3)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*The Art of Hyperparameter Tuning in Deep Neural Nets by Example*: [https://towardsdatascience.com/the-art-of-hyperparameter-tuning-in-deep-neural-nets-by-example-685cb5429a38](https://towardsdatascience.com/the-art-of-hyperparameter-tuning-in-deep-neural-nets-by-example-685cb5429a38)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Automated Hyperparameter tuning*: [https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a](https://insaid.medium.com/automated-hyperparameter-tuning-988b5aeb7f2a)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Get better at building PyTorch models with Lightning and Ray Tune*: [https://towardsdatascience.com/get-better-at-building-pytorch-models-with-lightning-and-ray-tune-9fc39b84e602](https://towardsdatascience.com/get-better-at-building-pytorch-models-with-lightning-and-ray-tune-9fc39b84e602)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Ray & MLflow: Taking Distributed Machine Learning Applications to Production*:
+    [https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88](https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*A Novice''s Guide to Hyperparameter Optimization at Scale*: [https://wood-b.github.io/post/a-novices-guide-to-hyperparameter-optimization-at-scale/](https://wood-b.github.io/post/a-novices-guide-to-hyperparameter-optimization-at-scale/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'A Databricks notebook to run Ray Tune and MLflow on a Databricks cluster: [https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/6762389964551879/1089858099311442/7376217192554178/latest.html](https://databricks-prod-cloudfront.cloud.databricks.com/public/4027ec902e239c93eaaa8714f173bcfc/6762389964551879/1089858099311442/7376217192554178/latest.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*A Brief Introduction to Ray Distributed Objects, Ray Tune, and a Small Comparison
+    to Parsl*: [https://cloud4scieng.org/2021/04/08/a-brief-introduction-to-ray-distributed-objects-ray-tune-and-a-small-comparison-to-parsl/](https://cloud4scieng.org/2021/04/08/a-brief-introduction-to-ray-distributed-objects-ray-tune-and-a-small-comparison-to-parsl/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,880 @@
+- en: '*Chapter 8:* Neural Machine Translation'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapter, [*Chapter 7*](B16391_07_Final_NM_ePUB.xhtml#_idTextAnchor230),
+    *Implementing NLP Applications*, we introduced several text encoding techniques
+    and used them in three **Natural Language Processing** (**NLP**) applications.
+    One of the applications was for free text generation. The result showed that it
+    is possible for a network to learn the structure of a language, so as to generate
+    text in a certain style.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will build on top of this case study for free text generation
+    and train a neural network to automatically translate sentences from a source
+    language into a target language. To do that, we will use concepts learned from
+    the free text generation network, as well as from the autoencoder introduced in
+    [*Chapter 5*](B16391_05_Final_NM_ePUB.xhtml#_idTextAnchor152), *Autoencoder for
+    Fraud Detection*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start by describing the general concept of machine translation, followed
+    by an introduction to the encoder-decoder neural architectures that will be used
+    for neural machine translation. Next, we will discuss all the steps involved in
+    the implementation of the application, from preprocessing to defining the network
+    structure to training and applying the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The chapter is organized into the following sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Idea of Neural Machine Translation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Encoder-Decoder Architecture
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Preparing the Data for the Two Languages
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building and Training an Encoder-Decoder Architecture
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Idea of Neural Machine Translation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Automatic translation** has been a popular and challenging task for a long
+    time now. The flexibility and ambiguity of the human language make it still one
+    of the most difficult tasks to implement. The same word or phrase can have different
+    meanings depending on the context and, often, there might not be just one correct
+    translation, but many possible ways to translate the same sentence. So, how can
+    a computer learn to translate text from one language into another? Different approaches
+    have been introduced over the years, all with the same goal: to automatically
+    translate sentences or text from a source language into a target language.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The development of automatic translation systems started in the early 1970s
+    with **Rule-Based Machine Translation** (**RBMT**). Here, automatic translation
+    was implemented through hand-developed rules and dictionaries by specialized linguists
+    at the lexical, syntactic, and semantic levels of sentences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the 1990s, **statistical machine translation** models became state of the
+    art, even though the first concepts for statistical machine translation were introduced
+    in 1949 by Warren Weaver. Instead of using dictionaries and handwritten rules,
+    the idea became to use a vast corpus of examples to train statistical models.
+    This task can be described as modeling the probability distribution, ![](img/Formula_B16391_08_001.png),
+    that a string, ![](img/Formula_B16391_07_001.png), in the target language (for
+    example, German) is the translation of a string, ![](img/Formula_B16391_08_003.png),
+    in the source language (for example, English). Different approaches have been
+    introduced to model this ![](img/Formula_B16391_08_004.png) probability distribution,
+    the most popular of which came from the Bayes theorem and modeled ![](img/Formula_B16391_08_005.png)
+    as ![](img/Formula_B16391_08_006.png). Thus, in this approach, the task is split
+    into two subtasks: training a language model, ![](img/Formula_B16391_08_007.png),
+    and modeling the probability, ![](img/Formula_B16391_08_008.png) More generally,
+    several subtasks can be defined, and several models are trained and tuned for
+    each subtask.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'More recently, neural machine translation gained quite some popularity in the
+    task of automatic translation. Also, here, a vast corpus of example sentences
+    in a source and target language is required to train the translation model. The
+    difference between classical statistical-based models and neural machine translation
+    is in the definition of the task: instead of training many small sub-components
+    and tuning them separately, one single network is trained in an end-to-end fashion.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One network architecture that can be used for neural machine translations is
+    an encoder-decoder network. Let's find out what this is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Encoder-Decoder Architecture
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will first introduce the general concept of an encoder-decoder
+    architecture. Afterward, we will focus on how the encoder is used in neural machine
+    translation. In the last two subsections, we will concentrate on how the decoder
+    is applied during training and deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the possible structures for neural machine translation is the **encoder-decoder**
+    network. In [*Chapter 5*](B16391_05_Final_NM_ePUB.xhtml#_idTextAnchor152), *Autoencoder
+    for Fraud Detection*, we introduced the concept of a neural network consisting
+    of an encoder and a decoder component. Remember, in the case of an autoencoder,
+    the task of the encoder component is to extract a dense representation of the
+    input, while the task of the decoder component is to recreate the input based
+    on the dense representation given by the encoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the case of encoder-decoder networks for neural machine translation, the
+    task of the encoder is to extract the context of the sentence in the source language
+    (the input sentence) into a dense representation, while the task of the decoder
+    is to create the corresponding translation in the target language from the dense
+    representation of the encoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 8.1* visualizes this process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.1 – The general structure of an encoder-decoder network for neural
+    machine translation](img/B16391_08_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.1 – The general structure of an encoder-decoder network for neural
+    machine translation
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, the source language is English, and the target language is German. The
+    goal is to translate the sentence `I am a student` from English into German, where
+    one correct translation could be `Ich bin ein Student`. The encoder consumes the
+    `I am a student` sentence and produces as output a dense vector representation
+    of the content of the sentence. This dense vector representation is fed into the
+    decoder, which then outputs the translation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case study, the input and the output of the network are sequences. Therefore,
+    **Recurrent Neural Network** (**RNN**) layers are commonly used in the encoder
+    and decoder parts, to capture the context information and to handle input and
+    output sequences of variable length.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, encoder-decoder RNN-based architectures are used for all kinds of
+    sequence-to-sequence analysis tasks – for example, question-and-answer systems.
+    Here, the question is first processed by the encoder, which creates a dense numerical
+    representation of it, then the decoder generates the answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's focus now on the encoder part of the neural translation network, before
+    we move on to the decoder, to understand what kind of data preparation is needed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying the Encoder
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The goal of the encoder is to extract a dense vector representation of the context
+    from the input sentence. This can be achieved by using a **Long Short-Term Memory**
+    (**LSTM**) layer where the encoder reads the input sentence (in English) either
+    word by word or character by character.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [*Chapter 6*](B16391_06_Final_VK_ePUB.xhtml#_idTextAnchor181), *Recurrent
+    Neural Networks for Demand Prediction*, we introduced LSTM layers. Remember that
+    an LSTM layer has two hidden states, one being the cell state and the other being
+    a filtered version of it. The cell state contains a summary of all previous inputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In a classic encoder-decoder network architecture, the vectors of the hidden
+    states of the LSTM layer are used to store the dense representation. *Figure 8.2*
+    shows how the LSTM-based encoder processes the input sentence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.2 – Example of how the encoder processes the input sentence](img/B16391_08_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.2 – Example of how the encoder processes the input sentence
+  prefs: []
+  type: TYPE_NORMAL
+- en: The encoder starts with some initialized hidden state vectors. At each step,
+    the next word in the sequence is fed into the LSTM unit and the hidden state vectors
+    are updated. The final hidden state vectors, after processing the whole input
+    sequence in the source language, contain the context representation and become
+    the input for the hidden state vectors in the decoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The intermediate output hidden states of the encoder are not used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a dense representation of the context, we can use it to feed
+    the decoder. While the way the encoder works during training and deployment stays
+    the same, the way the decoder works is a bit different during training and deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's first concentrate on the training phase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying the Decoder during Training
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The task of the decoder is to generate the translation in the target sequence
+    from the dense context representation, either word by word or character by character,
+    using again an RNN with an LSTM layer. This means that, in theory, each predicted
+    word/character should be fed back into the network as the next input. However,
+    during training, we can skip the theory and apply the concept of **teacher forcing**.
+    Here, the actual word/character is fed back into the LSTM unit instead of the
+    predicted word/character, which greatly benefits the training procedure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 8.3* shows an example of teacher forcing during the training phase
+    of the decoder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.3 – Example of teacher forcing while training of the decoder](img/B16391_08_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.3 – Example of teacher forcing while training of the decoder
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The dense context representation of the encoder is used to initialize the hidden
+    states of the decoder''s LSTM layer. Next, two sequences are used by the LSTM
+    layer to train the decoder: the input sequence with the true word/character values,
+    starting with a **start token**, and the target sequence, also with the true word/character
+    values.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The target sequence, in this case, is the input sequence shifted by one character
+    and with an end token at the end.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To summarize, three sequences of words/characters are needed during training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The input sequence for the encoder
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The input sequence for the decoder
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The output sequence for the decoder
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: During deployment, we don't have the input and output sequence for the decoder.
+    So, let's find out how the trained decoder can be used during deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying the Decoder during Deployment
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When we apply the trained network, we don''t know the true values of the translation
+    sequence. So, we feed only the dense context representation from the encoder and
+    a start token into the decoder. Then, the decoder applies the LSTM unit multiple
+    times, always feeding the last predicted word/character back into the LSTM unit
+    as input for the next step. *Figure 8.4* visualizes the usage of the decoder during
+    deployment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.4 – Usage of the decoder during deployment](img/B16391_08_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.4 – Usage of the decoder during deployment
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the first step, the dense context representation from the encoder forms the
+    input hidden state vectors and the **start token** forms the input value for the
+    decoder. Based on this, the first word is predicted, and the hidden state vectors
+    are updated. In the next steps, the updated hidden state vectors and the last
+    predicted word are fed back into the LSTM unit, to predict the next word. This
+    means that if a wrong word has been predicted once; the error accumulates in this
+    kind of sequential prediction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, you learned what encoder-decoder neural networks are and how
+    they can be used for neural machine translation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next sections, we will go through the steps required to train a neural
+    machine translation network to translate sentences from English into German. As
+    usual, the first step is data preparation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, let's start by creating the three sequences required to train a neural machine
+    translation network using an encoder-decoder structure.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing the Data for the Two Languages
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 7*](B16391_07_Final_NM_ePUB.xhtml#_idTextAnchor230), *Implementing
+    NLP Applications*, we talked about the advantages and disadvantages of training
+    neural networks at the character and word levels. As we already have some experience
+    with the character level, we decided to also train this network for automatic
+    translation at the character level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To train a neural machine translation network, we need a dataset with bilingual
+    sentence pairs for the two languages. Datasets for different language combinations
+    can be downloaded for free at [www.manythings.org/anki/](http://www.manythings.org/anki/).
+    From there, we can download a dataset containing a number of sentences in English
+    and German that are commonly used in everyday life. The dataset consists of two
+    columns only: the original short text in English and the corresponding translation
+    in German.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 8.5* shows you a subset of this dataset to be used as the training
+    set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.5 – Subset of the training set with English and German sentences](img/B16391_08_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.5 – Subset of the training set with English and German sentences
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, for some English sentences, there is more than one possible
+    translation. For example, the sentence `Hug Tom` can be translated to `Umarmt
+    Tom`, `Umarmen Sie Tom`, or `Drücken Sie Tom`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember that a network doesn't understand characters, only numerical values.
+    Thus, character input sequences need to be transformed into numerical input sequences.
+    In the first part of the previous chapter, we introduced several encoding techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As for the free text generation case study, we adopted **one-hot encoding**
+    as the encoding scheme, which will be implemented in two steps. First, an **index-based
+    encoding** is produced; then, this index-based encoding is converted into a one-hot
+    encoding inside the **Keras Network Learner** node during training and the **Keras
+    Network Executor** node when applying the trained network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In addition, a dictionary mapping for the English and German characters with
+    their index is also needed. In the previous chapter, for product name generation,
+    we resorted to the **KNIME Text Processing Extension** to generate the index-based
+    encoding for the character sequences. We will do the same here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the training of the neural machine translation, three index-encoded character
+    sequences must be created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The input sequence to feed the encoder. This is the index-encoded input character
+    sequence from the source language – in our case, English.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The input sequence to feed the decoder. This is the index-encoded character
+    sequence for the target language, starting with a start token.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The target sequence to train the decoder, which is the input sequence to the
+    decoder shifted by one step in the past and ending with an end token.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The workflow in *Figure 8.6* reads the bilingual sentence pairs, extracts the
+    first 10,000 sentences, performs the index-encoding for the sentences in English
+    and German separately, and finally, partitions the dataset into a training and
+    a test set:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.6 – Preprocessing workflow snippet to prepare the data to train
+    the network for neural machine translation](img/B16391_08_006.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.6 – Preprocessing workflow snippet to prepare the data to train the
+    network for neural machine translation
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most of the work of the preprocessing happens inside the component named **Index
+    encoding and sequence creation**. *Figure 8.7* shows its content:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.7 – Workflow snippet inside the component named Index encoding and
+    sequence creation](img/B16391_08_007.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.7 – Workflow snippet inside the component named Index encoding and
+    sequence creation
+  prefs: []
+  type: TYPE_NORMAL
+- en: The workflow snippet inside the component first separates the English text from
+    the German text, then produces the index-encoding for the sentences – in the upper
+    part for the German sentences and the lower part for the English sentences. Then,
+    finally, for each language, a dictionary is created, applied, and saved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the index-encoding of the German sentences, the two sequences for the
+    decoder are created: in the upper branch by adding a start token at the beginning
+    and in the lower branch by adding an end token at the end of the sequence.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: All sequences from the German and English languages are then transformed into
+    collection cells so that they can be converted to one-hot encoding before training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building and Training the Encoder-Decoder Architecture
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that the three sequences are available, we can start defining the network
+    structure within a workflow. In this section, you will learn how to define and
+    train an encoder-decoder structure in KNIME Analytics Platform. Once the network
+    is trained, you will learn how the encoder and decoder can be extracted into two
+    networks. In the last section, we will discuss how the extracted networks can
+    be used in a deployment workflow to translate English sentences into German.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the Network Structure
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the encoder-decoder architecture, we want to have both the encoder and the
+    decoder as LSTM networks. The encoder and the decoder have different input sequences.
+    The English one-hot-encoded sentences are the input for the encoder and the German
+    one-hot-encoded sentences are the input for the decoder. This means two input
+    layers are needed: one for the encoder and one for the decoder.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The **encoder** network is made up of two layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An input layer implemented via the **Keras Input Layer** node: The shape of
+    the input tensor is ![](img/Formula_B16391_08_009.png), where ![](img/Formula_B16391_08_010.png)
+    is the dictionary size for the source language. *?* in the input tensor shape
+    represents variable length sequences, while *n* indicates one-hot vectors with
+    ![](img/Formula_B16391_08_011.png) components. In our example, ![](img/Formula_B16391_08_012.png)
+    for the English language, and the shape of the input tensor is [?,71].'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'An LSTM Layer via a **Keras LSTM Layer** node: In this node, we use 256 units
+    and enable the *return state* checkbox to pass the hidden states to the upcoming
+    decoder network.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The **decoder network** is made of three layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, a **Keras Input Layer** node to define the input shape. Again, the input
+    shape ![](img/Formula_B16391_08_013.png) is a tuple, where ![](img/Formula_B16391_08_014.png)
+    represents a variable length and ![](img/Formula_B16391_08_015.png) the size of
+    each vector in the input sequence – that is, the dictionary size of the target
+    language (German). In our example, the input tensor for German has a shape of
+    ![](img/Formula_B16391_08_016.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An LSTM layer via a Keras **LSTM Layer** node. This time, the optional input
+    ports are used to feed the hidden states from the encoder into the decoder. This
+    means the output port of the first LSTM layer in the encoder network is connected
+    to both optional input ports in the decoder network. In addition, the output port
+    of the Keras Input Layer node for the German input sequences is connected to the
+    top input port. In its configuration window, it is important to select the correct
+    input tensors as well as the hidden tensors. The *return sequence* and *return
+    state* checkboxes must be activated to return the intermediate output hidden states,
+    which are used in the next layer to extract the probability distribution for the
+    next predicted character. As in the encoder LSTM, 256 units are used.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Last, a softmax layer is added via a **Keras Dense Layer** node to produce the
+    probability vector of the characters in the dictionary in the target language
+    (German). In the configuration window, the softmax activation function is selected
+    to have 85 units, which is the size of the dictionary of the target language.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The workflow in *Figure 8.8* defines this encoder-decoder network structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.8 – The workflow snippet that defines the encoder-decoder network](img/B16391_08_008.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.8 – The workflow snippet that defines the encoder-decoder network
+  prefs: []
+  type: TYPE_NORMAL
+- en: The upper part of the workflow defines the encoder with a **Keras Input Layer**
+    and **Keras LSTM Layer** node. In the lower part, the decoder is defined as described
+    previously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have defined the encoder-decoder architecture, we can train the
+    network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the Network
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As in all other examples in this book, the **Keras Network Learner** node is
+    used to train the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the first tab of the configuration window, named **Input Data**, the input
+    columns for both input layers are selected: in the upper part for the source language,
+    which means the input for the encoder, and in the lower part for the target language,
+    which means the input for the decoder. To convert the index-encoded sequences
+    into one-hot-encoded sequences, the **From Collection of Number (integer) to One-Hot
+    Tensor** conversion type is used for both columns.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next tab of the configuration window, named **Target Data**, the column
+    with the target sequence for the decoder is selected and the **From Collection
+    of Number (integer) to One-Hot Tensor** conversion type is enabled again. Characters
+    are again considered like classes in a multi-class classification problem; therefore,
+    the Categorical Cross Entropy loss function is adopted for the training process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the third tab, **Options**, the training phase is set to run for a maximum
+    of 120 epochs, with a batch size of 128 data rows, shuffling the data before each
+    epoch and using Adam as the optimizer algorithm with the default settings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, we monitor the performance using the **Learner Monitor** view
+    of the Keras Network Learner node and decide to stop the learning process when
+    an accuracy of 94% has been reached.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extracting the Trained Encoder and Decoder
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To apply the trained model to translate new sentences, we need to split the
+    encoder and decoder apart. To do so, each part is extracted from the complete
+    network using a few lines of Python code in a **DL Python Network Editor** node.
+    This node allows us to edit and modify the network structure using the **Python
+    libraries** directly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember that the output of the decoder is the probability distribution across
+    all characters in the target language. In [*Chapter 7*](B16391_07_Final_NM_ePUB.xhtml#_idTextAnchor230),
+    *Implementing NLP Applications*, we introduced two approaches for the prediction
+    of the next character based on this output probability distribution. Option one
+    picks the character with the highest probability as the next character. Option
+    two picks the next character randomly according to the given probability distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this case study, we use option one and implement it directly in the decoder
+    via an additional **lambda layer**. To summarize, when postprocessing, we need
+    to perform the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Separate the encoder and decoder parts of the network.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introduce a lambda layer with an argmax function that selects the character
+    with the highest probability in the softmax layer.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Important note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Lamba layers allow you to use arbitrary TensorFlow functions when constructing
+    sequential and functional API models using TensorFlow as the backend. Lambda layers
+    are best suited for simple operations or quick experimentation.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Let's start with extracting the encoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extracting the Encoder
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the following code, you can see the Python code used to extract the encoder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Load packages:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define input:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Extract trained encoder LSTM and define model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: It starts with defining the input, feeding it into the encoder's LSTM layer,
+    and then defining the output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In more detail, in the first two lines, the required packages are loaded. Next,
+    an input layer is defined; then, the `-3` layer – the trained LSTM layer of the
+    encoder – is extracted. Finally, the network output is defined as the output of
+    the trained encoder LSTM layer
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have extracted the encoder, let's see how we can extract the decoder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extracting the Decoder and Adding a Lambda Layer
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the following code snippet, you can see the code used in the **DL Python
+    Network Editor** node to extract the decoder part and add the lambda layer to
+    it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Load the packages:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the inputs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Extract the trained decoder LSTM layer and softmax layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Apply the LSTM and dense layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Add the lambda layer and define the output:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The code again first loads the necessary packages, then defines three inputs
+    – two for the input hidden states and one for the one-hot-encoded character vector.
+    Next, it extracts the trained LSTM layer and the softmax layer in the decoder.
+    Finally, it introduces the lambda layer with the `argmax` function and defines
+    the output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For faster execution during deployment, the encoder and the decoder are converted
+    into TensorFlow networks using the **Keras to TensorFlow Network Converter** node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have trained the neural machine translation network and we have
+    separated the encoder and the decoder, we want to apply them to the sentences
+    in the test set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The full training workflow is available on the KNIME Hub: [https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/.](https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/.)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying the Trained Network for Neural Machine Translation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To apply the encoder and decoder networks to the test data, we need a workflow
+    that first applies the encoder to the index-encoded English sentences to extract
+    the context information, and then applies the decoder to produce the translation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The decoder should be initialized with the first hidden states from the encoder
+    and with the start token from the input sequence, to trigger the translation character
+    by character in the recursive loop. *Figure 8.9* visualizes the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.9 – The idea of applying the encoder and decoder model during deployment](img/B16391_08_009.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.9 – The idea of applying the encoder and decoder model during deployment
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The workflow snippet in *Figure 8.10* performs exactly these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.10 – This workflow snippet applies the trained encoder-decoder neural
+    architecture to translate English sentences into German sentences](img/B16391_08_010.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.10 – This workflow snippet applies the trained encoder-decoder neural
+    architecture to translate English sentences into German sentences
+  prefs: []
+  type: TYPE_NORMAL
+- en: It starts with a **TensorFlow Network Executor** node (the first one on the
+    left in *Figure 8.10*). This node takes the encoder and the index-encoded English
+    sentences as input. In its configuration window, two outputs are defined from
+    the LSTM hidden states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we create a start token and transform it into a collection cell. To this
+    start token, we apply the decoder network using another **TensorFlow Network Executor**
+    node (the second one from the left). In the configuration window, we make sure
+    that the hidden states from the encoder produced in the previous **TensorFlow
+    Network Executor** node are used as input. As output, we again set the hidden
+    states, as well as the next predicted character – that is, the first character
+    of the translated sentence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we enter the recursive loop, where this process is repeated multiple times
+    using the updated hidden states from the last iteration and the last predicted
+    character as input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, the German dictionary is applied to the index-encoded predicted characters
+    and the final translation is obtained. The following is an excerpt of the translation
+    results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.11 – Final results of the deployed translation network on new English
+    sentences](img/B16391_08_011.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.11 – Final results of the deployed translation network on new English
+    sentences
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the first column, we have the new English sentences, in the second column,
+    the correct translations, and in the last column, the translation generated by
+    the network. Most of these translations are actually correct, even though they
+    don't match the sentences in column two, as the same sentence can have different
+    translations. On the other hand, the translation of the `Talk to Tom` sentence
+    is not correct as `rune` is not a German word.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The described deployment workflow is available on the KNIME Hub: [https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/](https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%208/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, you have learned how you can define, train, and apply encoder-decoder
+    architectures based on the example of neural machine translation at the character
+    level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we explored the topic of neural machine translation and trained
+    a network to produce English-to-German translations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We started with an introduction to automatic machine translation, covering its
+    history from rule-based machine translation to neural machine translation. Next,
+    we introduced the concept of encoder-decoder RNN-based architectures, which can
+    be used for neural machine translation. In general, encoder-decoder architectures
+    can be used for sequence-to-sequence prediction tasks or question-answer systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, we covered all the steps needed to train and apply a neural machine
+    translation model at the character level, using a simple network structure with
+    only one LSTM unit for both the encoder and decoder. The joint network, derived
+    from the combination of the encoder and decoder, was trained using a **teacher
+    forcing** paradigm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the end of the training phase and before deployment, a **lambda layer** was
+    inserted in the decoder part to predict the character with the highest probability.
+    In order to do that, the structure of the trained network was modified after the
+    training process with a few lines of Python code in a DL Python Network Editor
+    node. The Python code split the decoder and the encoder networks and added the
+    lambda layer. This was the only part involving a short, simple snippet of Python
+    code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Of course, this network could be further improved in many ways – for example,
+    by stacking multiple LSTM layers or by training the model at the word level using
+    additional embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the last chapter on RNNs. In the next chapter, we want to move on to
+    another class of neural networks, **Convolutional Neural Networks** (**CNNs**),
+    which have proven to be very successful for image processing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions and Exercises
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'An encoder-decoder model is a:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a.) Many-to-one architecture
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b.) Many-to-many architecture
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c.) One-to-many architecture
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d.) CNN architecture
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What is the task of the encoder in neural machine translation?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a.) To encode the characters
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b.) To generate the translation
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c.) To extract a dense representation of the content in the target language
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d.) To extract a dense representation of the content in the source language
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What is another application for encoder-decoder LSTM networks?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a.) Text classification
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b.) Question-answer systems
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c.) Language detection
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d.) Anomaly detection
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL

@@ -1,0 +1,1021 @@
+- en: '9'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Implementing Model Servers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 8*](B17519_08.xhtml#_idTextAnchor121), *Considering Hardware for
+    Inference*, we discussed hardware options and optimizations for serving DL models
+    that are available to you as part of the Amazon SageMaker platform. In this chapter,
+    we will focus on another important aspect of engineering inference workloads –
+    choosing and configuring model servers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Model servers, similar to application servers for regular applications, provide
+    a runtime context to serve your DL models. You, as a developer, deploy trained
+    models to the model server, which exposes the deployed models as REST or gRPC
+    endpoints. The end users of your DL models then send inference requests to established
+    endpoints and receive a response with predictions. The model server can serve
+    multiple end users simultaneously. It also provides configurable mechanisms to
+    optimize inference latency and throughput to meet specific SLAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In [*Chapter 1*](B17519_01.xhtml#_idTextAnchor013), *Introducing Deep Learning
+    with Amazon SageMaker*, we discussed that Amazon SageMaker Managed Hosting has
+    several mechanisms to deploy models: real-time inference endpoints, batch transform
+    jobs, and asynchronous inference. In all these cases, you will need to select
+    a model server to manage inference runtime and model deployment. However, model
+    server configuration for these use cases will likely be different, since they
+    have different inference traffic profiles and latency/throughput requirements.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Amazon SageMaker provides several model server solutions as part of its DL
+    Inference Containers. In this chapter, we will focus on three popular model servers
+    designed to productionalize DL inference workloads: **TensorFlow Serving** (**TFS**),
+    **PyTorch** **TorchServe** (**PTS**), and **NVIDIA Triton**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using TFS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using PTS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using NVIDIA Triton
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After reading this chapter, you will know how to deploy your TensorFlow and
+    PyTorch models and configure your model servers for your inference requirements.
+    We will also discuss the functional limitations of using model servers as part
+    of SageMaker Managed Hosting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will provide code samples so that you can develop practical
+    skills. The full code examples are available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To follow along with this code, you will need the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An AWS account and IAM user with permission to manage Amazon SageMaker resources.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Have a SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker-compatible
+    environment established.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to GPU training instances in your AWS account. Each example in this chapter
+    will provide the recommended instance types for you to use. You may need to increase
+    your compute quota for *SageMaker Training Job* to have GPU instances enabled.
+    In this case, please follow the instructions at [https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You must install the required Python libraries by running `pip install -r requirements.txt`.
+    The file that contains the required libraries can be found in the `chapter9` directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we will provide examples of compiling models for inference,
+    which requires access to specific accelerator types. Please review the instance
+    recommendations as part of the model server examples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using TFS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**TFS** is a native model server for TensorFlow 1, TensorFlow 2, and Keras
+    models. It is designed to provide a flexible and high-performance runtime environment
+    with an extensive management API and operational features (such as logging and
+    metrics). AWS provides TFS as part of TensorFlow inference containers ([https://github.com/aws/deep-learning-containers/tree/master/tensorflow/inference/docker](https://github.com/aws/deep-learning-containers/tree/master/tensorflow/inference/docker)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reviewing TFS concepts
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: TFS has a concept known as **servable** that encapsulates all model and code
+    assets required for inference. To prepare servable for TFS serving, you need to
+    package the trained model into **SavedModel** format. A SavedModel contains a
+    complete TensorFlow program, including trained parameters and computation. It
+    does not require the original model building code to run, which makes it useful
+    for sharing or deploying across the TFS ecosystem (for example, using TFLite,
+    TensorFlow.js, or TFS). You can package more than one model as well as specific
+    model lookups or embeddings in a single servable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TFS loads and exposes your servable via REST or gRPC endpoints. The Server API
+    defines a list of endpoints to perform classification and regression inference.
+    Additionally, each servable has an associated **signature** that defines the input
+    and output tensors for your model, as well as the model type (regression or classification).
+    Many common models have standard signatures that depend on the type of task (for
+    example, image classification, object detection, text classification, and so on).
+    TFS allows you to have custom signatures as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Integrating TFS with SageMaker
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Amazon SageMaker provides a managed hosting environment where you can manage
+    your inference endpoints with uniform management and invocation APIs, regardless
+    of the underlying model server. This approach sets certain limitations on native
+    model server functionality. In this section, we will review how SageMaker integrates
+    with TFS and the limitations you should be aware of.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When deploying TFS on SageMaker, you will not have access to TFS’s native management
+    API to manage your servable life cycle (loading and unloading models, promoting
+    the model version, and more). Also, you will not have direct access to the TFS
+    Serving API. Instead, you will need to call your SageMaker endpoint using the
+    standard SageMaker invocation interface. Then, the SageMaker HTTP server (a part
+    of the DL TFS container) translates your requests into TFS format and passes them
+    to the TFS Serving APIs. Note that you can provide custom pre-processing, prediction,
+    and post-processing logic in your inference script. SageMaker supports both the
+    REST and gRPC serving APIs. The following diagram shows this TFS integration:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.1 – TFS integration with SageMaker Managed Hosting ](img/B17519_09_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.1 – TFS integration with SageMaker Managed Hosting
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are several things to keep in mind when working with TFS on SageMaker:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned previously, SageMaker doesn’t allow you to access the TFS Management
+    API. However, it does allow to you provide the configuration of TFS via environmental
+    variables.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SageMaker supports hosting multiple models with TFS. For this, you need to prepare
+    separate servables for each model and then create a multi-model archive.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'You can use REST headers and a request body to specify which models TFS should
+    use to serve specific requests. For instance, the following request tells TFS
+    to use `model2` to serve this request:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: SageMaker supports default TFS input and output formats for your inference requests.
+    Additionally, SageMaker also supports application/JSON, text/CSV, and application/JSON
+    Lines.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that once you deploy the endpoint with the TFS model server, you won’t
+    be able to directly change the TFS configuration or served models. For this, you
+    will need to use the SageMaker Management API to create a new endpoint or endpoint
+    variant with the desired configuration. We will discuss managing SageMaker inference
+    resources in production in [*Chapter 10*](B17519_10.xhtml#_idTextAnchor154), *Operationalizing
+    Inference Workloads*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing TFS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: TFS provides a set of mechanisms to optimize your model serving based on your
+    requirements, the runtime environment, and available hardware resources. It implies
+    that TFS tuning is use-case-specific and typically requires testing and benchmarking
+    to achieve desired performance. In this section, we will review several mechanisms
+    that you can use to tune TFS performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using TFS batching
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: TFS supports automatic batching, where you can put several inference requests
+    in a single batch. This can improve your server throughput, especially when using
+    GPU instances (remember, GPUs are very good for parallel computations). How you
+    configure batching will be different depending on the type of hardware device.
+    TFS supports different batching schedules for different servables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To configure TFS batching on SageMaker, you can use the following environment
+    variables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_ENABLE_BATCHING` to enable the TFS batching feature. This defaults
+    to `false`, which means that batching is not enabled.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_MAX_BATCH_SIZE` defines the maximum size of the batch. This
+    defaults to `8`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_BATCH_TIMEOUT_MICROS` defines how long to wait to accumulate
+    a full batch in microseconds. This defaults to `1000`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_NUM_BATCH_THREADS` sets how many batches to process simultaneously.
+    This defaults to the number of instance CPUs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_MAX_ENQUEUED_BATCHES` defines how many batches can be enqueued
+    at the same time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'You can review the detailed documentation on the TFS batching feature here:
+    [https://github.com/tensorflow/serving/blob/master/tensorflow_serving/batching/README.md](https://github.com/tensorflow/serving/blob/master/tensorflow_serving/batching/README.md).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using the gRPC serving API
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As discussed earlier, TFS supports two types of APIs: REST and gRPC. While
+    both APIs have the same functionality, the gRPC API typically has better performance
+    due to the use of HTTP/2 network protocol and more efficient payload representations
+    via the ProtoBuf format.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'While the SageMaker Invocation API only supports the REST API, you can still
+    use gRPC for inter-container communication between SageMaker’s HTTP frontend server
+    and TFS (refer to *Figure 9.1* for an illustration of this). Note that in this
+    case, you will need to provide some code to translate the SageMaker payload into
+    gRPC format and send it to TFS. However, even in this case, AWS reports a decrease
+    in the overall latency by at least 75% for image classification tasks. Refer to
+    this article for details: [https://aws.amazon.com/blogs/machine-learning/reduce-compuer-vision-inference-latency-using-grpc-with-tensorflow-serving-on-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/reduce-compuer-vision-inference-latency-using-grpc-with-tensorflow-serving-on-amazon-sagemaker/).
+    The performance benefits will vary based on the model and payload size.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring resource utilization with TFS
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'TFS provides the following parameters for configuring hardware resources allocation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_INSTANCE_COUNT` defines how many instances of the TFS serving
+    process will be spawned. Changing this parameter may increase your CPU and GPU
+    utilization and ultimately improve your latency/throughput characteristics.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_FRACTIONAL_GPU_MEM_MARGIN` defines the fraction of GPU memory
+    available to initialize the CUDA/cuDNN library. The remaining memory will be distributed
+    equally between TFS processes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_INTER_OP_PARALLELISM` determines how many threads are used when
+    running independent non-blocking compute operations in your model graphs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TFS_INTRA_OP_PARALLELISM` determines how many threads are used when
+    running operations that can be parallelized interally.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, let’s review how we can use TFS on SageMaker using a practical example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing TFS serving
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this example, we will take one of the pre-trained models from TensorFlow
+    Hub, convert it into **SavedModel** format, and then package it with the custom
+    inference for deployment on SageMaker. We will review how we can use both the
+    REST and gRPC APIs and how to define the TFS configuration when it’s deployed
+    on SageMaker Managed Hosting. For this task, we will use the popular EfficientNetV2
+    model architecture to classify images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/1_TensorFlow_Serving.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/1_TensorFlow_Serving.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing the training model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We will start by loading the model artifacts from TensorFlow Hub. You can read
+    about the EfficientNetV2 model on its model page here: [https://tfhub.dev/google/imagenet/efficientnet_v2_imagenet1k_s/classification/2](https://tfhub.dev/google/imagenet/efficientnet_v2_imagenet1k_s/classification/2).
+    To download the model, we can use the TensorFlow Hub API, as shown in the following
+    code block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: This model expects a dense 4D tensor of the `float32` dtype with a shape of
+    `[batch, height, weight, color]`, where `height` and `weight` have a fixed length
+    of `384`, and `color` has a length of `3`. `batch` can be variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To test the model locally, you need to convert the image (or a batch of images)
+    into the expected 4D tensor, run it through the model, and apply the `softmax`
+    function to get the label probabilities, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have performed smoke testing on the model, we need to package it
+    in SageMaker/TFS-compatible formats.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packaging the model artifacts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As discussed earlier, TFS expects your model to be converted into SavedModel
+    format. Additionally, SageMaker expects the model artifact to be packaged into
+    a `tar.gz` archive with the following structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following code creates the appropriate directory structure and exports
+    the trained model in SavedModel format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that in our example, we will only use a single version of a single model.
+    Next, we need to prepare an inference script for preprocessing, running predictions,
+    and postprocessing between the SageMaker HTTP frontend and the TFS server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developing the inference code
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'SageMaker expects your processing code to be named `inference.py` and placed
+    in the `/code` directory in the model archive. Our inference code needs to implement
+    either the `input_handler()` and `output_handler()` functions or a single `handler()`
+    function. In our case, we have chosen to implement a single `handler()` method
+    to process incoming requests and send it to the appropriate TFS API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: As you can see, depending on whether we want to use the gRCP API or the REST
+    API, the processing and prediction code will be slightly different. Note that
+    the `context` `namedtuple` object provides necessary details about the TFS configuration,
+    such as the endpoint path and ports, model name and version, and more.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we choose to use the TFS REST API, we need to convert the incoming request
+    into the expected TFS format, serialize it into JSON, and then generate a POST
+    request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use the gRPC API, we will need to convert the incoming REST payload into
+    a `protobuf` object. For this, we will use the following helper function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we use the `prediction_service_pb2()` and `predict_pb2()` TFS methods
+    to communicate with the gRPC API. Here, the `stub` object converts parameters
+    during the RPC. The `grpc_request` object defines what TFS API to invoke and call
+    the parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To choose what TFS API to call, we implemented a simple mechanism that allows
+    you to provide the `USE_GRPC` environment variable via a SageMaker Model object:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once we have our `inference.py` code ready, we can add it to the model package
+    and create a `tar.gz` model archive. This can be done by running the following
+    Bash code from a Jupyter notebook:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, our model has been packaged according to TFS and SageMaker requirements
+    and we are ready to deploy it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying the TFS model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To deploy the TFS model, follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will start by uploading our model archive to Amazon S3 so that SageMaker
+    can download it to the serving container at deployment time. We can use a SageMaker
+    `Session()` object to do this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we can use the SageMaker SDK TensorFlowModel object to configure the
+    TFS environment. Note that we are providing the TFS configuration via the `env`
+    dictionary:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Once the model has been configured, we are ready to deploy the endpoint. Here,
+    we will use one of the GPU instances, but you can experiment with CPU instances
+    as well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we can run predictions, we need to convert the image (or several images)
+    into a 4D TFS tensor and then convert it into a NumPy `ndarray` that the `.predict()`
+    method knows how to serialize into the application/JSON content type. A sample
+    method to process images into TFS format has been provided in the sample notebook.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following code, we are running predictions and then mapping the resulting
+    softmax scores to labels:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running this code, you should have an output that contains labels and
+    their normalized probabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we reviewed how to use the TFS model server on Amazon SageMaker.
+    TFS is a highly configurable production-grade model server that should be considered
+    a great candidate when it comes to hosting TensorFlow models. We also discussed
+    some implementation specifics of Sagemaker/TFS integration that should be accounted
+    for when engineering your model server. Once you have your TensorFlow model(s)
+    running on SageMaker, it’s recommended to perform benchmarking and tune the TFS
+    configuration based on your specific use case requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will review the native model server for PyTorch models
+    – TorchServe.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using PTS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**PTS** is a native model server for PyTorch models. PTS was developed in collaboration
+    between Meta and AWS to provide a production-ready model server for the PyTorch
+    ecosystem. It allows you to serve and manage multiple models and serve requests
+    via REST or gRPC endpoints. PTS supports serving TorchScripted models for better
+    inference performance. It also comes with utilities to collect logs and metrics
+    and optimization tweaks. SageMaker supports PTS as part of PyTorch inference containers
+    ([https://github.com/aws/deep-learning-containers/tree/master/pytorch/inference/docker](https://github.com/aws/deep-learning-containers/tree/master/pytorch/inference/docker)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Integration with SageMaker
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'PTS is a default model server for PyTorch models on Amazon SageMaker. Similar
+    to TFS, SageMaker doesn’t expose native PTS APIs to end users for model management
+    and inference. The following diagram shows how to integrate SageMaker and PTS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.2 – PTS architecture on SageMaker ](img/B17519_09_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.2 – PTS architecture on SageMaker
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s highlight these integration details:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: SageMaker supports a limited number of PTS configs out of the box. If you need
+    to have more flexibility with your PTS configuration, you may need to extend the
+    SageMaker PyTorch Inference container. Alternatively, you can package the PTS
+    configs as part of your model package and provide the path to it via the `TS_CONFIG_FILE`
+    environment variable. However, with the latter approach, you won’t be able to
+    manipulate all the settings (for example, the JVM config).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PTS requires you to package model artifacts and handler code into a MAR archive.
+    SageMaker has slightly different requirements regarding the model archive, which
+    we will discuss in the following code example.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SageMaker supports hosting multiple models at the same time. For this, you need
+    to set the `ENABLE_MULTI_MODEL` environment variable to `true` and package your
+    models into a single archive.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SageMaker provides a mechanism to configure PTS via endpoint environmental variables.
+    Let’s review the available config parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing PTS on SageMaker
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'PTS supports two primary mechanisms for performance optimization: server-side
+    batching and spawning multiple model threads. These settings can be configured
+    via the following environmental variables:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TS_BATCH_SIZE` to set the maximum size of server-side batches.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TS_MAX_BATCH_DELAY` to set the maximum delay that the server will
+    wait to complete the batch in microseconds.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TS_RESPONSE_TIMEOUT` sets the time delay for a timeout in seconds
+    if an inference response is not available.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`SAGEMAKER_TS_MIN_WORKERS` and `SAGEMAKER_TS_MAX_WORKERS` configure the minimum
+    and the maximum number of model worker threads on CPU or GPU devices, respectively.
+    You can read some of the considerations on setting up these in the PyTorch documentation
+    at [https://github.com/pytorch/serve/blob/master/docs/performance_guide.md](https://github.com/pytorch/serve/blob/master/docs/performance_guide.md).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Additionally, PTS supports inference profiling using the PyTorch TensorBoard
+    plugin, which we discussed in [*Chapter 7*](B17519_07.xhtml#_idTextAnchor110),
+    *Operationalizing Deep Learning Training*. This plugin allows you to profile your
+    PyTorch inference code and identify potential bottlenecks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serving models with PTS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s review how to deploy PyTorch models using PTS on SageMaker. We will use
+    the Distilbert model that has been trained on the Q&A NLP task from HuggingFace
+    Models. The sample code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_PyTorch_Torchserve.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_PyTorch_Torchserve.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packaging the model for PTS on SageMaker
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'When using the PTS model server on SageMaker, you may choose to use one of
+    two options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploy your model using the `PyTorchModel` class from the Python SageMaker SDK.
+    In this case, your model archive needs to provide only the necessary model artifacts
+    (for example, model weights, lookups, tokenizers, and so on). As part of the `PyTorchModel`
+    object configuration, you will provide your inference code and other dependencies,
+    and SageMaker will automatically package it for PTS.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'You can also package your model along with the inference code in a single archive.
+    While this approach requires some additional work, it allows you to create a model
+    package and deploy models without using the SageMaker SDK. SageMaker expects the
+    following directory structure in this case:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In this example, we will use the first option:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following Bash script will download the required HuggingFace model artifacts
+    and package them into a single `tar.gz archive`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we need to upload the model archive to Amazon S3 using the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Next, we need to prepare some code to load models from the uploaded model artifacts
+    and perform inference and data processing. This code is called the **inference
+    handler** in PTS terminology.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing the inference handler
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'SageMaker requires you to provide some code to load the model and run predictions
+    so that you can preprocess incoming inference requests and post-process the response.
+    To perform these operations, you need to implement the `model_fn()`, `predict_fn()`,
+    `input_fn()`, and `output_fn()` methods. You can find implementations of the inference
+    handler using the HuggingFace Pipeline API here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_src/pipeline_predictor.py](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/2_src/pipeline_predictor.py).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying the model to a SageMaker endpoint
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Deploying the model on PTS using the SageMaker SDK is straightforward. To configure
+    PTS, we can use the `"env"` dictionary to set the appropriate environment variables
+    in the serving container. Note that here, we explicitly reference the inference
+    code via the `"entry_point"` parameter. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As a prerequisite, you can add any other dependencies (for example, custom
+    libraries or `requirements.txt`) to the `"source_dir"` location. The SageMaker
+    SDK will automatically merge these assets with the model data into the MAR archive
+    required by PTS:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can define the endpoint configuration and supported serializers and
+    deserializers for the request/response pair:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can run prediction by calling the `.predict()` method:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can also confirm that our PTS configurations have been applied properly.
+    For this, you can open your SageMaker endpoint log stream and search for a log
+    line, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In this section, we discussed how PTS can be used to serve PyTorch models. In
+    real production systems, you will probably prefer to convert your model into TorchScript
+    format and further experiment with batching and worker scaling options to optimize
+    your specific use case requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will review a feature-rich framework-agnostic model
+    server called NVIDIA Triton.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using NVIDIA Triton
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**NVIDIA Triton** is an open source model server developed by NVIDIA. It supports
+    multiple DL frameworks (such as TensorFlow, PyTorch, ONNX, Python, and OpenVINO),
+    as well various hardware platforms and runtime environments (NVIDIA GPUs, x86
+    and ARM CPUs, and AWS Inferentia). Triton can be used for inference in cloud and
+    data center environments and edge or mobile devices. Triton is optimized for performance
+    and scalability on various CPU and GPU platforms. NVIDIA provides a specialized
+    utility for performance analysis and model analysis to improve Triton’s performance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Integration with SageMaker
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'You can use Triton model servers by utilizing a pre-built SageMaker DL container
+    with it. Note that SageMaker Triton containers are not open source. You can find
+    the latest list of Triton containers here: [https://github.com/aws/deep-learning-containers/blob/master/available_images.md#nvidia-triton-inference-containers-sm-support-only](https://github.com/aws/deep-learning-containers/blob/master/available_images.md#nvidia-triton-inference-containers-sm-support-only).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'SageMaker doesn’t require you to provide inference custom code when deploying
+    models on Triton. However, you will need to provide a Triton `config.pbtxt` file
+    for each model you intend to serve. This config specifies the API contract for
+    the inference request/response pair and other parameters on how the model needs
+    to be served. You can review the possible configuration parameters by reading
+    the official Triton documentation: [https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also, note that, unlike TFS and PTS, at the time of writing, SageMaker doesn’t
+    support hosting multiple independent models on Triton. However, you can still
+    have multiple versions of the same model or organize several models into a pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Optimizing Triton inference
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Triton provides several utilities to improve your performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Model Analyzer** allows you to understand the GPU memory utilization of your
+    models so that you can understand how to run multiple models on a single GPU'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Performance Analyzer** allows you to analyze your Triton inference and throughput'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You won’t be able to run Performance Analyzer directly against SageMaker Triton
+    Endpoint since the SageMaker inference API doesn’t match the Triton inference
+    API. To bypass this limitation, you can run the Triton container locally on an
+    instance of SageMaker Notebook with the target hardware accelerator and run an
+    analysis against it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Triton provides the following optimization features:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Dynamic batching**: This puts multiple inference requests into a batch to
+    increase Triton throughput. This feature is similar to the batching we discussed
+    for TFS and PTS model servers.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model instances**: This specifies how many copies of each model will be available
+    for inference. By default, a single instance of the model is loaded. Having more
+    than one copy of the model typically results in better latency/throughout as it
+    allows you to overlap memory transfer operations (for example, CPU to/from GPU)
+    with inference compute. Having multiple instances also allows you to use all the
+    available GPU resources more efficiently.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Both parameters can be configured via the `config.pbtxt` file. Let’s gain some
+    practical experience in using Triton on SageMaker.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serving models with Triton on SageMaker
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this example, we will deploy the image classification PyTorch ResNet50 model
+    using Triton. Our target hardware accelerator will be `ml.g4dn` instances. First,
+    we need to compile the model to the TensorRT runtime; then, the compiled model
+    will be packaged and deployed to the Triton model server. The sample code is available
+    here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/3_NVIDIA_Triton_Server.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter9/3_NVIDIA_Triton_Server.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that the model compilation process described in the following subsection
+    is specific to the PyTorch framework. If you choose to use the TensorFlow model,
+    your model compilation and configuration will be different. You can refer to the
+    Triton TensorFlow backend repository for details: [https://github.com/triton-inference-server/tensorflow_backend](https://github.com/triton-inference-server/tensorflow_backend).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compiling the model for Triton
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are several ways you can compile your eager PyTorch model into TensorRT
+    format, such as by converting your PyTorch model into ONNX format. Another way
+    is to use the PyTorch JIT compiler to convert your eager model into TorchScript
+    format natively. Recently, the PyTorch and NVIDIA teams have implemented an optimized
+    way to compile your PyTorch model into a TensorRT runtime using the **Torch-TensorRT
+    compiler**. This approach has several advantages as it allows you to use TensorRT-specific
+    optimizations such as the GP16 and INT8 reduced precision types and NVIDIA GPU
+    weight sparsity:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.3 – Compiling the PyTorch model using TensorRT-Torch ](img/B17519_09_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.3 – Compiling the PyTorch model using TensorRT-Torch
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To compile the PyTorch model using TensorRT-Torch, we need two components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A runtime environment for compilation. It’s highly recommended to use NVIDIA’s
+    latest PyTorch containers for this purpose. Note that you will need to run this
+    container on an instance with an NVIDIA GPU available. For instance, you can run
+    this sample on a SageMaker Notebook whose type is `g4dn`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Compilation code. This code will be executed inside the NVIDIA PyTorch Docker
+    container.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now, let’s review the compilation code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will start by loading the model from PyTorch Hub, setting it to evaluation
+    mode, and placing it on the GPU device:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will compile it using the TensorRT-Torch compiler. As part of the
+    compiler configuration, we will specify the expected inputs and target precision.
+    Note that since we plan to use dynamic batching for our model, we will provide
+    several input shapes with different values for the batch dimensions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we will save our model to disk:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: To execute this script, you need to start a Docker container with the `docker
+    run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -it --rm
+    -v $PWD/chapter9/3_src:/workspace/3_src nvcr.io/nvidia/pytorch:22.05-py3` command.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Your console session will open inside a container, where you can execute the
+    compilation script by running the `python 3_src/compile_tensorrt.py` command.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The resulting `model.pt` file will be available outside of the Docker container
+    in the `3_src` directory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing the model config
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Previously, we mentioned that Triton uses a configuration file with a specific
+    convention to define model signatures and runtime configuration. The following
+    code is for a `config.pbtxt` file that we can use to host the ResNet50 model.
+    Here, we define batching parameters (the max batch size and dynamic batching config),
+    input and output signatures, as well as model copies and the target hardware environment
+    (via the `instance_group` object):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Refer to the Triton configuration for more details: [https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md](https://github.com/triton-inference-server/server/blob/main/docs/user_guide/model_configuration.md).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packaging the model artifacts
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To deploy the compiled model with its configuration, we need to bundle everything
+    into a single `tar.gz` archive and upload it to Amazon S3\. The following code
+    shows the directory structure within the model archive:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Once the model package has been uploaded to Amazon S3, we can deploy our Triton
+    endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying the Triton endpoint
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The Triton inference container is not supported by the SageMaker Python SDK.
+    Hence, we will need to use the boto3 SageMaker client to deploy the model. Follow
+    these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to identify the correct Triton image. Use the following code
+    to find the Triton container URI based on your version of the Triton server (we
+    used `22.05` for both model compilation and serving) and your AWS region:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we can create the model, which defines the model data and serving container,
+    as well as other parameters, such as environment variables:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'After that, we can define the endpoint configuration:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we are ready to deploy our endpoint:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Once the endpoint has been deployed, you can check SageMaker’s endpoint logs
+    to confirm that the Triton server has started and that the model was successfully
+    loaded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running inference
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To run inference, we must construct a payload according to the model signature
+    defined in `config.pbtxt`. Take a look at the following inference call. The response
+    will follow a defined output signature as well:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: This section described the basic functionality of the Triton model server and
+    how to use it on Amazon SageMaker. It’s recommended that you refer to the Triton
+    documentation to learn advanced features and optimization techniques. Keep in
+    mind that depending on your chosen model format and DL framework, your model configuration
+    will be different. You can review the AWS detailed benchmarking for the Triton
+    server for the BERT model at [https://aws.amazon.com/blogs/machine-learning/achieve-hyperscale-performance-for-model-serving-using-nvidia-triton-inference-server-on-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/achieve-hyperscale-performance-for-model-serving-using-nvidia-triton-inference-server-on-amazon-sagemaker/).
+    These benchmarks provide a good starting point for experimenting with and tuning
+    Triton-hosted models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we discussed how to use popular model servers – TensorFlow
+    Serving, PyTorch TorchServe, and NVIDIA Triton – on Amazon SageMaker. Each model
+    server provides rich functionality to deploy and tune your model inference. The
+    choice of a specific model server may be driven by the DL framework, target hardware
+    and runtime environments, and other preferences. NVIDIA Triton supports multiple
+    model formats, target hardware platforms, and runtimes. At the same time, TensorFlow
+    Serving and TorchServe provide native integration with their respective DL frameworks.
+    Regardless of which model server you choose, to ensure optimal utilization of
+    compute resources and inference performance, it’s recommended to plan how you
+    load test and benchmark your model with various server configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, [*Chapter 10*](B17519_10.xhtml#_idTextAnchor154), *Operationalizing
+    Inference Workloads*, we will discuss how to move and manage inference workloads
+    in production environments. We will review SageMaker’s capabilities for optimizing
+    your inference workload costs, perform A/B testing, scale in and out endpoint
+    resources based on inference traffic patterns, and advanced deployment patterns
+    such as multi-model and multi-container endpoints.
+  prefs: []
+  type: TYPE_NORMAL

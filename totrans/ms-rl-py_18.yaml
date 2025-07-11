@@ -1,0 +1,882 @@
+- en: '*Chapter 14*: Autonomous Systems'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far in the book, we have covered many state-of-the-art algorithms and approaches
+    in reinforcement learning. Now, starting with this chapter, we will see them in
+    action to take on real-world problems! We'll start with robot learning, an important
+    application area for reinforcement learning. To this end, we will train a KUKA
+    robot to grasp objects on a tray using PyBullet physics simulation. We will discuss
+    several ways of solving this hard-exploration problem and solve it both using
+    a manually crafted curriculum as well as using the ALP-GMM algorithm. At the end
+    of the chapter, we will present other simulation libraries for robotics and autonomous
+    driving, which are commonly used to train reinforcement learning agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, this chapter covers the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing PyBullet
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Getting familiar with the KUKA environment
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Developing strategies to solve the KUKA environment
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using curriculum learning to train the KUKA robot
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Going beyond PyBullet, into autonomous driving
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This is one of the most challenging and fun areas for reinforcement learning.
+    Let's dive right in!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing PyBullet
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'PyBullet is a popular high-fidelity physics simulation module for robotics,
+    machine learning, games, and more. It is one of the most commonly used libraries
+    for robot learning using RL, especially in sim-to-real transfer research and applications:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.1 – PyBullet environments and visualizations (source: PyBullet
+    GitHub repo)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_14_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 14.1 – PyBullet environments and visualizations (source: PyBullet GitHub
+    repo)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: PyBullet allows developers to create their own physics simulations. In addition,
+    it has prebuilt environments using the OpenAI Gym interface. Some of those environments
+    are shown in *Figure 14.1*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will set up a virtual environment for PyBullet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up PyBullet
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'It is almost always a good idea to work in virtual environments for Python
+    projects, which is also what we will do for our robot learning experiments in
+    this chapter. So, let''s go ahead and execute the following commands to install
+    the libraries we will use:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can test whether your installation is working by running this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And if everything is working fine, you will see a cool Ant robot wandering
+    around as in *Figure 14.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.2 – Ant robot walking in PyBullet'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_14_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.2 – Ant robot walking in PyBullet
+  prefs: []
+  type: TYPE_NORMAL
+- en: Great! We are now ready to proceed to the KUKA environment that we will use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting familiar with the KUKA environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'KUKA is a company that offers industrial robotics solutions, which are widely
+    used in manufacturing and assembly environments. PyBullet includes a simulation
+    of a KUKA robot, used for object-grasping simulations (*Figure 14.3*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.3 – KUKA robots are widely used in industry. (a) A real KUKA robot'
+  prefs: []
+  type: TYPE_NORMAL
+- en: (image source CNC Robotics website), (b) a PyBullet simulation
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_14_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.3 – KUKA robots are widely used in industry. (a) A real KUKA robot
+    (image source CNC Robotics website), (b) a PyBullet simulation
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are multiple KUKA environments in PyBullet, for the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Grasping a rectangular block using robot and object positions and angles
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Grasping a rectangular block using camera inputs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Grasping random objects using camera/position inputs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we'll focus on the first one, which we'll look into next in
+    more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Grasping a rectangular block using a KUKA robot
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this environment, the goal of the robot is to reach a rectangular object,
+    grasp it, and raise it up to a certain height. An example scene from the environment,
+    along with the robot coordinate system, is shown in *Figure 14.4*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.4 – Object-grasping scene and the robot coordinate system'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_14_4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.4 – Object-grasping scene and the robot coordinate system
+  prefs: []
+  type: TYPE_NORMAL
+- en: The dynamics and initial position of the robot joints are defined in the `Kuka`
+    class of the `pybullet_envs` package. We will talk about these details only as
+    much as we need to, but you should feel free to dive into the class definition
+    to better understand the dynamics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: To better understand the PyBullet environment and how the `Kuka` class is constructed,
+    you can check out the *PyBullet Quickstart Guide* at [https://bit.ly/323PjmO](https://bit.ly/323PjmO).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's now dive into the Gym environment created to control this robot inside
+    PyBullet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The KUKA Gym environment
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '`KukaGymEnv` wraps the `Kuka` robot class and turns it into a Gym environment.
+    The action, observation, reward, and terminal conditions are defined as follows.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Actions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are three actions the agent takes in the environment, which are all about
+    moving the gripper. These actions are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Velocity along the ![](img/Formula_14_001.png) axis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Velocity along the ![](img/Formula_14_002.png) axis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Angular velocity to rotate the gripper (yaw)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The environment itself moves the gripper along the ![](img/Formula_14_003.png)
+    axis towards the tray, where the object is located. When it gets sufficiently
+    close to the tray, it closes the fingers of the gripper to try grasping the object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The environment can be configured to accept discrete or continuous actions.
+    We will use the latter in our case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Observations
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The agent receives nine observations from the environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Three observations for the ![](img/Formula_14_004.png), ![](img/Formula_14_005.png),
+    and ![](img/Formula_14_006.png) positions of the gripper
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Three observations for the Euler angles of the gripper with respect to the ![](img/Formula_14_007.png),
+    ![](img/Formula_14_008.png), and ![](img/Formula_14_009.png) axes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Two observations for the ![](img/Formula_14_010.png) and ![](img/Formula_14_011.png)
+    positions of the object **relative** to the gripper
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: One observation for the Euler angle of the object **relative** to the gripper's
+    Euler angle along the ![](img/Formula_14_012.png) axis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Reward
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The reward for grasping the object successfully and lifting it up to a certain
+    height is 10,000 points. Other than that, there is a slight cost that penalizes
+    the distance between the gripper and the object. Additionally, there is also some
+    energy cost from rotating the gripper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Terminal conditions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An episode terminates after 1,000 steps or after the gripper closes, whichever
+    occurs first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The best way to wrap your mind around how the environment works is to actually
+    experiment with it, which is what you will do next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This can be done with the following code file: `Chapter14/manual_control_kuka.py.`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This script allows you to control the robot manually. You can use the "gym-like"
+    control mode, where the vertical speed and the gripper finger angles are controlled
+    by the environment. Alternatively, you can choose the non-gym-like mode to exert
+    more control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One thing you will notice is that even if you keep the speeds along the ![](img/Formula_14_013.png)
+    and ![](img/Formula_14_014.png) axes at zero, in the gym-like control mode, the
+    robot will change its ![](img/Formula_14_015.png) and ![](img/Formula_14_016.png)
+    positions while going down. This is because the default speed of the gripper along
+    the ![](img/Formula_14_017.png) axis is too high. You can actually verify that,
+    in the non-gym-like mode, values below ![](img/Formula_14_018.png) for ![](img/Formula_14_019.png)
+    alter the positions on the other axes too much. We will reduce the speed when
+    we customize the environment to alleviate that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that you are familiar with the KUKA environment, let's discuss some alternative
+    strategies to solve it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developing strategies to solve the KUKA environment
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The object-grasping problem in the environment is a **hard-exploration** problem,
+    meaning that it is unlikely to stumble upon the sparse reward that the agent receives
+    at the end upon grasping the object. Reducing the vertical speed as we will do
+    will make it a bit easier. Still, let''s refresh our minds about what strategies
+    we have covered to address these kinds of problems:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Reward shaping** is one of the most common **machine teaching** strategies
+    that we discussed earlier. In some problems, incentivizing the agent towards the
+    goal is very straightforward. In many problems, though, it can be quite painful.
+    So, unless there is an obvious way of doing so, crafting the reward function may
+    just take too much time (and expertise about the problem). Also notice that the
+    original reward function has a component to penalize the distance between the
+    gripper and the object, so the reward is already shaped to some extent. We will
+    not go beyond that in our solution.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Curiosity-driven learning** incentivizes the agent to discover new parts
+    of the state space. For this problem, though, we don''t need the agent to randomly
+    explore the state space too much as we already have some idea about what it should
+    do. So, we will skip this technique as well.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`"entropy_coeff"` config inside the PPO trainer of RLlib, which is what we
+    will use. However, our hyperparameter search (we will come to it soon) ended up
+    picking this value as zero.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Curriculum learning** is perhaps the most suitable approach here. We can
+    identify what makes the problem challenging for the agent, start training it at
+    easy levels, and gradually increase the difficulty.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, curriculum learning is what we will leverage to solve this problem. But
+    first, let's identify the dimensions to parametrize the environment to create
+    a curriculum.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Parametrizing the difficulty of the problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'When you experimented with the environment, you may have noticed the factors
+    that make the problem difficult:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The gripper starts too high to discover the correct sequences of actions to
+    grasp the object. So, the robot joint that adjusts the height will be one dimension
+    we will parameterize. It turns out that this is set in the second element of the
+    `jointPositions` array of the `Kuka` class.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When the gripper is not at its original height, it may get misaligned with the
+    location of the object along the ![](img/Formula_14_020.png) axis. We will also
+    parametrize the position of the joint that controls this, which is the fourth
+    element of the `jointPositions` array of the `Kuka` class.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Randomizing the object position is another source of difficulty for the agent,
+    which takes place for the ![](img/Formula_14_021.png) and ![](img/Formula_14_022.png)
+    positions as well as the object angle. We will parametrize the degree of randomization
+    between 0 and 100% for each of these components.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Even when the object is not randomly positioned, its center is not aligned with
+    the default position of the robot on the ![](img/Formula_14_023.png) axis. We
+    will add some bias to the ![](img/Formula_14_024.png) position of the object,
+    again parametrized.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This is great! We know what to do, which is a big first step. Now, we can go
+    into curriculum learning!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using curriculum learning to train the KUKA robot
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The first step before actually kicking off some training is to customize the
+    `Kuka` class as well as `KukaGymEnv` to make them work with the curriculum learning
+    parameters we described above. So, let's do that next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Customizing the environment for curriculum learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'First, we start by creating a `CustomKuka` class that inherits the original
+    `Kuka` class of PyBullet. Here is how we do it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter14/custom_kuka.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We first need to create the new class, and accept an additional argument, the
+    `jp_override` dictionary, which stands for **joint position override**:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We need this to change the `jointPositions` array set in the `reset` method,
+    which we override:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Now, it's time to create `CustomKukaEnv`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Create the custom environment that accepts all these parametrization inputs
+    for curriculum learning:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we are also making it RLlib compatible by accepting `env_config`.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'We use the randomization parameters in the `reset` method to override the default
+    amount of randomization in the object position:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Also, we should now replace the old `Kuka` class with `CustomKuka` and pass
+    the joint position override input to it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we override the `step` method of the environment to decrease the default
+    speed on the ![](img/Formula_14_025.png) axis:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Also notice that we rescaled the reward (it will end up between -10 and 10)
+    to make the training easy.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Great job! Next, let's discuss what kind of curriculum to use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Designing the lessons in the curriculum
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'It is one thing to determine the dimensions to parametrize the difficulty of
+    the problem, and another thing to decide how to expose this parametrization to
+    the agent. We know that the agent should start with easy lessons and move to more
+    difficult ones gradually. This, though, raises some important questions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Which parts of the parametrized space are easy?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What should the step sizes be to change the parameters between lesson transitions?
+    In other words, how should we slice the space into lessons?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What are the criteria of success for the agent to transition to the next lesson?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What if the agent fails in a lesson, meaning that its performance is unexpectedly
+    bad? Should it go back to the previous lesson? What is the bar for failure?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: What if the agent cannot transition into the next lesson for a long time? Does
+    it mean that we set the bar for success for the lesson too high? Should we divide
+    that lesson into sub-lessons?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As you can see, these are non-trivial questions to answer when we are designing
+    a curriculum manually. But also remember that in [*Chapter 11*](B14160_11_Final_SK_ePub.xhtml#_idTextAnchor239),
+    *Generalization and Partial Observability*, we introduced the **Absolute Learning
+    Progress with Gaussian Mixture Models (ALP-GMM)** method, which handles all these
+    decisions for us. Here, we will implement both, starting with a manual curriculum
+    first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the agent using a manually designed curriculum
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We will design a rather simple curriculum for this problem. It will transition
+    the agent to subsequent lessons when it meets the success criteria, and fall back
+    to a previous lesson in the event of low performance. The curriculum will be implemented
+    as a method inside the `CustomKukaEnv` class, with the `increase_difficulty` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We start by defining the delta changes in the parameter values during lesson
+    transitions. For the joint values, we will decrease the joint positions from what
+    is entered by the user (easy) to the original values in the environment (difficult):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'During each lesson transition, we also make sure to increase the randomization
+    of the object position:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we remember to set the biases to zeros when the object position becomes
+    fully randomized:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'So far, so good. We have almost everything ready to train our agent. One last
+    thing before doing so: let''s discuss how to pick the hyperparameters.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hyperparameter selection
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In order to tune the hyperparameters in RLlib, we can use the Ray Tune library.
+    In [*Chapter 15*](B14160_15_Final_SK_ePub.xhtml#_idTextAnchor329), *Supply Chain
+    Management*, we will provide you with an example of how it is done. For now, you
+    can just use the hyperparameters we have picked in `Chapter14/configs.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: In hard-exploration problems, it may make more sense to tune the hyperparameters
+    for a simple version of the problem. This is because without observing some reasonable
+    rewards, the tuning may not pick a good set of hyperparameter values. After we
+    do an initial tuning in an easy environment setting, the chosen values can be
+    adjusted later in the process if the learning stalls.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's see how we can use the environment we have just created during
+    training with the curriculum we have defined.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the agent on the curriculum using RLlib
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To proceed with the training, we need the following ingredients:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initial parameters for the curriculum
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some criteria to define the success (and failure, if needed)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A callback function that will execute the lesson transitions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In the following code snippet, we use the PPO algorithm in RLlib, set the initial
+    parameters, and set the reward threshold (empirically) to *5.5* in the callback
+    function that executes the lesson transitions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter14/train_ppo_manual_curriculum.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: This should kick off the training and you will see the curriculum learning in
+    action! You will notice that as the agent transitions to the next lesson, its
+    performance will usually drop as the environment gets more difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will look into the results of this training later. Let's now also implement
+    the ALP-GMM algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Curriculum learning using absolute learning progress
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The ALP-GMM method focuses on where the biggest performance change (absolute
+    learning progress) in the parameter space is and generates parameters around that
+    gap. This idea is illustrated in *Figure 14.5*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.5 – ALP-GMM generates parameters (tasks) around points, between
+    which the biggest episode reward change is observed'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_14_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.5 – ALP-GMM generates parameters (tasks) around points, between which
+    the biggest episode reward change is observed
+  prefs: []
+  type: TYPE_NORMAL
+- en: This way, the learning budget is not spent on the parts of the state space that
+    have already been learned, or on the parts that are too difficult to learn for
+    the current agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this recap, let's go ahead and implement it. We start by creating a custom
+    environment in which the ALP-GMM algorithm will run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter14/custom_kuka.py
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We get the ALP-GMM implementation directly from the source repo accompanying
+    the paper (Portelas et al. 2019) and put it under `Chapter14/alp`. We can then
+    plug that into the new environment we create, `ALPKukaEnv`, the key pieces of
+    which are here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We create the class and define all the minimum and maximum values of the parameter
+    space we are trying to teach the agent:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, the task is the latest sample from the parameter space generated by the
+    ALP-GMM algorithm to configure the environment.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'A task is sampled at the beginning of each episode. Once an episode finishes,
+    the task (environment parameters used in the episode) and the episode reward are
+    used to update the GMM model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'And finally, we make sure to keep track of the episode reward:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'One thing to note here is that ALP-GMM is normally implemented in a centralized
+    fashion: a central process generates all the tasks for the rollout workers and
+    collects the episode rewards associated with those tasks to process. Here, since
+    we are working in RLlib, it is easier to implement it inside the environment instances.
+    In order to account for the reduced amount of data collected in a single rollout,
+    we used `"fit_rate": 20`, lower than the original level of 250, so that a rollout
+    worker doesn''t wait too long before it fits a GMM to the task-reward data it
+    collects.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After creating `ALPKukaEnv`, the rest is just a simple call of the Ray `tune.run()`
+    function, which is available in `Chapter14/train_ppo_alp.py`. Note that, unlike
+    in a manual curriculum, we don't specify the initial values of the parameters.
+    Instead, we have passed the bounds of the ALP-GMM processes, and they guide the
+    curriculum within those bounds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we are ready to do a curriculum learning bake-off!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing the experiment results
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We kick off three training sessions using the manual curriculum we described,
+    the ALP-GMM one, and one without any curriculum implemented. The TensorBoard view
+    of the training progress is shown in *Figure 14.6*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.6 – Training progress on TensorBoard'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_14_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 14.6 – Training progress on TensorBoard
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A first glance might tell you that the manual curriculum and ALP-GMM are close,
+    while not using a curriculum is a distant third. Actually, this is not the case.
+    Let''s unpack this plot:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The manual curriculum goes from easy to difficult. That is why it is at the
+    top most of the time. In our run, it could not even get to the latest lesson within
+    the time budget. Therefore, the performance shown in the figure is inflated for
+    the manual curriculum.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The no-curriculum training is always competing at the most difficult level.
+    That is why it is at the bottom most of the time: The other agents are not running
+    against the hardest parameter configurations so they slowly get there.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ALP-GMM is in the middle for the most part, because it is experimenting with
+    difficult and hard configurations at the same time while focusing on somewhere
+    in between.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Since this plot is inconclusive, we evaluate the agents on the original (most
+    difficult) configuration. The results are the following after 100 test episodes
+    for each:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The manual curriculum performed the worst as it could not get to the latest
+    lesson as of the end of the training.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The no-curriculum training had some success, but starting with the most difficult
+    setting seems to have set it back. Also, the evaluation performance is in line
+    with what is shown on TensorBoard, since the evaluation settings are no different
+    from the training settings in this case.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: ALP-GMM seems to have benefited from gradually increasing the difficulty and
+    performs the best.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The no-curriculum training's peak point on the TensorBoard graph is similar
+    to ALP-GMM's latest performance. So, our modification with respect to the vertical
+    speed of the robot diminished the difference between the two. Not using a curriculum,
+    however, causes the agent to not learn at all in many hard-exploration scenarios.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can find the code for the evaluation in `Chapter14/evaluate_ppo.py`. Also,
+    you can use the script `Chapter14/visualize_policy.py` to watch your trained agents
+    in action, see where they fall short, and come up with ideas to improve the performance!
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our discussion on the KUKA example of robot learning. In the
+    next section, we will wrap up this chapter with a list of some popular simulation
+    environments used to train autonomous robots and vehicles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Going beyond PyBullet into autonomous driving
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'PyBullet is a great environment to test the capabilities of reinforcement learning
+    algorithms in a high-fidelity physics simulation. Some of the other libraries
+    you will come across at the intersection of robotics and reinforcement learning
+    are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Gazebo: [http://gazebosim.org/](http://gazebosim.org/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'MuJoCo (requires a license): [http://www.mujoco.org/](http://www.mujoco.org/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Adroit: [https://github.com/vikashplus/Adroit](https://github.com/vikashplus/Adroit).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition, you will see Unity and Unreal Engine-based environments used to
+    train reinforcement learning agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The next and more popular level of autonomy is of course autonomous vehicles.
+    RL is increasingly experimented with in realistic autonomous vehicle simulations
+    as well. The most popular libraries in this area are these:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'CARLA: [https://github.com/carla-simulator/carla](https://github.com/carla-simulator/carla).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'AirSim: [https://github.com/microsoft/AirSim](https://github.com/microsoft/AirSim).
+    (Disclaimer: The author is a Microsoft employee at the time of authoring this
+    book and part of the organization developing AirSim.)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With this, we conclude this chapter on robot learning. This is a very hot application
+    area in RL, and there are many environments I hope you enjoyed and are inspired
+    to start tinkering with robots.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Autonomous robots and vehicles are going to play a huge role in our world in
+    the future, and reinforcement learning is one of the primary approaches to create
+    such autonomous systems. In this chapter, we have taken a peek at what it looks
+    like to train a robot to accomplish an object-grasping task, a major challenge
+    in robotics with many applications in manufacturing and material handling in warehouses.
+    We used the PyBullet physics simulator to train a KUKA robot in a hard-exploration
+    setting, for which we used both manual and ALP-GMM-based curriculum learning.
+    Now that you have a fairly good grasp of how to utilize these techniques, you
+    can take on other similar problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next chapter, we will look into another major area for reinforcement
+    learning applications: supply chain management. Stay tuned for another exciting
+    journey!'
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Coumans, E., Bai, Y. (2016-2019). PyBullet, a Python module for physics simulation
+    for games, robotics, and machine learning. URL: [http://pybullet.org](http://pybullet.org).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bulletphysics/Bullet3\. (2020). Bullet Physics SDK, GitHub. URL: [https://github.com/bulletphysics/bullet3](https://github.com/bulletphysics/bullet3).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'CNC Robotics. (2018). KUKA Industrial Robots, Robotic Specialists. URL: [https://www.cncrobotics.co.uk/news/kuka-robots/](https://www.cncrobotics.co.uk/news/kuka-robots/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'KUKA AG. (2020). URL: [https://www.kuka.com/en-us](https://www.kuka.com/en-us).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Portelas, Rémy, et al. (2019). Teacher Algorithms for Curriculum Learning of
+    Deep RL in Continuously Parameterized Environments. ArXiv:1910.07224 [Cs, Stat],
+    Oct. 2019\. arXiv.org, [http://arxiv.org/abs/1910.07224](http://arxiv.org/abs/1910.07224).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

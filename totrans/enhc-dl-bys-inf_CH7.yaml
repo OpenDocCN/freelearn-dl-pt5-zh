@@ -1,0 +1,1316 @@
+- en: Chapter 7
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Practical Considerations for Bayesian Deep Learning
+  prefs: []
+  type: TYPE_NORMAL
+- en: Over the last two chapters, [*Chapter 5*](CH5.xhtml#x1-600005), [*Principled
+    Approaches for Bayesian* *Deep Learning*](CH5.xhtml#x1-600005) and [*Chapter 6*](CH6.xhtml#x1-820006),
+    [*Using the Standard Toolbox for Bayesian* *Deep Learning*](CH6.xhtml#x1-820006),
+    we’ve been introduced to a range of methods that facilitate Bayesian inference
+    with neural networks. [*Chapter 5*](CH5.xhtml#x1-600005), [*Principled Approaches*
+    *for Bayesian Deep Learning*](CH5.xhtml#x1-600005) introduced specially crafted
+    Bayesian neural network approximations, while [*Chapter 6*](CH6.xhtml#x1-820006),
+    [*Using the Standard Toolbox for* *Bayesian Deep Learning*](CH6.xhtml#x1-820006)
+    showed how we can use the standard toolbox of machine learning to add uncertainty
+    estimates to our models. These families of methods come with their own advantages
+    and disadvantages. In this chapter, we will explore some of these differences
+    in practical scenarios in order to help you understand how to select the best
+    method for the task at hand.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will also look at different sources of uncertainty, which can improve your
+    understanding of the data or help you choose a different exception path based
+    on the source of uncertainty. For example, if a model is uncertain because the
+    input data is inherently noisy, you might want to send the data to a human for
+    review. However, if a model is uncertain because the input data has not been seen
+    before, it might be helpful to add this data to your model so that it can reduce
+    its uncertainty on this type of data. Bayesian deep learning techniques can help
+    you to distinguish between these sources of uncertainty. These topics will be
+    covered in the following sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Balancing uncertainty quality and computational considerations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: BDL and sources of uncertainty
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 7.1 Technical requirements
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To complete the practical tasks in this chapter, you will need a Python 3.8
+    environment with the SciPy and scikit-learn stack and the following additional
+    Python packages installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: TensorFlow 2.0
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: TensorFlow Probability
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'All of the code for this book can be found on the GitHub repository for the
+    book: [https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference](https://github.com/PacktPublishing/Enhancing-Deep-Learning-with-Bayesian-Inference).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.2 Balancing uncertainty quality and computational considerations
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: While Bayesian methods have many benefits, there are also trade-offs to consider
+    in terms of memory and computational overheads. These considerations play a critical
+    role in selecting the most appropriate methods to use within real-world applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we’ll examine the trade-offs between different methods in terms
+    of performance and uncertainty quality, and we’ll learn how we can use TensorFlow’s
+    profiling tools to measure the computational costs associated with different models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.2.1 Setting up our experiments
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To evaluate the performance of different models, we’ll need a few different
+    datasets. One of these is the California Housing dataset, which is conveniently
+    provided by scikit-learn. The others we’ll use are commonly used in papers comparing
+    uncertainty models: the Wine Quality dataset and the Concrete Comdivssive Strength
+    dataset. Let’s take a look at a breakdown of these datasets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**California Housing**: This dataset comprises a number of features for different
+    regions in California derived from the 1990 California census. The dependent variable
+    is house value, which is provided as the median value for each block of houses.
+    In older papers, you’ll see the Boston Housing dataset used; the California Housing
+    dataset is now favored due to ethical issues around the Boston Housing dataset.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Wine Quality**: The Wine Quality dataset comprises features pertaining to
+    the chemical composition of a variety of different wines. The value we’re trying
+    to predict is the subjective quality of the wine.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Concrete Comdivssive Strength**: The Concrete Comdivssive Strength dataset’s
+    features describe the ingredients used for mixing concrete, and each data point
+    is a different concrete mixture. The dependent variable is the concrete’s comdivssive
+    strength.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The following experiments will use code from the book’s GitHub repository (
+    [https://github.com/PacktPublishing/Bayesian-Deep-Learning](https://github.com/PacktPublishing/Bayesian-Deep-Learning)),
+    which we’ve seen in various forms in the previous chapters. The example assumes
+    that we’re running the code from within this repository.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Importing our dependencies
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'As usual, we’ll start by importing our dependencies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we can see that we’re using a number of model classes defined in the repository.
+    While these classes each support different architectures of models, they’ll be
+    using the default structure, which is defined in `constants.py`. This structure
+    comprises a single densely connected hidden layer of 64 units, and a single densely
+    connected output layer. The BBB and PBP equivalents will be used and are defined
+    as their default architectures in their respective classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: preparing our data and models
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now we need to prepare our data and models to run our experiments. Firstly,
+    we’ll set up a dictionary that we can iterate over to access data from different
+    datasets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we’ll create another dictionary to allow us to iterate over our different
+    BDL models:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we’ll create a dictionary to hold our results:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we see that we’ll be recording two results: the log-likelihood, and the
+    mean-squared error. We’re using these metrics as we’re looking at regression problems,
+    but for classification problems you may opt to use F-score or accuracy in place
+    of the mean-squared error, and expected calibration error in place of (or as well
+    as) log-likelihood. We’ll also be storing the model type in the `Method` field,
+    and the dataset in the `Dataset` field.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running our experiments
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Now we’re ready to run our experiments. However, we’re not only interested
+    in the model performance, but also the computational considerations of our various
+    models. As such, we’ll see calls to `tf.profiler` in the following code. First,
+    however, we’ll set a few parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we’re setting the number of epochs each model will train for, as well
+    as the batch size each model will use. We’re also setting `logdir_base`, the location
+    that all of our profiling logs will be written to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now we’re ready to drop in our experiment code. We’ll start by iterating over
+    the datasets:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we see that for each dataset we’re splitting the data, using ![2 3](img/file149.jpg)
+    of the data for training and ![1 3](img/file150.jpg) for testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we iterate over the models:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For each model, we instantiate a new log directory to log the training information.
+    We then instantiate the model and run `model.fit()`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the model fits, we stop the profiler and create a new directory to log
+    the prediction information, after which we start the profiler again:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With the profiler running, we run predict, after which we again stop the profiler.
+    With our predictions in hand, we can compute our mean squared error and log-likelihood,
+    and store these to our `results` dictionary. Finally, we run `tf.keras.backend.clear_session()`
+    to clear our TensorFlow graph after each experiment within our `model` loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once we’ve got results for all models and all datasets, we convert our results
+    dictionary into a pandas DataFrame:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now we’re ready to analyze our data!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.2.2 Analyzing model performance
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'With the data obtained from our experiments, we can plot this to see which
+    models performed best on which datasets. To do so, we’ll use the following plotting
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that initially we add a `'NLL'` field to our pandas DataFrame. This gives
+    us the negative log-likelihood. This makes things a little less confusing when
+    looking at the plots, as lower is better for both mean squared error and negative
+    log-likelihood.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code iterates over the datasets and metrics, and creates some nice bar plots
+    with the help of the Seaborn plotting library. In addition to this, we use calls
+    to `ax.text()` to overlay the metric values on the bar plots, allowing us to see
+    the values clearly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Also notice how, for the California Housing data, we’re capping our *y* values
+    at 100 for our negative log-likelihood. This is because, for this dataset, our
+    negative log-likelihood value is *incredibly* high - making it difficult to view
+    this in context with the other values. This is another reason why we’re overlaying
+    the metric values, to allow us to compare them easily as one of the values exceeds
+    the limit of the plot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file151.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.1: Bar plot of results from LL and MSE experiments'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It’s worth noting that, for fair comparison, we’ve used the equivalent architecture
+    across all models, used the same batch size, and trained for the same number of
+    epochs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we see here, there’s no single best method: each model performs differently
+    depending on the data, and a model with low mean squared error isn’t guaranteed
+    to also have a low negative log-likelihood score. Generally speaking, MC dropout
+    exhibits the worst mean squared error scores; however, it also produces the best
+    negative log-likelihood observed during our experiments for the Wine Quality dataset,
+    for which it achieves a negative log-likelihood of 2.9\. This is due to the fact
+    that, while it generally performs worse in terms of error, its uncertainties are
+    very high. As such, because it is more uncertain in regions for which it is wrong,
+    it produces a more favorable negative log-likelihood score. We can see this if
+    we plot the errors against the uncertainties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file152.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.2: Scatter plot of errors vs uncertainty estimates'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure* [*7.2*](#x1-120077r2), we see the BBB, PBP, and ensemble results
+    in the plot on the left, while MC dropout’s results are in the plot on the right.
+    The reason for this is that MC dropout’s uncertainty estimates are two orders
+    of magnitude higher than the uncertainty estimates produced by the other methods,
+    thus they can’t be clearly represented on the same axes. These very high-magnitude
+    uncertainties are also the reason behind its comparatively low negative log-likelihood
+    score. This is quite a surprising example for MC dropout, as it is typically *over-confident*,
+    whereas in this case, it’s clearly *under-confident*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: While MC dropout’s under-confidence may lead to better likelihood scores, these
+    metrics need to be considered in context; we typically want a good trade-off between
+    likelihood and error. As such, PBP is probably the best choice in the case of
+    the Wine Quality data as it has the lowest error, but it also has a reasonable
+    likelihood; its negative log-likelihood is not so low as to be suspicious, but
+    also low enough to know that the uncertainty estimates will be reasonably consistent
+    and principled.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the case of the other datasets, the choices are a little more straightforward:
+    BBB is the clear winner for California Housing, and PBP again proves to be the
+    sensible choice on balance in the case of Concrete Comdivssive Strength. This
+    is all with the important caveat that none of these networks have been specifically
+    optimized for these datasets: this is merely an illustrative example.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Crucially, it’s going to come down to the specific application and how much
+    robust uncertainty estimates matter. For example, in a safety-critical scenario,
+    you’ll want to go with a method with the most robust uncertainty estimates, and
+    so you may favor under-confidence over a lower error because you want to make
+    sure that you’re only going with the model when you’re very confident in its outcome.
+    In these cases, you may well go for an under-confident but high likelihood (low
+    negative likelihood) method such as MC dropout on the Wine Quality dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In other cases, perhaps uncertainty doesn’t matter at all, in which case you
+    may just go for a standard neural network. But in most mission-critical or safety-critical
+    applications, you’re going to want to strike a balance and take advantage of the
+    additional information provided by model uncertainty estimates while still achieving
+    a low error score. However, practically, these performance metrics aren’t the
+    only thing we need to consider when developing machine learning systems. We also
+    care about the practical implications. In the next section, we’ll see how the
+    computational requirements of these models stack up against each other.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.2.3 Computational considerations of Bayesian deep learning models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'For every real-world application of machine learning, there are considerations
+    beyond performance: we also need to understand the practical limitations of the
+    compute infrastructure. They are usually governed by a few things, but existing
+    infrastructure and cost tend to come up time and time again.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Existing infrastructure is often important because unless it’s a totally new
+    project, it’s a case of working out how a machine learning model can be integrated,
+    and this means either finding or requesting additional computational resources
+    on a hardware or software stack. It will come as no surprise that cost is a significant
+    factor: every project has a budget, and the expense that the machine learning
+    component of the solution brings to the table needs to be balanced against the
+    advantages that it provides. The budget will often dictate what machine learning
+    solutions are feasible based on the cost of the computational resources required
+    to train, deploy, and run them at inference time.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get some insight into how the methods here compare in terms of their computational
+    requirements, we’ll look at the output of the TensorFlow profiler that we included
+    in our experiment code. To do this, we simply need to run TensorBoard from the
+    command line, pointing to the logging directory for the particular model we’re
+    interested in:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will start a TensorBoard instance (typically at http://localhost:6006/).
+    Copy the URL into your browser, and you’ll be greeted with the TensorBoard GUI.
+    TensorBoard provides you with a suite of tools for understanding the performance
+    of your TensorFlow models, from the execution time right down to the memory allocation
+    of different processes. You can scroll through the available tools via the **Tools**
+    selection box in the top left corner of the screen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/tensorboard_tool_select.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.3: Tool selection box in the TensorBoard GUI'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get a very detailed picture of what’s going on, take a look at the Trace
+    Viewer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file154.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.4: Trace Viewer in the TensorBoard GUI'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we get an overall picture of the time taken to run our model’s functions,
+    as well as a detailed picture of which processes are running under the hood, and
+    how long each of these processes take to run. We can even dig deeper by double-clicking
+    on a block and looking at its statistics. For example, we can double-click on
+    the **train** block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file155.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.5: Trace Viewer from the TensorBoard GUI, highlighting the train block'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This brings up some information at the bottom of our screen. This allows us
+    to closely examine the run time of this process. If we click on **Duration**,
+    we get a detailed breakdown of the run duration statistics for the process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/tensorboard_profiling_trace_train_stats.JPG)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.6: Examining the statistics of a block in the TensorBoard Trace Viewer'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we see that the process was run 10 times (once per epoch) and that the
+    average duration is 144,527,053 ns (nanoseconds). Let’s use our profiler results
+    for the Concrete Comdivssion Strength dataset and collect the runtime and memory
+    allocation information using TensorBoard. If we do this for each of our models’
+    training runs, we obtain the following information:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|  |  | **Profiling data for model training** |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Model** |  | **Peak memory usage (MiB)** | **Duration (ms)** |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **BBB** |  | 0.09 | 4270 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **PBP** |  | 0.253 | 10754 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **MCDropout** |  | 0.126 | 2198 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Ensemble** |  | 0.215 | 20630 |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|  |  |  |  |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Figure 7.7: Table of profiling data for model training for Concrete Comdivssive
+    Strength dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, we see that MC dropout is the fastest model to train for this dataset,
+    taking half as long as BBB. We also see that the ensemble takes by far the longest
+    to train, nearly 10 times as long as MC dropout, despite the fact that the ensemble
+    comprises only 5 models. In terms of memory usage, we see that the ensemble again
+    performs poorly, but that PBP is the most memory hungry of the models, while BBB
+    has the lowest peak memory usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But it’s not just training that counts. We also need to factor in the computational
+    cost of inference. Looking at our profiling data for our models’ predict functions,
+    we see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|  |  | **Profiling data for model predictions** |  |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Model** |  | **Peak memory usage (MiB)** | **Duration (ms)** |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **BBB** |  | 0.116 | 849 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **PBP** |  | 1.27 | 176 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **MCDropout** |  | 0.548 | 23 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| **Ensemble** |  | 0.389 | 17 |'
+  prefs: []
+  type: TYPE_TB
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '* * *'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|  |  |  |  |'
+  prefs: []
+  type: TYPE_TB
+- en: 'Figure 7.8: Table of profiling data for model prediction for Concrete Comdivssive
+    Strength dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interestingly, here we see that the ensemble is in the lead when it comes to
+    model inference speed, and it also comes in second when we look at peak memory
+    usage for predictions. In contrast, PBP has by far the highest peak memory usage,
+    while BBB takes the longest to run inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are various factors contributing to the results we see here. Firstly,
+    it’s important to note that none of these models are properly optimized for computational
+    performance. For example, we could significantly cut down the training duration
+    for our ensemble by training all the ensemble members in parallel, which we don’t
+    do here. Similarly, because PBP used a lot of high-level code in its implementation
+    (unlike the other methods, which are all built on nicely optimized TensorFlow
+    or TensorFlow Probability code), its performance suffers as a result.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most crucially, we need to ensure that, when selecting the right model for the
+    job, we consider the computational implications as well as the typical performance
+    metrics. So, with all that in mind, how do we choose the right model?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.2.4 Choosing the right model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: With our performance metrics and profiling information in hand, we have all
+    the data we need to choose the right model for the task. But model selection isn’t
+    easy; we see here that all our models have advantages and disadvantages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we start with performance metrics, then we see that BBB has the lowest mean
+    squared error, but it also has a very high negative log-likelihood. So, the best
+    choice on the basis of performance metrics alone is PBP: it has the lowest negative
+    log-likelihood score, and its mean squared error is nowhere near as poor as MC
+    dropout’s error, making PBP the best choice, on balance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, if we look at the computational implications in *Figure* [*7.7*](#x1-121014r7)
+    and [*7.8*](#x1-121017r8), we see that PBP is one of the worst choices both in
+    terms of memory usage and execution time. The best choice here, on balance, would
+    be MC dropout: its prediction time is only a little slower than the prediction
+    time of the ensemble, and it has the shortest training duration.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At the end of the day, it’s entirely down to the application: perhaps inference
+    doesn’t need to be run in real time, so we can go with our PBP implementation.
+    Or perhaps inference time and low error are our key considerations, in which case
+    the ensemble is a good choice. As we see here, metrics and computational overheads
+    need to be considered in context, and, as with any class of machine learning models,
+    there’s no single best choice for all applications. It’s all down to choosing
+    the right tool for the job.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we’ve introduced tools for comprehensively understanding model
+    performance and demonstrated how important it is to consider a range of factors
+    when selecting a model. Fundamentally, performance analysis and profiling are
+    as important for helping us to make the right practical choices as they are for
+    helping us to uncover opportunities for further improvements. We may not have
+    time for further optimizing our code and so may need to be pragmatic and go with
+    the best computationally optimized method we have to hand. Alternatively, the
+    business case may dictate that we need the model with the best performance, which
+    may justify investing time to optimize our code and reduce the computational overheads
+    of a given method. In the next section, we’ll take a look at another important
+    practical consideration of working with BDL methods as we learn how we can use
+    these methods to better understand sources of uncertainty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.3 BDL and sources of uncertainty
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this case study, we will look at how we can model aleatoric and epistemic
+    uncertainty in a regression problem when we are trying to predict a continuous
+    outcome variable. We will use a real-life dataset of diamonds that contains the
+    physical attributes of more than 50,000 diamonds as well as their prices. In particular,
+    we will look at the relationship between the weight of a diamond (measured as
+    its **carat**) and the price paid for the diamond.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Setting up the environment'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To set up the environment, we import several packages. We import `tensorflow`
+    and `tensorflow_probability` for building and training vanilla and probabilistic
+    neural networks, `tensorflow_datasets` for importing the diamonds data set, `numpy`
+    for performing calculations and operations on numerical arrays (such as calculating
+    the mean), `pandas` for handling DataFrames, and `matplotlib` for plotting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, we load the diamonds dataset using the `load` function provided by `tensorflow_datasets`.
+    We load the dataset as a `pandas` DataFrame, which is convenient for preparing
+    the data for training and inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The dataset contains many different attributes of diamonds, but here we will
+    focus on carat and price by selecting the respective columns from the DataFrame:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then divide the dataset into train and test splits. We use 80% of the data
+    for training and 20% for testing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'For further processing, we convert the train and test DataFrames to NumPy arrays:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also save the number of training samples into a variable because we will
+    need it later during model training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we define a plotting function. This function will come in handy during
+    the rest of the case study. It allows us to plot the data points as well as the
+    fitted model predictions and their standard deviations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Using this function, we can have a first look at the training data by running
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The training data distribution is shown in *Figure* [*7.9*](#x1-124168r9). We
+    observe that the relationship between carat and diamond price is non-linear, with
+    prices increasing more rapidly at higher carat.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file157.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.9: Relationship between the carat of a diamond and its price'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 2: Fitting a model without uncertainty'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: Having completed the setup, we are ready to fit some regression models to the
+    data. We start by fitting a neural network model without quantifying the uncertainty
+    in the predictions. This allows us to establish a baseline and to introduce some
+    tools (in the form of functions) that will be useful for all of the models in
+    this case study.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It is recommended that you normalize the input features to a neural network
+    model. In this example, that means normalizing the weight of the diamonds in carats.
+    Normalizing input features will make the model converge faster during training.
+    `tensorflow.keras` provides a convenient normalization function that allows us
+    to do just that. We can use it as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will also need a loss function, ideally one that can be used for all the
+    models in this case study. A regression model can be posed as *P*(*y*|*x,w*),
+    the probability distribution of labels *y* given the inputs *x* and model parameters
+    *w*. We can fit such a model to the data by minimizing the negative log-likelihood
+    loss −*logP*(*y*|*x*). In `Python` code, this can be written as a function that
+    takes as input the true outcome value `y_true` and the predicted outcome distribution
+    `y_divd` and returns the negative log-likelihood of the outcome value under the
+    predicted outcome distribution, which is implemented in the `log_prob()` method
+    provided by the `distributions` module in `tensorflow_probability`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Equipped with these tools, let’s build our first model. We use the normalizer
+    function that we just defined to normalize the model inputs. We then stack two
+    dense layers on top. The first dense layer consists of 32 nodes. This allows us
+    to model the non-linearity observed in the data. The second dense layer consists
+    of one node in order to reduce the model prediction to a single value. Importantly,
+    we do not use the output produced by this second dense layer as the model output.
+    Instead, we use the dense layer output to parameterize the mean of a normal distribution,
+    which means that we are modeling the ground truth labels using a normal distribution.
+    We also set the variance of the normal distribution to 1\. Parameterizing the
+    mean of a distribution while setting the variance to a fixed value implies that
+    we are modeling the overall trend of the data without yet quantifying uncertainty
+    in the model’s predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As we’ve seen in previous case studies, to train the model we use the `compile()`
+    and `fit()` functions. During compilation of the model, we specify the `Adam`
+    optimizer and the previously defined loss function. For the `fit` function, we
+    specify that we want to train the model for 100 epochs on the carat and price
+    data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can then obtain the model’s predictions on the hold-out test data and visualize
+    everything using our `plot_scatter()` function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This produces the following chart:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/prediction_model_no_uncertainty.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.10: Predictions without uncertainty on diamond test data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see in *Figure* [*7.10*](#x1-125089r10) that the model captures the non-linear
+    trend of the data. As a diamond’s weight increases, the model predicts prices
+    to increase more rapidly as we add more and more weight.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, there is another obvious trend in the data that the model does not
+    capture. We can observe that as weight increases, there is more and more variability
+    in the price. At low weight, we only observe a little scatter around the fitted
+    line, but the scatter increases at higher weight. We can consider this variability
+    as inherent to the problem. That is, even if we had a lot more training data,
+    we would still not be able to predict price, especially at high weight, perfectly.
+    This sort of variability is aleatoric uncertainty, which we first encountered
+    in [*Chapter 4*](CH4.xhtml#x1-490004), [*Introducing Bayesian Deep Learning*](CH4.xhtml#x1-490004),
+    and will have a closer look at in the next subsection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Fitting a model with aleatoric uncertainty'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'We can account for aleatoric uncertainty in our model by predicting the standard
+    deviation of the normal distribution in addition to predicting its mean. As before,
+    we build a model with a normalizer layer and two dense layers. However, this time
+    the second dense layer will output two values instead of one. The first output
+    value will again be used to parameterize the mean of a normal distribution. But
+    the second output value will parameterize the variance of the normal distribution,
+    which allows us to quantify the aleatoric uncertainty in the model’s predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We again compile and fit the model on the weight and price data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, we can obtain and visualize predictions on the test data. Note that this
+    time, we pass `plot_std=True` in order to also plot the standard deviation of
+    the predicted output distribution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have now trained a model that represents the variation inherent to the data.
+    The dashed error bars in *Figure* [*7.11*](#x1-126075r11) show the predicted variability
+    of price as a function of weight. We can observe that the model is indeed less
+    certain about what price to predict at weight above 1 carat, reflecting the larger
+    scatter in the data that we observe at the higher weight range.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/prediction_model_aleatoric_uncertainty.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.11: Predictions with aleatoric uncertainty on diamond test data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: Fitting a model with epistemic uncertainty'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: In addition to aleatoric uncertainty, we also deal with epistemic uncertainty
+    – the uncertainty that stems not from the data, but from our model. Looking back
+    at *Figure* [*7.11*](#x1-126075r11), for example, the solid line, which represents
+    the mean of our model prediction, appears to capture the trend of the data reasonably
+    well. But given that training data is limited, we cannot be 100% certain that
+    we found the true mean of the underlying data distribution. Maybe the true mean
+    is actually a little bit greater or a little less than what we estimated it to
+    be. In this section, we look at how we can model such uncertainty, and we will
+    also see that epistemic uncertainty can be reduced by observing more data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The trick to modeling epistemic uncertainty is, once again, to represent the
+    weights in our neural network by a distribution rather than a point estimate.
+    We can achieve this by replacing the dense layers that we used previously with
+    DenseVariational layers from `tensorflow_probability`. Under the hood, this will
+    implement BBB, which we first learned about in [*Chapter 5*](CH5.xhtml#x1-600005),
+    [*Principled Approaches for Bayesian Deep Learning*](CH5.xhtml#x1-600005). In
+    brief, when using BBB, we learn the posterior distribution over the weights of
+    our network using the principle of variational learning. In order to do so, we
+    need to define both prior and posterior distribution functions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the code example for BBB presented in [*Chapter 5*](CH5.xhtml#x1-600005),
+    [*Principled* *Approaches for Bayesian Deep Learning*](CH5.xhtml#x1-600005) made
+    use of predefined `tensorflow_probability` modules for 2D convolution and dense
+    layers with the reparameterization trick, which implicitly defined prior and posterior
+    functions for us. In this example, we will define the prior and posterior functions
+    for the dense layer ourselves.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We start by defining the prior over the dense layer’s weights (both the kernel
+    and the bias terms). The prior distribution models the uncertainty in the weights
+    before we observe any data. It can be defined using a multivariate normal distribution
+    that has a trainable mean and a variance that is fixed at 1:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also define the variational posterior. The variational posterior is an approximation
+    to the distribution of the dense layer’s weights after we have observed the training
+    data. We again use a multivariate normal distribution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Equipped with these prior and posterior functions, we can define our model.
+    As before, we use the normalizer layer to normalize our inputs and then stack
+    two dense layers on top of each other. But this time, the dense layers will represent
+    their parameters as distributions rather than point estimates. We achieve this
+    by using the DenseVariational layers from `tensorflow_probability` together with
+    our prior and posterior functions. The final output layer is a normal distribution
+    with its variance set to 1 and with its mean parameterized by the output of the
+    preceding DenseVariational layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To observe the effect of the amount of available training data on epistemic
+    uncertainty estimates, we first fit our model on a small subset of data before
+    fitting it on all available training data. We take the first 500 samples from
+    the training dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We build, compile, and fit the model as before:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then obtain and plot predictions on the test data. Note that here, we sample
+    from the posterior distribution 10 times, which allows us to observe how much
+    the predicted mean varies with every sample iteration. If the predicted mean varies
+    a lot, this means that epistemic uncertainty is estimated to be large, while if
+    the mean varies only very little, there is only little estimated epistemic uncertainty:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: In *Figure* [*7.12*](#x1-127216r12), we can observe that the predicted mean
+    varies over the 10 different samples. Interestingly, variation (and thus epistemic
+    uncertainty) seems to be lower at lower weights and increases as weight increases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/prediction_model_high_epistemic_uncertainty.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.12: Predictions with high epistemic uncertainty on diamond test data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In order to verify that epistemic uncertainty can be reduced by training on
+    more data, we train our model on the full training dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And then plot the predictions for the full data model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As expected, we see in *Figure* [*7.13*](#x1-127259r13) that epistemic uncertainty
+    is much lower now and the predicted mean varies very little over the 10 samples
+    (to the point where it is hard to see any difference between the 10 red curves):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/prediction_model_low_epistemic_uncertainty.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.13: Predictions with low epistemic uncertainty on diamond test data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 5: Fitting a model with aleatoric and epistemic uncertainty'
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'As a final exercise, we can put all the building blocks together and build
+    a neural network that models both aleatoric and epistemic uncertainty. We can
+    achieve this by using two DenseVariational layers (which will allow us to model
+    epistemic uncertainty) and then stacking a normal distribution layer on top whose
+    mean and variance are parameterized by the outputs of the second DenseVariational
+    layer (which will allow us to model aleatoric uncertainty):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can build and train this model following the same procedure as before. We
+    can then again perform inference on the test data for 10 times, which yields the
+    predictions shown in *Figure* [*7.14*](#x1-128075r14). Every of the 10 inferences
+    now yields a predicted mean and standard deviation. The standard deviation represents
+    the estimated aleatoric uncertainty for every inference, and the variation observed
+    across the different inferences represents the epistemic uncertainty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/prediction_model_aleatoric_and_epistemic_uncertainty.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.14: Predictions with both epistemic and aleatoric uncertainty on diamond
+    test data'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '7.3.1 Sources of uncertainty: Image classification case study'
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous case study, we saw how we can model aleatoric and epistemic
+    uncertainty in a regression problem. In this section, we’ll look at the MNIST
+    digits dataset one more time to model aleatoric and epistemic uncertainty. We
+    will also explore how aleatoric uncertainty can be difficult to reduce, whereas
+    epistemic uncertainty can be reduced with more data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start with our data. To make our example more insightful, we will not
+    just use the standard MNIST dataset but also use a variant of MNIST named AmbiguousMNIST.
+    This dataset contains generated images that are, unsurprisingly, inherently ambiguous.
+    Let’s first load the data and then explore the AmbiguousMNIST dataset. We’ll start
+    with the necessary imports:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can download the AmbiguousMNIST dataset with the `ddu_dirty_mnist` library:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then concatenate and shuffle the images and labels so that we have a good
+    mix of both datasets during training. We also fix the shape of the dataset so
+    that it fits the setup of our model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: '*Figure* [*7.15*](#x1-129091r15) gives an example of the AmbiguousMNIST images.
+    We can see that the images are in between classes: a 4 can also be interpreted
+    as an 9, a 0 can be interpreted as a 6, and vice versa. This means that our model
+    will most likely struggle to classify at least a portion of these images correctly
+    as they are inherently noisy.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file158.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.15: Examples of images from the AmbiguousMNIST dataset'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we have our train dataset, let’s load our test dataset as well. We
+    will just use the standard MNIST test dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can now start to define our model. In this example, we use a small Bayesian
+    neural net with **Flipout** layers. These layers sample from the kernel and bias
+    posteriors during the forward pass and thus add stochasticity to our model. We
+    can use this later on when we want to compute uncertainty values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We define a block as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We compile our model and can start training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We are now interested in separating images via epistemic uncertainty and aleatoric
+    uncertainty. Epistemic uncertainty should separate our in-distribution images
+    from out-of-distribution images, as these images can be seen as unknown unknowns:
+    our model has never seen these images before, and should therefore assign high
+    epistemic uncertainty (or *knowledge uncertainty*) to them. Although our model
+    was trained on the AmbiguousMNIST dataset, the model should still have high aleatoric
+    uncertainty when it would see images from this dataset at test time: training
+    with these images does not reduce aleatoric uncertainty (or *data uncertainty*)
+    as the images are inherently ambiguous.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We use the FashionMNIST dataset as the out-of-distribution dataset. We use
+    the AmbiguousMNIST test set as our ambiguous dataset for testing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let’s use the stochasticity of our model to create a variety of model predictions.
+    We iterate over our test images fifty times:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can then define some functions to compute the different kinds of uncertainty:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can see how well our model can distinguish between in-distribution,
+    ambiguous, and out-of-distribution images. Let’s plot a histogram of the different
+    distributions according to the different uncertainty methods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This produces the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![PIC](img/file159.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 7.16: The different types of uncertainty on MNIST'
+  prefs: []
+  type: TYPE_NORMAL
+- en: What can we observe?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Total and data uncertainty are relatively good at distinguishing in-distribution
+    data from out-of-distribution and ambiguous data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: However, data and total uncertainty are not able to separate ambiguous data
+    from out-of-distribution data. To do that, we need knowledge uncertainty. We can
+    see that knowledge uncertainty clearly separates ambiguous data from out-of-distribution
+    data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We trained on ambiguous samples as well, but that doesn’t reduce the uncertainty
+    of the ambiguous test samples to uncertainty levels similar to the original in-distribution
+    data. This shows that data uncertainty cannot easily be reduced. The data is inherently
+    ambiguous, no matter how much ambiguous data the model sees.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can confirm these observations by looking at the AUROC for the different
+    combinations of distributions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can first compute the AUROC score to compute the ability of our model to
+    separate in-distribution and ambiguous images from out-of-distribution images:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We see a confirmation of what we saw in our histograms: knowledge uncertainty
+    is far better than the other two types of uncertainty at separating in-distribution
+    and ambiguous data from out-of-distribution data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can see that both total uncertainty and data uncertainty are able to separate
+    in-distribution from ambiguous data pretty well. Using data uncertainty gives
+    us a small improvement over using total uncertainty. Knowledge uncertainty, however,
+    is not able to distinguish between in-distribution data and ambiguous data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.4 Summary
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ve taken a look at a number of practical considerations
+    of using Bayesian deep learning: exploring trade-offs in model performance and
+    learning how we can use Bayesian neural network methods to better understand the
+    effects of different uncertainty sources on our data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we’ll dig further into applying BDL through a variety of
+    case studies, demonstrating the benefits of these methods in a range of practical
+    settings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 7.5 Further reading
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Practical Considerations for Probabilistic Backpropagation*, Matt Benatan
+    *et al.*: In this paper, the authors explore methods to get the most out of PBP,
+    demonstrating how different early stopping approaches can be used to improve training,
+    exploring the tradeoffs associated with mini-batching, and more'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Modeling aleatoric and epistemic uncertainty using TensorFlow and* *TensorFlow
+    Probability*, Alexander Molak: In this Jupyter notebook, the author shows how
+    to model aleatoric and epistemic uncertainty on regression toy data'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Weight Uncertainty in Neural Networks*, Charles Blundell *et al.*: In this
+    paper, the authors introduce BBB, which we use in the regression case study and
+    is one of the key pieces of BDL literature'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Deep Deterministic Uncertainty: A Simple Baseline*, Jishnu Mukhoti *et al.*:
+    In this work, the authors describe several experiments related to the different
+    types of uncertainty and introduce the *AmbiguousMNIST* dataset that we used in
+    the last case study'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Uncertainty Estimation in Deep Learning with application to Spoken* *Language
+    Assessment*, Andrey Malinin: This thesis highlights the different sources of uncertainty
+    with intuitive examples'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

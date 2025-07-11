@@ -1,0 +1,612 @@
+- en: '9'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Machine Learning Part 1 – Statistical Machine Learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will discuss how to apply classical statistical machine
+    learning techniques such as **Naïve Bayes**, **term frequency-inverse document
+    frequency** (**TF-IDF**), **support vector machines** (**SVMs**), and **conditional
+    random fields** (**CRFs**) to common **natural language processing** (**NLP**)
+    tasks such as classification (or intent recognition) and slot filling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are two aspects of these classical techniques that we need to consider:
+    representations and models. **Representation** refers to the format of the data
+    that we are going to analyze. You will recall from [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144),
+    that it is standard to represent NLP data in formats other than lists of words.
+    Numeric data representation formats such as vectors make it possible to use widely
+    available numeric processing techniques, and consequently open up many possibilities
+    for processing. In [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144), we also explored
+    data representations such as the **count bag of words**(**BoW**), TF-IDF, and
+    Word2Vec. We will primarily be using TF-IDF in this chapter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once the data is in a format that is ready for further processing, that is,
+    once it has been *vectorized*, we can use it to train, or build, a model that
+    can be used to analyze similar data that the system may encounter in the future.
+    This is the **training** phase. The future data can be test data; that is, previously
+    unseen data similar to the training data that is used to evaluate the model. In
+    addition, if the model is being used in a practical application, the future data
+    could be new examples of queries from users or customers addressed to the runtime
+    system. When the system is used to process data after the training phase, this
+    is called **inference**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will cover the following topics in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A quick overview of evaluation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Representing documents with TF-IDF and classifying with naïve Bayes
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Classifying documents with SVMs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Slot filling with conditional random fields
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will start this chapter with a very practical and basic set of techniques
+    that should be in everyone’s toolbox, and that frequently end up being practical
+    solutions to classification problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A quick overview of evaluation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before we look at how different statistical techniques work, we have to have
+    a way to measure their performance, and there are a couple of important considerations
+    that we should review first. The first consideration is the *metric* or score
+    that we assign to the system’s processing. The most common and simple metric is
+    **accuracy**, which is the number of correct responses divided by the overall
+    number of attempts. For example, if we’re attempting to measure the performance
+    of a movie review classifier, and we attempt to classify 100 reviews as positive
+    or negative, if the system classifies 75 reviews correctly, the accuracy is 75%.
+    A closely related metric is **error rate**, which is, in a sense, the opposite
+    of accuracy because it measures how often the system made a mistake. In this example,
+    the error rate would be 25%.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will only make use of accuracy in this chapter, although there are more precise
+    and informative metrics that are actually more commonly used, for example, **precision**,
+    **recall**, **F1**, and **area under the curve (AUC)**. We will discuss these
+    in [*Chapter 13*](B19005_13.xhtml#_idTextAnchor226). For the purposes of this
+    chapter, we just need a basic metric so that we can compare results, and accuracy
+    will be adequate for that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second important consideration that we need to keep in mind in evaluation
+    is how to treat the data that we will be using for evaluation. Machine learning
+    approaches are trained and evaluated with a standard approach that involves splitting
+    the dataset into *training*, *development*, also often called *validation* data,
+    and *testing* subsets. The training set is the data that is used to build the
+    model, and is typically about 60-80 percent of the available data, although the
+    exact percentage is not critical. Typically, you would want to use as much data
+    as possible for training, while reserving a reasonable amount of data for evaluation
+    purposes. Once the model is built, it can be tested with development data, normally
+    about 10-20 percent of the overall dataset. Problems with the training algorithm
+    are generally uncovered by trying to use the model on the development set. A final
+    evaluation is done once, on the remaining data – the test data, which is usually
+    about 10 percent of the total data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Again, the exact breakdown of training, development, and test data is not critical.
+    Your goal is to use the training data to build a good model that will enable your
+    system to accurately predict the interpretation of new, previously unseen data.
+    To meet that goal, you need as much training data as possible. The goal of the
+    test data is to get an accurate measure of how your model performs on new data.
+    To meet that goal, you need as much test data as possible. So, the data split
+    will always involve a trade-off between these goals.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is very important to keep the training data separate from the development
+    data, and especially from the test data. Performance on the training data is not
+    a good indicator of how the system will really perform on new, unseen data, so
+    performance on the training data is not used for evaluation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following this brief introduction to evaluation, We will now move on to the
+    main topics of this chapter. We will cover some of the most well-established machine
+    learning approaches for important NLP applications such as classification and
+    slot filling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Representing documents with TF-IDF and classifying with Naïve Bayes
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In addition to evaluation, two important topics in the general paradigm of machine
+    learning are representation and processing algorithms. Representation involves
+    converting a text, such as a document, into a numerical format that preserves
+    relevant information about the text. This information is then analyzed by the
+    processing algorithm to perform the NLP application. You’ve already seen a common
+    approach to representation, TF-IDF, in [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144).
+    In this section, we will cover using TF-IDF with a common classification approach,
+    Naïve Bayes. We will explain both techniques and show an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary of TF-IDF
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: You will recall the discussion of TF-IDF from [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144).
+    TF-IDF is based on the intuitive goal of trying to find words in documents that
+    are particularly diagnostic of their classification topic. Words that are relatively
+    infrequent in the whole corpus, but which are relatively common in a specific
+    document, seem to be helpful in finding the document’s class. TF-IDF was defined
+    in the equations presented in the *term frequency-inverse document frequency (TF-IDF)*
+    section in [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144). In addition, we saw
+    partial TF-IDF vectors for some of the documents in the movie review corpus in
+    *Figure 7**.4*. Here, we will take the TF-IDF vectors and use them to classify
+    documents using the Naïve Bayes classification approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying texts with Naïve Bayes
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Bayesian classification techniques have been used for many years, and, despite
+    their long history, are still very common and widely used. Bayesian classification
+    is simple and fast, and can lead to acceptable results in many applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The formula for Bayesian classification is shown in the following equation.
+    For each category in the set of possible categories, and for each document, we
+    want to compute the probability that that is the correct category for that document.
+    This computation is based on some representation of the document; in our case,
+    the representation will be a vector like one of the ones we’ve previously discussed
+    – BoW, TF-IDF, or Word2Vec.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To compute this probability, we take into account the probability of the vector,
+    given a category, multiplied by the probability of the category, and divided by
+    the probability of the document vector, as shown in the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: P(category ∣ documentVector) =  P(documentVector ∣ category)P(category)   _____________________________  P(documentVector)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The training process will determine the probabilities of the document vectors
+    in each category and the overall probabilities of the categories.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The formula is called *naïve* because it makes the assumption that the features
+    in the vectors are independent. This is clearly not correct for text because the
+    words in sentences are not at all independent. However, this assumption makes
+    the processing much simpler, and in practice does not usually make a significant
+    difference in the results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are both binary and multi-class versions of Bayesian classification. We
+    will work with binary classification with the movie review corpus since we have
+    only two categories of reviews.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TF-IDF/Bayes classification example
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Using TF-IDF and Naïve Bayes to classify the movie reviews, we can start by
+    reading the reviews and splitting the data into training and test sets, as shown
+    in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once we have our training and test data, the next step is creating TF-IDF vectors
+    from the reviews, as shown in the following code snippet. We will primarily be
+    using the scikit-learn library, although we’ll use NLTK for tokenization:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: The main steps in the preceding code are creating the vectorizer and then using
+    the vectorizer to convert the movie reviews to TF-IDF format. This is the same
+    process that we followed in [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144). The
+    resulting TF-IDF vectors were shown in *Figure 7**.4*, so we won’t repeat that
+    here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying the documents into positive and negative reviews is then done with
+    the multinomial Naïve Bayes function from scikit-learn, which is one of scikit-learn’s
+    Naïve Bayes packages, suitable for working with TF-IDF vector data. You can take
+    a look at scikit-learn’s other Naïve Bayes packages at [https://scikit-learn.org/stable/modules/naive_bayes.html#naive-bayes](https://scikit-learn.org/stable/modules/naive_bayes.html#naive-bayes)
+    for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we have the TF-IDF vectors, we can initialize the naïve Bayes classifier
+    and train it on the training data, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can compute the accuracy of the classifier by vectorizing the test
+    set (`movies_test_tfidf`), and using the classifier that was created from the
+    training data to predict the classes of the test data, as shown in the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: We can see from the preceding code that the accuracy of the classifier is `0.64`.
+    That is, 64% of the test data reviews were assigned the correct category (positive
+    or negative). We can also get some more information about how well the classification
+    worked by looking at the *confusion matrix*, which is shown in the last two lines
+    of the code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In general, a confusion matrix shows which categories were confused with which
+    other categories. We have a total of `400` test items (20% of the 2,000 reviews
+    that were reserved as test examples). `132` of the `190` negative reviews were
+    correctly classified as negative, and `58` were incorrectly classified as positive.
+    Similarly, `124` of the `210` positive reviews were correctly classified as positive,
+    but `86` were misclassified as negative. That means 69% of the negative reviews
+    were correctly classified, and 59% of the positive reviews were correctly classified.
+    From this, we can see that our model does slightly better in classifying negative
+    reviews as negative. The reasons for this difference are not clear. To understand
+    this result better, we can look more carefully at the reviews that were misclassified.
+    We won’t do this right now, but we will look at analyzing results more carefully
+    in [*Chapter 14*](B19005_14.xhtml#_idTextAnchor248).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will now consider a more modern and generally more accurate approach to classification.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying documents with Support Vector Machines (SVMs)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: SVMs are a popular and robust tool for text classification in applications such
+    as intent recognition and chatbots. Unlike neural networks, which we will discuss
+    in the next chapter, the training process is usually relatively quick and normally
+    doesn’t require enormous amounts of data. That means that SVMs are good for applications
+    that have to be quickly deployed, perhaps as a preliminary step in the development
+    of a larger-scale application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The basic idea behind SVMs is that if we represent documents as **n**-dimensional
+    vectors (for example, the TF-IDF vectors that we discussed in [*Chapter 7*](B19005_07.xhtml#_idTextAnchor144),
+    we want to be able to identify a hyperplane that provides a boundary that separates
+    the documents into two categories with as large a boundary (or *margin*) as possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An illustration of using SVMs on the movie review data is shown here. We start,
+    as usual, by importing the data and creating a train/test split:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have the data set up and we have generated the train/test split,
+    we will create the TF-IDF vectors and perform the SVC classification in the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: The process shown here is very similar to the Naïve Bayes classification example
+    shown in the code snippets in the previous section. However, in this case, we
+    use an SVM instead of Naïve Bayes for classification, although we still use TF-IDF
+    to vectorize the data. In the preceding code, we can see that the accuracy result
+    for the classification is `0.82`, which is considerably better than the Bayes
+    accuracy shown in the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The resulting confusion matrix is also better, in that `153` of the `190` negative
+    reviews were correctly classified as negative, and `37` were incorrectly classified
+    as positive. Similarly, `172` of the `210` positive reviews were correctly classified
+    as positive, but `38` were misclassified as negative. That means 80% of the negative
+    reviews were correctly classified, and 81% of the positive reviews were correctly
+    classified.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SVMs were originally designed for binary classification, as we have just seen
+    with the movie review data, where we only have two categories (positive and negative,
+    in this case). However, they can be extended to multi-class problems (which includes,
+    most cases of intent recognition) by splitting the problem into multiple binary
+    problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider a multi-class problem that might occur with a generic personal assistant
+    application. Suppose the application includes several intents, for example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Find out the weather
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Play music
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Read the latest headlines
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Tell me the latest sports scores for my favorite teams
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Find a nearby restaurant offering a particular cuisine
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The application needs to classify the user’s query into one of these intents
+    in order to process it and answer the user’s question. To use SVMs for this, it
+    is necessary to recast the problem as a set of binary problems. There are two
+    ways to do this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One is to create multiple models, one for each pair of classes, and split the
+    data so that each class is compared to every other class. With the personal assistant
+    example, the classification would need to decide about questions such as “*Is
+    the category weather or sports?*” and *Is the category weather or news?*. This
+    is the *one versus one* approach, and you can see that this could result in a
+    very large number of classifications if the number of intents is large.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other approach is called *one versus rest* or *one versus all*. Here, the
+    idea is to ask questions such as *Is the category* “*weather*” *or is it something
+    else?* This is the more popular approach, which we will show here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The way to use the multiclass SVM from scikit-learn is very similar to what
+    was shown previously. The difference is that we’re importing the `OneVsRestClassifier`
+    and using it to create the classification model, as shown in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: '**Classification** is widely used in many natural language applications, both
+    for categorizing documents such as movie reviews and for categorizing what a user’s
+    overall goal (or *intent*) in asking their question is in applications such as
+    chatbots. However, often the application will require more fine-grained information
+    from the utterance or document in addition to its overall classification. This
+    process is often called **slot filling**. We discussed slot-filling in [*Chapter
+    8*](B19005_08.xhtml#_idTextAnchor159) and showed how to write slot-filling rules.
+    In the following section, we will show another approach to slot-filling, based
+    on statistical techniques, specifically **conditional random** **fields** (**CRFs**).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Slot-filling with CRFs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 8*](B19005_08.xhtml#_idTextAnchor159), we discussed the popular
+    application of slot-filling, and we used the spaCy rule engine to find slots for
+    the restaurant search application shown in *Figure 8**.9*. This required writing
+    rules for finding the fillers of each slot in the application. This approach can
+    work fairly well if the potential slot fillers are known in advance, but if they
+    aren’t known in advance, it won’t be possible to write rules. For example, with
+    the rules in the code following *Figure 8**.9*, if a user asked for a new cuisine,
+    say, *Thai*, the rules wouldn’t be able to recognize *Thai* as a new filler for
+    the `CUISINE` slot, and wouldn’t be able to recognize *not too far away* as a
+    filler for the `LOCATION` slot. Statistical methods, which we will discuss in
+    this section, can help with this problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With **statistical methods**, the system does not use rules but looks for patterns
+    in its training data that can be applied to new examples. Statistical methods
+    depend on having enough training data for the system to be able to learn accurate
+    patterns, but if there is enough training data, statistical methods will generally
+    provide a more robust solution to an NLP problem than rule-based methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will look at a popular approach that can be applied to statistical
+    slot filling – CRF. CRFs are a way of taking the context of textual items into
+    account when trying to find the label for a span of text. Recall that the rules
+    we discussed in [*Chapter 8*](B19005_08.xhtml#_idTextAnchor159) did not look at
+    any nearby words or other context – they only looked at the item itself. In contrast,
+    CRFs attempt to model the probability of a label for a particular section of text,
+    that is, given an input *x*, they model the probability of that input being an
+    example category *y (P(y|x))*. CRFs use the word (or token) sequence to estimate
+    the conditional probabilities of slot labels in that context. We will not review
+    the mathematics of CRF here, but you can find many detailed descriptions of the
+    underlying mathematics on the web, for example, [https://arxiv.org/abs/1011.4088](https://arxiv.org/abs/1011.4088).
+  prefs: []
+  type: TYPE_NORMAL
+- en: To train a system for slot-tagging, the data has to be annotated so that the
+    system can tell what slots it’s looking for. There are at least four different
+    formats used in the NLP technical literature for representing the annotations
+    for slot-tagged data, and we’ll briefly illustrate these. These formats can be
+    used both for training data and for representing processed NLP results, which
+    can, in turn, be used for further processing stages such as retrieving information
+    from a database.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Representing slot-tagged data
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Training data for slot-filling applications can be found in several formats.
+    Let’s look at how the sentence `show me science fiction films directed by steven
+    spielberg`, a query from the MIT movie query corpus ([https://groups.csail.mit.edu/sls/downloads/](https://groups.csail.mit.edu/sls/downloads/)),
+    can be represented in four different formats.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One commonly used notation is **JavaScript Object Notation** (**JSON**) format,
+    as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here, we see that the input sentence is shown as `tokens`, which is followed
+    by a list of slots (called `entities` here). Each entity is associated with a
+    name, such as `GENRE` or `DIRECTOR` and the tokens that it applies to. The example
+    shows two slots, `GENRE` and `DIRECTOR`, which are filled by `science fiction
+    films` and `steven` `spielberg`, respectively:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second format uses `show me <GENRE>science fiction films</GENRE> directed
+    by <``DIRECTOR>steven Spielberg</DIRECTOR>`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The third format is called **Beginning Inside Outside** (**BIO**), which is
+    a textual format that labels the beginning, middle, and end of each slot filler
+    in a sentence, as in *Figure 9**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.1 – BIO tagging for “show me science fiction films directed by steven
+    spielberg”](img/B19005_09_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.1 – BIO tagging for “show me science fiction films directed by steven
+    spielberg”
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the BIO format, words outside of any slot are labeled `O` (that is `Outside`),
+    the beginning of a slot (`science` and `steven` are labeled `B`, and the inside
+    of a slot is labeled `I`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, another very simple format for representing tagged slots is **Markdown**,
+    a simplified way of marking up text for rendering. We’ve seen Markdown before,
+    in Jupyter notebooks, as a way to display comment blocks. In *Figure 9**.2*, we
+    can see an example of some training data for a restaurant search application similar
+    to the one we looked at in [*Chapter 8*](B19005_08.xhtml#_idTextAnchor159) (which
+    was shown in *Figure 8**.9*). Slot values are shown in square brackets, and the
+    slot names are shown in parentheses:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.2 – Markdown tagging for a restaurant search application](img/B19005_09_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.2 – Markdown tagging for a restaurant search application
+  prefs: []
+  type: TYPE_NORMAL
+- en: All four formats show basically the same information about the slots and values;
+    the information is just represented in slightly different ways. For your own projects,
+    if you are using a public dataset, it would probably be most convenient to use
+    the format that the dataset already uses. However, if you are using your own data,
+    you can choose whatever format is most appropriate or easiest to use for your
+    application. All other considerations being equal, the XML and JSON formats are
+    generally more flexible than BIO or markdown, since they can represent nested
+    slots, that is, slots that contain additional values as slot fillers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our example, we will be using the spaCy CRF suite library, located at [https://github.com/talmago/spacy_crfsuite](https://github.com/talmago/spacy_crfsuite),
+    and we will use restaurant search as an example application. This dataset is annotated
+    using the Markdown format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following code sets up the application by importing display and Markdown
+    functionality and then reading in the Markdown file from the `examples` directory.
+    Reading in the Markdown file will reproduce the list of utterances shown in *Figure
+    9**.2*. Note that the training data in the Markdown file is not large enough for
+    a real application, but it works as an example here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The next steps, shown below, will be to import `crfsuite` and `spacy` and convert
+    the Markdown-formatted training dataset to a CRF format. (The code in GitHub shows
+    some additional steps that are omitted here for simplicity):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At this point, we can do the actual training of the CRF with the `CRFExtractor`
+    object, as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The classification report, which is produced in the second to last step, and
+    is shown next, is based on the training dataset (`train_dataset`). Since the CRF
+    was trained on this dataset, the classification report will show perfect performance
+    on each slot. Obviously, this is not realistic, but it’s shown here in order to
+    illustrate the classification report. Remember that we will return to the topics
+    of precision, recall, and F1 score in [*Chapter 13*](B19005_13.xhtml#_idTextAnchor226):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At this point, the CRF model has been trained and is ready to test with new
+    data. If we test this model with the sentence *show me some good chinese restaurants
+    near me*, we can see the result in JSON format in the following code. The CRF
+    model found two slots, `CUISINE` and `QUALITY`, but missed the `LOCATION` slot,
+    which should have been filled by `near me`. The results also show the model’s
+    confidence in the slots, which was quite high, well over `0.9`. The result also
+    includes the zero-based positions of the characters in the input that begin and
+    end the slot value (`good` starts at position `10` and ends at position `14`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we can illustrate the robustness of this approach by testing our application
+    with a cuisine that was not seen in the training data, `Japanese`. Let’s see if
+    the system can label `Japanese` as a cuisine in a new utterance. We can try an
+    utterance such as `show some good Japanese restaurants near here` and see the
+    result in the following JSON:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The system did identify `Japanese` as a cuisine in this example, but the confidence
+    was much lower than we saw in the previous example, only `0.537` this time, compared
+    with `0.96` for the same sentence with a known cuisine. This relatively low confidence
+    is typical for slot fillers that didn’t occur in the training data. Even the confidence
+    of the `QUALITY` slot (which did occur in the training data) was lower, probably
+    because it was affected by the low probability of the unknown `CUISINE` slot filler.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A final observation worth pointing out is that while it would have been possible
+    to develop a rule-based slot tagger for this task, as we saw in [*Chapter 8*](B19005_08.xhtml#_idTextAnchor159),
+    the resulting system would not have been able to even tentatively identify `Japanese`
+    as a slot filler unless `Japanese` had been included in one of the rules. This
+    is a general illustration of how the statistical approach can provide results
+    that are not all or none, compared to rule-based approaches.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter has explored some of the basic and most useful classical statistical
+    techniques for NLP. They are especially valuable for small projects that start
+    out without a large amount of training data, and for the exploratory work that
+    often precedes a large-scale project.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We started out by learning about some basic evaluation concepts. We learned
+    particularly about accuracy, but we also looked at some confusion matrices. We
+    also learned how to apply Naïve Bayes classification to texts represented in TF-IDF
+    format, and then we worked through the same classification task using a more modern
+    technique, SVMs. Comparing the results produced by Naïve Bayes and SVMs, we saw
+    that we got better performance from the SVMs. We then turned our attention to
+    a related NLP task, slot-filling. We learned about different ways to represent
+    slot-tagged data and finally illustrated CRFs with a restaurant recommendation
+    task. These are all standard approaches that are good to have in your NLP toolbox,
+    especially for the initial exploration of applications with limited data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [*Chapter 10*](B19005_10.xhtml#_idTextAnchor184), we will continue working
+    on topics in machine learning, but we will move on to a very different type of
+    machine learning, neural networks. There are many varieties of neural networks,
+    but overall, neural networks and their variants have become the standard technologies
+    for NLP in the last decade or so. The next chapter will introduce this important
+    topic.
+  prefs: []
+  type: TYPE_NORMAL

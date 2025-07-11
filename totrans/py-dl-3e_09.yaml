@@ -1,0 +1,1359 @@
+- en: '9'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Advanced Applications of Large Language Models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous two chapters, we introduced the transformer architecture and
+    learned about its latest large-scale incarnations, known as **large language models**
+    (**LLMs**). We discussed them in the context of **natural language processing**
+    (**NLP**) tasks. NLP was the original transformer application and is still the
+    field at the forefront of LLM development today. However, the success of the architecture
+    has led the research community to explore the application of transformers in other
+    areas, such as computer vision.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll focus on these areas. We’ll discuss transformers as replacements
+    for convolutional networks (CNNs, [*Chapter 4*](B19627_04.xhtml#_idTextAnchor107))
+    for tasks such as image classification and object detection. We’ll also learn
+    how to use them as generative models for images instead of text, as we have done
+    until now. We’ll also implement a model fine-tuning example – something we failed
+    to do in [*Chapter 8*](B19627_08.xhtml#_idTextAnchor220). And finally, we’ll implement
+    a novel LLM-driven application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying images with Vision Transformer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Detection transformer
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Generating images with stable diffusion
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Fine-tuning transformers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Harnessing the power of LLMs with LangChain
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We’ll implement the example in this chapter using Python, PyTorch, the Hugging
+    Face Transformers library ([https://github.com/huggingface/transformers](https://github.com/huggingface/transformers)),
+    and the LangChain framework ([https://www.langchain.com/](https://www.langchain.com/),
+    [https://github.com/langchain-ai/langchain](https://github.com/langchain-ai/langchain)).
+    If you don’t have an environment with these tools, fret not – the example is available
+    as a Jupyter Notebook on Google Colab. The code examples can be found in this
+    book’s GitHub repository: [https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter09](https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter09).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying images with Vision Transformer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Vision Transformer** (**ViT**, *An Image is Worth 16x16 Words: Transformers
+    for Image Recognition at Scale*, [https://arxiv.org/abs/2010.11929](https://arxiv.org/abs/2010.11929))
+    proves the adaptability of the attention mechanism by introducing a clever technique
+    for processing images. One way to use transformers for image inputs is to encode
+    each pixel with four variables – pixel intensity, row, column, and channel location.
+    Each pixel encoding is an input to a simple **neural network** (**NN**), which
+    outputs a ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:math>](img/845.png)-dimensional
+    embedding vector. We can represent the three-dimensional image as a one-dimensional
+    sequence of these embedding vectors. It acts as an input to the model in the same
+    way as a token embedding sequence does. Each pixel will attend to every other
+    pixel in the attention blocks.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This approach has some disadvantages related to the length of the input sequence
+    (context window). Unlike a one-dimensional text sequence, an image has a two-dimensional
+    structure (the color channel doesn’t increase the number of pixels). Therefore,
+    the input sequence length increases quadratically as the image size increases.
+    Even a small 64×64 image would result in an input sequence with a length of 64*64=4,096\.
+    On one hand, this makes the model computationally intensive. On the other hand,
+    as each pixel attends to the entire long sequence, it will be hard for the model
+    to learn the structure of the image. CNNs approach this problem by using filters,
+    which restrict the input size of a unit only to its immediate surrounding area
+    (receptive field). To understand how ViT solves this problem, let’s start with
+    the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.1 – Vision Transformer. Inspired by https://arxiv.org/abs/2010.11929](img/B19627_09_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.1 – Vision Transformer. Inspired by [https://arxiv.org/abs/2010.11929](https://arxiv.org/abs/2010.11929)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s denote the input image resolution with *(H, W)* and the number of channels
+    with *C*. Then, we can represent the input image as a tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">x</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>H</mml:mi><mml:mo>×</mml:mo><mml:mi>W</mml:mi><mml:mo>×</mml:mo><mml:mi>C</mml:mi></mml:mrow></mml:msup></mml:math>](img/846.png).
+    ViT splits the image into a sequence of two-dimension square patches, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>N</mml:mi><mml:mo>×</mml:mo><mml:msup><mml:mrow><mml:mi>P</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msup><mml:mo>×</mml:mo><mml:mi>C</mml:mi></mml:mrow></mml:msup></mml:math>](img/847.png)
+    (*Figure 9**.1*). Here, *(P, P)* is the resolution of each image patch (*P=16*)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>N</mml:mi><mml:mo>=</mml:mo><mml:mo>(</mml:mo><mml:mi>H</mml:mi><mml:mo>×</mml:mo><mml:mi>W</mml:mi><mml:mo>)</mml:mo><mml:mtext>/</mml:mtext><mml:msup><mml:mrow><mml:mi>P</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msup></mml:math>](img/848.png)
+    is the number of patches (which is also the input sequence length). The sequence
+    of patches serves as input to the model, in the same way as a token sequence does.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, the input patches, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi></mml:mrow></mml:msub></mml:math>](img/849.png),
+    serve as input to a linear projection, which outputs a ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:math>](img/693.png)-dimensional
+    **patch embedding** vector for each patch. The patch embeddings form the input
+    sequence, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/851.png).
+    We can summarize the patch-to-embedding process with the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub><mml:mo>;</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mi>E</mml:mi><mml:mo>;</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mi
+    mathvariant="bold">E</mml:mi><mml:mo>;</mml:mo><mml:mo>…</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>N</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mi
+    mathvariant="bold">E</mml:mi></mml:mrow></mml:mfenced><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">E</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi><mml:mi>o</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/852.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
+    mathvariant="bold">E</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:msup><mml:mrow><mml:mi>P</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msup><mml:mo>⋅</mml:mo><mml:mi>C</mml:mi></mml:mrow></mml:mfenced><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/853.png)
+    is the linear projection and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">E</mml:mi></mml:mrow><mml:mrow><mml:mi>p</mml:mi><mml:mi>o</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mfenced separators="|"><mml:mrow><mml:mi>N</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/854.png)
+    is the static positional encoding (the same as in the original transformer).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once we have the embedding sequence, ViT processes it with a standard encoder-only
+    pre-normalization transformer, similar to BERT ([*Chapter 7*](B19627_07.xhtml#_idTextAnchor202)).
+    It comes in three variants, displayed as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.2 – ViT variants. Based on https://arxiv.org/abs/2010.11929](img/B19627_09_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.2 – ViT variants. Based on https://arxiv.org/abs/2010.11929
+  prefs: []
+  type: TYPE_NORMAL
+- en: The encoder architecture uses unmasked self-attention, which allows a token
+    to attend to the full sequence rather than the preceding tokens only. This makes
+    sense because the preceding or the next element doesn’t carry the same meaning
+    in the relationship between pixels of an image as the order of the elements in
+    a text sequence. The similarities between the two models don’t end here. Like
+    BERT, the input sequence starts with a special `[CLS]` (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/855.png))
+    token (for classification tasks). The model output for the ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/856.png)
+    token is the output for the full image. In this way, the ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mi>l</mml:mi><mml:mi>s</mml:mi></mml:mrow></mml:msub></mml:math>](img/856.png)
+    token attends to the entire input sequence (that is, the entire image). Alternatively,
+    if we take the model output for any other patch, we will introduce an imbalance
+    between the selected patch and the others of the sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Following the example of BERT, ViT has pre-training and fine-tuning phases.
+    Pre-training uses large general-purpose image datasets (such as ImageNet) while
+    fine-tuning trains the model on smaller task-specific datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The model ends with a **classification head**, which contains one hidden layer
+    during pre-training and no hidden layers during fine-tuning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One issue with ViT is that it performs best when pre-training with very large
+    datasets, such as JFT-300M with 300M labeled images (*Revisiting Unreasonable
+    Effectiveness of Data in Deep Learning Era*, [https://arxiv.org/abs/1707.02968](https://arxiv.org/abs/1707.02968)).
+    This makes the training a lot more computationally intensive versus a comparable
+    CNN. Many further variants of ViT try to solve this challenge and propose other
+    improvements to the original model. You can find out more in *A Survey on Visual
+    Transformer* ([https://arxiv.org/abs/2012.12556](https://arxiv.org/abs/2012.12556)),
+    which is regularly updated with the latest advancements in the field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let’s see how to use ViT in practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using ViT with Hugging Face Transformers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll implement a basic example of ViT image classification
+    with the help of Hugging Face Transformers and its `pipeline` abstraction, which
+    we introduced in [*Chapter 8*](B19627_08.xhtml#_idTextAnchor220). Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import the `pipeline` abstraction:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create an image classification pipeline instance. The pipeline uses the ViT-Base
+    model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the instance with an image of a bicycle from Wikipedia:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This code outputs the following top-5 class probability distribution (only
+    the first class is displayed):'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'This example is simple enough, but let’s dive in and analyze the ViT model
+    itself. We can do this with the `print(img_classification_pipeline.model)` command,
+    which outputs the following:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The model works with 224×224 input images. Here, `in_f` and `out_f` are shortened
+    for `in_features` and `out_features`, respectively. Unlike other models, ViT uses
+    bias in all `Linear` layers (the `bias=True` input parameter is not displayed).
+    Let’s discuss the components of the model in the order that they appear:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '`ViTEmbeddings`: The patch embedding block. It contains a 2D convolution with
+    a 16×16 filter size, stride of 16, three input channels (one for each color),
+    and 768 output channels (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>768</mml:mn></mml:math>](img/858.png)).
+    Applying the convolutional filter at each location produces one 768-dimensional
+    patch embedding per location of the input image. Since the patches form a two-dimensional
+    grid (the same as the input), the output is flattened to a one-dimensional sequence.
+    This block also adds positional encoding information, which is not reflected in
+    its string representation. The dropout probability of all dropout instances is
+    0 because the model runs in inference rather than training mode.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ViTEncoder`: The main encoder model contains 12 `ViTLayer` pre-ln (`LayerNorm`)
+    encoder block instances. Each contains the following:'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ViTAttention` attention block: `ViTSelfAttention` multi-head attention and
+    its output linear projection, `ViTSelfOutput`. All `ViTIntermediate` plus `GELUActivation`
+    and `ViTOutput`.'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Classification head (`classifier`): In inference mode, the classification head
+    has only one `Linear` layer with 1,000 outputs (because the model was fine-tuned
+    on the ImageNet dataset).'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, let’s see how object detection with transformers works.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the DEtection TRansformer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**DEtection TRansformer** (**DETR**, *End-to-End Object Detection with Transformers*,
+    [https://arxiv.org/abs/2005.12872](https://arxiv.org/abs/2005.12872)) introduces
+    a novel transformer-based object detection algorithm.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A quick recap of the YOLO object detection algorithm
+  prefs: []
+  type: TYPE_NORMAL
+- en: We first introduced YOLO in [*Chapter 5*](B19627_05.xhtml#_idTextAnchor146).
+    It has three main components. The first is the backbone – that is, a CNN model
+    that extracts features from the input image. Next is the neck – an intermediate
+    part of the model that connects the backbone to the head. Finally, the head outputs
+    the detected objects using a multi-step algorithm. More specifically, it splits
+    the image into a grid of cells. Each cell contains several pre-defined anchor
+    boxes with different shapes. The model predicts whether any of the anchor boxes
+    contains an object and the coordinates of the object’s bounding box. Many of the
+    boxes will overlap and predict the same object. The model filters the overlapping
+    objects with the help of intersection-over-union and non-maximum suppression.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Like YOLO, DetR starts with a CNN backbone. However, it replaces the neck and
+    the head with a full post-normalization transformer encoder-decoder. This negates
+    the need for hand-designed components such as the non-maximum suppression procedure
+    or anchor boxes. Instead, the model outputs a set of bounding boxes and class
+    labels for the detected objects. To understand how it works, we’ll start with
+    the following figure, which displays the components of DetR:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.3 – DetR architecture. Inspired by https://arxiv.org/abs/2005.12872](img/B19627_09_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.3 – DetR architecture. Inspired by https://arxiv.org/abs/2005.12872
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, the backbone CNN extracts the features from the input image, the same
+    as in YOLO. Its outputs are the feature maps of the last convolutional layer.
+    The original input image is a tensor with a shape of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>m</mml:mi><mml:mi>g</mml:mi></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>H</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/861.png),
+    where ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>3</mml:mn></mml:math>](img/862.png)
+    is the number of color channels and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>H</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/863.png)/![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub></mml:math>](img/864.png)
+    are the image dimensions. The last convolution output is a tensor with a shape
+    of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>C</mml:mi><mml:mo>×</mml:mo><mml:mi>H</mml:mi><mml:mo>×</mml:mo><mml:mi>W</mml:mi></mml:mrow></mml:msup></mml:math>](img/865.png).
+    Typically, the number of output feature maps is *C=2048*, and their height and
+    width are ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>H</mml:mi><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi>H</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:mn>32</mml:mn></mml:math>](img/866.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>W</mml:mi><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:mn>32</mml:mn></mml:math>](img/867.png),
+    respectively.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, the three-dimensional (excluding the batch dimension) backbone output
+    is incompatible with the expected input tensor of the encoder, which should be
+    a one-dimensional input sequence of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:math>](img/868.png)-sized
+    embedding tensors (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo><</mml:mo><mml:mi>C</mml:mi></mml:math>](img/869.png)).
+    To solve this, the model applies 1×1 bottleneck convolution, which downsamples
+    the number of channels from *C* to ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:math>](img/870.png),
+    followed by a flattening operation. The transformed tensor becomes ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mn>0</mml:mn></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:mi>H</mml:mi><mml:mo>⋅</mml:mo><mml:mi>W</mml:mi></mml:mrow></mml:msup></mml:math>](img/871.png),
+    which we can use as a transformer input sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let’s focus on the actual transformer, which is displayed in detail in
+    the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.4 – DetR transformer in detail. Inspired by https://arxiv.org/abs/2005.12872](img/B19627_09_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.4 – DetR transformer in detail. Inspired by https://arxiv.org/abs/2005.12872
+  prefs: []
+  type: TYPE_NORMAL
+- en: The encoder maps the input sequence to a sequence of continuous representations,
+    just like the original encoder ([*Chapter 7*](B19627_07.xhtml#_idTextAnchor202)).
+    One difference is that the model adds fixed absolute positional encodings to each
+    **Q**/**K** tensor of all attention layers of the encoder, as opposed to static
+    positional encodings added only to the initial input tensor of the original transformer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The decoder is where it gets more interesting. First, let’s note that the fixed
+    positional encodings also participate in the decoder’s encoder-decoder attention
+    block. Since they participate in all self-attention blocks of the encoder, we
+    propagate them to the encoder-decoder attention to level the playing field.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, the encoder takes as input a sequence of *N* **object queries**, represented
+    by tensors, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">o</mml:mi><mml:mi mathvariant="bold">q</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold-italic">i</mml:mi></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>N</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/872.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can think of them as slots, which the model uses to detect objects. The model
+    output for each input object query represents the properties (bounding box and
+    class) of one detected object. Having *N* object queries means that the model
+    can detect *N* objects at most. Because of this, the paper’s authors propose to
+    use *N*, which is significantly larger than the typical number of objects in an
+    image. Unlike the original transformer, the decoder’s attention here isn’t masked,
+    so it can detect all objects in parallel rather than sequentially.
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the start of the training process, the object query tensors are initialized
+    randomly. The training itself updates both the model weights and the query tensors
+    – that is, the model learns the object queries alongside the model weights. They
+    act as learned positional encodings of the detected objects and serve the same
+    purpose as the initial fixed input positional encodings. Because of this, we add
+    the object queries to the encoder-decoder attention and the self-attention layers
+    of the decoder blocks in the same way we add the input positional encodings to
+    the encoder. This architecture has a sort of *bug* – the very first self-attention
+    layer of the first decoder block will take as input the same object query twice,
+    making it useless. Empirical experiments show that this doesn’t degrade the model
+    performance. For the sake of simplicity, the implementation doesn’t have a unique
+    first decoder block without self-attention but uses the standard decoder block
+    instead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Encoding configurations
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The model can work with multiple configurations of the fixed and learned encodings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: add both types of encodings only to input data;
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: add the fixed encodings to the input data and the learned encodings to the input
+    and all decoder attention layers;
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: add the fixed encodings to the data and all encoder attention layers and the
+    learned encodings only to the decoder input;
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: add both types of encodings to the input data and every attention layer of the
+    encoder and the decoder.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The model works best in the fourth configuration, but for the sake of simplicity,
+    it can be implemented in the first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The object queries make it possible to not impose prior geometric limitations
+    such as grid cells and anchor boxes in YOLO. Instead, we specify only the maximum
+    number of objects to detect and let the model do its magic. The learned queries
+    tend to specialize over different regions of the image. However, this is a result
+    of the training and the properties of the training dataset, as opposed to manually
+    crafted features.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The model ends with a combination of two heads: a three-layer perceptron with
+    ReLU activations and a separate FC layer. The perceptron is called an FFN, which
+    differs from the FFNs in the transformer blocks. It predicts the detected object
+    bounding box height, width, and normalized center coordinates concerning the input
+    image. The FC has softmax activation and predicts the class of the object. Like
+    YOLO, it includes an additional special background class, which indicates that
+    no object is detected within the slot. Having this class is even more necessary
+    because some slots will inevitably be empty, as *N* is much larger than the number
+    of objects in the image.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Predicting a set of unrestricted bounding boxes poses a challenge to the training
+    because it is not trivial to match the predicted boxes with the ground-truth ones.
+    The first step is to pad the ground-truth boxes for each image with dummy entries,
+    so the number of ground-truth boxes becomes equal to the number of predicted ones,
+    *N*. Next, the training uses one-to-one **bipartite matching** between the predicted
+    and ground-truth boxes. Finally, the algorithm supervises each predicted box to
+    be closer to the ground-truth box it was matched to. You can check out the paper
+    for more details on the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: DetR for image segmentation
+  prefs: []
+  type: TYPE_NORMAL
+- en: The authors of DetR extend the model for image segmentation. The relationship
+    between DetR for detection and segmentation is similar to the one between Faster
+    R-CNN and Mask R-CNN ([*Chapter 5*](B19627_05.xhtml#_idTextAnchor146)). DetR for
+    segmentation adds a third head that’s implemented with upsampling convolutions.
+    It produces binary segmentation masks for each detected object in parallel. The
+    final result merges all masks using pixel-wise argmax.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using DetR with Hugging Face Transformers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll implement a basic example of DetR object detection with
+    the help of Hugging Face Transformers and its `pipeline` abstraction, which we
+    introduced in [*Chapter 8*](B19627_08.xhtml#_idTextAnchor220). This example follows
+    the ViT pattern, so we’ll include the full code without any comments. Here it
+    is:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The last call returns a list of detected objects in the following form:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we can see the model definition with the `print(obj_detection_pipeline.model)`
+    command. Here, `in_f` and `out_f` are shortened for `in_features` and `out_features`,
+    respectively. DetR uses bias in all `Linear` layers (the `bias=True` input parameter
+    is not displayed). We’ll omit the backbone definition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s discuss the model elements in the order that they appear, starting with
+    the 1×1 bottleneck convolution (we have ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>256</mml:mn></mml:math>](img/873.png)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we have the object query embedding (*N=100*). As we mentioned, the object
+    queries are learned alongside the weight updates during training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The following is the encoder with six post-ln encoder blocks, ReLU activation,
+    and FFN with one 2,048-dimensional hidden layer. Note that the positional encodings
+    are not displayed (the same applies to the decoder):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we have the decoder with six post-ln decoder blocks and the same properties
+    as the encoder:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we have the output FFN and linear layer. The FFN outputs four values
+    (the bounding box coordinates), and the linear layer can detect 91 classes and
+    the background:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, let’s see how we can generate new images with transformers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating images with stable diffusion
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll introduce **stable diffusion** (**SD**, *High-Resolution
+    Image Synthesis with Latent Diffusion Models*, [https://arxiv.org/abs/2112.10752](https://arxiv.org/abs/2112.10752),
+    [https://github.com/Stability-AI/stablediffusion](https://github.com/Stability-AI/stablediffusion)).
+    This is a generative model that can synthesize images based on text prompts or
+    other types of data (in this section, we’ll focus on the text-to-image scenario).
+    To understand how it works, let’s start with the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.5 – Stable diffusion model and training. Inspired by https://arxiv.org/abs/2112.10752](img/B19627_09_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.5 – Stable diffusion model and training. Inspired by https://arxiv.org/abs/2112.10752
+  prefs: []
+  type: TYPE_NORMAL
+- en: SD combines an autoencoder (**AE**, the *Pixel space* section of *Figure 9**.5*),
+    denoising diffusion probabilistic models (**DDPM** or simply **DM**, the *Latent
+    distribution space* section of *Figure 9**.5* and [*Chapter 5*](B19627_05.xhtml#_idTextAnchor146)),
+    and transformers (the *Conditioning* section of *Figure 9**.5*). Before we dive
+    into each of these components, let’s outline their role in the training and inference
+    pipelines of SD. Training involves all of them – AE encoder, forward diffusion,
+    reverse diffusion (**U-Net**, [*Chapter 5*](B19627_05.xhtml#_idTextAnchor146)),
+    AE decoder, and conditioning. Inference (generating images from text) only involves
+    reverse diffusion, AE decoder, and conditioning. Don’t worry if you don’t understand
+    everything you just read, as we’ll go into more detail in the following sections.
+    We’ll start with the AE, continue with the conditioning transformer, and combine
+    it when we discuss the diffusion process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Autoencoder
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Although we mentioned AEs briefly in [*Chapter 1*](B19627_01.xhtml#_idTextAnchor016),
+    we’ll introduce this architecture in more detail here, starting with the following
+    figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 9.6 – An \uFEFFAE\uFEFF](img/B19627_09_6.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.6 – An AE
+  prefs: []
+  type: TYPE_NORMAL
+- en: An AE is a feed-forward neural network that tries to reproduce its input. In
+    other words, an AE’s target value (label), **y**, equals the input data, **x**.
+    We can formally say that it tries to learn an identity function, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>h</mml:mi></mml:mrow><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi><mml:mo>,</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msup></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi
+    mathvariant="bold">x</mml:mi></mml:math>](img/874.png) (a function that repeats
+    its input). In its most basic form, an AE consists of hidden
+  prefs: []
+  type: TYPE_NORMAL
+- en: '(or bottleneck) and output layers (**W** and **W**’ are the weight matrices
+    of these layers). Like U-Net, we can think of the autoencoder as a virtual composition
+    of two components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Encoder**: This maps the input data to the network’s internal latent representation.
+    For the sake of simplicity, in this example, the encoder is a single FC bottleneck
+    layer. The internal state is just its activation tensor, **z**. The encoder can
+    have multiple hidden layers, including convolutional ones (as in SD). In this
+    case, **z** is the activation of the last layer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Decoder**: This tries to reconstruct the input from the network’s internal
+    state, **z**. The decoder can also have a complex structure that typically mirrors
+    the encoder. While U-Net tries to translate the input image into a target image
+    of some other domain (for example, a segmentation map), the autoencoder simply
+    tries to reconstruct its input.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We can train the autoencoder by minimizing a loss function, known as the **reconstruction
+    error**. It measures the distance between the original input and its reconstruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The latent tensor, **z**, is the focus of the entire AE. The key is that the
+    bottleneck layer has fewer units than the input/output ones. Because the model
+    tries to reconstruct its input from a smaller feature space, we force it to learn
+    only the most important features of the data. Think of the compact data representation
+    as a form of compression (but not lossless). We can use only the encoder part
+    of the model to generate latent tensors for downstream tasks. Alternatively, we
+    can use only the decoder to synthesize new images from generated latent tensors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, the encoder maps the input sample to the latent space, where
+    each latent attribute has a discrete value. An input sample can have only one
+    latent representation. Therefore, the decoder can reconstruct the input in only
+    one possible way. In other words, we can generate a single reconstruction of one
+    input sample. However, we want to generate new images conditioned on text prompts
+    rather than recreating the original ones. One possible solution to this task is
+    **variational autoencoders** (**VAEs**). A VAE can describe the latent representation
+    in probabilistic terms. Instead of discrete values, we’ll have a probability distribution
+    for each latent attribute, making the latent space continuous. We can modify the
+    latent tensor to influence the probability distribution (that is, the properties)
+    of the generated image. In SD, the DM component, combined with the conditioning
+    text prompts, acts as this modifier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this short detour completed, let’s discuss the role of the convolutional
+    encoder in SD (the *Pixel space* section of *Figure 9**.5*). During training,
+    the AE encoder creates a compressed initial latent representation tensor, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi
+    mathvariant="bold">z</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi><mml:mo>×</mml:mo><mml:mi>w</mml:mi><mml:mo>×</mml:mo><mml:mi>c</mml:mi></mml:mrow></mml:msup></mml:math>](img/875.png),
+    of the input image, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">x</mml:mi><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>H</mml:mi><mml:mo>×</mml:mo><mml:mi>W</mml:mi><mml:mo>×</mml:mo><mml:mn>3</mml:mn></mml:mrow></mml:msup></mml:math>](img/876.png).
+    More specifically, the encoder downsamples the image by a factor, *f = H/h = W/w*,
+    where ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>f</mml:mi><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mn>2</mml:mn></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msup></mml:math>](img/877.png)
+    (*m* is an integer selected by empirical experiments). Then, the entire diffusion
+    process (forward and reverse) works with the compressed **z** rather than the
+    original image, **x**. Only when the reverse diffusion ends does the AE decoder
+    upsample the newly generated representation, **z**, into the final generated image,
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mover
+    accent="true"><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mo>~</mml:mo></mml:mover></mml:math>](img/878.png).
+    In this way, the smaller **z** allows the use of a smaller and more computationally
+    efficient U-Net, which benefits both the training and the inference. The paper’s
+    authors refer to this combination of AEs and diffusion models as **latent** **diffusion
+    models**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The AE training is separate from the U-Net training. Because of this, we can
+    train the AE once and then use it for multiple downstream tasks with different
+    U-Net configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Conditioning transformer
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The conditioning transformer, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>τ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/879.png)
+    (*Figure 9**.5*), produces a latent representation of the text description of
+    the desired image. SD provides this representation to the U-Net so that it can
+    influence its output. For this to work, the text latent representation has to
+    live in the same semantic (not just dimensional) space as the image latent representation
+    of the U-Net. To achieve this, the latest version of SD, 2.1, uses the OpenCLIP
+    open source model as a conditioning transformer (*Reproducible scaling laws for
+    contrastive language-image learning*, https://arxiv.org/abs/2212.07143). **CLIP**
+    stands for **contrastive language-image pre-training**. This technique was introduced
+    by OpenAI (*Learning Transferable Visual Models From Natural Language Supervision*,
+    https://arxiv.org/abs/2103.00020). Let’s discuss it in more detail, starting with
+    the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 9.7 – CLIP. Inspired by https://arxiv.org/abs/2103.00020](img/B19627_09_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.7 – CLIP. Inspired by https://arxiv.org/abs/2103.00020
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It has two main components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`[EOS]` token. The model output at this token serves as an embedding vector
+    of the entire sequence. In the context of SD, we’re only interested in the text
+    encoder, and all other components of the CLIP system are only necessary for its
+    training.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Image encoder**: This is either a ViT or a CNN (most often ResNet). It takes
+    an image as input and outputs its embedding vector, **i**. Like the text encoder,
+    this is the activation of the highest layer of the model and not a task-specific
+    head.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For CLIP to work, the embedding vectors of the two encoders must have the same
+    size, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mi>o</mml:mi><mml:mi>d</mml:mi><mml:mi>e</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub></mml:math>](img/870.png).
+    When necessary (for example, in the case of the CNN image encoder), the encoder’s
+    output tensor is flattened to a one-dimensional vector. If the dimensions of the
+    two encoders still differ, we can add linear projections (FC layers) to equalize
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s focus on the actual pre-training algorithm. The training set contains
+    *N* text-image pairs, where the text of each pair describes the content of its
+    corresponding image. We feed all text representations to the text encoder and
+    the images to the image encoder to produce the ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">t</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn><mml:mo>.</mml:mo><mml:mo>.</mml:mo><mml:mi>N</mml:mi></mml:mrow></mml:msub></mml:math>](img/881.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">i</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn><mml:mo>.</mml:mo><mml:mo>.</mml:mo><mml:mi>N</mml:mi></mml:mrow></mml:msub></mml:math>](img/882.png)
+    embeddings, respectively. Then, we compute a cosine similarity between every two
+    embedding vectors (a total of *N×N* similarity measurements). Within these measurements,
+    we have *N* correctly matching text-image pairs (the table diagonal of *Figure
+    9**.5*) and *N×N-N* incorrect pairs (all pairs outside the table diagonal). The
+    training updates the weights of the two encoders so that the similarity scores
+    for the correct pairs are maximized and the incorrect ones are minimized. Should
+    the training prove successful, we’ll have similar embeddings for text prompts
+    that correctly describe what’s on the image and dissimilar embeddings in all other
+    cases. During SD training, we optimize the text encoder alongside the U-Net (but
+    not the full CLIP system).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how to produce semantically correct text embeddings, we can
+    proceed with the actual diffusion model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Diffusion model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: DM is a type of generative model that has forward and reverse phases. Forward
+    diffusion starts with the latent vector, **z**, produced by the AE encoder (which
+    takes an image, **x**, as input). Then, it gradually adds random Gaussian noise
+    to **z** through a series of *T* steps until the final (latent) representation,
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/883.png),
+  prefs: []
+  type: TYPE_NORMAL
+- en: is pure noise. Forward diffusion uses an accelerated algorithm, which produces
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>T</mml:mi></mml:mrow></mml:msub></mml:math>](img/884.png)
+    in a single step instead of *T* steps ([*Chapter 5*](B19627_05.xhtml#_idTextAnchor146)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reverse diffusion does the opposite and starts with pure noise. It gradually
+    tries to restore the original latent tensor, **z**, by removing small amounts
+    of noise in a series of *T* denoising steps. In practice, we’re interested in
+    reverse diffusion to generate images based on latent representations (forward
+    diffusion only participates in the training). It is usually implemented with a
+    U-Net type of CNN (*Figure 9**.5*, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>ϵ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub></mml:math>](img/885.png)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: It takes the noise tensor, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/540.png),
+    at step *t* as input and outputs an approximation of the noise added to the original
+    latent tensor, **z** (that is, only the noise and not the tensor itself). Then,
+    we subtract the predicted noise from the current U-Net input, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/887.png),
+    and feed the result as new input to the U-Net, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/888.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, the cost function measures the difference between the predicted
+    and actual noise and accordingly updates the U-Net weights after each denoising
+    step. This process continues until (hopefully) only the original tensor, **z**,
+    remains. Then, the AE decoder uses it to produce the final image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The pure form of DM has no way to influence the properties of the generated
+    image (this is known as conditioning) because we start with random noise, which
+    results in random images. SD allows us to do just that – a way to condition the
+    U-Net to generate images based on specific text prompts or other data types. To
+    do this, we need to integrate the output embedding of the conditioning transformer
+    with the denoising U-Net. Let’s assume that we have a text prompt, `[EOS]` token.
+    Then, we map its output to the intermediate layers of the U-Net via a **cross-attention**
+    layer. In this layer, the key and value tensors represent the conditioning transformer
+    outputs, and the query tensors represent the intermediate U-Net layers (*Figure
+    9**.5*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi mathvariant="bold">Q</mml:mi><mml:mo>=</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>Q</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mo>⋅</mml:mo><mml:msub><mml:mrow><mml:mi>φ</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/892.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi mathvariant="bold">K</mml:mi><mml:mo>=</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>K</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mo>⋅</mml:mo><mml:msub><mml:mrow><mml:mi>τ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:mi mathvariant="bold">y</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/893.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi mathvariant="bold">V</mml:mi><mml:mo>=</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mo>⋅</mml:mo><mml:msub><mml:mrow><mml:mi>τ</mml:mi></mml:mrow><mml:mrow><mml:mi>θ</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:mi mathvariant="bold">y</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/894.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *i* is the *i*-th intermediate U-Net layer, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>φ</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>N</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>ϵ</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/895.png)
+    is the flattened activation of that layer, and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>ϵ</mml:mi></mml:mrow></mml:msub></mml:math>](img/896.png)
+    is the flattened activation tensor size. ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>Q</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>d</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>ϵ</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/897.png),
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>K</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>d</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>τ</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/898.png),
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi></mml:mrow><mml:mrow><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:mfenced></mml:mrow></mml:msubsup><mml:mo>∈</mml:mo><mml:msup><mml:mrow><mml:mi
+    mathvariant="double-struck">R</mml:mi></mml:mrow><mml:mrow><mml:mi>d</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>d</mml:mi></mml:mrow><mml:mrow><mml:mi>τ</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msup></mml:math>](img/899.png)
+    are learnable projection matrices, where *d* is the chosen size of the actual
+    cross-attention embedding. We have a unique set of three matrices for each of
+    the *i* intermediate U-Net layers with cross-attention. In its simplest form,
+    we can add one or more cross-attention blocks after the output of an intermediate
+    U-Net layer. The blocks can have a residual connection, which preserves the unmodified
+    intermediate layer output and augments it with the attention vector. Note that
+    the output of the intermediate convolutional layers has four dimensions: `[batch,
+    channel, height, width]`. However, the standard attention blocks use two-dimensional
+    input: `[batch, dim]`. One solution is to flatten the convolutional output before
+    feeding it to the attention block. Alternatively, we can preserve the channel
+    dimension and only flatten the height and width: `[batch, channel, height*width]`.
+    In this case, we can assign one attention head to the output of each convolutional
+    channel.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 9**.5* has a *switch* component, which allows us to concatenate the
+    text prompt representation and the U-Net input rather than using cross-attention
+    in the intermediate layers. This use case is for tasks other than text-to-image,
+    which is the focus of this section.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let’s see how to use SD in practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using stable diffusion with Hugging Face Transformers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll use SD to generate an image conditioned on a text prompt.
+    In addition to the Transformers library, we’ll also need **Diffusers** (https://github.com/huggingface/diffusers)
+    – a library for pre-trained diffusion models for generating images and audio.
+    Please note that the diffusers SD implementation requires the presence of a GPU.
+    You can run this example in the Google Colab notebook with GPU enabled. Let’s
+    start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Do the necessary imports:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Instantiate an SD pipeline (`sd_pipe`) with SD version 2.1\. We don’t use the
+    main transformers `pipeline` abstraction, which we used in the preceding examples.
+    Instead, we use `StableDiffusionPipeline`, which comes from the `diffusers` library.
+    We’ll also move the model to a `cuda` device (an NVIDIA GPU) if it is available:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Let’s run `sd_pipe` for 100 denoising steps with the following text prompt:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The generated `image` is as follows:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 9.8 – SD-generated image](img/B19627_09_8.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 9.8 – SD-generated image
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unfortunately, the AE, U-Net, and conditioning transformer descriptions are
+    large, and it would be impractical to include them here. Still, they are available
+    in the Jupyter Notebook. Nevertheless, we can see a shortened summary of the entire
+    SD pipeline with the `print(sd_pipe)` command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `transformers` and `diffusers` refer to the package of origin for the
+    given component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first component is an optional `safety_checker` (not initialized), which
+    can identify **not-safe-for-work** (**NSFW**) images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we have a BPE-based `CLIPTokenizer` `tokenizer`, with a token vocabulary
+    size of around 50,000 tokens. It tokenizes the text prompt and feeds it to `text_encoder`
+    of `CLIPTextModel`. The Hugging Face `CLIPTextModel` duplicates the OpenAI CLIP
+    transformer-decoder (the model card is available at https://huggingface.co/openai/clip-vit-large-patch14).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we have `UNet2DConditionModel`. The convolutional portions of the U-Net
+    use residual blocks ([*Chapter 4*](B19627_04.xhtml#_idTextAnchor107)). It has
+    four downsampling blocks with a downsampling factor of 2 (implemented with convolutions
+    with stride 2). The first three include `text_encoder` cross-attention layers.
+    Then, we have a single mid-block, which preserves input size and contains one
+    residual and one cross-attention sublayer. The model ends with four skip-connected
+    upsampling blocks, symmetrical to the downsampling sequence. The last three blocks
+    also include cross-attention layers. The model uses **sigmoid linear unit** (**SiLU**,
+    [*Chapter* *3*](B19627_03.xhtml#_idTextAnchor079)) activations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we have the convolutional autoencoder, `AutoencoderKL`, with four downsampling
+    residual blocks, one residual mid-block (the same as the one in U-Net), four upsampling
+    residual blocks (symmetrical to the downsampling sequence), and SiLU activations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let’s focus on `scheduler` of `DDIMScheduler`, which is part of the
+    `diffusers` library. It is one of multiple available schedulers. During training,
+    a scheduler adds noise to a sample to train the DM. It defines how to update the
+    latent tensor based on the U-Net output during inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stable Diffusion XL
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Recently, Stability AI released Stable Diffusion XL (*SDXL: Improving Latent
+    Diffusion Models for High-Resolution Image Synthesis*, [https://arxiv.org/abs/2307.01952](https://arxiv.org/abs/2307.01952)).
+    SDXL uses a three times larger U-Net. The larger size is due to more attention
+    blocks and a larger attention context (the new version uses the concatenated outputs
+    of two different text encoders). It also utilizes an optional **refinement model**
+    (**refiner**) – a second U-Net in the same latent space as the first, specializing
+    in high-quality, high-resolution data. It takes the output latent representation,
+    **z**, of the first U-Net as input and uses the same conditioning text prompt.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we’ve concluded our introduction to SD and the larger topic of transformers
+    for computer vision. Next, let’s see how to fine-tune a transformer-based model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring fine-tuning transformers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll use PyTorch to fine-tune a pre-trained transformer.
+    More specifically, we’ll fine-tune a `Trainer` class ([https://huggingface.co/docs/transformers/main_classes/trainer](https://huggingface.co/docs/transformers/main_classes/trainer)),
+    which implements the basic training loop, model evaluation, distributed training
+    on multiple GPUs/TPUs, mixed precision, and other training features. This is opposed
+    to implementing the training from scratch, as we’ve been doing until now in our
+    PyTorch examples. We’ll also need the **Datasets** ([https://github.com/huggingface/datasets](https://github.com/huggingface/datasets))
+    and **Evaluate** ([https://github.com/huggingfahttps://github.com/huggingface/evaluate](https://github.com/huggingfahttps://github.com/huggingface/evaluate))
+    packages. Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Load the dataset, which is split into `train`, `validation`, and `test` portions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load the DistilBERT WordPiece subword `tokenizer`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use `tokenizer` to tokenize the dataset. In addition, it’ll pad or truncate
+    each sample to the maximum length accepted by the model. The `batched=True` mapping
+    speeds up processing by combining the data in batches (as opposed to single samples).
+    The `Tokenizers` library works faster with batches because it parallelizes the
+    tokenization of all the examples in a batch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load the transformer `model`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The `AutoModelForSequenceClassification` class loads DistilBERT configuration
+    for binary classification – the model head has a hidden layer and an output layer
+    with two units. This configuration works for our task because we have to classify
+    the movie reviews into two categories.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Initialize `TrainingArguments` of the `Trainer` instance. We’ll specify `output_dir`
+    for the location of the model predictions and checkpoints. We’ll also run the
+    evaluation once per epoch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Initialize the `accuracy` evaluation metric:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Initialize `trainer` with all the necessary components for training and evaluation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: It accepts the model, train, and evaluation datasets and the `training_args`
+    instance. The `compute_metrics` function will compute the validation accuracy
+    after each epoch. `preprocess_logits_for_metrics` will convert the one-hot encoded
+    model output (`x[0]`) to indexed labels so that it can match the format of the
+    ground-truth labels (`x[1]`) in the `compute_metrics` function.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Finally, we can run the training:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The model will achieve around 85% accuracy in three epochs.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Next, let’s see how to harness the power of LLMs with the LangChain framework.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Harnessing the power of LLMs with LangChain
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'LLMs are powerful tools, yet they have some limitations. One of them is the
+    context window length. For example, the maximum input sequence of Llama 2 is 4,096
+    tokens and even less in terms of words. As a reference, most of the chapters in
+    this book hover around 10,000 words. Many tasks wouldn’t fit this length. Another
+    LLM limitation is that its entire knowledge is stored within the model weights
+    at training time. It has no direct way to interact with external data sources,
+    such as databases or service APIs. Therefore, the knowledge can be outdated or
+    insufficient. The **LangChain** framework can help us alleviate these issues.
+    It does so with the following modules:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Model I/O**: The framework differentiates between classic LLMs and chat models.
+    In the first case, we can prompt the model with a single prompt, and it will generate
+    a response. The second case is more interactive – it presumes a back-and-forth
+    communication between the human and the model in a chat form. Internally, both
+    are LLMs; the difference comes from using different APIs. Regardless of the model
+    type, a token sequence is the only way to feed it with input data. The I/O module
+    provides helper prompt templates for different use cases. For example, the chat
+    template maintains an explicit list of all messages instead of concatenating them
+    in a single sequence. We also have a few-shot template, which provides an interface
+    to include one or more instructive input/output examples within the input query.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The module can also parse the model output (a token sequence converted into
+    words). For example, if the output is a JSON string, a JSON parser can convert
+    it into an actual JSON object.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Retrieval**: This retrieves external data and feeds it to the model input
+    sequence. Its most basic function is to parse file formats such as CSV and JSON.
+    It can also split larger documents into chunks if they don’t fit within the context
+    window size.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Vector databases
+  prefs: []
+  type: TYPE_NORMAL
+- en: The primary output of an LLM and other neural networks (before any task-specific
+    heads) are embedding vectors, which we use for downstream tasks such as classification
+    or text generation. The universal nature of this data format has led to the creation
+    of vector-specific databases (or stores). As the name suggests, these stores only
+    work with vectors and support fast vector operations, such as different similarity
+    measures over the whole database. We can query an input embedding vector against
+    all other database vectors and find the most similar ones. This concept is similar
+    to the **Q**/**K**/**V** attention mechanism but in an external database form,
+    which allows it to work with a larger dataset than in-memory attention.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This retrieval module has integrations with multiple vector databases. This
+    way, we can use the LLM to generate and store document embeddings (the document
+    acts as an input sequence). Later, we can query the LLM to generate a new embedding
+    for a given query and compare this query against the database to find the nearest
+    matches. In this scenario, the role of the LLM is limited to generating vector
+    embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Chains**: These are mechanisms that combine multiple LangChain components
+    to create a single application. For example, we can create a chain that takes
+    user input, formats it with a special prompt template, feeds it to an LLM, and
+    parses the LLM output to JSON. We can branch chains or combine multiple chains.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Memory**: This maintains the input token sequence throughout a chain of steps
+    or model interactions with the outside world, which can modify and extend the
+    sequence dynamically. It can also use the emerging LLM abilities to create a shortened
+    summary of the current historical sequence. The shortened version replaces the
+    original in the input token sequence for future inputs. This compression allows
+    us to use the context window more efficiently and store more information.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Agents**: An agent is an entity that can take actions that interact with
+    the environment. In the current context, an LLM acts as the agent’s reasoning
+    engine to determine which actions the agent is to take and in which order. To
+    help with this task, the agent/LLM can use special functions called **tools**.
+    These can be generic utilities (for example, API calls), other chains, or even
+    agents.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Callbacks**: We can use callbacks to plug into various points of the LLM
+    application, which is useful for logging, monitoring, or streaming.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, let’s solidify our understanding of LangChain with an example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using LangChain in practice
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll use LangChain, LangChain Experimental ([https://github.com/langchain-ai/langchain/tree/master/libs/experimental](https://github.com/langchain-ai/langchain/tree/master/libs/experimental)),
+    and OpenAI’s `gpt-3.5-turbo` model to answer the question: *What are the sum of
+    the elevations of the deepest section of the ocean and the highest peak on Earth?
+    Use metric units only*. To make things more interesting, we won’t let an LLM generate
+    the output one word at a time. Instead, we’ll ask it to break up the solution
+    into steps and use data lookup and calculations to find the right answer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example is partially based on https://python.langchain.com/docs/modules/agents/agent_types/plan_and_execute.
+    It requires access to the OpenAI API ([https://platform.openai.com/](https://platform.openai.com/))
+    and SerpAPI ([https://serpapi.com/](https://serpapi.com/)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Initialize LangChain’s API wrapper for the `gpt-3.5-turbo` model. The `temperature`
+    parameter (in the [0,1] range) determines how the model selects the next token.
+    For example, if `temperature=0`, it will always output the highest probability
+    token. The closer `temperature` is to 1, the more likely it is that the model
+    selects a token with a lower probability:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the tools that will help us solve this task. First is the search tool,
+    which uses SerpAPI to perform Google searches. This allows the LLM to query Google
+    for the elevations of the deepest part of the ocean and the highest mountain in
+    our question:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next is the calculator tool, which will allow the LLM to compute the sum of
+    the elevations. This tool uses a special few-shot learning LangChain `PromptTemplate`
+    to query the LLM to calculate mathematical equations:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Initialize a special `PlanAndExecute` `agent`. It accepts the LLM, the tools
+    we just defined, as well as `planner` and `executor` agents, as arguments:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`planner` uses a special LangChain text prompt template that queries the LLM
+    model to break up the solution of the task into subtasks (steps). The model generates
+    a list-friendly formatted string, which the planner parses and returns as the
+    list of steps that `executor` (itself an `agent`) executes.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Finally, we can run `agent`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The final answer is `The depth of the deepest section of the ocean in metric
+    units is 19,783 meters`. Although the text description is off the mark, the computation
+    seems correct.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Let’s analyze part of the steps `planner` and `executor` take to reach the
+    result. First, `planner` takes our initial query and asks the LLM to break it
+    up into the following list of steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, `agent` iterates over each step and tasks `executor` to perform it. `executor`
+    has an internal LLM planner, which can also break up the current step into subtasks.
+    In addition to the step description, `executor` uses a special text prompt, instructing
+    its LLM `model` to identify the list of `tools` (a tool has a name) it can use
+    for each step. For example, `executor` returns the following result as output
+    for the augmented version of the first step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `Search` agent’s `action` represents a new intermediate step to be executed
+    after the current one. It will use the search tool to query Google with `action_input`.
+    In that sense, the chain is dynamic, as the output of one step can lead to additional
+    steps added to the chain. We add the result of each step to the input sequence
+    of the future steps, and the LLM, via different prompt templates, ultimately determines
+    the next actions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our introduction to LangChain – a glimpse of what is possible
+    with LLMs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we discussed a variety of topics. We started with LLMs in
+    the computer vision domain: ViT for image classification, DetR for object detection,
+    and SD for text-to-image generation. Next, we learned how to fine-tune an LLM
+    with the Transformers library. Finally, we used LangChain to implement a novel
+    LLM-driven application.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we’ll depart from our traditional topics and dive into
+    the practical field of MLOps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Part 4:'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Developing
+  prefs: []
+  type: TYPE_NORMAL
+- en: and Deploying Deep Neural Networks
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this single-chapter part, we’ll discuss some techniques and tools that will
+    help us develop and deploy neural network models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part has the following chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 10*](B19627_10.xhtml#_idTextAnchor253), *Machine Learning Operations
+    (MLOps)*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

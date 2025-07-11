@@ -1,0 +1,1630 @@
+- en: '*Chapter 6:* Recurrent Neural Networks for Demand Prediction'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We have gathered some experience, by now, with fully connected feedforward
+    neural networks in two variants: implementing a classification task by assigning
+    an input sample to a class in a set of predefined classes or trying to reproduce
+    the shape of an input vector via an autoencoder architecture. In both cases, the
+    output response depends only on the values of the current input vector. At time
+    ![](img/Formula_B16391_06_001.png), the output response, ![](img/Formula_B16391_06_002.png),
+    depends on, and only on, the input vector, ![](img/Formula_B16391_06_003.png),
+    at time ![](img/Formula_B16391_06_004.png). The network has no memory of what
+    came before ![](img/Formula_B16391_06_005.png) and produces ![](img/Formula_B16391_06_006.png)
+    only based on input ![](img/Formula_B16391_06_007.png).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With **Recurrent Neural Networks** (**RNNs**), we introduce the time component
+    ![](img/Formula_B16391_06_008.png). We are going to discover networks where the
+    output response, ![](img/Formula_B16391_06_009.png), at time ![](img/Formula_B16391_06_001.png)
+    depends on the current input sample, ![](img/Formula_B16391_06_011.png), as well
+    as on previous input samples, ![](img/Formula_B16391_06_012.png), ![](img/Formula_B16391_06_013.png),
+    … ![](img/Formula_B16391_06_014.png), where the memory of the network of the past
+    ![](img/Formula_B16391_06_015.png) samples depends on the network architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will first introduce the general concept of RNNs, and then the specific
+    concept of **Long Short-Term Memory** (**LSTM**) in the realm of a classic time
+    series analysis task: **demand prediction**. Then, we will show how to feed the
+    network with not only static vectors, ![](img/Formula_B16391_06_016.png), but
+    also sequences of vectors, such as ![](img/Formula_B16391_06_017.png), ![](img/Formula_B16391_06_018.png),
+    ![](img/Formula_B16391_06_019.png), … ![](img/Formula_B16391_06_020.png), spanning
+    ![](img/Formula_B16391_06_021.png) samples of the past input signal. These sequences
+    of input vectors (tensors) built on the training set are used to train and evaluate
+    a practical implementation of an LSTM-based RNN.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In summary, this chapter will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing RNNs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Demand Prediction Problem
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data Preparation – Creating the Past
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Building, Training, and Deploying an LSTM-Based RNN
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing RNNs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's start with an overview of RNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**RNNs** are a family of neural networks that cannot be constrained in the
+    feedforward architecture.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: RNNs are obtained by introducing auto or backward connections – that is, recurrent
+    connections – into feedforward neural networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When introducing a recurrent connection, we introduce the concept of time. This
+    allows RNNs to take context into account; that is, to remember inputs from the
+    past by capturing the dynamic of the signal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing recurrent connections changes the nature of the neural network from
+    static to dynamic and is therefore suitable for analyzing time series. Indeed,
+    RNNs are often used to create solutions to problems involving time-ordered sequences,
+    such as time series analysis, language modeling, free text generation, automatic
+    machine translation, speech recognition, image captioning, and other similar problems
+    investigating the time evolution of a given signal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recurrent Neural Networks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As stated in the previous section, the introduction of an auto or backward
+    connection into a feedforward network transforms it into an RNN. For example,
+    let''s consider the simple feedforward network depicted in *Figure 6.1*, looking
+    at its detailed representation on the left and its compact representation on the
+    right:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1 – A simple fully connected feedforward network on the left and
+    its more compact matrix-based representation on the right](img/B16391_06_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.1 – A simple fully connected feedforward network on the left and its
+    more compact matrix-based representation on the right
+  prefs: []
+  type: TYPE_NORMAL
+- en: The compact representation of the network in *Figure 6.1* includes one multi-dimensional
+    input, ![](img/Formula_B16391_06_022.png), one possibly multi-dimensional output,
+    ![](img/Formula_B16391_06_023.png), one hidden layer represented by the box containing
+    the neuron icons, and the two weight matrixes from the input to the hidden layer,
+    ![](img/Formula_B16391_06_024.png), and from the hidden to the output layer, ![](img/Formula_B16391_06_025.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s now introduce to this network a recurrent connection, feeding the output
+    vector, ![](img/Formula_B16391_06_026.png), back into the input layer in addition
+    to the original input vector, ![](img/Formula_B16391_06_027.png) (*Figure 6.2*).
+    This simple change to the network architecture changes the network behavior. Before,
+    the function implemented by the network was just ![](img/Formula_B16391_06_028.png),
+    where ![](img/Formula_B16391_06_029.png) is the current time when the input sample,
+    ![](img/Formula_B16391_06_030.png), is presented to the network. Now, the function
+    implemented by the recurrent network assumes the shape ![](img/Formula_B16391_06_031.png);
+    that is, the current output depends on the current input, as well as on the output
+    produced in the previous step for the previous input sample. We have introduced
+    the concept of time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.2 – Adding a recurrent connection to the feedforward network](img/B16391_06_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.2 – Adding a recurrent connection to the feedforward network
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanks to these recurrent connections, the output of RNNs also contains a bit
+    of the history of the input signal. We then say that they have memory. How far
+    in the past the memory span goes depends on the recurrent architecture and the
+    paradigms contained in it. For this reason, RNNs are more suitable than feedforward
+    networks for analyzing sequential data, because they can also process information
+    from the past. Past input information is metabolized via the output feedback into
+    the input layer through the recurrent connection.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem now becomes how to train a network where the output depends on the
+    previous output(s) as well. As you can imagine, a number of algorithms have been
+    proposed over the years. The simplest one, and therefore the most commonly adopted,
+    is **Back Propagation Through Time** (**BPTT**) (Goodfellow I, Bengio Y., Courville
+    A., *Deep Learning*, MIT Press, (2016)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'BPTT is based on the concept of *unrolling* the network over time. To understand
+    the concept of *unrolling*, let''s take a few glimpses at the network at different
+    times, ![](img/Formula_B16391_06_032.png), during training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At time ![](img/Formula_B16391_06_033.png), we have the original feedforward
+    network, with weight matrixes ![](img/Formula_B16391_06_034.png) and ![](img/Formula_B16391_06_035.png),
+    input ![](img/Formula_B16391_06_036.png) and ![](img/Formula_B16391_06_037.png),
+    and output ![](img/Formula_B16391_06_038.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At time ![](img/Formula_B16391_06_039.png), we again have the original feedforward
+    network, with weight matrixes ![](img/Formula_B16391_06_040.png) and ![](img/Formula_B16391_06_041.png),
+    but this time with input ![](img/Formula_B16391_06_042.png) and ![](img/Formula_B16391_06_043.png)
+    and output ![](img/Formula_B16391_06_044.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At time ![](img/Formula_B16391_06_045.png), again, we have the original feedforward
+    network, with weight matrixes ![](img/Formula_B16391_06_046.png) and ![](img/Formula_B16391_06_047.png),
+    but this time with input ![](img/Formula_B16391_06_048.png) and ![](img/Formula_B16391_06_049.png)
+    and output ![](img/Formula_B16391_06_050.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This continues for the ![](img/Formula_B16391_06_021.png) samples in the input
+    sequence.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Practically, we can copy the same original feedforward network with static weight
+    matrixes ![](img/Formula_B16391_06_052.png) and ![](img/Formula_B16391_06_053.png)
+    ![](img/Formula_B16391_06_054.png) times, which is as many ![](img/Formula_B16391_06_055.png)
+    samples as in the input sequence (*Figure 6.3*). Each copy of the original network
+    at time ![](img/Formula_B16391_06_056.png) will have the current input vector,
+    ![](img/Formula_B16391_06_057.png), and the previous output vector, ![](img/Formula_B16391_06_058.png),
+    as input. More generically, at each time ![](img/Formula_B16391_06_059.png), the
+    network copy will produce an output, ![](img/Formula_B16391_06_060.png), and a
+    related state, ![](img/Formula_B16391_06_061.png). The state, ![](img/Formula_B16391_06_062.png),
+    is the network memory and feeds the next copy of the static network, while ![](img/Formula_B16391_06_063.png)
+    is the dedicated output of each network copy. In some recurrent architectures,
+    ![](img/Formula_B16391_06_064.png) and ![](img/Formula_B16391_06_065.png) are
+    identical.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s summarize. We have a recurrent network with the following features:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fed by input tensor ![](img/Formula_B16391_06_066.png), of ![](img/Formula_B16391_06_067.png)
+    size, consisting of a sequence of ![](img/Formula_B16391_06_068.png) ![](img/Formula_B16391_06_069.png)-dimensional
+    vectors
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Producing an output tensor, ![](img/Formula_B16391_06_070.png), of ![](img/Formula_B16391_06_071.png)
+    size, consisting of a sequence of ![](img/Formula_B16391_06_072.png) ![](img/Formula_B16391_06_073.png)
+    -dimensional vectors
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Producing a state tensor, ![](img/Formula_B16391_06_074.png), related to output
+    tensor ![](img/Formula_B16391_06_075.png), used as the network memory
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Important note
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: This recurrent network can also be just a sub-network that is a hidden unit
+    in a bigger neural architecture. In this case, it is fed by the outputs of previous
+    layers, and its output forms the input to the next layers in the bigger network.
+    Then, ![](img/Formula_B16391_06_076.png) is not the output of the whole network,
+    but just the output of this recurrent unit – that is, an intermediate hidden state
+    of the full network.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'In *Figure 6.3*, we propose the unrollment over four time steps of the simple
+    recurrent network in *Figure 6.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.3 – Unrolling a recurrent network though time](img/B16391_06_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.3 – Unrolling a recurrent network though time
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this point, we have transformed the recurrent sub-network into a sequence
+    of ![](img/Formula_B16391_03_173.png) copies of the original feedforward network
+    – that is, into a much larger static feedforward network. As large as it might
+    be, we do already know how to train fully connected feedforward networks with
+    the backpropagation algorithm. So, the backpropagation algorithm has been adapted
+    to include the unrolling process and to train the resulting feedforward network.
+    This is the basic BPTT algorithm. Many variations of the BPTT algorithm have also
+    been proposed over the years.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will now dive into the details of the simplest recurrent network, the one
+    made of just one layer of recurrent units.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recurrent Neural Units
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The simplest recurrent neural unit consists of a network with just one single
+    hidden layer, with activation function ![](img/Formula_B16391_06_078.png), with
+    an auto connection. Using the same unrolling-over-time process, we can represent
+    this unit as ![](img/Formula_B16391_03_252.png) copies of a feedforward network
+    with one hidden layer of just one unit (*Figure 6.4*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.4 – The simplest recurrent neural unit](img/B16391_06_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.4 – The simplest recurrent neural unit
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, the output, ![](img/Formula_B16391_06_080.png), is also the state
+    of the network, which is fed back into the input – that is, into the input of
+    the next copy of the unrolled network at time ![](img/Formula_B16391_06_081.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This simple recurrent unit already shows some memory, in the sense that the
+    current output also depends on previously presented samples at the input layer.
+    However, its architecture is a bit too simple to show a considerable memory span.
+    Of course, it depends on the task to solve how long of a memory span is needed.
+    A classic example is sentence completion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To complete a sentence, you need to know the topic of the sentence, and to know
+    the topic, you need to know the previous words in the sentence. For example, analyzing
+    the sentence *Cars drive on the …*, we realize that the topic is *cars* and then
+    the only logical answer would be *road*. To complete this sentence, we need a
+    memory of just four words. Let's now take a more complex sentence, such as *I
+    love the beach. My favorite sound is the crashing of the …*. Here, many answers
+    are possible, including *cars*, *glass*, or *waves*. To understand which is the
+    logical answer, we need to go back in the sentence to the word *beach*, which
+    is nine words backward. The memory span needed to analyze this sentence is more
+    than double the memory span needed to analyze the previous sentence. This short
+    example shows that sometimes a longer memory span is needed to give the correct
+    answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simple recurrent neural unit provides some memory, but often not enough
+    to solve most required tasks. We need something more powerful that can crawl backward
+    farther in the past than just what the simple recurrent unit can do. This is exactly
+    why LSTM units were introduced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Long Short-Term Memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: LSTM was introduced for the first time in 1997 (Hochreiter, Sepp and Schmidhuber,
+    Jürgen (1997), *Long Short-term Memory. Neural computation*, 9\. 1735-80\. 10.1162/
+    neco.1997.9.8.1735, https://www.researchgate.net/publication/13853244_Long_Short-term_Memory).
+    It is a more complex type of recurrent unit, using an additional hidden vector,
+    the cell state or memory state, ![](img/Formula_B16391_06_082.png), and the concept
+    of gates.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 6.5* shows the structure of an unrolled LSTM unit (C. Olah, *Understanding
+    LSTM Networks*, 2015, [https://colah.github.io/posts/2015-08-Understanding-LSTMs/](https://colah.github.io/posts/2015-08-Understanding-LSTMs/)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.5 – LSTM layer](img/B16391_06_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.5 – LSTM layer
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the different copies of the unit are connected by two hidden
+    vectors. The one on the top is the cell state vector, ![](img/Formula_B16391_06_083.png),
+    used to make information travel through the different unit copies. The second
+    one on the bottom is the output vector of the unit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we have the gates, three in total. Gates can open or close (or partially
+    open/close) and, in this way, they make decisions on what to store or delete from
+    a hidden vector. A gate consists of a sigmoid function and a pointwise multiplication.
+    Indeed, the sigmoid function takes values in [0,1]. Specifically, ![](img/Formula_B16391_06_084.png)
+    removes the input (forgets it), while ![](img/Formula_B16391_06_085.png) lets
+    the input pass unaltered (remembers it). In between ![](img/Formula_B16391_06_086.png)
+    and ![](img/Formula_B16391_06_087.png), a variety of nuances of remembering and
+    forgetting are possible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The weights of these sigmoid layers, which implement the gates, are adjusted
+    via the learning process. That is, the gates learn when to allow data to enter,
+    leave, or be deleted through the iterative process of making guesses, backpropagating
+    error, and adjusting weights via gradient descent. The training algorithm for
+    LSTM layers is again an adaptation of the backpropagation algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An LSTM layer contains three gates: a forget gate, an input gate, and an output
+    gate (*Figure 6.5*). Let''s have a closer look at these gates.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Forget Gate
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The first gate from the left, the **forget gate**, filters the components from
+    the cell state vector. Based on the values in the current input vector, ![](img/Formula_B16391_06_088.png)
+    and in the output vector of the previous unit, ![](img/Formula_B16391_06_089.png),
+    the gate produces a forget or remember decision, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_090.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_B16391_06_091.png) is the weight matrix of the forget
+    gate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The vector of decision ![](img/Formula_B16391_06_092.png) is then pointwise
+    multiplied by the hidden cell state vector, ![](img/Formula_B16391_06_093.png),
+    to decide what to remember (![](img/Formula_B16391_06_094.png)) and what to forget
+    (![](img/Formula_B16391_06_095.png)) from the previous state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The question now is why do we want to forget? If LSTM units have been introduced
+    to obtain a longer memory, why should we need to forget something? Take, for example,
+    analyzing a document in a text corpus; you might need to forget all knowledge
+    about the previous document since the two documents are probably unrelated. Therefore,
+    with each new document, the memory should be reset to 0.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even within the same text, if you move to the next sentence and the subject
+    of the text changes, and with the new subject a new gender appears, then you might
+    want to forget the gender of the previous subject, to be ready to incorporate
+    the new one and to adjust the corresponding part of speech accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Input Gate
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The goal of the input gate is more straightforward: it keeps the input information
+    that is new and useful. Here, again, a sigmoid gate lets input components pass
+    completely (![](img/Formula_B16391_06_096.png)), blocks them completely (![](img/Formula_B16391_06_097.png)),
+    or something in between depending on their importance to the final, current, and
+    future outputs.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This decision is implemented again as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_098.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is done with a new set of weights, ![](img/Formula_B16391_06_099.png),
+    of course.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The input gate doesn't operate on the previous cell state, ![](img/Formula_B16391_06_100.png),
+    directly. Instead, a new cell state candidate, ![](img/Formula_B16391_06_101.png),
+    is created, based on the values in the current input vector, ![](img/Formula_B16391_06_102.png),
+    and in the output vector of the previous unit, ![](img/Formula_B16391_06_103.png),
+    using a tanh layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_104.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Again, this is with another set of weights, ![](img/Formula_B16391_06_105.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The input gate now decides which information of the cell candidate state vector,
+    ![](img/Formula_B16391_06_106.png), should be added to the cell state vector,
+    ![](img/Formula_B16391_06_107.png). Therefore, the candidate state, ![](img/Formula_B16391_06_108.png),
+    is multiplied pointwise by the output of the sigmoid layer of the input gate,
+    ![](img/Formula_B16391_06_109.png), and then added to the filtered cell state
+    vector, ![](img/Formula_B16391_06_110.png) The final state, ![](img/Formula_B16391_06_111.png),
+    then results in the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_112.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: What have we done here? We have added new content to the previous cell state
+    vector, ![](img/Formula_B16391_06_113.png). Let's suppose we want to look at a
+    new sentence in the text where ![](img/Formula_B16391_06_114.png) is a subject
+    with a different gender. In the forget gate, we forgot about the gender previously
+    stored in the cell state vector. Now, we need to fill in the void and push the
+    new gender into memory – that is, into the new cell state vector.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Output Gate
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Finally, the output gate! We have the new cell state, ![](img/Formula_B16391_06_115.png),
+    to pass to the next copy of the unit; we just need to output something for this
+    current time, ![](img/Formula_B16391_06_116.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Again, like all other gates, the output gate applies a sigmoid function to
+    all components of the input vector, ![](img/Formula_B16391_06_117.png), and of
+    the previous output vector, ![](img/Formula_B16391_06_118.png), in order to decide
+    what to block and what to pass from the newly created state vector, ![](img/Formula_B16391_06_119.png),
+    into the final output vector, ![](img/Formula_B16391_06_120.png). All decisions,
+    ![](img/Formula_B16391_06_121.png), are then pointwise multiplied by the newly
+    created state vector, ![](img/Formula_B16391_06_122.png), previously normalized
+    through a ![](img/Formula_B16391_06_123.png) function to fall in ![](img/Formula_B16391_06_124.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_125.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![](img/Formula_B16391_06_126.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is with a new set of weights, ![](img/Formula_B16391_06_127.png), for this
+    output gate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this case, the output vector, ![](img/Formula_B16391_06_128.png), and the
+    state vector, ![](img/Formula_B16391_06_129.png), produced by the LSTM recurrent
+    unit are different, ![](img/Formula_B16391_06_130.png) being a filtered version
+    of ![](img/Formula_B16391_06_131.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why do we need a different output from the unit cell state? Well, sometimes
+    the output needs to be something different from the memory. For example, while
+    the cell state is supposed to carry the memory of the gender to the next unit
+    copy, the output might be required to produce the number, plural or singular,
+    of the subject rather than its gender.
+  prefs: []
+  type: TYPE_NORMAL
+- en: LSTM layers are a very powerful recurrent architecture, capable of keeping the
+    memory of a large number of previous inputs. These layers thus fit – and are often
+    used to solve – problems involving ordered sequences of data. If the ordered sequences
+    of data are sorted based on time, then we talk about time series. Indeed, LSTM-based
+    RNNs have been applied often and successfully to time series analysis problems.
+    A classic task to solve in time series analysis is demand prediction. In the next
+    section, we will explore an application of LSTM-based neural networks to solve
+    a demand prediction problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Demand Prediction Problem
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's continue then by exploring a demand prediction problem and how it can
+    be treated as a time series analysis problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Demand prediction is a task related to the need to make estimates about the
+    future. We all agree that knowing what lies ahead in the future makes life much
+    easier. This is true for life events as well as, for example, the prices of washing
+    machines and refrigerators, or demand for electrical energy in an entire city.
+    Knowing how many bottles of olive oil customers will want tomorrow or next week
+    allows for better restocking plans in retail stores. Knowing of a likely increase
+    in the demand for gas or diesel allows a trucking company to better plan its finances.
+    There are countless examples where this kind of knowledge of the future can be
+    of help.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Demand Prediction
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Demand prediction**, or demand forecasting, is a big branch of data science.
+    Its goal is to make estimations about future demand using historical data and
+    possibly other external information. Demand prediction can refer to any kind of
+    numbers: visitors to a restaurant, generated kW/h, school new registrations, beer
+    bottles, diaper packages, home appliances, fashion clothing and accessories, and
+    so on. Demand forecasting may be used in production planning, inventory management,
+    and at times in assessing future capacity requirements, or in making decisions
+    on whether to enter a new market.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Demand prediction techniques are usually based on time series analysis. Previous
+    values of demand for a given product, goods, or service are stored and sorted
+    over time to form a time series. When past values in the time series are used
+    to predict future values in the same time series, we are talking about autoregressive
+    analysis techniques. When past values from other external time series are also
+    used to predict future values in the time series, then we are talking about multi-regression
+    analysis techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Time series analysis** is a field of data science with a lot of tradition,
+    as it already offers a wide range of classical techniques. Traditional forecasting
+    techniques stem from statistics and their top techniques are found in the **Autoregressive
+    Integrated Moving Average** (**ARIMA**) model and its variations. These techniques
+    require the assumption of a number of statistical hypotheses, are hard to verify,
+    and are often not realistic. On the other hand, they are satisfied with a relatively
+    small amount of past data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recently, with the growing popularity of **machine learning** algorithms, a
+    few data-based regression techniques have also been applied to demand prediction
+    problems. The advantages of these machine learning techniques consist of the absence
+    of required statistical hypotheses and less overhead in data transformation. The
+    disadvantages consist of the need for a larger amount of data. Also, notice that
+    in the case of time series where all required statistical hypotheses are verified,
+    traditional methods tend to perform better.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's try to predict the next ![](img/Formula_B16391_06_132.png) values in the
+    time series based on the past ![](img/Formula_B16391_06_133.png) values. When
+    using a machine learning model for time series analysis, such as, for example,
+    linear regression or a regression tree, we need to supply the vector of the past
+    ![](img/Formula_B16391_06_021.png) samples as input to train the model to predict
+    the next ![](img/Formula_B16391_06_132.png) values. While this strategy is commonly
+    implemented and yields satisfactory results, it is still a static approach to
+    time series analysis – **static** in the sense that each output response depends
+    only on the corresponding input vector. The order of presentation of input samples
+    to the model does not influence the response. There is no concept of an input
+    sequence, but just of an input vector.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: KNIME Analytics Platform offers a few nodes and standard components to deal
+    with time series analysis. The key node here is the `EXAMPLES/00_Components/Time
+    Series` folder in the `statsmodels` Python module in the background. Because of
+    that, they require the installation of the KNIME Python integration ([https://www.knime.com/blog/setting-up-the-knime-python-extension-revisited-for-python-30-and-20](https://www.knime.com/blog/setting-up-the-knime-python-extension-revisited-for-python-30-and-20)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 6.6*, you can see the list of available components for time series
+    analysis tasks within KNIME Analytics Platform:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.6 – The EXAMPLES/00_Components/Time Series folder contains components
+    dedicated to time series analysis](img/B16391_06_006.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.6 – The EXAMPLES/00_Components/Time Series folder contains components
+    dedicated to time series analysis
+  prefs: []
+  type: TYPE_NORMAL
+- en: All things considered, these machine learning-based strategies, using regression
+    models, do not fully exploit the sequential structure of the data, where the fact
+    that ![](img/Formula_B16391_06_136.png) comes after ![](img/Formula_B16391_06_137.png)
+    carries some additional information. This is where RNNs, and particularly LSTMs,
+    might offer an edge on the other machine learning algorithms, thanks to their
+    internal **memory**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s now introduce the case study for this chapter: predicting energy demand
+    in **kilowatts** (**kW**) needed by the hour.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Predicting Energy Demand
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As an example of demand prediction, we want to tackle the problem of electrical
+    energy prediction – that is, of predicting the number of kW needed in the next
+    hour by an average household consumer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the hardest problems in the energy industry is matching supply and demand.
+    On the one hand, over-production of energy can be a waste of resources; on the
+    other hand, under-production can leave people without the basic commodities of
+    modern life. The prediction of electrical energy demand at each point in time
+    is therefore a very important topic in data science.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For this reason, a couple of years ago energy companies started to monitor the
+    electricity consumption of each household, store, or other entity, by means of
+    smart meters. A pilot project was launched in 2009 by the Irish **Commission for
+    Energy Regulation** (**CER**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Smart Metering Electricity **Customer Behaviour Trials** (**CBTs**) took
+    place between 2009 and 2010 with over 5,000 Irish homes and businesses participating.
+    The purpose of the trials was to assess the impact on consumers' electricity consumption,
+    in order to inform the cost-benefit analysis for a national rollout. Electric
+    Ireland residential and business customers and Bord Gáis Energy business customers
+    who participated in the trials had an electricity smart meter installed in their
+    homes or on their premises and agreed to take part in the research to help establish
+    how smart metering can help shape energy usage behaviors across a variety of demographics,
+    lifestyles, and home sizes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The original dataset contains over 5,000 time series, each one measuring the
+    electricity usage for each installed smart meter for a bit over a year. All original
+    time series have been aligned and standardized to report energy measures by the
+    hour.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The final goal is to predict energy demand across all users. At this point,
+    we have a dilemma: should we train one model for each time series and sum up all
+    predictions to get the demand in the next hour or should we train one single model
+    on all time series to get the global demand for the next hour?'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training one model on a single time series is easier and probably more accurate.
+    However, training 5,000 models (and probably more in real life) can pose a few
+    technical problems. Training one single model on all time series might not be
+    that accurate. As expected, a compromise solution was implemented. Smart energy
+    meters have been clustered based on energy usage profile, and the average time
+    series of hourly energy usage for each cluster has been calculated. The goal now
+    is to calculate the energy demand in the next hour for each clustered time series,
+    weight it by the cluster size, and then sum up all contributions to find the final
+    total energy demand for the next hour.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thirty smart meter clusters have been detected based on the energy used on business
+    days versus the weekend, at different times over the 24 hours, and the average
+    hourly consumption.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'More details on this data preparation procedure can be found in the *Data Chef
+    ETL Battles. What can be prepared with today''s data? Ingredient Theme: Energy
+    Consumption Time Series* blog post, available at https://www.knime.com/blog/EnergyConsumptionTimeSeries,
+    and in the *Big Data, Smart Energy, and Predictive Analytics* whitepaper, available
+    at [https://files.knime.com/sites/default/files/inline-images/knime_bigdata_energy_timeseries_whitepaper.pdf](https://files.knime.com/sites/default/files/inline-images/knime_bigdata_energy_timeseries_whitepaper.pdf).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The final dataset contains 30 time series of average energy usage by the 30
+    clusters. Each time series shows the electrical profile of a given cluster of
+    smart meters: from stores (high energy consumption from 9 a.m. to 5 p.m. on business
+    days) to nightly business customers (high energy consumption from 9 p.m. to 6
+    a.m. every day), from family households (high energy consumption from 7 a.m. to
+    9 a.m. and then again from 6 p.m. to 10 p.m. every business day) to other unclear
+    entities (using energy across 24 hours on all 7 days of the week). For example,
+    cluster 26 refers to stores (*Figure 6.7*). Here, electrical energy is used mainly
+    between 9 a.m. and 5 p.m. on all business days:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.7 – Plot of energy usage by the hour for cluster 26](img/B16391_06_007.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.7 – Plot of energy usage by the hour for cluster 26
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the opposite side, cluster 13 includes a number of restaurants (*Figure
+    6.8*), where the energy usage is pushed to the evening, mainly from 6 p.m. to
+    midnight, every day of the week:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.8 – Plot of energy usage by the hour for cluster 13](img/B16391_06_008.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.8 – Plot of energy usage by the hour for cluster 13
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice that cluster 26 is the poster child for time series analysis, with a
+    clear seasonality on the 24 hours in a day and the 7 days of the week series.
+    In this chapter, we will continue with an autoregressive analysis of cluster 26's
+    time series. The goal will be to predict the average energy usage in the next
+    hour, based on the average energy usage in the past ![](img/Formula_B16391_06_138.png)
+    hours, for cluster 26.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have a set of time series describing the usage of electrical energy
+    by the hour for clusters of users, we will try to perform some predictions of
+    future usage for each cluster. Let's focus first on the data preparation for this
+    time series problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data Preparation – Creating the Past
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now implement in practice a demand prediction application, using the
+    time series for cluster 26\. Again, we will have two separate workflows: one to
+    train the LSTM-based RNN and one to deploy it in production. Both applications
+    will include a data preparation phase, which must be exactly the same for both.
+    In this section, we will go through this data preparation phase.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Dealing with **time series**, the **data preparation** steps are slightly different
+    from what is implemented in other classification or clustering applications. Let''s
+    go through these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Data loading**: Read from the file the time series of the average hourly
+    used energy for the 30 identified clusters and the corresponding times.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Date and time standardization**: Time is usually read as a string from the
+    file. To make sure that it is processed appropriately, it is best practice to
+    transform it into a **Date&Time** object. A number of nodes are available to deal
+    with Date&Time objects in an appropriate and easy way, but especially in a standardized
+    way.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Timestamp alignment**: Once the time series has been loaded, we need to make
+    sure that its sampling has been consistent with no time holes. Possible time holes
+    need to be filled with missing values. We also need to make sure that the data
+    of the time series has been time-sorted.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Partitioning**: Here, we need to create a training set to train the network
+    and a test set to evaluate its performance. Differently from classification problems,
+    here we need to respect the time order so as not to mix the past and future of
+    the time series in the same set. Past samples should be reserved for the training
+    set and future samples for the test set.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Missing value imputation**: Missing value imputation for time series is also
+    different from missing value imputation in a static dataset. Since what comes
+    after depends on what was there before, most techniques of missing value imputation
+    for time series are based on previous and/or the following sample values.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Creating the input vector of past samples**: Once the time series is ready
+    for analysis, we need to build the tensors to feed the network. The tensors must
+    consist of ![](img/Formula_B16391_06_021.png) past samples that the network will
+    use to predict the value for the next sample in time. So, we need to produce sequences
+    of ![](img/Formula_B16391_03_173.png) past ![](img/Formula_B16391_06_141.png)-dimensional
+    vectors (the ![](img/Formula_B16391_06_142.png) past samples) for all training
+    and test records.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Creating the list to feed the network**: Finally, the input tensors of past
+    samples must be transformed into a list of values, as this is the input format
+    required by the network.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's start with data loading.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data Loading and Standardization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The dataset is read from a **CSV** file via the **File Reader** node: 30 time
+    series and one date column. The date column is imported by the File Reader node
+    as a string and must be converted into a Date&Time object to make sure it is processed
+    – for example, sorted – appropriately in the next steps. **Date&Time** is the
+    internal standard object to represent date and time entities in KNIME Analytics
+    Platform. In order to convert a string into a Date&Time object, we use the **String
+    to Date&Time** node:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.9 – The String to Date&Time node and its configuration window](img/B16391_06_009.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.9 – The String to Date&Time node and its configuration window
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the configuration window (*Figure 6.9*), you must select the string input
+    columns containing the date and/or time information and define the date/time format.
+    You can do this manually, by providing a string format – for example, as `dd.mm.yyyy`,
+    where `dd` indicates the day, `mm` the month, and `yyyy` the year.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, if you have date format of `day(2).month(2).year(4)`, you can
+    manually add the option `dd.MM.yyyy`, if this is not available in the **Date format**
+    options. When manually adding the date/time type, you must select the appropriate
+    **New type** option: **Date or Time** or **Date&time**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Alternatively, you can provide the date/time format automatically, by pressing
+    the **Guess data type and format** button. With this last option, KNIME Analytics
+    Platform will parse your string to find out the date/time format. It works most
+    of the time! If it does not, you can always revert to manually entering the date/time
+    format.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the node description of the **String to Data&Time** node, you can find an
+    overview of possible placeholders in the format structures. The most important
+    ones are **y** for year, **M** for month in year, **d** for day of month, **H**
+    for hour of day (between 0 and 23), **m** for minute of hour, and **s** for second
+    of minute. Many more placeholders are supported – for example, **W** for week
+    of month or **D** for day of year.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The String to Date&Time node is just one of the many nodes that deals with Date&Time
+    objects, all contained in the **Other Data Types/Time Series** folder in the **Node
+    Repository** panel. Some nodes manipulate Date&Time objects, such as, for example,
+    to calculate a time difference or produce a time shift; other nodes are used to
+    convert Date&Time objects from one format to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, the Column Filter node is inserted to isolate the time series for
+    cluster 26 only. The only required standardization here was about the date conversion
+    from a string to a Date&Time object. We can now move on to data cleaning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data Cleaning and Partitioning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The **Timestamp Alignment** component is inserted to check for time holes in
+    the time series. This component checks whether the selected timestamp column is
+    uniformly sampled in the selected time scale. Missing values will be inserted
+    at skipped sampling times. In this case, it checks whether the **rowID** column,
+    containing the timestamps, has missing sampling times considering an hourly sampling
+    rate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Timestamp Alignment component is part of the time series-dedicated component
+    set available in `EXAMPLES/00_Components/Time Series`. To create an instance in
+    your workflow, just drag and drop it into the workflow editor or double-click
+    it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After that, we partition the data into a training set and test set, to train
+    the LSTM-based RNN and evaluate it. We have not provided an additional validation
+    set here to evaluate the network performance throughout the training process.
+    We decided to keep things simple and just provide a training set to the Keras
+    Network Learner node and a test set to measure the error on the time series prediction
+    task:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.10 – The Partitioning node and its configuration window. Notice
+    the Take from top data extraction mode for time series analysis](img/B16391_06_010.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.10 – The Partitioning node and its configuration window. Notice the
+    Take from top data extraction mode for time series analysis
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To separate the input dataset into training and test sets, we use again a **Partitioning**
+    node. Here, we decided to implement an 80%–20% split: 80% of the input data will
+    be directed toward training and 20% toward testing. In addition, we set the extraction
+    procedure to **Take from top** (*Figure 6.10*). In a time series analysis problem,
+    we want to keep the intrinsic time order of the data: we use the past to train
+    the network and the future to test it. When using the **Take from top** data extraction
+    option, the top percentage of the data is designated to the top output port, while
+    the remaining at the bottom to the lower output port. If the data is time-sorted
+    from past to future, then this data extraction modality preserves the time order
+    of the data.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a time series analysis problem, partitioning should use the **Take from top**
+    data extraction modality, in order to preserve the time order of the data and
+    use the past for training and the future for testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As for every dataset, the operation for missing value imputation is an important
+    one; first, because neural networks cannot deal with missing values and second,
+    because choosing the right missing value imputation technique can affect your
+    final results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Missing value imputation must be implemented after the Timestamp Alignment component
+    since this component, by definition, creates missing values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In [*Chapter 4*](B16391_04_Final_NM_ePUB.xhtml#_idTextAnchor101), *Building
+    and Training a Feedforward Network*, we already introduced the **Missing Value**
+    node and its different strategies to impute missing values. Some of these strategies
+    are especially useful when it comes to sequential data, as they take the previous
+    and/or following values in a time series into account. Possible strategies are
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Average/linear interpolation**, replacing the missing value with the average
+    value of previous and next sample'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Moving average**, replacing the missing value with the mean value of the
+    sample window'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Next**, replacing the missing value with the value of the next sample'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Previous**, replacing the missing value with the value of the previous sample'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We went for linear interpolation between the previous and next values to impute
+    missing values in the time series (*Figure 6.11*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.11 – The Missing Value node and its configuration window](img/B16391_06_011.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.11 – The Missing Value node and its configuration window
+  prefs: []
+  type: TYPE_NORMAL
+- en: The formula to use for missing value imputation is calculated in the **Missing
+    Value** node on the training data, applied to the test data with the **Missing
+    Value (Apply)** node, and saved to a file through the Model Writer node. The pure
+    application on the test set of the formula defined on the training set prevents
+    the test data from interfering with the implementation of any transformation required
+    for model training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's focus next on the creation of input tensors for the neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the Input Tensors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have read the data, converted the date cells into Date&Time objects, isolated
+    the time series for cluster 26, assigned missing values to missing sampling steps,
+    partitioned the data into 80% for the training set and 20% for the test set, applied
+    a linear interpolation between previous and next value for missing value imputation.
+    The data is ready, it is now time to create the input tensors for the neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: A key node to create vectors of past samples that is so often needed in time
+    series analysis is the Lag Column node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 6.12* shows the Lag Column node and its configuration window:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.12 – The Lag Column node and its configuration window](img/B16391_06_012.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.12 – The Lag Column node and its configuration window
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **Lag Column** node makes copies of the selected column and shifts them
+    down a number, ![](img/Formula_B16391_06_143.png), of cells, where ![](img/Formula_B16391_06_144.png)
+    cells, where ![](img/Formula_B16391_06_145.png) is the lag interval and ![](img/Formula_B16391_06_146.png)
+    is the **Lag** setting in the configuration window.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Lag Column node is a very simple yet very powerful node that comes in handy
+    in a lot of situations. If the input column is time-sorted, then shifting down
+    the cells corresponds to moving them into the past or the future, depending on
+    the time order.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 6.13*, we explain this concept:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.13 – The Lag Column node takes snapshots of the same column at different
+    times, as defined by the Lag and Lag interval settings](img/B16391_06_013.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.13 – The Lag Column node takes snapshots of the same column at different
+    times, as defined by the Lag and Lag interval settings
+  prefs: []
+  type: TYPE_NORMAL
+- en: Considering Lag = 4 and Lag Interval = 2, the Lag Column node produces four
+    copies of the selected column, each copy moving backward with a step of 2\. That
+    is, besides the selected column at current time *t*, we will also have four snapshots
+    of the same column at time *t*-2, *t*-4, *t*-6, and *t*-8 (*Figure 6.13*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our demand prediction problem, we used the values for the average energy
+    used by cluster 26 in the immediate 200 past hours to predict the average energy
+    need at the current hour. That is, we built an input vector with the 200 immediate
+    past samples, using a Lag Column node with Lag=200 and Lag Interval=1 (*Figure
+    6.12*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For space reasons, we then transformed the vector of cells into a collection
+    of cells using the **Column Aggregator** node, as it is one of the possible formats
+    to feed the neural network via the Keras Network Learner node. The Column Aggregator
+    node is another way to produce **lists** of data cells. The node groups the selected
+    columns per row and aggregates their cells using the selected aggregation method.
+    In this case, the **List** aggregation method was selected and applied to the
+    200 past values of cluster 26, as created via the Lag Column node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The workflow snippet, implementing data preparation part to feed the upcoming
+    RNN for the demand prediction problem, is shown in *Figure 6.14*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.14 – Data preparation for demand prediction: date and time standardization,
+    time alignment, missing value imputation, creating the input vector of past samples,
+    and partitioning](img/B16391_06_014.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 6.14 – Data preparation for demand prediction: date and time standardization,
+    time alignment, missing value imputation, creating the input vector of past samples,
+    and partitioning'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The data is ready. Let's now build, train, and test the LSTM-based RNN to predict
+    the average demand of electrical energy for cluster 26 at the current hour given
+    the average energy used in the previous 200 hours by the same cluster 26.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building, Training, and Deploying an LSTM-Based RNN
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s proceed with the next step: building a simple LSTM-based RNN for demand
+    prediction. First, we will train the network, then we will test it, and finally,
+    we will deploy it. In this case study, we used no validation set for the network
+    and we performed no optimization on the static hyperparameters of the network,
+    such as, for example, the size of the LSTM layer.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A relatively simple network is already achieving good error measures on the
+    test set for our demand prediction task, and therefore, we decided to focus this
+    section on how to test a model for time series prediction rather than on how to
+    optimize the static parameters of a neural network. We looked at the optimization
+    loop in [*Chapter 5*](B16391_05_Final_NM_ePUB.xhtml#_idTextAnchor152), *Autoencoder
+    for Fraud Detection*. In general, this optimization loop can also be applied to
+    optimize network hyperparameters. Let's begin by building an LSTM-based RNN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building the LSTM-Based RNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'For this case study, we went for the simplest possible LSTM-based RNN: an RNN
+    with just one hidden LSTM layer. So, the final network consists of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: One input layer accepting tensors of 200 past vectors – each past vector being
+    just the previous sample, that is, with size 1 – obtained through a Keras Input
+    Layer node with Shape = 200, 1.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: One hidden layer with 100 LSTM units, accepting the previous tensor as the only
+    input, through the **Keras LSTM Layer** node
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A classic dense layer as output with just one neuron producing the predicted
+    value for the next sample in the time series, obtained through the Keras Dense
+    Layer node with the ReLU activation function.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The nodes used to build this neural architecture are shown in *Figure 6.15*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.15 – Building a very basic, very simple LSTM-based RNN](img/B16391_06_015.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.15 – Building a very basic, very simple LSTM-based RNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The size of the input tensor was [200,1], which is a sequence of 200 1-sized
+    vectors. If the length of the input sequence is not known, we can use *?* to indicate
+    unknown sequence length. The NLP case studies in the next chapter will show you
+    some examples of this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have already described the Keras Input Layer node and the Keras Dense Layer
+    node in previous chapters. Let's explore, in this section, just the Keras LSTM
+    Layer node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Until now, we have used the term vector when we've talked about the input, the
+    cell state, and the output. A tensor is a more generalized form, representing
+    a vector stretching along *k*-dimensions. A rank 0 tensor is equal to a scalar
+    value, a rank 1 tensor is equal to a vector, and a rank 2 tensor is equal to a
+    matrix.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Notice that the Keras LSTM Layer node accepts up to three input tensors: one
+    with the input values of the sequence and two to initialize the hidden state tensors,
+    ![](img/Formula_B16391_06_147.png) and ![](img/Formula_B16391_06_148.png).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If the previous neural layer produces more than one tensor as output, in the
+    configuration window of the current LSTM layer, via a drop-down menu, you can
+    select which tensor should be used as input or to initialize the hidden states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will explore more complex neural architectures in the next chapters. Here,
+    we have limited our architecture to the simplest classic LSTM layer configuration,
+    accepting just one input tensor from the input layer. The one input tensor accepted
+    as input can be seen in the configuration window of the LSTM Layer node in *Figure
+    6.16*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.16 – The Keras LSTM Layer node and its configuration window](img/B16391_06_016.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.16 – The Keras LSTM Layer node and its configuration window
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the LSTM layer, we can set two activation functions, called **Activation**
+    and **Recurrent activation**. The **Recurrent activation** function is used by
+    the gates to filter the input components. The function selected as **Activation**
+    is used to create the candidates for the cell state, ![](img/Formula_B16391_06_149.png),
+    and to normalize the new cell state, ![](img/Formula_B16391_06_150.png), before
+    applying the output gate. This means that for the standard LSTM unit, which we
+    introduced in this chapter, the setting for **Activation** is the tanh function
+    and for **Recurrent activation** the sigmoid function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We set the layer to add biases to the different layers of the LSTM unit but
+    decided to not use the dropout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **Implementation** and **Unroll** setting options don't have any impact
+    on the results but can improve the performance depending on your hardware and
+    the sequence length. When activating the **Unroll** checkbox, the network will
+    be unrolled before training, which can speed up the learning process, but it is
+    memory-expensive and only suitable for short input sequences. If unchecked, a
+    so-called symbolic loop is used in the TensorFlow backend.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can choose whether to return the intermediate output tensors ![](img/Formula_B16391_06_151.png)
+    as a full sequence or just the last output tensor, ![](img/Formula_B16391_06_152.png)
+    (the **Return sequences** option). In addition, you can also output the hidden
+    cell state tensor as output (the **Return state** option). In the energy demand
+    prediction case study, only the final output tensor of the LSTM unit is used to
+    feed the next dense layer with the ReLU activation function. Therefore, the two
+    checkboxes are not activated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other three tabs in the node configuration window set the regularization
+    terms, initialization strategies, and constraints on the learning algorithm. We
+    set no regularizations and no constraints in this layer. Let's train this network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training the LSTM-Based RNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The Keras Network Learner node then follows to train this LSTM-based RNN on
+    the training set. We know about this node already. Let''s summarize the specs
+    used in its configuration window for this case study here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The input tensor is accepted with conversion to **From Collection of Number
+    (double)**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The output vector is produced with conversion to **Number (double)**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The loss function is set to **Mean Squared Error** (**MSE**) in the **Target**
+    tab.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of epochs is set to `50`, the training batch size to `256`, and the
+    training algorithm to **Adam** – an optimized version of backpropagation – in
+    the **Options** tab.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The learning rate is set to be `0.001` with no learning rate decay.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For this network, with just one neuron in the output layer, the MSE loss function
+    on a training batch takes on a simpler form and becomes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_153.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_B16391_06_154.png) is the batch size, ![](img/Formula_B16391_06_155.png)
+    is the output value for training sample ![](img/Formula_B16391_06_156.png), and
+    ![](img/Formula_B16391_06_157.png) is the corresponding target answer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Since we are talking about number prediction and MSE as the loss function,
+    the plot in the **Loss** tab of the **Learning Monitor** view is the one to take
+    into account to evaluate the learning process. Since we are trying to predict
+    exact numbers, the accuracy is not meaningful in this case. *Figure 6.17* shows
+    the **Learning Monitor** view of the Keras Network Learner node for this demand
+    prediction example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.17 – Plot of the MSE loss function over training epochs in the Loss
+    tab of'
+  prefs: []
+  type: TYPE_NORMAL
+- en: the Learning Monitor view](img/B16391_06_017.jpg)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.17 – Plot of the MSE loss function over training epochs in the Loss
+    tab of the Learning Monitor view
+  prefs: []
+  type: TYPE_NORMAL
+- en: The screenshot in *Figure 6.17* shows that after just a few batch training iterations,
+    we reach an acceptable prediction error, at least on the training set. After training,
+    the network should be applied to the test set, using the **Keras Network Executor**
+    node, and saved for deployment as a Keras file using the **Keras Network Writer**
+    node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's now apply the trained LSTM network to the test set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Testing the LSTM-Based RNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In theory, to test the performance of the network, we just need to apply the
+    network to the input tensors in the test set. This is easily done with a **Keras
+    Network Executor** node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 6.18* shows the inside of the **In-sample testing** component:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.18 – Inside of the In-sample testing component](img/B16391_06_018.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.18 – Inside of the In-sample testing component
+  prefs: []
+  type: TYPE_NORMAL
+- en: The In-sample testing component selects the number of input sequences to test
+    on (the **Row Filter** node), then passes them through the **Keras Network Executor**
+    node, and joins the predictions with the corresponding target answers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, and outside of the **In-sample testing** component, the **Numeric
+    Scorer** node calculates some error metrics and the **Line Plot (Plotly)** node
+    shows the original time series and the reconstructed time series (final workflow
+    in *Figure* *6.25*). The numeric error metrics quantify the error, while the line
+    plot gives a visual idea of how faithful the predictions are. Predictions generated
+    with this approach are called **in-sample** predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Numeric Scorer node calculates six error metrics (*Figure 6.19*): R2, **Mean
+    Absolute Error** (**MAE**), MSE, **Root Mean Squared Error** (**RMSE**), **Mean
+    Signed Difference** (**MSD**), and **Mean Absolute Percentage Error** (**MAPE**).
+    The corresponding formulas are shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_B16391_06_158.jpg)![](img/Formula_B16391_06_159.jpg)![](img/Formula_B16391_06_160.jpg)![](img/Formula_B16391_06_161.jpg)![](img/Formula_B16391_06_162.jpg)![](img/Formula_B16391_06_163.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_B16391_06_164.png) is the number of predictions from
+    the test set, ![](img/Formula_B16391_06_165.png) is the output value for the test
+    sample ![](img/Formula_B16391_06_166.png), and ![](img/Formula_B16391_06_167.png)
+    is the corresponding target answer. We chose to apply the network on a test set
+    of 600 tensors, generated the corresponding predictions, and calculated the error
+    metrics. This is the result we got:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.19 – Error measures between in-sample predicted 600 values and the
+    corresponding target values](img/B16391_06_019.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.19 – Error measures between in-sample predicted 600 values and the
+    corresponding target values
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Each metric has its pros and cons. Commonly adopted errors for time series
+    predictions are MAPE, MAE, or MSE. MAPE, for example, shows just 9% error on the
+    next 600 values of the predicted time series, which is a really good result. The
+    plot in *Figure 6.20* proves it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B16391_06_020.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.20 – The next 600 in-sample predicted values against the next 600 target
+    values in the time series
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is an easy test. For each value to predict, we feed the network with the
+    previous history of real values. This is a luxury situation that we cannot always
+    afford. Often, we predict the next 600 values, one by one, based just on past
+    predicted values. That is, once we have trained the network, we trigger the next
+    prediction with the first 200 real past values in the test set. After that, however,
+    we predict the next value based on the latest 199 real values plus the currently
+    predicted one; then again based on the latest 198 real values plus the previously
+    predicted one and the currently predicted one, and so on. This is a suboptimal,
+    yet more realistic, situation. Predictions generated with this approach are called
+    **out-sample** predictions and this kind of testing is called out-sample testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To implement out-sample testing, we need to implement the loop that feeds the
+    current prediction back into the vector of past samples. This loop has been implemented
+    in the deployment workflow as well. Let's have a look at the details of this implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a Deployment Loop
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To implement out-sample testing, we need to implement the loop described in
+    the previous section, where the currently predicted value becomes part of the
+    tensor of past values for the next prediction. This is done in the component named
+    **Deployment Loop** (*Figure 6.21*), which is also inside the out-sample testing
+    component in the final workflow (*Figure 6.25*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.21 – The deployment loop. Notice the recursive loop to pass back'
+  prefs: []
+  type: TYPE_NORMAL
+- en: the new input sequence at each iteration](img/B16391_06_021.jpg)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.21 – The deployment loop. Notice the recursive loop to pass back the
+    new input sequence at each iteration
+  prefs: []
+  type: TYPE_NORMAL
+- en: Here, a `no_preds`, created in the `no_preds=600`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Integer Configuration node belongs to a special group of configuration
+    nodes, so its configuration window transfers into the configuration window of
+    the component that contains it. As a consequence, the **Deployment Loop** component
+    has a configuration setting for the number of predictions to create with the recursive
+    loop, as shown in *Figure 6.22*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.22 – The configuration window of the Deployment Loop component](img/B16391_06_022.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.22 – The configuration window of the Deployment Loop component
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The recursive loop is one of the few loops in KNIME Analytics Platform that
+    allows you to pass the results back to be consumed in the next iteration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The **Deployment Loop** component uses two more new important nodes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The Keras to TensorFlow Network Converter node**: The Keras to TensorFlow
+    Converter node converts a Keras deep learning model with a TensorFlow backend
+    into a TensorFlow model. TensorFlow models are executed using the TensorFlow Java
+    API, which is usually faster than the Python kernel available via the Keras Python
+    API. If we use the Keras Network Executor node within the recursive loop, a Python
+    kernel must be started at each iteration, which slows down the network execution.
+    A TensorFlow model makes the network execution much faster.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The TensorFlow Network Executor node**: The configuration window of the TensorFlow
+    Network Executor node is similar to the configuration window of the Keras Network
+    Executor node, the only difference being the backend engine, which in this case
+    is TensorFlow.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For out-sample testing, the deployment loop is triggered with the first tensor
+    in the test set and from there it generates 600 predictions autonomously. In the
+    out-sample testing component, these predictions are then joined with the target
+    values and outside of the out-sample testing component, the Numeric Error node
+    calculates the selected error metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Obviously, for out-sample testing, the error values become larger (*Figure
+    6.23*), since the prediction error is influenced by the prediction errors in the
+    previous steps. MAPE, for example, reaches 18%, which is practically double the
+    result from in-sample testing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.23 – Error measures between the out-sample predicted 600 values
+    and'
+  prefs: []
+  type: TYPE_NORMAL
+- en: the corresponding target values](img/B16391_06_023.jpg)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.23 – Error measures between the out-sample predicted 600 values and
+    the corresponding target values
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 6.24*, we can see the prediction error when visualizing the predicted
+    time series and comparing it with the original time series for the first 600 out-sample
+    predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.24 – The next 600 out-sample predicted values (orange) against the
+    next 600 target values (blue) in the time series](img/B16391_06_024.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.24 – The next 600 out-sample predicted values (orange) against the
+    next 600 target values (blue) in the time series
+  prefs: []
+  type: TYPE_NORMAL
+- en: There, we can see that the first predictions are quite correct, but they start
+    deteriorating the further we move from the onset of the test set. This effect
+    is, of course, not present for in-sample predictions. Indeed, the error values
+    on the first out-sample predictions are comparable to the error values for the
+    corresponding in-sample predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have performed here a pretty crude time series prediction since we have not
+    taken into account the seasonality prediction as a separate problem. We have somehow
+    let the network manage the whole prediction by itself, without splitting seasonality
+    and residuals. Our results are satisfactory for this use case. However, for more
+    complex use cases, the seasonality index could be calculated, the seasonality
+    subtracted, and predictions performed only on the residual values of the time
+    series. Hopefully, this would be an easier problem and would lead to more accurate
+    predictions. Nevertheless, we are satisfied with the prediction error, especially
+    considering that the network had to manage the prediction of the seasonality as
+    well.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The final workflow, building, training, and in-sample testing the network,
+    is shown in *Figure 6.25*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.25 – The final workflow to prepare the data and build, train, and
+    test the LSTM-based network on a time series prediction problem](img/B16391_06_025.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.25 – The final workflow to prepare the data and build, train, and test
+    the LSTM-based network on a time series prediction problem
+  prefs: []
+  type: TYPE_NORMAL
+- en: This workflow is available in the book's GitHub space. Let's now move on to
+    the deployment workflow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying the LSTM-Based RNN
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Deployment at this point is easy. We read the deployment data, for example,
+    from a `.table` file; then, we apply the same data preparation steps as for the
+    training and test data. We isolate the first input sequence with 200 past samples;
+    we apply the deployment loop to generate ![](img/Formula_B16391_06_168.png) new
+    samples (here, we went for ![](img/Formula_B16391_06_169.png)); we apply the trained
+    LSTM-based RNN inside the deployment loop; and finally, we visualize the predictions
+    with a Line Plot (Plotly) node. Notice that this time there are no predictions
+    versus target values, since the deployment data is real-world data and not lab
+    data, and as such does not have any target values to be compared to.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The deployment workflow is shown in *Figure 6.26* and is available on KNIME
+    Hub at [https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%206/](https://hub.knime.com/kathrin/spaces/Codeless%20Deep%20Learning%20with%20KNIME/latest/Chapter%206/):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.26 – The deployment workflow for a demand prediction problem](img/B16391_06_026.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.26 – The deployment workflow for a demand prediction problem
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is the deployment workflow, including data reading, the same data preparation
+    as for the data in the training workflow, network reading, and a deployment loop
+    to generate the predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this last section, we have learned how to apply the deployment loop to a
+    deployment workflow to generate new predictions in real life.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we introduced a new recurrent neural unit: the LSTM unit.
+    We showed how it is built and trained, and how it can be applied to a time series
+    analysis problem, such as demand prediction.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As an example of a demand prediction problem, we tried to predict the average
+    energy consumed by a cluster of users in the next hour, given the energy used
+    in the previous 200 hours. We showed how to test in-sample and out-sample predictions
+    and some numeric measures commonly used to quantify the prediction error. Demand
+    prediction applied to energy consumption is just one of the many demand prediction
+    use cases. The same approach learned here could be applied to predict the number
+    of customers in a restaurant, the number of visitors to a web site, or the amount
+    of a type of food required in a supermarket.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we also introduced a new loop in KNIME Analytics Platform,
+    the recursive loop, and we mentioned a new visualization node, the Line Plot (Plotly)
+    node.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will continue with RNNs, focusing on different text-related
+    applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions and Exercises
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Check your level of understanding of the concepts explored in this chapter
+    by answering the following questions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why are LSTM units suitable for time series analysis?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a). Because they are faster than classic feedforward networks
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b). Because they can remember past input tensors
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c). Because they use gates
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d). Because they have hidden states
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What is the data extraction option to use for partitioning in time series analysis?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a). Draw randomly
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b). Take from top
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c). Stratified Sampling
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d). Linear Sampling
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What is a tensor?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a). A tensor is a two-dimensional vector.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b). A tensor is a *k*-dimensional vector.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c). A tensor is just a number.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d). A tensor is a sequence of numbers.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: What is the difference between in-sample and out-sample testing?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: a). In-sample testing uses the real past values from the test set to make the
+    predictions. Out-sample testing uses past prediction values to make new predictions.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: b). In-sample testing is more realistic than out-sample testing.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: c). In-sample testing is more complex than out-sample testing.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: d). In-sample testing applies the trained network while out-sample testing uses
+    rules.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL

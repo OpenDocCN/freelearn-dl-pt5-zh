@@ -1,0 +1,1279 @@
+- en: Latent Space Interpolation with MusicVAE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll learn about the importance of continuous latent space
+    of **Variational** **Autoencoders** (**VAEs**) and its importance in music generation
+    compared to standard **Autoencoders** (**AEs**). We'll use the MusicVAE model,
+    a hierarchical recurrent VAE, from Magenta to sample sequences and then interpolate
+    between them, effectively morphing smoothly from one to another. We'll then see
+    how to add groove, or humanization, to an existing sequence using the GrooVAE
+    model. We'll finish by looking at the TensorFlow code used to build the VAE model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous latent space in VAEs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Score transformation with MusicVAE and GrooVAE
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding TensorFlow code
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''ll use the following tools:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A **command line** or **bash** to launch Magenta from the Terminal
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Python** and its libraries to write music generation code using Magenta'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Magenta** to generate music in MIDI'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**MuseScore** or **FluidSynth** to listen to the generated MIDI'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In Magenta, we'll make the use of the **MusicVAE** and **GrooVAE** models. We'll
+    be explaining these models in depth, but if you feel like you need more information,
+    the model's README in Magenta's source code ([github.com/tensorflow/magenta/tree/master/magenta/models](https://github.com/tensorflow/magenta/tree/master/magenta/models))
+    is a good place to start. You can also take a look at Magenta's code, which is
+    well documented. We also provide additional content in the last section, *Further
+    reading*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for this chapter is in this book's code GitHub in the `Chapter04` folder,
+    located at [github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter04](https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter04).
+    The examples and code snippets will suppose you are located in this chapter's
+    folder. For this chapter, you should go to `cd Chapter04` before you start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Check out the following video to see the Code in Action: [http://bit.ly/3176ylN](http://bit.ly/3176ylN)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Continuous latent space in VAEs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml), *Generating Drum
+    Sequences with the Drums RNN*, we saw how we can use an RNN (LSTM) and a beam
+    search to iteratively generate a sequence, by taking an input and then predicting,
+    note by note, which next note is the most probable. That enabled us to use a primer
+    as a basis for the generation, using it to set a starting melody or a certain
+    key.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using that technique is useful, but it has its limitations. What if we wanted
+    to start with a primer and explore variations around it, and not just in a random
+    way, but in a desired **specific direction**? For example, we could have a two-bars
+    melody for a bass line, and we would like to hear how it sounds when played more
+    as an arpeggio. Another example would be transitioning smoothly between two melodies.
+    This is where the RNN models we previously saw fall short and where VAEs comes
+    into play.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before getting into the specifics of VAEs and how they are implemented in MusicVAE,
+    let's first introduce standard AEs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The latent space in standard AEs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An AE network is a pair of two connected networks, an **encoder** and a **decoder**,
+    where the encoder produces an **embedding** from an input that the decoder will
+    try to replicate. The embedding is a dense representation of the input, where
+    useless features have been dropped, but is still representative enough so that
+    the decoder can try and reproduce the input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What's the use of the encoder and decoder pair if the decoder merely tries to
+    reproduce the input? Its main use is **dimensionality reduction**, where the input
+    can be represented in a lower spatial resolution (with fewer dimensions) while
+    still keeping its meaning. This forces the network to discover significant features
+    to be encoded in the hidden layer nodes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following diagram, we illustrate a VAE network, which is separated into
+    three main parts—the hidden layer nodes (latent space or latent variables) in
+    the middle, the encoder on the left, and the decoder on the right:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/043aa5d4-f3a3-414a-a0d3-edec46f86a10.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Regarding the network training, the loss function, called **reconstruction loss**,
+    is defined such as the network is penalized for creating outputs different from
+    the input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generation is possible by instantiating the latent variables, which produces
+    the embeddings, and then decoding that to produce a new output. Unfortunately,
+    the learned latent space of the AE might not be continuous, which is a major shortcoming
+    of that architecture, making its real-world usages limited. A latent space that
+    is not continuous means that sampling a point at random might result in a vector
+    that the decoder cannot make sense of. This is because the encoder hasn't learned
+    how to handle that specific point and cannot generalize from its other learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following diagram, the black point marked by ? falls in such a space,
+    meaning the encoder won''t be able to reconstruct the input from it. This is an
+    example visualization of samples of the latent space (for three classes), with
+    the axis representing the first two dimensions of the latent space and the colors
+    representing three classes, which shows the formation of distinct clusters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7aa4d654-12d4-4087-84a9-5d30b6b349c5.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is fine if you are just replicating an input, but what if you want to sample
+    from the latent space or interpolate between two inputs? In the diagram, you can
+    see that the black data point (denoted with a question mark) falls in a region
+    the decoder won't be able to make sense of. This is why the discontinuous latent
+    space from AEs is a problem for our use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's see how a VAE solves that problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using VAEs in generating music
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There is one property in VAEs that makes them useful for generating music (or
+    any generation) is that their latent space is **continuous**. To achieve that,
+    the encoder doesn''t output a vector, but rather two vectors: a vector of means
+    called **µ** (mu) and a vector of standard deviations called **σ** (sigma). Therefore,
+    latent variables, often called **z** by convention, follow a probability distribution
+    of *P(z)*, often a Gaussian distribution.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In other words, the mean of the vector controls where the encoding of the input
+    should be located and the standard deviation controls the size of the area around
+    it, making the latent space continuous. Reusing the previous example, an example
+    plot of the latent space, with the *x* and *y* axes representing its first two
+    dimensions, for three classes represented by three colors, you can see the clusters
+    now cover an area instead of being discrete:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/5a6f6e91-8f39-4257-882a-209640b9c800.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here is the VAE network, where you can see the change in the hidden layer with
+    µ and σ:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/6c5991fc-730a-4dfa-a1fd-cc494dc6350c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This network architecture is very powerful for generating music and is often
+    considered in a class of model called generative models. One property of that
+    type of model is that the generation is stochastic, meaning that for a given input
+    (and the same values of mean and standard deviation), the sampling will make the
+    encoding vary a little for each pass.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This model has multiple properties that are really interesting for music generation,
+    such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Expression**: A musical sequence can be mapped to the latent space and reconstructed
+    from it.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Realism**: Any point of the latent space represents a realistic example.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Smoothness**: Samples from nearby points are similar.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We'll be explaining more on VAE in this chapter, but this minimal introduction
+    is important to understand the code we're about to write.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Score transformation with MusicVAE and GrooVAE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we've learned to generate various parts of a score.
+    We've generated percussion and monophonic and polyphonic melodies and learned
+    about expressive timing. This section builds on that foundation and shows how
+    to manipulate the generated scores and transform them. In our example, we'll sample
+    two small scores from the latent space, we'll then interpolate between the two
+    samples (progressively going from the first sample to the second sample), and
+    finally, we'll add some groove (or **humanization**, see the following information
+    box for more information) on the resulting score.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For our example, we''ll work on percussion since adding groove in MusicVAE
+    only works on drums. We''ll be using different configurations and pre-trained
+    models in MusicVAE to perform the following steps. Remember, there are more pre-trained
+    models in Magenta than we can present here (see the first section, *Technical
+    requirements*, for a link to the README that contains all of them):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Sample:** By using the `cat-drums_2bar_small` configuration and pre-trained
+    model, we sample two different scores of two bars each. We could do the same thing
+    for the melody by using the `cat-mel_2bar_big` configuration.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Interpolate**: By using the same configuration, we can interpolate between
+    the two generated scores. What interpolation means is that it will progressively
+    change the score, going from the first sample to the second. By asking a different
+    number of outputs, we can decide how gradually we go between the two samples.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Groove:** By using the `groovae_2bar_humanize` configuration, we can then
+    humanize the previous 16-bars sequence by adding groove.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Here is a diagram explaining the different steps of our example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b4ce57e4-ba59-4e18-b043-070c5664a709.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: First, we'll be sampling `sample1` and `sample2` (2 bars each). Then, we'll
+    ask the interpolation for 4 output sequences ("i1", "i2", "i3", and "i4") of 2
+    bars each. The resulting 6 output sequences of 12 bars will contain the 2 input
+    sequences in both ends, plus the score progression of 6 sequences in between.
+    Finally, we'll add groove to the whole sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If you remember from the last chapter, in the *Performance music with the Performance
+    RNN* section, we introduced what **groove** or **humanization** is and how to
+    generate sequences that feel less robotic. This boils down to two things: expressive
+    timing and dynamics. The former changes the timing of the notes so that they don''t
+    fall exactly on step boundaries, while the latter changes the force at which each
+    note is played (its velocity) to emulate a human playing an instrument.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be explaining more on these configurations as we go along. If you want
+    to try out the examples for the melody instead of the percussion, follow the example
+    by changing the mentions of `cat-drums_2bar_small` to `cat-mel_2bar_big`. We'll
+    also be looking at other models, including the melody model, later in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initializing the model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before sampling, interpolating, and grooving, we need to initialize the model
+    that we're going to use. The first thing you'll notice is that MusicVAE doesn't
+    have a similar interface to the previous chapters; it has its own interface and
+    model definition. This means the code we've written up to now cannot be reused,
+    except for some things such as MIDI and plot files handling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can follow this example in the `chapter_04_example_01.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The pre-trained MusicVAE models are not packaged in bundles (the `.mag` files)
+    unlike in the previous chapters. A model and a configuration now correspond to
+    a **checkpoint**, which is slightly less expressive than bundles. We''ve already
+    briefly explained what a checkpoint is and we''ll be looking into this in detail
+    in [Chapter 7](6f012812-5c24-44d4-b8cb-ddfd3ed78f5c.xhtml), *Training Magenta
+    Models*. Just remember for now that checkpoints are used in TensorFlow to save
+    the model state that occurs during training, making it easy to reload the model''s
+    state at a later time:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s first make a `download_checkpoint` method that downloads a checkpoint
+    corresponding to a model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: You don't have to worry too much about the details of this method; basically,
+    it downloads the checkpoint from online storage. It is analogous to the `download_bundle` method from
+    `magenta.music.notebook_utils`, which we've been using in the previous chapters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now write a `get_model` method that instantiates the MusicVAE model
+    using the checkpoint:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this method, we first download the checkpoint for the given model name with
+    our `download_checkpoint` method. Then, we instantiate the `TrainedModel` class
+    from `magenta.models.music_vae` with the checkpoint, `batch_size=8`. This value
+    defines how many sequences the model will process at the same time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having a batch size that's too big will result in wasted overhead; a batch size
+    too small will result in multiple passes, probably making the whole code run slower.
+    Unlike during training, the batch size doesn't need to be big. In this example,
+    the sample uses two sequences, the interpolation two sequences, and the humanizing
+    code six sequences, so if we wanted to nitpick, we could change `batch_size` to
+    match each call.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For the first argument of `TrainedModel`, we pass an instance of `Config`. Each
+    model corresponds to a configuration in the `models/music_vae/configs.py` file.
+    If you look at the content of that file, you'll probably recognize some content
+    we already saw. For example, let's take the configuration named `cat-drums_2bar_small` from
+    `CONFIG_MAP`, which is the configuration we'll be using for sampling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, follow the reference of the `data_converter` attribute, you'll end up in
+    a class named `DrumsConverter` in `models.music_vae.data`. In the `__init__` method,
+    you can see classes and methods we've already covered in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml),
+    *Generating Drum Sequences with the Drums RNN* for the DrumsRNN models, such as
+    the `MultiDrumOneHotEncoding` class that we explained in the section, *Encoding
+    percussion events as classes*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The MusicVAE code builds on the content we previously saw, adding a new layer
+    that enables the conversion of note sequences to Tensforflow tensors. We'll be
+    looking into the TensorFlow code in more detail in the *Understanding TensorFlow
+    2.0 code*section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sampling the latent space
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we can download and initialize our MusicVAE models, we can sample (analogous
+    to generate) sequences. Remembering what we've learned from the previous section
+    on VAEs, we know that we can sample any point in the latent space, by instantiating
+    the latent variables corresponding to our probability distribution and then decoding
+    the embeddings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Until now, we've been using the term **generate** when speaking of creating
+    a new sequence. That term refers to the generation algorithm we described in [Chapter
+    2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml), *Generating Drum Sequences with
+    the Drums RNN*, and that was also used in [Chapter 3](48023567-4100-492a-a28e-53b18a63e01e.xhtml),
+    *Generating Polyphonic Melodies*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We're now using the term **sample** when speaking of creating a new sequence.
+    This refers to the act of sampling (because we're effectively sampling a probability
+    distribution) the latent space and differs from the generation algorithm we previously
+    described.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing the sampling code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now write the first method for our example, the `sample` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s define the method, which takes a model name as an input and returns
+    a list of two generated `NoteSequence` objects:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this method, we first instantiate the model using our previous `get_model`
+    method. We then call the `sample` method, asking for `n=2` sequences that the
+    method will return. We are keeping the default temperature (which is 1.0, for
+    all models), but we can change it using the `temperature` parameter. Finally,
+    we save the MIDI files and the plot files using the `save_midi` and `save_plot` methods respectively,
+    from the previous chapter, present in the `utils.py` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s call the sample method we created:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: You might have noticed that the pre-trained model, `cat-drums_2bar_small.lokl`, has
+    `.lokl` suffixed. There's also a `.hikl` model, which refers to the KL divergence
+    during training. We'll be explaining that in the next section, *Refining the loss
+    function with KL divergence*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the previous snippet, `num_bar_per_sample` and `num_steps_per_sample` define
+    the number of bars and steps respectively for each sample. The configuration we
+    are using, `cat-drums_2bar_small`, is a small 9 classes drum kit configuration,
+    similar to the one we saw in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml).
+    For our example, we'll use 32 steps (2 bars).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s open the `output/sample/music_vae_00_TIMESTAMP.html` file, changing `TIMESTAMP`
+    for the printed value in the console. Here is the first generated sample we are
+    going to work with:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/747b12cd-3237-4133-9049-a0412f20a9b7.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Notice we've activated the velocity output in Visual MIDI, meaning the notes
+    don't quite fill the whole vertical space because the default velocity in Magenta
+    is 100 (remember MIDI values go from 0 to 127). Because we'll be adding groove
+    later, we need to see the notes' velocity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s open the `output/sample/music_vae_01_TIMESTAMP.html` file, changing `TIMESTAMP`
+    for the printed value in the console. Here is the second sample:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/d9995a10-42e9-436f-85fd-59e2eb32a1b2.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synthesizer, refer to the following command depending on your
+    platform and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We now have two 2 bar samples to work with; we'll be interpolating between them
+    in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Refining the loss function with KL divergence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You might have noticed in the previous code snippet that the `cat-drums_2bar_small.lokl` checkpoint we
+    are using is suffixed with `lokl.` This is because this configuration has two
+    different trained checkpoints: `lokl` and `hikl`. The first one has been trained
+    for more realistic sampling, while the second one has been trained for better
+    reconstruction and interpolation. We''ve used the first one in the previous code
+    for sampling, and we''ll use the second one in the next section for interpolation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'But what do `lokl` and `hikl` mean exactly? These refer to **low** or **high**
+    **Kulback**-**Leibler** (**KL**) divergence. The KL divergence measures how much
+    two probability distributions diverge from each other. Reusing our previous example,
+    we can show that we want to minimize the KL divergence to achieve smoothness during
+    interpolation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f24e53ff-0e1e-482e-ba66-157e1c7e88ab.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is an example visualization of samples of the latent space (for 3 classes),
+    with the axis representing the first 2 dimensions of the latent space, and the
+    colors representing 3 classes. On the left, we have encodings that are fairly
+    close to one another, enabling smooth interpolation. On the right, we have clusters
+    that are further apart, which means the interpolation will be harder but might
+    result in a better sampling because the clusters are more distinct.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The KL loss function sums all the KL divergences with the standard normal. Alone,
+    the KL loss results in a random cluster centered around the prior (a round blob
+    around 0), which is not really useful by itself. By **combining** the reconstruction
+    loss function and the KL loss function, we achieve clusters of similar encodings
+    that are densely packed around the latent space origin.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can look at the implementation of the model loss function in Magenta's code
+    in the `MusicVAE` class, in the `magenta.models.music_vae` package, in the `_compute_model_loss`
+    function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, the KL divergence is tuned using the hyperparameters, `free_bits`
+    and `max_beta`. By increasing the effect of the KL loss (which means decreasing
+    `free_bits` or increasing `max_beta`), you'll have a model that produces better
+    random samples but is worse at reconstruction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sampling from the same area of the latent space
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'What is interesting for sampling is that we can reuse the same `z` variable
+    for each of the generated sequences in the same batch. That is useful for generating
+    sequences from the same area of the latent space. For example, to generate 2 sequences
+    of 64 steps (4 bars) using the same `z` variable for both, we would be using the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: Sampling from the command line
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You can also call the model sampling from the command line. The example from
+    this section can be called using the following command line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: Interpolating between two samples
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We now have 2 generated samples and we want to interpolate between the two of
+    them, with 4 intermediate sequences in between, resulting in a continuous 6 sequences
+    of 2 bars each, for a 12 bars total sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting the sequence length right
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: For our example, we used `length=32` when calling the `sample` method on the
+    model, so the return of the method are sequences of 2 bars each. You should know
+    that the sequence length is important in MusicVAE since each model works on different
+    sequence lengths—`cat-drums_2bar_small` works on 2 bar sequences, while `hierdec-mel_16bar`
+    works on 16 bar sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When sampling, Magenta won''t complain, because it can generate a longer sequence
+    and then truncate it. But during interpolation, you''ll end up with an exception
+    like this, meaning that you haven''t asked for the proper number of steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: Exceptions in MusicVAE are especially cryptic and the encoder is quite finicky,
+    so we'll try listing the common mistakes and their associated exception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing the interpolation code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now write the second method for our example, the `interpolate` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s define the method, which takes a list of two `NoteSequence` objects
+    as an input and returns a 16 bar interpolated sequence:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: We first instantiate the model, then we call the `interpolate` method with the
+    first and last sample using the parameters, `start_sequence` and `end_sequence`
+    respectively, the number of output sequences of 6 using the `num_steps` parameter (be
+    careful it has nothing to do with the sequence length in steps) and the `length`
+    parameter of 2 bars (in steps). The interpolation result is a list of six `NoteSequence`
+    objects, each of 2 bars.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We then concatenate the elements of the list to form a single `NoteSequence` object
+    of 12 bars using `concatenate_sequences` from `magenta.music.sequence_lib`. The
+    second argument (`[4] * num_output`) is a list containing the time in seconds
+    of each element of the first argument. We should remember that this is necessary
+    because `NoteSequence` doesn't define a start and an end, so a 2 bars sequence
+    ending with silence concatenated with another sequence of 2 bars won't result
+    in a 4 bars sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When calling the `interpolate` method, a `NoExtractedExamplesError` exception
+    could occur if the input sequences are not quantized or an input sequence is empty,
+    for example. Remember you also have to ask for the proper length or you'll receive
+    `MultipleExtractedExamplesError`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can then call the `interpolate` method:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s open the `output/merge/music_vae_00_TIMESTAMP.html` file, changing `TIMESTAMP`
+    for the printed value in the console. Corresponding to our samples, we have this
+    interpolated sequence:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/35e0d58a-f0b8-4279-af0e-dc1019573af4.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We've marked every 2 bars with a different background alpha. You can locate
+    the first sample we've generated in the previous section between 0 and 4 seconds,
+    with a darker background. Then, 4 new interpolated chunks can be located between
+    4 and 20 seconds. Finally, you can see the second input sample on the right between
+    20 and 24 seconds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Interpolating between two sequences is a hard problem, but MusicVAE does it
+    well and the result in our example is quite impressive. You should try other generations
+    with different lengths and listen to them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Interpolating from the command line
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'You can also call the interpolation from the command line. The example from
+    this section can be called using the following command line (you''ll need to download
+    the checkpoint by yourself):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: By changing the `SAMPLE_1.mid` and `SAMPLE_2.mid` file names for a previous
+    sampled file from the previous sampling section, you'll be able to interpolate
+    between the two sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Humanizing the sequence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Finally, we'll be adding humanization (or **groove**) to the generated sequence.
+    The groove models are part of GrooVAE (pronounced *groovay*) and are present in
+    MusicVAE's code.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Writing the humanizing code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now write the last method of our example, the `groove` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s define the method, which takes `NoteSequence` as input and returns
+    a humanized sequence:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: First, we download the model. Then, we split the sequence in chunks of 4 seconds,
+    because we need chunks of 2 bars for the model to handle. We then call the `encode`
+    function, followed by the `decode` function. Unfortunately, there isn't a `groove`
+    method on the model yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `encode` method takes a list of sequence that it will encode, returning
+    the `encoding` vector (also called z or latent vector), `mu` and `sigma`. We won't
+    be using `mu` and `sigma` here but we left them for clarity. The resulting shape
+    of the encoding array is *(6, 256)*, where 6 is the number of split sequences,
+    and 256 is the encoding size that is defined in the model, explained in a later
+    section, *Building the hidden layer*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As for the `interpolate` method, the call to the `encode` method might throw
+    an exception if the sequences are not properly formed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, the `decode` method takes the previous `encoding` value and the number
+    of steps per sample and tries to reproduce the input, resulting in a list of 6
+    humanized sequences of 2 bars each.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we concatenate the sequences like in the interpolate code snippet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s try calling the `groove` method:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The returned sequence, `generated_groove_sequence`, is our final sequence for
+    this example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s open the `output/groove/music_vae_00_TIMESTAMP.html` file, changing
+    `TIMESTAMP` for the printed value in the console. Corresponding to our interpolated
+    sequence, we have this humanized sequence:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/807d45f4-2bea-4dab-bf69-41b102ec67fc.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Let's look at the resulting plot file. First, the notes' velocities are dynamic
+    now, for example, with notes being played louder to mark the end or the start
+    of a beat like a real drummer would do. You can see an example of that on the
+    bass drum between the 20 and 24 seconds mark. Then, notice that the notes are
+    played with expressive timing, meaning the notes do not fall exactly on steps
+    beginning and end. Finally, some notes are not being played anymore, while others
+    have been added to the resulting score.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To listen to the generated MIDI, use your software synthesizer but **NOT MuseScore** since
+    it will have a hard time with the expressive timing and you might hear a different
+    score than what you actually have. For the software synth, refer to the following
+    command depending on your platform and replace `PATH_TO_SF2` and `PATH_TO_MIDI`
+    with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To learn more about groove and humanization, you can refer to the last section,
+    *Further reading*, for more information on the topic, which is thoroughly explained
+    in the GrooVAE blog post and GrooVAE paper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Humanizing from the command line
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Unfortunately, the humanization methods cannot be called from the command line
+    for now. We will see other ways of humanizing a sequence in [Chapter 9](8018122a-b28e-44ff-8533-5061a0ad356b.xhtml),
+    *Making Magenta Interact with Music Applications*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: More interpolation on melodies
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous sections, we''ve been doing sampling and interpolation on drum
+    sequences. By changing the code a bit, we can also do the same thing on melodies.
+    Unfortunately, you won''t be able to humanize the sequence since the GrooVAE model
+    was trained on percussion data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can follow this example in the `chapter_04_example_02.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To make that happen, we change the calling code and keep the `sample` and `interpolate`
+    methods as they are. We''ll generate a sightly longer sequence with 10 interpolations
+    instead of 6\. Here is the code (warning: the checkpoint size is 1.6 GB):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: You'll notice we're using the `cat-mel_2bar_big` configuration for both the
+    sampling and the interpolation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s open the generated `output/merge/cat-mel_2bar_big_00_TIMESTAMP.html` file
+    by replacing `TIMESTAMP` with the proper value. A generated output looks like
+    this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/1b5e2e30-1541-4519-bcfb-06ee60a37e56.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sampling the whole band
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous sections, we''ve been sampling and interpolating for drums
+    and melodies. Now, we''ll sample a trio of percussion, melody, and bass at the
+    same time using one of the bigger models. This is perhaps one of the most impressive
+    models because it can generate rather long sequences of 16 bars at once, using
+    multiple instruments that work well together:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can follow this example in the `chapter_04_example_03.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For that example, we use our `sample` method with the `hierdec-trio_16bar`
+    pre-trained model name as an argument (warning: the checkpoint size is 2.6GB):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s open the generated `output/sample/hierdec-trio_16bar_00_TIMESTAMP.html` file
+    by replacing `TIMESTAMP` with the proper value. A generated output looks like
+    this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/48f1a28e-ceb2-4d46-9184-a7ebebf7edfb.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: By using the `coloring=Coloring.INSTRUMENT` parameter in Visual MIDI, we can
+    color each instrument with a separate color. It is hard to read because the bass
+    line is on the same pitch as the drum line, but you can see the three instruments
+    in the diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To listen to the generated MIDI, use your software synthesizer or MuseScore.
+    For the software synth, refer to the following command depending on your platform
+    and replace `PATH_TO_SF2` and `PATH_TO_MIDI` with the proper values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Linux: `fluidsynth -a pulseaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'macOS: `fluidsynth -a coreaudio -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Windows: `fluidsynth -g 1 -n -i PATH_TO_SF2 PATH_TO_MIDI`'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can hear that the generated MIDI has three instruments, and your synthesizer
+    should assign a different instrument sound for each track (normally, a piano,
+    a bass, and a drum). This is the only pre-trained model in Magenta that can generate
+    multiple instruments at the same time, see the first section, *Technical requirements*,
+    for a link to the README, which lists all of the available pre-trained models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What is interesting in that model is that the long term structure of the 16
+    bars sequence is kept using a special type of decoder called `HierarchicalLstmDecoder`.
+    That architecture adds another layer between the latent code and the decoder,
+    called a **conductor**, which is an RNN that outputs a new embedding for each
+    bar of the output. The decoder layer then proceeds to decode each bar.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To learn more about the hierarchical encoder and decoder architecture, you can
+    refer to the last section, *Further reading*, for more information on the topic,
+    which is thoroughly explained in the MusicVAE blog post and MusicVAE paper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An overview of other pre-trained models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We already saw many pre-trained models present in MusicVAE and there are some
+    more that are interesting but cannot be covered in depth here. Remember you can
+    find the full list of them in the README, see the first section, *Technical requirements*,
+    for the link to it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here''s an overview of some of them we find interesting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The `nade-drums_2bar_full` model is a drums pre-trained model similar to the
+    one from our example, but using the 61 classes from General MIDI instead of 9
+    classes. The model is bigger though. You can see which classes are encoded and
+    what they correspond to in the `data.py` file in the `magenta.models.music_vae`
+    module.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `groovae_2bar_tap_fixed_velocity` pre-trained model converts a "tap" pattern
+    into a full-fledged drum rhythm while keeping the same groove. A "tap" sequence
+    is a sequence that you could be taking from another rhythm, or even by tapping
+    on your desk with your finger. In other words, it is a single note sequence, with
+    groove, that can be transformed into a drum pattern. Usage of this would be to
+    record a bass line from a real instrument, then "tap" the rhythm (or convert it
+    from the audio), and then feed it to the network to sample a drum pattern that
+    fits the same groove as the bass line.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The `groovae_2bar_add_closed_hh` pre-trained model adds or replaces hi-hat on
+    an existing groove.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding TensorFlow code
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we'll take a quick look at the TensorFlow code to understand
+    a bit more how the sampling, interpolating, and humanizing code works. This will
+    also make references to the first section of this chapter, *Continuous latent
+    space in VAEs*, so that we make sense of both the theory and the hands-on practice
+    we've had.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But first, let's do an overview of the model's initialization code. For this
+    section, we'll take the `cat-drums_2bar_small` configuration as an example and
+    the same model initialization code we've been using for this chapter, meaning `batch_size`
+    of 8.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building the VAE graph
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We'll start by looking at the `TrainedModel` constructor in the `models.music_vae.trained_model`
+    module. By taking the configuration values, `z_size`, `enc_rnn_size`, and `dec_rnn_size`,
+    from the config map we've already introduced in a previous section, *Initializing
+    the model*, we can find relevant information about the encoder's RNN, the hidden
+    layer, and the decoder's RNN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Notice the encoder is `BidirectionalLstmEncoder` and the decoder is `CategoricalLstmDecoder`,
+    both from the `magenta.models.music_vae.lstm_models` module.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building an encoder with BidirectionalLstmEncoder
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s first have a look at the encoder''s RNN, which is initialized in the
+    `BidirectionalLstmEncoder` class of the `magenta.models.music_vae.lstm_models`
+    module, in the `build` method, where the encoding layer gets initialized as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You can see in the `rnn_cell` method from the `magenta.models.music_vae.lstm_utils`
+    module that the layer is `LSTMBlockCell` (from the `tensorflow.contrib.rnn`  module)
+    with 512 units and a dropout wrapper:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the `DrumsConverter` class from the `magenta.models.music_vae.data` module
+    (instantiated in the `configs.py` file), you can see that we use the same `MutltiDrumOneHotEncoding`
+    class that we explained in [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The melody configurations will use the `OneHotMelodyConverter` class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a decoder with CategoricalLstmDecoder
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Then, let''s look at the decoder''s RNN initialization in the `BaseLstmDecoder`
+    class of the `magenta.models.music_vae.lstm_models` module, in the `build` method,
+    where the decoding layer get initialized as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `output_depth` will be 512\. The output layer is initialized as a dense
+    layer, followed by 2 layers of `LSTMBlockCell` of 256 units each.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also find the information on the encoder and decoder of your current
+    configuration in the console during execution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: Building the hidden layer
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Finally, the hidden layer initialization is in the `MusicVAE` class of the
+    `magenta.models.music_vae.base_model` module, in the `encode` method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Both the `mu` and `sigma` layers are densely connected to the previous `encoder_output`
+    value with a shape of *(8, 256)*, where 8 corresponds to `batch_size` and 256
+    corresponds to `z_size`. The method returns `MultivariateNormalDiag`, which is
+    a normal distribution with `mu` and `sigma` as parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f66e73a4-effb-4f2d-9cd1-2b88c67b8611.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Looking at the sample method
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now look at the `sample` method content, located in the `TrainedModel`
+    class of the `models.music_vae.trained_model` module. The core of the method is
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The method will split the number of required samples, `n`, in batches of maximum
+    `batch_size`, then sample `z_input` from the standard normal distribution of size
+    *(8, 256)* using `randn`, and finally run the model using those values. Remember,
+    `z` is the embedding, so essentially what we are doing here is instantiating the
+    latent variables and then decoding them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remembering what we saw in the previous section, *Sampling from the same area
+    of the latent space*, we know that `z` might be sampled only once if we are reusing
+    the same `z` variable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The samples are then converted back to sequences by calling the one-hot decoding
+    of the samples:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Looking at the interpolate method
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The interpolate method, located in the `TrainedModel` class, is pretty short:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: What we are doing here is encoding the start and end sequence and getting back
+    only the `mu` value from the encodings, using it to instantiate `z`, then decoding
+    `z` for the resulting list of interpolated sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But what is that `_slerp` method that instantiates `z`? Well, "slerp" stands
+    for "spherical linear interpolation", and it calculates the direction between
+    the first sequence and the second sequence so that the interpolation can move
+    in the latent space in the proper direction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We won't worry too much about the implementation details of the `slerp` method;
+    we'll just remember the diagram from the section, *The latent space in standard
+    autoencoders*, which showed how moving in a specific direction in the latent space
+    would resulting in a transition from one sequence to another. By decoding at regular
+    intervals along that direction, we end up with sequences that progressively goes
+    from one to another.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at the groove method
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Finally, let''s have a look at our `groove` method. As a reminder, the `groove`
+    method is not present in Magenta so we had to write it ourselves:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Apart from variable naming, this code snippet is almost identical to the `interpolate`
+    method, but instead of using the µ value to instantiate the latent variables to
+    move in a direction, we're just encoding the sequences and then decoding them
+    with the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we looked at sampling, interpolating, and humanizing scores
+    using a variational autoencoder with the MusicVAE and GrooVAE models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We first explained what is latent space in AE and how dimensionality reduction
+    is used in an encoder and decoder pair to force the network to learn important
+    features during the training phase. We also learned about VAEs and their continuous
+    latent space, making it possible to sample any point in the space as well as interpolate
+    smoothly between two points, both very useful tools in music generation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we wrote code to sample and transform a sequence. We learned how to initialize
+    a model from a pre-trained checkpoint, sample the latent space, interpolate between
+    two sequences, and humanize a sequence. Along the way, we've learned important
+    information on VAEs, such as the definition of the loss function and the KL divergence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we looked at TensorFlow code to understand how the VAE graph is built.
+    We showed the building code for the encoder, the decoder, and the hidden layer
+    and explained the layers configurations and shapes. We also looked at the sample,
+    interpolate, and groove methods, by explaining their implementations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter marks the end of the content aimed at models generating symbolic
+    data. With the previous chapters, we've had a deep look at the most important
+    models for generating and handling MIDI. The next chapter, *Audio Generation with
+    NSynth and GANSynth*, will look at generating sub-symbolic content, such as audio.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: What is the main use of the encoder and decoder pair in AE and what is a major
+    shortcoming of such design?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: How is the loss function defined in AE?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the main improvement in VAE on AE, and how is that achieved?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is KL divergence and what is its impact on the loss function?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the code to sample `z` with a batch size of 4 and `z` size of 512?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is the usage of the **slerp** method during interpolation?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**MusicVAE: Creating a palette for musical scores with machine learning**:
+    Magenta''s team blog post on MusicVAE, explaining in more detail what we''ve seen
+    in this chapter ([magenta.tensorflow.org/music-vae](https://magenta.tensorflow.org/music-vae))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A Hierarchical Latent Vector Model for Learning Long-Term Structure in Music**:
+    Magenta''s team paper on MusicVAE, a very approachable and interesting read ([arxiv.org/abs/1803.05428](https://arxiv.org/abs/1803.05428))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**GrooVAE: Generating and Controlling Expressive Drum Performances**: Magenta''s
+    team blog post on GrooveVAE, explaining in more detail what we''ve seen in this
+    chapter ([magenta.tensorflow.org/groovae](https://magenta.tensorflow.org/groovae))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Learning to Groove with Inverse Sequence Transformations**: Magenta''s team
+    paper on GrooVAE, very approachable and interesting read ([arxiv.org/abs/1905.06118](https://arxiv.org/abs/1905.06118))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Groove MIDI Dataset**: The dataset used for the GrooVAE training, composed
+    of 13.6 hours of aligned MIDI and synthesized audio ([magenta.tensorflow.org/datasets/groove](https://magenta.tensorflow.org/datasets/groove))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Using Artificial Intelligence to Augment Human Intelligence**: An interesting
+    read on AI interfaces enabled by latent space type models ([distill.pub/2017/aia/](https://distill.pub/2017/aia/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Intuitively Understanding Variational Autoencoders**: An intuitive introduction
+    to VAE, very clear ([www.topbots.com/intuitively-understanding-variational-autoencoders/](https://www.topbots.com/intuitively-understanding-variational-autoencoders/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Tutorial - What is a variational autoencoder?**: A more in-depth overview
+    of VAEs ([jaan.io/what-is-variational-autoencoder-vae-tutorial](https://jaan.io/what-is-variational-autoencoder-vae-tutorial))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Autoencoders — Guide and Code in TensorFlow 2.0**: Hands-on code for AE and
+    VAE in TensorFlow 2.0 ([medium.com/red-buffer/autoencoders-guide-and-code-in-tensorflow-2-0-a4101571ce56](https://medium.com/red-buffer/autoencoders-guide-and-code-in-tensorflow-2-0-a4101571ce56))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Kullback-Leibler Divergence Explained**: The KL divergence explained from
+    a statistical viewpoint ([www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained](https://www.countbayesie.com/blog/2017/5/9/kullback-leibler-divergence-explained))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**An Introduction to Variational Autoencoders**: Good and complete paper on
+    VAEs ([arxiv.org/pdf/1906.02691.pdf](https://arxiv.org/pdf/1906.02691.pdf))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

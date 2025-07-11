@@ -1,0 +1,887 @@
+- en: Deep Learning for Natural Language Processing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you will learn how to create document summaries. We will begin
+    by removing parts of documents that should not be considered and tokenizing the
+    remaining text. Next, we will apply embeddings and create clusters. These clusters
+    will then be used to make document summaries. Also, we will learn how to use **restricted
+    Boltzmann machines** (**RBMs**) as building blocks to create deep belief networks
+    for topic modeling. We will begin with coding the RBM and defining the Gibbs sampling
+    rate, contrastive divergence, and free energy for the algorithm. We will conclude
+    by compiling multiple RBMs to create a deep belief network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter covers the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Formatting data using tokenization
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Cleaning text to remove noise
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Applying word embeddings to increase usable data
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Clustering data into topic groups
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Summarizing documents using model results
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Creating an RBM
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defining the Gibbs sampling rate
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Speeding up sampling with contrastive divergence
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Computing free energy for model evaluation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Stacking RBMs to create a deep belief network
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Formatting data using tokenization
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The first step we will take to begin analyzing text is loading text files and
+    then tokenizing our data by transforming the text from sentences into smaller
+    pieces, such as words or terms. A text object can be tokenized in a number of
+    ways. In this chapter, we will tokenize text into words, although other sized
+    terms could also be tokenized. These are referred to as n-grams, so we can get
+    two-word terms (2-grams), three-word terms, or a term of any arbitrary size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get started with the process of creating one-word tokens from our text objects,
+    we will use the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s load the libraries that we will need. For this project, we will use
+    `tidyverse` for data manipulation, `tidytext` for special functions to manipulate
+    text data, `spacyr` for extracting text metadata, and `textmineR` for word embeddings.
+    To load these libraries, we run the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this chapter, the data that we will use will be the 20 Newsgroups dataset.
+    This consists of pieces of text that come from one of 20 Newsgroups. The format
+    of the data that we will pull in has a unique ID, the group the text belongs to,
+    and the group.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s read in the data using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running this code, you should see the `twenty_newsgroups` object appear
+    in your `Environment` window. The object has 11,314 rows and 3 columns.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take a look at a sample of the data. In this case, let''s print the
+    first row of data to our console. We look at the first row of data by running
+    the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, you will see the following printed to your console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/9bf0f4f8-febd-470f-95cd-97b18ade0ee1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, let''s break this text into tokens. Tokens are some atomic portion of
+    the text character string that we see in the preceding screenshot. In this case,
+    we will break this string into word tokens. The final result will be a row for
+    each word listed, alongside the ID and newsgroup ID. We tokenize the text data
+    using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running this code, we can see that our data object has grown substantially.
+    We now have 3.5 million rows when we previously only had 11,000, since each word
+    now gets its own row.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take a quick look at term frequency, now that we have each word separated
+    out into its own line. In this step, we can begin to see whether certain terms
+    are used more than others with the text included in this dataset. To plot the
+    frequency of each term in the data, we will use the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, we will see the following plot generated:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/aa636335-74b1-4319-83c6-225e5edcd427.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We have successfully taken some text and divided it into tokens. However, we
+    can see from the plot that terms such as the, to, of, and a are most frequent.
+    These types of words are often bundled into a collection of terms referred to
+    as **stop words**. Next, we will learn how to remove these types of terms that
+    have no information value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cleaning text to remove noise
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The next step we will take to prepare for text analysis is doing some preliminary
+    cleaning. This is a common way to get started, regardless of what machine learning
+    method will be applied later. When working with text, there are several terms
+    and patterns that will not provide meaningful information. Some of these terms
+    are generally not useful and steps to remove these pieces of text data can be
+    used every time, while others will be more context-dependent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As previously noted, there are collections of terms referred to as stop words.
+    These terms have no information value and can usually be removed. To remove stop
+    words from our data, we use the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running the preceding code, our row count goes down from 3.5 million
+    to 1.7 million. In effect, our data (`word_tokens`) has almost been cut in half
+    by removing all the stop words. Let''s run the plot we ran earlier to see which
+    terms are most frequent now. We can identify the term frequency as we did before
+    with the following lines of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this chunk of code, the following plot is generated:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/00d142aa-0671-49a2-bda3-0b8928435982.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In this plot, we can see that terms such as the, to, of, and a are now removed.
+    However, we also now see that there are some numbers showing up as frequent terms.
+    This could be context-dependent and there may be cases where pulling numbers from
+    text is very important for a project. However, here we will focus on actual words
+    and will remove all terms that contain non-alphabetic characters. We can accomplish
+    this by using some regular expressions, also known as **regex**. We can remove
+    the terms that do not contain any characters from the alphabet by using the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this regex code, we can run the same plot code again, as we did
+    previously. When we do, we generate a plot that looks like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/7a0bb9f6-e4dc-4bee-b4db-0a4ab31c4404.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Based on this plot, we see our top twenty terms are all words, including one
+    possible acronym (nntp). With our data object now reduced to 1.4 million rows,
+    which includes only terms that start and end with characters from the alphabet,
+    we are ready to move on to the next step where we will use embeddings to add extra
+    context to each term.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Applying word embeddings to increase usable data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Extracting terms from text is a good starting point for text analysis. With
+    the text tokens we have created so far, we can compare term frequency for different
+    categories, which begins to tell us a story about the content that dominates a
+    particular newsgroup. However, the term alone is just one part of the overall
+    information we can glean from a given term. The previous plot contained `people`
+    and, of course, we know what this word means, although there are multiple nuanced
+    details connected to this term. For instance, `people` is a noun. It is similar
+    to terms such as *person* and *human* and is also related to a term such as *household*.
+    All of these details for `people` could be important but, by just extracting the
+    term, we cannot directly derive these other details. This is where embeddings
+    are especially helpful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Embeddings, in the context of natural language processing, are pre-trained
+    neural networks that perform the type of mapping just described. We can use these
+    embeddings to match parts of speech to terms, as well as to find the lexical distance
+    between words. Let''s get started by looking at the parts-of-speech embeddings.
+    To examine the parts of speech for every term in our text dataset, we run the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Using the preceding code, we first install `spacy` on our machine. Next, we
+    initialize `spacy` using a small (`sm`) English (`en`) model that is trained on
+    web text (`web`) for the core `spacy` elements: named entities, part-of-speech
+    tags, and syntactic dependencies. Afterward, we apply the model to the first piece
+    of text in our dataset. Once we do this, we will see the following results printed
+    to the console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/a3b0807f-e1dd-4a72-aeb0-c1e2488d292c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the preceding example, we see that `spacy` stores each token separately with
+    a token ID and a sentence ID. The three additional pieces of data supplied are
+    listed next to each token. Let's look at the example for the `11` token ID. In
+    this case, `Cubs`, which the model has identified as a part of speech, is a proper
+    noun and the named entity type is **organization**. We see the `ORG_B` code, which
+    means this token begins with the name of an organization. In this case, the one-term
+    begins and ends with the name of the organization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s look at a few other examples. If you scroll down the results in your
+    console, you should find a section that looks like the following output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/f268edfd-aa45-4734-ac1d-df1333588863.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the preceding screenshot, we see additional information that `spacy` can
+    identify. Let's look at lines `76` and `77`. We see that the term used in the
+    text is `won't`. However, the `spacy` model used lemmatization to break up this
+    contraction. Of course, `won't` is just a contracted form of `will not` and the
+    model has split out the two terms that are part of the contracted term. In addition,
+    the part of the speech for each term is included. Another example is lines `90`
+    and `91`. Here, the terms `this` and `season` are adjacent and the model correctly
+    identifies these two terms together to refer to a particular date part of the
+    speech, which means that it is not `last season` or `next season`, but `this season`.
+    In the named entities column, `this` has a `DATE_B` tag, which means the term
+    refers to a date and this term is the beginning of this particular date-type.
+    Similarly, `season` has a tag of `DATE_I`, which means that it refers to a date-type
+    piece of data and the token is inside the entity. We know from these two tags
+    that `this` and `season` are related and together refer to a specific point in
+    time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another way we can use word embedding is to cluster our text data into topic
+    groups. Topic grouping will result in a data object with lists of terms that co-occur
+    near each other in the text. Through this process, we can see which topics are
+    being discussed the most in the text data that we are analyzing. We will create
+    topic group clusters next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Clustering data into topic groups
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s use word embeddings to find all semantically similar words. To do this,
+    we will use the `textmineR` package to create a skip-gram model. The objective
+    of the skip-gram model is to look for terms that occur often within a given window
+    of another term. Since these terms are so frequently close to each other within
+    sentences in our text, we can conclude they have some connection to each other.
+    We will start by using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To begin building our skip-gram model, we first create a term co-occurrence
+    matrix by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running the code, you will have a `sparse` matrix in your environment
+    window. The matrix has every possible term along both dimensions, as well as a
+    value at the intersection of the terms if they occur together within the skip-gram
+    window, which in this case is `10`. An example of what a portion of this matrix
+    looks like can be seen here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/b912df1f-e53f-4c78-83a6-fad328df1c5b.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Next, we will fit a **Latent Dirichlet allocation** (**LDA**) model on the
+    text co-occurrence matrix that we just made. For our model, we will choose to
+    create 20 topics and will have the model perform 500 Gibbs iterations, setting
+    the `burning` value to `200`, which is the number of samples we will discard first.
+    We will set `calc_coherence` to `TRUE` to include this metric. `coherence` is
+    the relative distance between terms for a topic and we will use this distance
+    value to rank the strength of the topics we have found. We define our LDA model
+    by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Our next step will be to get the top terms for each topic. We will use `phi`,
+    which represents a distribution of words over topics as the topics and the argument,
+    `M`, to choose how many terms to include in each topic cluster. We can retrieve
+    our top terms per topic by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will take our topics and top terms and add in the `coherence` score along
+    with a `prevalence` score, which shows how often the terms occur in the entire
+    text corpus we are analyzing. We can assemble this summary data object by running
+    the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that we have created this summary data object, we can look at the top five
+    topics by the `coherence` value. We can identify which topics have the most terms
+    that are relatively close to each other by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we run the preceding code, we see the top five topics that we have identified
+    in the text object. You will see the following topics printed to your console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4f671001-4c4e-45d0-96bb-0ab8278c8584.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We have loaded in text data, extracted terms from the text, used a model to
+    identify associated information for the terms—such as named entity details and
+    part of speech—and organized terms according to topics discovered in the text.
+    Next, we will reduce our text objects by using modeling to summarize documents
+    in our text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summarizing documents using model results
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this last step, before moving on to building our own model, we will use
+    the `textrank` package to summarize the text. The approach this algorithm uses
+    to summarize text is to look for a sentence with the most words that are also
+    used in other sentences in the text data. We can see how this type of sentence
+    would be a good candidate for summarizing the text since it contains many words
+    found elsewhere. To get started, let''s select a piece of text from our data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s view the text in row `400` by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When we run this line of code, we will see the following piece of text printed
+    to the console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/456bb460-e652-457c-b8e6-3964dff1fe43.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this email, we can see that the subject matter regards objecting to someone
+    else's email because it is off-topic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s see which sentence the `textrank` algorithm will extract to summarize
+    the text. To get started, we will first perform tokenization on the text. However,
+    unlike earlier where we created word tokens, this time we will create sentence
+    tokens. In addition, we will use the row numbers for each sentence extracted as
+    the sentence ID. To create sentence tokens from our text, we run the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will create word tokens as we did previously. Remember that the reason
+    we create sentence and word tokens is because we need to see which words occur
+    in the most sentences and, of those words, which sentence contains the most frequently
+    occurring words. To create the data object with one word per row, we run the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we run the `textrank_sentences` function, which calculates the best summary
+    sentences in the way previously described. We calculate the `textrank` score,
+    which measures which sentences best summarize the text, by running the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: We have now ranked the sentences. If we view the summary, we can see the top
+    five sentences by default. However, in this case, let's start by looking at the
+    very top-ranked sentence and see how well that does at summarizing the overall
+    text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To look at just the top-ranked sentence, we first have to look at the first
+    object in the returned list, which is a data frame of the sentences with their
+    corresponding `textrank` score. Next, we arrange them by descending `textrank`
+    score to select the highest-rated sentence. Afterward, we select the top row and
+    extract just the sentence data. To print the top-ranked sentence based on the
+    `textrank` algorithm, we run the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, you will see the following console output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/90529700-5a88-4e79-8489-5ce1022ff9e0.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The sentence selected is restrict the discussion to appropriate newsgroups.
+    If we read the entire text again, we can see that this sentence does capture the
+    essence of what the writer is communicating. In fact, if the email only had this
+    line it would convey almost the same information. In this way, we can confirm
+    that the `textrank` algorithm performed well and that the selected sentence is
+    a good summary of the entire text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have covered some of the essential text analytics tools offered
+    by various R packages, we will proceed with creating our own deep learning text
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an RBM
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, we have extracted elements from text, added metadata, and created term
+    clusters to discover latent topics. We will now identify latent features by using
+    a deep learning model known as an RBM. As you may recall, we have discovered latent
+    topics in the text by looking for term co-occurrence within a given window size.
+    In this case, we will go back to using a neural network approach. The RBM is half
+    the typical neural network. Instead of taking data through hidden layers to an
+    output layer, the RBM model just takes the data to the hidden layers and this
+    is the output. The end result is similar to factor analysis or principal component
+    analysis. Here, we will begin the process of finding each of the 20 Newsgroups
+    in the dataset and throughout the rest of this chapter, we will make modifications
+    to the model to improve its performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To get started with building our RBM, we will need to load two libraries. The
+    first library will be `tm`, which is used for text mining in R, and has functions
+    for creating a document-term matrix and performing text cleanup. The other library
+    that we will need is `deepnet`, which has a function for the RBM. To load these
+    two libraries, we run the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we will take our text data and create a corpus, which in this case will
+    place the contents from each newsgroup email into a separate list element. From
+    there, we will remove some non-informative elements. We will also cast all text
+    to lowercase to decrease the unique term count, as well as group like terms together
+    regardless of their letter case. Afterward, we will cast the remaining terms to
+    a document-term matrix, where all the terms make up one dimension of the matrix
+    and all the documents make up the other dimension and the represented value in
+    the matrix if the term is present in the document. We will also use **term frequency-inverse
+    document frequency** (**tf-idf**) weighting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this case, the value in the matrix will not be binary but rather a float
+    representing the uniqueness of the term within the document, down-weighting terms
+    that occur frequently in all documents and giving more weight to terms that are
+    only present in one or some documents but not all. To perform these steps and
+    prepare our text data to be inputted into an RBM model, we run the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We will now split our data into `train` and `test` sets as with any modeling
+    exercise. In this case, we will create our `train` and `test` sets by running
+    the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With the data in the proper format and split into `train` and `test` sets,
+    we can now train our RBM model. Training the model is quite straightforward and
+    there are not too many parameters to configure. For now, we will modify a few
+    arguments and make changes to others as we progress through the chapter. To start,
+    we will train a starter RBM model by running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: In the preceding code, we set the `hidden` layers to the number of newsgroups
+    to see if there is enough latent information to map the text to the newsgroups.
+    We start with `100` rounds and leave everything else as a default.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now explore the latent features found in the text. We use our trained
+    model to perform this task by passing in data as input, which results in inferred
+    hidden units being produced as output. We infer the hidden units for the `test`
+    data by running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running this code, we have defined the latent feature space for the `test`
+    data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the Gibbs sampling rate
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Gibbs sampling plays a key role in constructing an RBM, so we will take a moment
+    here to define this sampling type. We will briefly walk through a couple of quick
+    concepts that lead to how to perform Gibbs sampling and why it matters for this
+    type of modeling. With RBM models, we are first using a neural network to map
+    our input or visible units to hidden units, which can be thought of as latent
+    features. After training our model, we want to either take a new visible unit
+    and define the probability that it belongs to the hidden units in the model, or
+    do the reverse. We also want this to be computationally efficient, so we use a
+    Monte Carlo approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monte Carlo methods involve sampling random points to approximate an area or
+    distribution. A classic example involves drawing a 10-by-10 inch square and inside
+    this square draw a circle. We know that a circle with a 10-inch diameter has an
+    area of 78.5 inches. Now, if we use a random number generator to choose float
+    pairs between 0 and 10 and do this 20 times and plot the points, we will likely
+    end up with around 15 points in the circle and 5 outside the circle. If we use
+    just these points, then we would approximate the area is 75 inches. Now, if we
+    try this again with a less conventional shape but something with many curves and
+    angles, then it would be much more difficult to calculate the area. However, we
+    could use the same approach to approximate the area. In this way, Monte Carlo
+    approaches work well when a distribution is difficult or computational costly
+    to define precisely, which is the case with our RBM model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, a Markov Chain is a technique in defining conditional probability that
+    only takes into account the event that just preceded the event probability we
+    are trying to predict, rather than events that happened two or more steps back.
+    This is a very simple form of conditional probability. A classic example for explaining
+    this concept is the game Chutes and Ladders. In this game, there are 100 squares
+    and a player rolls a six-sided die to determine the number of spaces to move,
+    with the object being to get to square 100\. Along the way, a square may contain
+    a slide that will move the player backward a certain number of squares, or a ladder
+    that will move the player forward a certain number of squares.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When determining the likelihood of landing on a given square, the only thing
+    that matters is the previous roll that resulted in the player landing on a certain
+    square. Whichever combination of rolls got the player to that point does not have
+    any impact on the probability of reaching a certain square based on the square
+    the player is currently on.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For context, we will discuss these two concepts briefly because they are both
+    involved in Gibbs sampling. This type of sampling is a Monte Carlo Markov Chain
+    method, which means that we start from an initial state and afterward we predict
+    the likelihood that a certain event, `x`, happens given another event, `y`, and
+    vice versa. By calculating this type of back-and-forth conditional probability
+    over a certain number of samples, we efficiently approximate the probability that
+    a given `visible` unit belongs to a given `hidden` unit. We can perform a few
+    very simple examples of sampling from a Gibbs distribution. In this example, we
+    will create a function with an argument, `rho`, as a coefficient value to modify
+    the given term when calculating the value for the other variable, while in our
+    RBM model the learned weights and the bias term perform this function. Let''s
+    create a sampler using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s first define a very simple Gibbs sampler to understand the concept by
+    running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have defined the function, let's calculate two separate 10 x 2 matrices
+    by choosing two different values for `rho`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We calculate our first 10 x 2 matrix by running the following code using a
+    value of `0.75` for `rho`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we calculate a 10 x 2 matrix using a value of `0.03` for `rho`, using
+    the following line of code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: After running each of these, you should see a 10 x 2 matrix printed to your
+    console. This function involves drawing random values from a normal distribution,
+    so the matrix printed to your console will be slightly different. However, you
+    will see the way the values are generated iteratively using the values from the
+    previous iteration to determine the value in the current iteration. We see here
+    how the Monte Carlo randomness is employed in calculating our value along with
+    the Markov Chain conditional probability. Now, with an understanding of Gibbs
+    sampling, we will explore contrastive divergence, which is a way we can use what
+    we learned about Gibbs sampling to modify our model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Speeding up sampling with contrastive divergence
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before proceeding, we need to change up the dataset being used. While the 20
+    Newsgroups dataset has worked well up until this point for all the concepts on
+    text analysis, it becomes less usable as we try to really tune our model to predict
+    latent features. All the additional changes that we will do next actually have
+    minimal impact on the model when using the 20 Newsgroups, so we will switch to
+    the spam versus ham dataset, which is similar. However, instead of involving emails
+    to a newsgroup, these are SMS text messages. In addition, instead of the target
+    variable being a given newsgroup, the target is either that the message is spam
+    or a legitimate text message.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Contrastive divergence is the argument that allows us to leverage what we learned
+    about Gibbs sampling. The value that we pass to this argument in the model will
+    adjust how many times the Gibbs sampling is performed. In other words, this controls
+    the length of the Markov Chain. The lower the value, the faster each round of
+    the model will be. If the value is higher, then each round is computationally
+    more costly, although the model may converge more quickly. In the following steps,
+    we can train a model with three different values for contrastive divergence to
+    see how adjusting this argument affects the model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To begin, we will load in the spam versus ham dataset using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will move our target variables to a vector, `y`, and the predictor
+    text data to a variable, `x`. Afterward, we will perform some basic text preprocessing
+    by removing special characters and one- and two-character words, as well as removing
+    any white space. We define our target variable and predictor variables, along
+    with cleaning the text, by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we convert this cleaned up text into a `corpus` data object and then
+    into a document-term matrix. We convert our text data into a suitable format for
+    modeling by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let''s divide our data into `train` and `test` sets, exactly as we did
+    with the 20 Newsgroups dataset. We get our data divided and ready for modeling
+    using the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now that all of our data is prepared, let''s run our three models and see how
+    they compare. We run a quick version of the three RBM models to evaluate the impact
+    of adjusting the contrastive divergence value by running the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: To measure how much change this argument has had on the model, we will use the
+    free energy values in the model object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Computing free energy for model evaluation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: RBMs belong to a class of energy-based models. These use a free energy equation
+    that is analogous to the cost function in other machine learning algorithms. Just
+    like a cost function, the objective is to minimize the free energy values. A lower
+    free energy value equates to a higher probability that the visible unit variables
+    are being described by the hidden units and a higher value equates to a lower
+    likelihood.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s now look at the three models we just created and compare free energy
+    values for these models. We compare the free energy to identify which model is
+    performing better by running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running this code, an output similar to the following will be printed
+    to your console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/82ac6d3b-213c-4147-9012-f77cd576d146.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this case, using just one round of Gibbs sampling produces the best performing
+    model in terms of reducing free energy in the quickest way.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stacking RBMs to create a deep belief network
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RBM models are a neural network with just two layers: the input, that is, the
+    visible layer, and the hidden layer with latent features. However, it is possible
+    to add additional hidden layers and an output layer. When this is done within
+    the context of an RBM, it is referred to as a **deep belief network**. In this
+    way, deep belief networks are like other deep learning architectures. For a deep
+    belief network, each hidden layer is fully connected meaning that it learns the
+    entire input.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first layer is the typical RBM, where latent features are calculated from
+    the input units. In the next layer, the new hidden layer learns the latent features
+    from the previous hidden layer. This, in turn, can lead to an output layer for
+    classification tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Implementing a deep belief network uses a similar syntax to what was used to
+    train the RBM. To get started, let''s first perform a quick check of the latent
+    feature space from the RBM we just trained. To print a sample of the latent feature
+    space from the model, we use the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the preceding code, we use the `up` function to generate a matrix of latent
+    features using the model that we just fit. The `up` function takes as input an
+    RBM model and a matrix of visible units and outputs a matrix of hidden units.
+    The reverse is also possible. The `down` function takes a matrix of hidden units
+    as input and outputs visible units. Using the preceding code, we will see an output
+    like the following printed to the console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/e4c44db4-9007-4aae-b297-e035f4641a06.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can see variance in the feature space of this first layer. To prepare for
+    the next step, we imagine using this matrix now as input to another RBM that will
+    further learn features. In this way, we can code our deep belief network using
+    an almost identical syntax to the syntax used for training the RBM. The exception
+    will be that for the hidden layer argument, rather than a single value representing
+    the number of units in a single hidden layer, we can now use a vector of values
+    that represent the number of units in each successive hidden layer. For our deep
+    belief network, we will start with `100` units, just like in our RBM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will then reduce this to `50` units in the next layer and `10` units in
+    the layer after that. The other difference is that we now have a target variable.
+    While an RBM is an unsupervised, generative model, we can use our deep belief
+    network to perform a classification task. We train our deep belief network using
+    the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With the deep belief network trained, we can now make predictions using our
+    model. We perform this prediction task in a similar way to how we generate predictions
+    for most machine learning tasks. However, in this case, we will use the `nn.predict`
+    function to use our trained neural network to predict whether the new test input
+    should be classified as spam or a legitimate text. We make a prediction on the
+    `test` data using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We now have the probability values that tell us whether a given message is
+    or is not spam. The probabilities are currently within a constrained range; however,
+    we can still use it. Let''s make a cut in the probabilities and assign `1` for
+    those above the threshold signifying that the message is predicted to be spam,
+    and everything under the cut point will receive a value of `0`. After making this
+    dividing line and creating a vector of binary values, we can create a confusion
+    matrix to see how well our model performed. We create our binary variables and
+    then see how well our model performed by running the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'After running the preceding code, we will see the following output to our console:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/42061ee5-9adc-45eb-8058-900c569ea209.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: As we can see, even this very simple implementation of a deep belief network
+    has performed fairly well. From here, additional modification can be made to the
+    number of hidden layers, units in these layers, the output activation function,
+    learning rate, momentum, and dropout, along with the contrastive divergence and
+    the number of epochs or rounds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we covered a number of methods for analyzing text data. We
+    started with techniques for extracting elements from text data, such as taking
+    a sentence and breaking it into tokens and comparing term frequency, along with
+    collecting topics and identifying the best summary sentence and extracting these
+    from the text. Next, we used some embedding techniques to add additional details
+    to our data, such as parts of speech and named entity recognition. Lastly, we
+    used an RBM model to find latent features in the input data and stacked these
+    RBM models to perform a classification task. In the next chapter, we will look
+    at using deep learning for time series tasks, such as predicting stock prices, in
+    particular.
+  prefs: []
+  type: TYPE_NORMAL

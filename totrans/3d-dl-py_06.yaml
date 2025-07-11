@@ -1,0 +1,645 @@
+- en: '5'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Understanding Differentiable Volumetric Rendering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we are going to discuss a new way of differentiable rendering.
+    We are going to use a voxel 3D data representation, unlike the mesh 3D data representation
+    we used in the last chapter. Voxel 3D data representation has certain advantages
+    compared to mesh models. For example, it is more flexible and highly structured.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand volumetric rendering, we need to understand several important
+    concepts, such as ray sampling, volumes, volume sampling, and ray marching. All
+    these concepts have corresponding PyTorch3D implementations. We will discuss each
+    of these concepts using explanations and coding exercises.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After we understand the preceding basic concepts of volumetric rendering, we
+    can then see easily that all the operations mentioned already are already differentiable.
+    Volumetric rendering is naturally differentiable. Thus, by then, we will be ready
+    to use differentiable volumetric rendering for some real applications. We are
+    going to go over a coding example of reconstructing 3D voxel models from multiple
+    images by using differentiable volumetric rendering.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will first understand volumetric rendering on a high level. We will then
+    dive into the basic concepts, such as ray sampling, volumes, volume sampling,
+    and ray marching. We will then present a coding example of reconstructing 3D object
+    shapes from a collection of images taken from different views of the object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A high-level description of volumetric rendering
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding ray sampling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using volume sampling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding ray marching
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Reconstructing 3D objects and colors from multi-view images
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In order to run the example code snippets in this book, you need to have a computer,
+    ideally with a GPU. However, running the code snippets with only CPUs is not impossible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The recommended computer configuration includes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A GPU for example, the NVIDIA GTX series or RTX series with at least 8 GB of
+    memory
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Python 3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: PyTorch library and PyTorch3D libraries
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The code snippets with this chapter can be found at [https://github.com/PacktPublishing/3D-Deep-Learning-with-Python.](https://github.com/PacktPublishing/3D-Deep-Learning-with-Python)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Overview of volumetric rendering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Volumetric rendering is a collection of techniques used to generate a 2D view
+    of discrete 3D data. This 3D discrete data could be a collection of images, voxel
+    representation, or any other discrete representation of data. The main goal of
+    volumetric rendering is to render a 2D projection of 3D data since that is what
+    our eyes can perceive on a flat screen. This method generated such projections
+    without any explicit conversion to a geometric representation (such as meshes).
+    Volumetric rendering is typically used when generating surfaces is difficult or
+    can lead to errors. It can also be used when the content (and not just the geometry
+    and surface) of the volume is important. It is typically used for data visualization.
+    For example, in brain scans, a visualization of the content of the interior of
+    the brain is typically very important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we will explore the volumetric rendering of a volume. We will
+    get a high-level overview of volumetric rendering as shown in *Figure 5**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we represent the 3D space and objects in it by using a **volume**, which
+    is a 3D grid of regularly spaced nodes. Each node has two properties: density
+    and color features. The density typically ranges from 0 to 1\. Density can also
+    be understood as the probability of occupancy. That is, how sure we think that
+    the node is occupied by a certain object. In some cases, the probability can also
+    be opacity.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We need to define one or multiple cameras. The rendering is the process that
+    determines what the cameras can observe from their views.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: To determine the RGB values at each pixel of the preceding cameras, a ray is
+    generated from the projection center going through each image pixel of the cameras.
+    We need to check the probability of occupancy or opacity and colors along this
+    ray to determine RGB values for the pixel. Note there are infinitely many points
+    on each such ray. Thus, we need to have a sampling scheme to select a certain
+    number of points along this ray. This sampling operation is called **ray sampling**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Note that we have densities and colors defined on the nodes of the volume but
+    not on the points on the rays. Thus, we need to have a way to convert densities
+    and colors of volumes to points on rays. This operation is called **volume sampling**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, from the densities and colors of the rays, we need to determine the
+    RGB values of each pixel. In this process, we need to compute how many incident
+    lights can arrive at each point along the ray and how many lights are reflected
+    to the image pixel. We call this process **ray marching**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.1: Volumetric rendering ](img/B18217_05_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.1: Volumetric rendering'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Having understood the basic process of volumetric rendering, let us dive deeper
+    into the first concept: ray sampling.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding ray sampling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Ray sampling is the process of emitting rays from the camera that goes through
+    the image pixels and sampling points along these rays. The ray sampling scheme
+    depends on the use case. For example, sometimes we might want to randomly sample
+    rays that go through some random subset of image pixels. Typically, we need to
+    use such a sampler during training since we only need a representative sample
+    from the full data. In such cases, we can use `MonteCarloRaysampler` in Pytorch3D.
+    In other cases, we want to get the pixel values for each pixel on the image and
+    maintain a spatial order. This is useful for rendering and visualization. For
+    such use cases, PyTorch3D provides `NDCMultiNomialRaysampler`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following, we will demonstrate how to use one of the PyTorch3D ray samplers,
+    `NDCGridRaysampler`. This is like `NDCMultiNomialRaysampler`, where pixels are
+    sampled along a grid. The codes can be found in the GitHub repository named `understand_ray_sampling.py`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to import all the Python modules, including the definition of
+    `NDCGridRaysampler`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Set up the devices for use in the following steps. If we have GPUs, then we
+    are going to use the first GPU. Otherwise, we are going to use the CPU:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We define a batch of 10 cameras. Here, `num_views` is the number of views,
+    which is 10 in this case. The `elev` variable denotes the elevation angle, and
+    `azim` denotes the azimuth angle. The rotation, `R`, and translation, `T`, can
+    thus be determined using the PyTorch3D `look_at_view_transform` function. The
+    10 cameras then can be defined by using rotations and translations. The 10 cameras
+    all point at an object located at the center of the world coordinates:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we can define the ray sampler, which is the `raysampler` variable.
+    We need to specify the image size of the camera. We also need to specify the minimum
+    and maximum depths that the ray ranges from. The `n_pts_per_ray` input is the
+    number of points along the ray:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the preceding step, we have already defined a ray sampler. To make the ray
+    sampler samples rays and points for use, we need to let the ray sampler know where
+    our cameras are and in what directions they are pointing. This can be easily achieved
+    by passing the cameras defined in step 3 to `raysampler`. What we obtain is then
+    a `ray_bundle` variable:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The `ray_bundle` variable contains a collection of different PyTorch tensors
+    that specify the sampled rays and points. We can print these member variables
+    to check their shapes and verify their contents:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The codes should run and print the following information:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We can see that `ray_bundle.origins` is a tensor about the origins of the rays,
+    and the batch size is 10\. Because the image size is 64 by 64, the size of the
+    second and third dimensions are both 64\. For each origin, we need three numbers
+    to specify its 3D location.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ray_bundle.directions` is a tensor about the directions of the ray. Again,
+    the batch size is 10 and the image size is 64 by 64\. These explain the size of
+    the first three dimensions of the tensor. We need three numbers to specify a direction
+    in 3D spaces.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ray_bundle.lengths` is a tensor about the depths of each point on the rays.
+    There are 10x64x64 rays and there are 50 points on each ray.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ray_bundle.xys` is a tensor about the x and y locations on the image plane
+    corresponding to each ray. There are 10x64x64 rays. We need one number to represent
+    the x location and one number to represent the y location:'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we save `ray_bundle` to a `ray_sampling.pt` file. These rays are useful
+    for our coding exercises in the following sections:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: By now, we understand what ray samplers do. Ray samplers give us a batch of
+    rays and discrete points on the rays. However, we still do not have densities
+    and colors defined on these points and rays. Next, we are going to learn how to
+    get these densities and colors from the volumes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using volume sampling
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Volume sampling is the process of getting color and occupancy information along
+    the points provided by the ray samples. The volume representation we are working
+    with is discrete. Therefore, the points defined in the ray sampling step might
+    not fall exactly on a point. The nodes of the volume grids and points on rays
+    typically have different spatial locations. We need to use an interpolation scheme
+    to interpolate the densities and colors at points of rays from the densities and
+    colors at volumes. We can do that by using `VolumeSampler` implemented in PyTorch3D.
+    The following code can be found in the GitHub repository in the `understand_volume_sampler.py`
+    file:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import the Python modules that we need:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Set up the devices:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load `ray_bundle`, which was computed in the last section:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We then define a volume. The densities tensor has a shape of [10, 1, 64, 64,
+    50], where we have a batch of 10 volumes, and each volume is a grid of 64x64x50
+    nodes. Each node has one number to represent the density at the node. On the other
+    hand, the colors tensor has a shape of [10, 3, 64, 64, 50], because each color
+    needs three numbers to represent the RGB values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We need to define `volume_sampler` based on the volumes. Here, we use bilinear
+    interpolation for the volume sampling. The densities and colors of points on the
+    rays can then be easily obtained by passing `ray_bundle` to `volume_sampler`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can print out the shape of the densities and colors:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output is as follows. Note that we have a batch size of 10 cameras, which
+    explains the size of the first dimension of the tensors. We have one ray for each
+    image pixel and our camera image resolution is 64 by 64\. The number of points
+    on each ray is 50, which explains the size of the fourth dimension of the tensors.
+    Each density can be represented by one number and each color needs three numbers
+    to represent the RGB values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, let us save the densities and colors because we need to use them in
+    the next section:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We now have an overview of volume sampling. We know what it is and why it is
+    useful. In the next section, we will learn about how to use these densities and
+    colors to generate the RGB image values on the batch of cameras.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the ray marcher
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have the color and density values for all the points sampled with
+    the ray sampler, we need to figure out how to use it to finally render the pixel
+    value on the projected image. In this section, we are going to discuss the process
+    of converting the densities and colors on points of rays to RGB values on images.
+    This process models the physical process of image formation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we discuss a very simple model, where the RGB value of each
+    image pixel is a weighted sum of the colors on the points of the corresponding
+    ray. If we consider the densities as probabilities of occupancy or opacity, then
+    the incident light intensity at each point of the ray is a = product of (1-p_i),
+    where p_i are the densities. Given the probability that this point is occupied
+    by a certain object is p_i, the expected light intensity reflected from this point
+    is w_i = a p_i. We just use w_i as the weights for the weighted sum of colors.
+    Usually, we normalize the weights by applying a softmax operation, such that the
+    weights all sum up to one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'PyTorch3D contains multiple implementations of ray marchers. The following
+    codes can be found in `understand_ray_marcher.py` in the GitHub repository:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this first step, we will import all the required packages:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we load the densities and colors on rays from the last section:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We define `ray_marcher` and pass the densities and colors on rays to `ray_marcher`.
+    This gives us `image_features`, which are exactly rendered RGB values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can print the image feature shape:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'As we have expected, the shape is [10, 64, 64, 4], where 10 is the batch size,
+    and 64 is the image width and height. The outputs have four channels, the first
+    three are RGBs. The last channel is the alpha channel, which represents whether
+    the pixel is in the foreground or the background:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: We have now gone through some of the main components of volumetric rendering.
+    Note that the computation process from the volume densities and colors to image
+    pixel RGB values is already differentiable. So, volumetric rendering is naturally
+    differentiable. Given that all the variables in the preceding examples are PyTorch
+    tensors, we can compute gradients on these variables.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will learn about differentiable volume rendering and
+    see an example of using volumetric rendering for reconstructing 3D models from
+    multi-view images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Differentiable volumetric rendering
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'While standard volumetric rendering is used to render 2D projections of 3D
+    data, differentiable volume rendering is used to do the opposite: construct 3D
+    data from 2D images. This is how it works: we represent the shape and texture
+    of the object as a parametric function. This function can be used to generate
+    2D projections. But, given 2D projections (this is typically multiple views of
+    the 3D scene), we can optimize the parameters of these implicit shape and texture
+    functions so that its projections are the multi-view 2D images. This optimization
+    is possible since the rendering process is completely differentiable, and the
+    implicit functions used are also differentiable.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reconstructing 3D models from multi-view images
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we are going to show an example of using differentiable volumetric
+    rendering for reconstructing 3D models from multi-view images. Reconstructing
+    3D models is a frequently sought problem. Usually, the direct ways of measuring
+    the 3D world are difficult and costly, for example, LiDAR and Radar are typically
+    expensive. On the other hand, 2D cameras have much lower costs, which makes reconstructing
+    the 3D world from 2D images incredibly attractive. Of course, to reconstruct the
+    3D world, we need multiple images from multiple views.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following `volume_renderer.py` code can be found in the GitHub repository
+    and it is modified from a tutorial of PyTorch3D. We will use this coding example
+    to show how the real-world application of volumetric rendering can be:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to import all the Python modules:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we need to set up the device:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Using the provided function from the PyTorch3D tutorial, we generate 40 cameras,
+    images, and silhouette images with different angles. We will consider these images
+    as the given ground-truth images, and we will fit a 3D volumetric model to these
+    observed ground-truth images:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we define a ray sampler. As we have discussed in the previous sections,
+    the ray sampler is for sample rays, and points per rays for us:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we create the ray marcher as before. Note, this time, we define a variable
+    renderer of the `VolumeRenderer` type. `VolumeRenderer` is just a nice interface,
+    where ray samplers and ray marchers do all the heavy-lifting work under the hood:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we define a `VolumeModel` class. This class is just for encapsulating
+    a volume so that the gradients can be computed in the forward function and the
+    volume densities and colors can be updated by the optimizer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define a Huber loss function. The Huber loss function is a robust loss function
+    to prevent a small number of outliers from dragging the optimization away from
+    the true optimal solutions. Minimizing this loss function will move x closer to
+    y:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Move everything to the right device:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define an instance of `VolumeModel`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now let’s set up the optimizer. The learning rate, `lr`, is set to 0.1\. We
+    use an Adam optimizer, and the number of optimization iterations will be 300:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we have the main optimization loop. The densities and colors of the volume
+    are rendered, and the resulting colors and silhouettes are compared with the observed
+    multi-view images. The Huber loss between the rendered images and observed ground-truth
+    images is minimized:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'After the optimization is finished, we take the final resulting volumetric
+    model and render images from new angles:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, the rendered new images are shown in Figure 5.2:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 5.2: Rendered images from the fitted 3D model ](img/B18217_05_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 5.2: Rendered images from the fitted 3D model'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By now, we have an overview of some of the main concepts in differentiable volumetric
+    rendering. We have also learned a concrete example of using differentiable volumetric
+    rendering for reconstructing 3D models from multiview images. You should be able
+    to master the skills already and be able to use the technique for your own problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we started with a high-level description of differentiable
+    volumetric rendering. We then dived deep into several important concepts of differentiable
+    volumetric rendering, including ray sampling, volume sampling, and the ray marcher,
+    but only by explanations and coding examples. We walked through a coding example
+    of using differentiable volumetric rendering for reconstructing 3D models from
+    multi-view images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using volumes for 3D deep learning has become an interesting direction in recent
+    years. As many innovative ideas come out following this direction, many breakthroughs
+    are emerging. One of the breakthroughs, called **Neural Radiance Fields** (**NeRF**),
+    will be the topic of our next chapter.
+  prefs: []
+  type: TYPE_NORMAL

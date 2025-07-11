@@ -1,0 +1,2367 @@
+- en: '5'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Analyzing Images with Computer Vision
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Computer vision is one of the fields in which deep learning has progressed enormously,
+    surpassing human-level performance in several tasks such as image classification
+    and object recognition. Furthermore, the field has moved from academia to real-world
+    applications, and the industry is recognizing its practitioners as adding high
+    value to businesses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will learn how to use GluonCV, a MXNet Gluon library specific
+    to computer vision, how to build our own networks, and how to use GluonCV’s model
+    zoo to use pretrained models for several applications.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Specifically, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding convolutional neural networks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Classifying images with AlexNet and ResNet
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Detecting objects with Faster R-CNN and YOLO
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Segmenting objects in images with PSPNet and DeepLab-v3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Apart from the technical requirements specified in the *Preface*, the following
+    technical requirements apply in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ensure that you have completed *Installing MXNet, Gluon, GluonCV and GluonNLP*,
+    the first recipe from [*Chapter 1*](B16591_01.xhtml#_idTextAnchor016), *Up and
+    Running* *with MXNet*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Ensure that you have completed *A toy dataset for regression – load, manage,
+    and visualize a house sales dataset*, the first recipe from [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    *Working with MXNet and Visualizing Datasets: Gluon* *and DataLoader*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code for this chapter can be found at the following GitHub URL: [https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch05](https://github.com/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/tree/main/ch05).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, you can access each recipe directly from Google Colab – for example,
+    for the first recipe of this chapter: [https://colab.research.google.com/github/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch05/5_1_Understanding_Convolutional_Neural_Networks.ipynb](https://colab.research.google.com/github/PacktPublishing/Deep-Learning-with-MXNet-Cookbook/blob/main/ch05/5_1_Understanding_Convolutional_Neural_Networks.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding convolutional neural networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In the previous chapters, we have used *fully connected* **Multi-Layer Perceptron**
+    (**MLP**) networks to solve our regression and classification problem. However,
+    as we will see, these networks are not optimal for solving image-related problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Images are highly dimensional entities – for example, each pixel in a color
+    image has three features (red, green, and blue values), and a 1,024x1,024 image
+    has more than 1 million pixels (a 1 megapixel image) and, therefore, more than
+    3 million features (3 * 106). If we connect all these points in the input layer,
+    to a second layer of 100 neurons for a *fully connected* network, we will require
+    more than 108 parameters, and that would be only for the first layer. Processing
+    images is, therefore, a time-intensive operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, imagine that we are trying to detect eyes in faces; if a pixel
+    belongs to an eye, the likelihood of nearby pixels belonging to the eye is very
+    high (think of the pixels that make up the iris, for example). When inputting
+    all our pixels directly into our network, all the information connected to pixel
+    location is lost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An architecture called a **Convolutional Neural Network** (**CNN**) was developed
+    to tackle these problems, and we will analyze the most important features of CNNs
+    and how to implement them in this recipe to solve image-related problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As with the previous chapters, in this recipe, we will use a few matrix operations
+    and linear algebra, but it will not be too difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will take the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduce convolutional layer equations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Understand the convolution parameters and receptive field.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Run a convolutional layer example with MXNet.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introduce pooling layer equations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Run a pooling layer example with MXNet.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Summarize CNNs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introducing convolutional layer equations
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The location problems described in the recipe introduction are formally known
+    as **translation invariance** and **locality**. In CNNs, these problems is solved
+    by using the convolution/cross-correlation operation in the so-called convolutional
+    layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the convolution, we have an input image (or **feature map** – see the following
+    *Important note* relating to convolutional layer equations) that is combined with
+    a **kernel**, which are the learnable parameters of this layer. The simplest way
+    to see how this operation works is with an example – if we had a 3x3 input and
+    we wanted to combine it with a 2x2 kernel, it would look like a sliding window,
+    as shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.1 – The convolutional layer](img/B16591_05_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.1 – The convolutional layer
+  prefs: []
+  type: TYPE_NORMAL
+- en: As shown in *Figure 5**.1*, to compute 1 pixel of the output, we can intuitively
+    place the kernel over the input and compute multiplications, and then add all
+    these values to obtain the final result. This helps a network learn features from
+    the image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, this operation is less computing intensive than the *fully connected*
+    layers, addressing the computing problem we identified.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: When using a convolution layer as the first step (typical in CNNs), the input
+    is the full image. Moreover, the output can be understood as another image of
+    a lower dimension with certain properties, given by the kernel. As kernels are
+    learned to highlight certain features of the image, these outputs are known as
+    *feature maps*. In the layer close to the input, each pixel of these feature maps
+    is a combination of a small number of pixels of the image (for example, horizontal
+    or vertical lines). As data travels through convolutional layers, these feature
+    maps represent higher levels of abstraction (for example, eyes on a face).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the convolution parameters and receptive field
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The example shown in *Figure 5**.1* is quite simple, for illustrative purposes;
+    the input size is 6x6 and the kernel size is 3x3\. These sizes are variable and
+    depend on the network architecture. However, there are three parameters that are
+    very important to calculate the output size; these are padding, stride, and dilation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Padding is the number of zero-valued pixels (rows/columns) that are added to
+    the input. The larger the padding, the larger the output, and effectively, this
+    increases the input size. In the example, padding is `1` (represented as *p*).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As mentioned, we can intuitively place the kernel over the input, compute multiplications,
+    and then add all these results to obtain the final value. For the next value,
+    we need to move the kernel to a different position, as shown in the following
+    diagram.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.2 – The stride parameter](img/B16591_05_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.2 – The stride parameter
+  prefs: []
+  type: TYPE_NORMAL
+- en: The number of spaces the kernel moves is defined by the stride. In *Figure 5**.2*,
+    we can see an example of the stride being 2, with each 3x3 kernel separated by
+    2 values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dilation is defined by how separated each input value that is used in the convolution
+    with the kernel is.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.3 – The dilation parameter](img/B16591_05_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.3 – The dilation parameter
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see in *Figure 5**.3*, different dilation parameters combine elements
+    of the input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These parameters define what is known as the **receptive field**, which is the
+    size of the region of the input that produces an activation. It is an important
+    parameter because only a feature present in the receptive field of our model will
+    be represented in the output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the example in *Figure 5**.1*, a 6x6 input, combined with a 3x3 kernel, with
+    a stride of 2, padding of 1, and dilation of 1, yields a 3x3 output and has a
+    receptive field of the full input (all pixels in the input are at least used once).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another very interesting property of these parameters is that given the right
+    combinations, you can have an output that is the same size as the input. The equation
+    that gives the dimensions of the output is as follows (the equation needs to be
+    applied to the height and the width, respectively):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: o = [i + 2 * p − k − (k − 1)*(d − 1)] / s + 1
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the preceding equation, *o* is the output dimension (height or width if working
+    with 2D images), *i* is the input dimension (height/width), *p* is padding, *k*
+    is the kernel size, *d* is dilation, and *s* is stride. There are different combinations
+    that will give the input and the output the same size, one of which is *p = 1,
+    k = 3, d = 1, s =* *1*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running a convolutional layer example with MXNet
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We can implement the following example using MXNet capabilities (note that
+    padding is 0, stride is 1, and dilation is 1):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.4 – A convolution example](img/B16591_05_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.4 – A convolution example
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If we want to follow the example depicted in *Figure 5**.4*, applying the convolution
+    operation to a 3x3 matrix with a 2x2 kernel, we can use the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These operations give the following as a result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is the expected result for the defined convolution step (taking into account
+    the given padding, stride, and dilation parameters).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing the pooling layer equations
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As described earlier, a desirable property of neural network models when working
+    with images is that as we traverse a network, we can increasingly process higher-level
+    features, or equivalently, each pixel in the deep feature maps has a higher receptive
+    field from the input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The operation performed in these layers is similar to the convolutional layers,
+    in the sense that we take a kernel of constant dimensions and apply a sliding
+    window. However, in this case, the kernel parameters are constant and, therefore,
+    not learned during the training of the network. This kernel is seen as an operation
+    (a function) and is typically either the max function (the **max pooling layer**)
+    or the average function (the **average** **pooling layer**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.5 – The max pooling layer](img/B16591_05_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.5 – The max pooling layer
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, by combining pixels that are nearby, we also achieve local invariance,
+    another desirable property to process images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running a pooling layer example with MXNet
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We can implement the example shown in *Figure 5**.5* using MXNet''s capabilities,
+    as shown here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These operations give the following as a result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is the expected result for the defined 2x2 max pooling step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summarizing CNNs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A typical CNN for **image classification** has, therefore, two different parts:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Feature extraction**: This is also known as the network backbone. It is built
+    with combinations of the convolutional and pooling layers seen in this recipe.
+    The input to each layer is feature maps (an image and all its channels in the
+    input layer), and the output is feature maps of reduced dimensions but with a
+    larger number of channels. Layers are typically stacked – a convolutional layer,
+    an activation function (typically, **Rectified Linear Unit** (**ReLU**)), and
+    a max pooling layer.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`softmax` function as the activation. The number of layers in the classifier
+    depends on the specific problem.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Therefore, a CNN architecture can be the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.6 – CNN architecture](img/B16591_05_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.6 – CNN architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 5**.6*, we can see a CNN architecture for *image classification*,
+    composed of two stages for feature extraction, each stage combining a convolution
+    layer (with the ReLU activation function) and a max pooling layer. Then, for the
+    classifier, the remaining feature map is flattened into a vector and passed through
+    a *fully connected* layer to finally provide the output with the *softmax* activation
+    function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works…
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we have introduced CNNs. This architecture has been developed
+    since early the 2000s and is responsible for the revolution in **computer vision**
+    applications, and making **deep learning** become the spotlight in most data-oriented
+    tasks including **natural language processing**, **speech recognition**, **image
+    generation**, and so on, reaching state-of-the-art in all of them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We have understood how CNNs work internally, exploring the concepts of *feature
+    maps*, *receptive field*, and the mathematical concepts behind the main layers
+    of these architectures, the *convolutional* and *max pooling* layers, and how
+    they are combined to build a complete CNN model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'CNNs have evolved rapidly; in 1998, one of the first CNNs was published, solving
+    a practical problem: [http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf](http://yann.lecun.com/exdb/publis/pdf/lecun-01a.pdf)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After that, it was not until 2012, with AlexNet, that CNNs gained worldwide
+    attention, and since then, progress quickly developed, until they surpassed human-level
+    performance. For more information on the history of CNNs, refer to this article:
+    [https://towardsdatascience.com/from-lenet-to-efficientnet-the-evolution-of-cnns-3a57eb34672f](https://towardsdatascience.com/from-lenet-to-efficientnet-the-evolution-of-cnns-3a57eb34672f).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We briefly touched on the topics of translation invariance and locality. For
+    more information on these topics, visit [https://d2l.ai/chapter_convolutional-neural-networks/why-conv.html](https://d2l.ai/chapter_convolutional-neural-networks/why-conv.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The relationship between convolution and cross-correlation is discussed here:
+    [https://towardsdatascience.com/convolution-vs-correlation-af868b6b4fb5](https://towardsdatascience.com/convolution-vs-correlation-af868b6b4fb5).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a better understanding of matrix dimensions, padding, stride, dilation,
+    and receptive field, a good explanation is provided here: [https://theaisummer.com/receptive-field/](https://theaisummer.com/receptive-field/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'CNNs have been state-of-the-art for image classification until quite recently;
+    in October 2020, **Transformers** were applied to computer vision tasks by Google
+    Brain with **ViT**: [https://ai.googleblog.com/2020/12/transformers-for-image-recognition-at.html](https://ai.googleblog.com/2020/12/transformers-for-image-recognition-at.html).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In a nutshell, instead of forcing a network with the locality principle, Transformer
+    architectures allow the same model to decide which features matter most at any
+    layer, local or global. This behavior is called **self-attention**. Transformers
+    are state-of-the-art for image classification at the time of writing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we are going to analyze in detail the following tasks – **image
+    classification**, **object detection**, and **image segmentation**. However, *MXNet
+    GluonCV Model Zoo* contains lots of models pre-trained for a large number of tasks.
+    You are encouraged to explore the different examples provided at [https://cv.gluon.ai/model_zoo/index.html](https://cv.gluon.ai/model_zoo/index.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying images with MXNet – GluonCV Model Zoo, AlexNet, and ResNet
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: MXNet provides a variety of tools to compose custom deep learning models. In
+    this recipe, we will see how to use MXNet to build a model from scratch, train
+    it, and use it to classify images from a dataset. We will also see that although
+    this approach works fine, it is time-consuming.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another option, and one of the highest value features that MXNet and GluonCV
+    provide, is their **Model Zoo**. GluonCV Model Zoo is a set of pre-trained, ready-to-go
+    models, for use with your own applications. We will see how to use Model Zoo with
+    two very important models for image classification – **AlexNet** and **ResNet**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will analyze and compare these approaches to classify images
+    on a reduced version of the *Dogs vs.* *Cats* dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As with previous chapters, in this recipe, we will use a few matrix operations
+    and linear algebra, but it will not be too difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, we will be classifying image datasets; therefore, we will revisit
+    some concepts that we''ve already seen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Understanding image datasets- load, manage, and visualize the Fashion MNIST
+    dataset*, the third recipe from [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    *Working with MXNet and Visualizing Datasets: Gluon* *and DataLoader*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 4*](B16591_04.xhtml#_idTextAnchor075), *Solving* *Classification
+    Problems*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will take the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Explore a reduced version of the *Dogs vs.* *Cats* dataset.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Create an AlexNet custom model from scratch.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train an *AlexNet* custom model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate an *AlexNet* custom model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introduce Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introduce ImageNet pre-trained models.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load an *AlexNet* pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate an *AlexNet* pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load a ResNet pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate a *ResNet* pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Exploring the reduced version of the dataset Dogs vs. Cats
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For our image classification experiments, we will work with a new dataset, *Dogs
+    vs. Cats*. This is a Kaggle dataset ([https://www.kaggle.com/c/dogs-vs-cats](https://www.kaggle.com/c/dogs-vs-cats))
+    that can be downloaded manually. In this recipe, we will work with a reduced version
+    of this dataset that can be downloaded from **Zenodo** ([https://zenodo.org/records/5226945](https://zenodo.org/records/5226945))
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the set of images in the dataset (either a cat or a dog is depicted), our
+    model will need to correctly classify these images. In the first step, as we saw
+    in previous chapters, we are going to do some **Exploratory Data** **Analysis**
+    (**EDA**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.7 – The Dogs vs. Cats dataset](img/B16591_05_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.7 – The Dogs vs. Cats dataset
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen in *Figure 5**.7*, each image in the dataset is in color, and
+    they are resized to 224 px by 224 px (width and height). There are 1,000 images
+    in the training and validation set and 400 images in the test set.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we did in *Understanding image datasets – load, manage, and visualize the
+    Fashion MNIST dataset*, the third recipe from [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    *Working with MXNet and Visualizing Datasets: Gluon and DataLoader*, we can compute
+    some visualizations using the dimensionality reduction techniques – **Principal
+    Component Analysis** (**PCA**), **t-distributed stochastic neighbor embedding**
+    (**t-SNE**), and **Uniform Manifold Approximation and** **Projection** (**UMAP**):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.8 – Dogs versus cats visualizations – PCA, t-SNE, and UMAP](img/1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.8 – Dogs versus cats visualizations – PCA, t-SNE, and UMAP
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 5**.8*, there is no clear boundary region to separate dogs versus
+    cats. However, as we will see in the following sections, an architecture introduced
+    in the previous chapter, CNNs, will achieve very good results on the task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an AlexNet custom model from scratch
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: AlexNet was a deep neural network that was developed by Alex Krizhevsky, Ilya
+    Sutskever, and Geoffrey Hinton in 2012\. It was designed to compete in the **ImageNet
+    Large Scale Visual Recognition Challenge** (**ILSVRC**) in 2012 and was the first
+    CNN-based model to win this competition.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.9 – AlexNet](img/B16591_05_9.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.9 – AlexNet
+  prefs: []
+  type: TYPE_NORMAL
+- en: The network uses five convolutional layers and three *fully connected* layers.
+    The activation function used is the ReLU, and it contains about 63 million trainable
+    parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To generate this network from scratch with MXNet, we can use the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This code uses MXNet functions to add the corresponding 2D *convolutional*,
+    *max-pooling*, and *fully connected* layers with their corresponding activation
+    functions, generating an AlexNet architecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training an AlexNet custom model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The task we are dealing with is an image classification task, which is a classification
+    problem where input data is images, and therefore, we can use the training loop
+    we saw in [*Chapter 4*](B16591_04.xhtml#_idTextAnchor075), *Solving Classification
+    Problems* – slightly modified for this task.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The parameters chosen are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Number of** **epochs**: 20'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Batch size**: 16 samples'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Optimizer**: Adam'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Learning** **rate**: 0.0001'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'With these parameters, we obtain the following results (the best model was
+    achieved on epoch 11):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Training** **loss**: 0.36'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Training** **accuracy**: 0.83'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Validation** **loss**: 0.55'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Validation** **accuracy**: 0.785'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluating an AlexNet custom model
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The accuracy obtained with the best model (in this case, the one corresponding
+    to the last training iteration) on the test set is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: That’s quite a decent number for just five epochs of training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Moreover, the confusion matrix computed is shown in the following figure (class
+    **0** corresponds to cats and **1** to dogs):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.10 – A trained custom AlexNet confusion matrix](img/B16591_05_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.10 – A trained custom AlexNet confusion matrix
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As shown in *Figure 5**.10*, the model mostly predicts accurately the expected
+    classes, with the following per-class errors:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cats detected as dogs**: **85**/200 (43% of cat images were misclassified)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dogs detected as cats**: **24**/200 (12% of dog images were misclassified)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s move on to the next heading.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One of the best features that MXNet and GluonCV provide is their large pool
+    of pre-trained models, readily available for its users to use and deploy in their
+    own applications. This model library is called **Model Zoo**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Moreover, depending on the task at hand, MXNet has some very interesting charts
+    that compare the different pre-trained models optimized for tasks. For image classification
+    (based on ImageNet), we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.11 – Model Zoo for image classification (ImageNet)](img/B16591_05_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.11 – Model Zoo for image classification (ImageNet)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Source: [https://cv.gluon.ai/model_zoo/classification.html](https://cv.gluon.ai/model_zoo/classification.html)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.11* displays the most important pre-trained models in **GluonCV
+    Model Zoo**, according to accuracy (the vertical axis) and inference performance
+    (the samples per second and horizontal axis). There are no models (yet) in the
+    top-right quadrant, meaning that, currently, we need to balance these characteristics.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using models from GluonCV Model Zoo can be done with just a couple of lines
+    of code, and we will explore this path to solve our reduced *Dogs vs. Cats* dataset
+    in the following steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ImageNet pre-trained models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Models from the **GluonCV Model Zoo** for **image classification** tasks have
+    been pre-trained in the *ImageNet* dataset. This dataset is one of the most well-known
+    datasets in computer vision. It was the first large-scale image dataset and was
+    part of the deep learning revolution when, in 2012, AlexNet won the ILSVRC.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This dataset has two variants:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Full dataset**: More than 20,000 classes in about 14 million images'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**ImageNet-1k**: 1,000 classes in about 1 million images'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Due to the size and large number of classes, the full dataset is rarely used
+    on benchmarks, with *ImageNet1k* the de facto ImageNet dataset (unless otherwise
+    noted in the research papers, articles, and so on). Images in the dataset are
+    in color and have a size of 224px by 224px (width and height).
+  prefs: []
+  type: TYPE_NORMAL
+- en: All image classification pre-trained models in GluonCV Model Zoo have been pre-trained
+    with ImageNet-1k, and therefore, they have 1,000 outputs. The outputs will be
+    post-processed so that all ImageNet classes corresponding to cats point to class
+    0, all ImageNet classes corresponding to dogs point to class 1, and all other
+    outputs point to class 2, which we will consider as unknown.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading an AlexNet pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: To compare the advantages and disadvantages of using a custom-trained model
+    and a pre-trained model from Model Zoo, in the following sections, we will work
+    with a version of the AlexNet architecture that has been pre-trained on the *ImageNet*
+    dataset, acquired from GluonCV Model Zoo.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Loading a pre-trained model is very easy and can be done with a single line
+    of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The `get_model` GluonCV function receives three parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`alexnet`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`False`, only the uninitialized architecture will be loaded)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`mx.cpu()` or `mx.gpu()`, if available'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This call will download the chosen model and, if required, its pre-trained weights
+    and biases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating an AlexNet pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'With the loaded model from the previous section, we can now evaluate and compare
+    our previous results, such as for `accuracy`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, this number is slightly lower than the accuracy we achieved with
+    our custom-trained AlexNet model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After computing the confusion matrix, we obtain the following values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.12 – A pre-trained AlexNet Confusion Matrix](img/B16591_05_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.12 – A pre-trained AlexNet Confusion Matrix
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we analyze *Figure 5**.12*, the most significant difference is that our
+    previous confusion matrix was a 2x2 matrix (with the options of **0** or **1**
+    for true labels and **0** or **1** for predicted labels). However, with our pre-trained
+    model, we have obtained a 3x3 confusion matrix. This is because, as mentioned
+    previously, pre-trained models have been trained in ImageNet, and they output
+    1,000 classes (instead of the two required for our dataset). These outputs have
+    been post-processed, so all *ImageNet* classes corresponding to cats point to
+    class **0**, all ImageNet classes corresponding to dogs point to class **1**,
+    and all other outputs point to class **2**, which we will consider as unknown.
+    When taking into account this unknown class **2**, the 3x3 matrix is computed.
+    Please note how there are no images that produce a true label of **2**; the last
+    row is all zeros.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The model mostly behaves accurately with the expected classes, with the following
+    per-class errors (we need to add numbers from the two wrong columns):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cats not detected as cats**: **96**/200 (48% of cats images were misclassified)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dogs not detected as dogs**: **14**/200 (7% of dogs images were misclassified)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is a significant difference in the per-class results, and this is due
+    to the pre-trained dataset used, *ImageNet*, because it has a large number of
+    classes associated with dog breeds and, therefore, has been trained more extensively
+    on dog images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading a ResNet pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Looking at AlexNet and later models with a higher depth, such as VGGNet, it
+    became clear that deeper layers could help when classifying images. However, when
+    training these deep networks, by using *backpropagation* and the *chain rule*,
+    the training algorithm starts computing smaller and smaller values for the gradients
+    because of the large number of multiplications of small numbers (the activation
+    function outputs are in the [0, 1] range), and therefore, when the gradients for
+    the early layers are computed, the updated weights are seldom modified. This is
+    known as the **vanishing gradient** problem, and different **ResNet** architectures
+    were developed to avoid it. Specifically, ResNet models use residual blocks that
+    add direct lines to connect layers, providing shortcuts that can be leveraged
+    during training to avoid vanishing gradients.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.13 – A ResNet residual block](img/B16591_05_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.13 – A ResNet residual block
+  prefs: []
+  type: TYPE_NORMAL
+- en: The architecture shown in *Figure 5**.13* allows you to stack layers in a more
+    scalable way, with known architectures with 18, 50, 101, and 152 layers. This
+    approach proved very successful, and ResNet152 won the ILSVRC in 2015.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this case, we will load the `v1d` version of `resNet50`, with a single line
+    of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The model then downloads successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating a ResNet pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'With the loaded model from the previous section, we can now evaluate and compare
+    with our previous results, such as for `accuracy`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: As we can see, this number is significantly higher than previous models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After computing the confusion matrix, we obtain the following values:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 5.14 – A pre-trained ResNet \uFEFFconfusion \uFEFFmatrix](img/B16591_05_14.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.14 – A pre-trained ResNet confusion matrix
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'According to *Figure 5**.14*, the per-class error rate is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cats not detected as cats**: **29**/200 (14.5% of cat images were misclassified)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dogs not detected as dogs**: **1**/200 (0.5% of dog images were misclassified)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is a significant difference in the per-class results, and this is again
+    due to the pre-trained dataset used, *ImageNet*, because it has a large number
+    of classes associated with dog breeds and, therefore, has been trained more extensively
+    on dog images.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we compared two approaches to using computer vision models
+    for image classification:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training a custom model from scratch
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using pre-trained models from GluonCV Model Zoo
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We applied both approaches with AlexNet architecture and compared the results
+    with the **ResNet-101 Model** **Zoo** version.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both approaches have advantages and disadvantages. Training from scratch provides
+    us direct control on the number of output classes, and we can fully handle the
+    training process and the evolution of loss and accuracy for both the training
+    and validation datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, in order to train a model, we need sufficient data, and that might
+    not be always available. Furthermore, adjusting the training hyperparameters (epochs,
+    batch size, optimizer, and learning rate) and the training itself are time-consuming
+    processes that, if not done properly, can yield suboptimal accuracy values (or
+    other metrics).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our examples, we used a reduced version of the *Dogs vs. Cats* dataset from
+    Kaggle, and we used pre-trained models on *ImageNet*. The Kaggle dataset contains
+    25,000 images (more than 10 times more) and the reader is encouraged to try the
+    proposed solution on that dataset (all helper functions have also been tested
+    with the full dataset).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, the choice of the *ImageNet* dataset was not casual; *ImageNet*
+    has dog classes and cat classes, and therefore, the expectation was that these
+    pre-trained models would perform well, as they had already seen images from the
+    `dataset` class. However, when this is not possible, and we apply pre-trained
+    models from a dataset to another dataset, the data probability distribution will
+    typically be very different; hence, the accuracy obtained can be very low. This
+    is known as the **domain gap** or **domain adaptation problem** between the source
+    dataset (the data the model has been pre-trained on) and the target dataset (the
+    data the model is evaluated on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: One way to tackle these issues for supervised learning problems is fine-tuning.
+    This approach is explored in detail in [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148).
+  prefs: []
+  type: TYPE_NORMAL
+- en: We finalized the recipe evaluating our two pre-trained models, *AlexNet* and
+    *ResNet*, and saw how CNN models have evolved through the years, increasing the
+    accuracy obtained.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we used *ImageNet* pre-trained models; for more information
+    about *ImageNet*, and the ILSVRC, I suggest this article: [https://machinelearningmastery.com/introduction-to-the-imagenet-large-scale-visual-recognition-challenge-ilsvrc/](https://machinelearningmastery.com/introduction-to-the-imagenet-large-scale-visual-recognition-challenge-ilsvrc/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although primarily about the ILSVRC, this previous link also includes some history
+    regarding CNNs, including *AlexNet*, VGGNet, and *ResNet*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, computer vision datasets have been under strict scrutiny recently
+    regarding data quality, and ImageNet is no exception, as this article describes:
+    [https://venturebeat.com/2021/03/28/mit-study-finds-systematic-labeling-errors-in-popular-ai-benchmark-datasets/](https://venturebeat.com/2021/03/28/mit-study-finds-systematic-labeling-errors-in-popular-ai-benchmark-datasets/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.11* shows a static image corresponding to the accuracy versus samples
+    per second graph for the Model Zoo for image classification (on *ImageNet*). A
+    snapshot of a dynamic version is available at this link and is worth taking a
+    look at: [https://cv.gluon.ai/model_zoo/classification.html](https://cv.gluon.ai/model_zoo/classification.html).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: At this link, results from different models available in GluonCV Model Zoo are
+    included, and it is suggested that you reproduce these results, as it is an interesting
+    exercise.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apart from ImageNet, GluonCV Model Zoo provides models pre-trained on **CIFAR10**.
+    A list of these models can be found at [https://cv.gluon.ai/model_zoo/classification.html#cifar10.](https://cv.gluon.ai/model_zoo/classification.html#cifar10)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For a deeper explanation of the vanishing gradient problem, Wikipedia provides
+    a good start: [https://en.wikipedia.org/wiki/Vanishing_gradient_problem](https://en.wikipedia.org/wiki/Vanishing_gradient_problem).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Lastly, regarding ResNet and its current research relevance, in a recently
+    published paper, it was shown that ResNet can still achieve **State-of-the-Art**
+    (**SOTA**) results when the latest researched training techniques are applied
+    to it, highlighting the importance of datasets and a training algorithm (versus
+    optimization only for model architecture): [https://gdude.de/blog/2021-03-15/Revisiting-Resnets](https://gdude.de/blog/2021-03-15/Revisiting-Resnets).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting objects with MXNet – Faster R-CNN and YOLO
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this recipe, we will see how to use MXNet and GluonCV on a pre-trained model
+    to detect objects from a dataset. We will see how to use GluonCV Model Zoo with
+    two very important models for **object detection** – **Faster R-CNN** and **YOLOv3**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will compare the performance of these two pre-trained models
+    to detect objects on the *Penn-Fudan* *Pedestrians* dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As for previous chapters, in this recipe, we will be using a few matrix operations
+    and linear algebra, but it will not be too difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we will unpack in this recipe, object detection combines classification
+    and regression, and therefore, chapters and recipes where we explored the foundations
+    of these topics are recommended to revisit. Furthermore, we will be detecting
+    objects on image datasets. This recipe will combine what we learned in the following
+    chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Understanding image datasets: load, manage, and visualize the Fashion MNIST
+    dataset*, the third recipe from [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    *Working with MXNet and Visualizing Datasets: Gluon* *and DataLoader*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 3*](B16591_03.xhtml#_idTextAnchor052), *Solving* *Regression Problems*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 4*](B16591_04.xhtml#_idTextAnchor075), *Solving* *Classification
+    Problems*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will take the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduce object detection.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate object detectors.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compare *Single-stage* and *Two-stage* object detectors.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Explore the *Penn-Fudan* *Pedestrians* dataset.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introduce the Object Detection Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Worke with *MS COCO* pre-trained models.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load a Faster R-CNN pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate a *Faster R-CNN* pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load a YOLOv3 pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate a *YOLOv3* pre-trained model from *Model Zoo*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Conclude what we have learned.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introducing object detection
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In some of the previous chapters and recipes, we analyzed image classification
+    problems, where the task of our models was to take an image and define the class
+    most likely associated with it. In **object detection**, however, there can be
+    multiple objects per image, corresponding to different classes, and in different
+    locations of the image, and therefore, the output is now two lists, one providing
+    the most likely class of each detected object and another indicating the estimated
+    location of the object. The class output can be modeled as a classification problem,
+    and the bounding box output can be modeled as a regression problem. Typically,
+    locations are represented with what is called a bounding box. An example of bounding
+    boxes is shown as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.15 – Bounding box examples](img/B16591_05_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.15 – Bounding box examples
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 5**.15*, we can see two examples of bounding boxes for two different
+    classes – `person` and `dog`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating object detectors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In image classification, we defined a correct classification if the class identified
+    in one image was the right one. However, in object detection, there are two parameters
+    – the class and the bounding box. Intuitively, we can define a correct classification
+    if, for each object that should be detected, there is a *similar enough* bounding
+    box that has been classified properly. To define what *similar enough* means,
+    we compute **Intersection over Union** (**IoU**), the ratio of the intersection
+    of the area of the bounding boxes over the area of the union of the bounding boxes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.16 – IoU](img/B16591_05_16.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.16 – IoU
+  prefs: []
+  type: TYPE_NORMAL
+- en: A graphical interpretation of IoU can be seen in *Figure 5**.16*. When the IoU
+    is above a determined threshold, the bounding boxes are said to match. By using
+    IoU and its threshold (typically 0.5), a detection can be classified as correct
+    (given the object was also correctly classified), and metrics such as accuracy,
+    precision, and recall can be computed (per class).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, in [*Chapter 4*](B16591_04.xhtml#_idTextAnchor075), *Solving Classification
+    Problems*, we discussed several options to evaluate *classification* problems.
+    We introduced **Area Under the Curve**(**AUC**), and we saw how changing the threshold
+    had an influence on **precision** and **recall**. When plotting precision and
+    recall together (the **PR curve**), we can see the effect of the threshold, in
+    the same way as we did for AUC. If we calculate the area covered between the curve
+    (the *x* axis, *y = 0 axis*, and *y = 1 axis*), we obtain a parameter that is
+    not dependent on the threshold value; it defines the performance of our model
+    with the given data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.17 – The PR curve](img/B16591_05_17.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.17 – The PR curve
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the characteristics of this curve that we can see clearly in *Figure
+    5**.17* is its zig-zag pattern. As we decrease the threshold, the curve goes down
+    with false positives and goes up again with true positives.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, in order to be able to compare different models easily, instead of
+    comparing the PR curves for each class, a single number metric was developed,
+    the **mean Average Precision** (**mAP**). In short, it is the mean of all the
+    areas under the PR curves for a model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: mAP =  1 _ N  ∑ i=1 N A P i
+  prefs: []
+  type: TYPE_NORMAL
+- en: To compute *mAP*, the first step is to calculate the average precision for each
+    class, which is the area under the PR curve and then compute its arithmetic mean.
+    This value provides a single number where object detection models evaluated on
+    the same dataset can be compared.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing single-stage and two-stage object detectors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We can think of object detectors as cropping a specific part of an image and
+    passing that cropped image through an image classifier, similar to what we did
+    with full images in the previous recipe. Using this approach, our object detector
+    will have two steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Region proposal network**: This is the module that will indicate the regions
+    where an object could be located.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Object classifier**: The regions will be classified by the model, with the
+    regions previously cropped and resized to match the model input constraints.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This approach is known as **two-stage object detection**, and its most important
+    characteristic is its accuracy, although it is slow due to its complex architecture,
+    and fully accurate (non-approximate) training cannot be done end to end.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Faster **Region-based Convolutional Neural Network** (**R-CNN**) is one of the
+    models that follow this approach. One of the most important differences from previous
+    versions of the model (**R-CNN** and **Fast R-CNN**) is that in order to provide
+    faster computations, it uses pre-computed bounding boxes called *anchor boxes*,
+    where the scale and the aspect ratio of the bounding box are pre-defined. This
+    approach allows the networks to be modeled to compute the *offset* related to
+    an anchor box, instead of the full bounding box coordinates, which simplifies
+    the regression problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another algorithm to improve computation times is **Non-Maximum Suppression**
+    (**NMS**). Typically, thousands of regions will be proposed for the next step
+    of the object detection pipeline. Many of these regions overlap with each other,
+    and NMS is the algorithm that takes into account the confidence of the prediction,
+    removing all overlapping regions over an IoU threshold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another approach for object detectors is to design architectures that make
+    predictions of bounding boxes and class probabilities together, allowing end-to-end
+    training in one step. Architectures following this approach are known as **single-stage
+    object detectors**. These architectures also make use of anchor boxes and NMS
+    to improve the regression task. The two most famous architectures using this approach
+    are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**You Only Look Once (YOLO**): The image is processed just once using a custom
+    CNN architecture (a combination of convolutional and max-pooling layers), ending
+    with two fully connected layers. These architectures have been developed continuously,
+    with *YOLOv3* being one of the most popular.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Single Shot Detector (SSD)**: The image is processed using a CNN backbone
+    architecture (such as VGG-16) to compute feature maps, and the generated multi-scale
+    feature maps are then classified. SSD512 (using *VGG-16* as the backbone) is one
+    of the models that follow this architecture.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: YOLOv3 model is the fastest and yields reasonable accuracy metrics, the SSD512
+    model is a good trade-off between speed and accuracy, and the Faster R-CNN model
+    has the highest accuracy and is the slowest of the three.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the Penn-Fudan Pedestrians dataset
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: For our object detection experiments, we will work with a new dataset – *Penn-Fudan
+    Pedestrians*. This is a publicly available dataset ([https://www.cis.upenn.edu/~jshi/ped_html/](https://www.cis.upenn.edu/~jshi/ped_html/))
+    and is a collaboration between the universities of Pennsylvania and Fudan, and
+    it must be downloaded manually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The dataset has 423 pedestrians annotated from 170 images; 345 pedestrians were
+    annotated for the release of the dataset (2007) and 78 pedestrians were added
+    later, as the previous ones were either small or occluded.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the set of images of the datasets, our models will need to correctly detect
+    the pedestrians present in the images and localize them, using bounding boxes.
+    To understand the problem better, as we saw in previous chapters, we are going
+    to do some EDA.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.18 – The Penn-Fudan Pedestrians dataset](img/B16591_05_18.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.18 – The Penn-Fudan Pedestrians dataset
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we can see in *Figure 5**.18*, each image can have one or more pedestrians,
+    with their corresponding bounding boxes. Each image in the dataset is in color,
+    and they have a variable width and height, which are later resized depending on
+    the model requirements. This figure was computed using the GluonCV visualization
+    utils package (the `plot_bbox` function):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: As for this datase,t there are no different classes to be classified, and no
+    further visualizations are computed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing object detection Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'GluonCV also provides pre-trained models for object detection in its Model
+    Zoo. For the *MS COCO* dataset, this is the accuracy (mAP) versus performance
+    (samples per second) chart:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.19 – Model Zoo for object detection (MS COCO)](img/B16591_05_19.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.19 – Model Zoo for object detection (MS COCO)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Image adapted from the following source: [https://cv.gluon.ai/model_zoo/detection.html](https://cv.gluon.ai/model_zoo/detection.html)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.19* displays the most important pre-trained models in GluonCV Model
+    Zoo, comparing accuracy (mAP on the vertical axis) and inference performance (samples
+    per second on the horizontal axis). There are no models (yet) in the top-right
+    quadrant, meaning that, currently, we need to balance between both characteristics.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using models from GluonCV Model Zoo can be done with just a couple of lines
+    of code, and we will explore this path to solve our *Penn-Fudan Pedestrians* dataset
+    in the following steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Working with MS COCO pre-trained models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Models from the GluonCV Model Zoo for object detection tasks have been pre-trained
+    in the *MS COCO* dataset. This dataset is one of the most popular object detection
+    datasets in computer vision. It was developed by Microsoft in 2015 and was updated
+    until 2017\. In its most recent update, it contains 80 classes (plus background)
+    and is composed of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Training/validation sets**: 118,000/5,000 images'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A test set**: 41,000 images'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Several object detection pre-trained models in GluonCV Model Zoo have been
+    pre-trained with *MS COCO*, and therefore, each object detected will be classified
+    among 80 classes. As there can be several objects in each image, in MXNet GluonCV
+    implementations, the outputs of an object detection model are structured as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**An array of indices**: For each object detected, this array gives the index
+    of the class of the detected object. The shape of this array is *BxNx1*, where
+    *B* is the batch size and *N* is the number of objects detected per image (depending
+    on the model).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**An array of probabilities**: For each object detected, this array gives the
+    probability associated with the detected object of being the detected class in
+    the **array of indices**. The shape of this array is BxNx1, where B is the batch
+    size and N is the number of objects detected per image (depending on the model).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**An array of bounding boxes**: For each object detected, this array gives
+    the bounding box coordinates associated with the detected object. The shape of
+    this array is *BxNx4*, where *B* is the batch size, N is the number of objects
+    detected per image (depending on the model), and 4 is the coordinates in the format
+    *[x-min, y-min,* *x-max, y-max]*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Looking at *Figure 5**.19*, two separated groups can be seen – the Faster R-CNN
+    family, which has the highest accuracy but is slow, and the YOLO family, which
+    is very fast but has a lower accuracy. For our experiments, we have selected two
+    of the most popular models, each of them corresponding to a different Faster R-CNN
+    (the backbone of ResNet-101 with the FPN version) and *YOLOv3* (the backbone of
+    Darknet53, a 53 CNN).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Furthermore, MS COCO contains the `person` class, and therefore, models pre-trained
+    in MS COCO are well suited for the *Penn-Fudan* *Pedestrian* dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading a Faster R-CNN pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Faster R-CNN is a two-stage object detection architecture, meaning that, first,
+    it provides regions where objects could be located, and second, by analyzing those
+    regions, it provides the classes and locations of the detected objects. It was
+    developed by Ren et al. (Microsoft Research) in 2014.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is the third iteration of a series of architectures that have evolved from
+    each other – R-CNN, Fast R-CNN, and Faster R-CNN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From the research papers (There''s more section), we can see an R-CNN architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.20 – The high-level architecture of R-CNN](img/B16591_05_20.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.20 – The high-level architecture of R-CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Source: The car image has the following source: *azerbaijan_stockers* on Freepik:
+    [https://www.freepik.com/free-photo/mini-coupe-high-speed-drive-road-with-front-lights_6159501.htm](https://www.freepik.com/free-photo/mini-coupe-high-speed-drive-road-with-front-lights_6159501.htm#query=CAR&position=48&from_view=search&track=sph&uuid=e82c3ce9-2fe8-40ef-9d39-e8d27781fdf2)#query=CAR&position=48&from_view=search&track=sph&uuid=e82c3ce9-2fe8-40ef-9d39-e8d27781fdf2'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Secondly, we can see the Fast R-CNN architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.21 – The high-level architecture of Fast R-CNN](img/B16591_05_21.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.21 – The high-level architecture of Fast R-CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Source: The car image has the following source: *azerbaijan_stockers* on Freepik:
+    [https://www.freepik.com/free-photo/mini-coupe-high-speed-drive-road-with-front-lights_6159501.htm#query=CAR&position=48&from_view=search&track=sph&uuid=e82c3ce9-2fe8-40ef-9d39-e8d27781fdf2](https://www.freepik.com/free-photo/mini-coupe-high-speed-drive-road-with-front-lights_6159501.htm#query=CAR&position=48&from_view=search&track=sph&uuid=e82c3ce9-2fe8-40ef-9d39-e8d27781fdf2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we can see the Faster R-CNN architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.22 – The high-level architecture of Faster R-CNN](img/B16591_05_22.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.22 – The high-level architecture of Faster R-CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Source: The car image has the following source: *azerbaijan_stockers* on Freepik:
+    [https://www.freepik.com/free-photo/mini-coupe-high-speed-drive-road-with-front-lights_6159501.htm#query=CAR&position=48&from_view=search&track=sph&uuid=e82c3ce9-2fe8-40ef-9d39-e8d27781fdf2](https://www.freepik.com/free-photo/mini-coupe-high-speed-drive-road-with-front-lights_6159501.htm#query=CAR&position=48&from_view=search&track=sph&uuid=e82c3ce9-2fe8-40ef-9d39-e8d27781fdf2)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The different architectures have similarities and differences, namely the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**R-CNN**: This uses the selective search algorithm to provide 2,000 region
+    proposals. Each of these regions is then fed into a CNN, which generates a feature
+    vector for each object of 4,096 features and the four-coordinate’s bounding box.
+    These feature vectors are the input to the **Support Vector Machine** (**SVM**)
+    classifier.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Fast R-CNN**: In this iteration, instead of feeding each region to a CNN,
+    the whole image is fed once, and a single feature map of the full image is computed,
+    accelerating the process. Then, **Regions Of Interest** (**ROIs**) are computed
+    over this feature map (instead of the image), obtained similarly with the *selective
+    search* algorithm. These are then passed through an *ROI pooling* layer, where
+    each object in a proposed region is assigned a feature map of the same shape.
+    This is an efficient method in which the output can now be fed into the two networks
+    for the regressor and classifier, which provide the location and class of each
+    object respectively. These two networks are based on fully connected layers. The
+    regressor computes offsets from the ROIs, and for the classifier, the output activation
+    function is *softmax*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Faster R-CNN**: In this last iteration, three changes are introduced. Firstly,
+    a backbone CNN is also used to compute the feature map of the image; however,
+    instead of using the selective search algorithm to propose regions, some *fully
+    convolutional* layers are added on top of the backbone CNN called a **Region Proposal
+    Network** (**RPN**), yielding a much smaller computation time. Secondly, these
+    region proposals are computed as offsets associated with anchor boxes. Lastly,
+    to reduce the number of regions to process, **Non-Maximum Suppression** (**NMS**)
+    is used. These three changes provide faster inference and higher accuracy.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For our experiments, we will use as the backbone the `v1d` version of weights
+    from a ResNet-101 network, with a **feature pyramid network** as the RPN. We can
+    load the model with a single line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: The model then downloads successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The GluonCV implementation of this model is capable of detecting 80,000 distinct
+    objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating a Faster R-CNN pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Using the *Penn-Fudan Pedestrian* dataset, we can now perform qualitative and
+    quantitative evaluation of the loaded model from the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can choose an image from the dataset and compare the output
+    of the model with the ground-truth output from the dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.23 – Comparing predictions and ground-truth for Faster R-CNN](img/B16591_05_23.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.23 – Comparing predictions and ground-truth for Faster R-CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 5**.23*, we can see a very strong correlation between the predicted
+    segmentation masks and the expected results from the ground-truth, as well as
+    strong confidence (+99%) and perfect class accuracy from the model. This figure
+    was computed using the GluonCV visualization `utils` package (the `plot_bbox`
+    function).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Quantitatively, we can perform a mAP evaluation and the runtime spent computing
+    this metric:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: The computed mAP for this model for *MS COCO* (see the object detection model
+    zoo) is 40.7; therefore, given the value of 0.67 for our model, we can conclude
+    our model performs the task accurately. However, it did take some time to complete
+    (~250 seconds), which is expected for Faster R-CNN architectures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading a YOLOv3 pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**You Only Look Once Version 3** (**YOLOv3**) is a single-stage object detection
+    architecture, meaning it uses an end-to-end approach that makes predictions of
+    bounding boxes and class probabilities in a single step. It was developed by Redmon
+    et al. (at the University of Washington) from 2016 (YOLO) to 2018 (YOLOv3).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is the third iteration of a series of architectures that have evolved from
+    each other – YOLO, YOLOv2, and YOLOv3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From the research papers, we can see the YOLO architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.24 – The architecture of YOLOv1](img/B16591_05_24.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.24 – The architecture of YOLOv1
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Secondly, we can see the YOLOv2 architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.25 – The architecture of YOLOv2](img/B16591_05_25.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.25 – The architecture of YOLOv2
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'And finally, we can see the YOLOv3 architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.26 – The architecture of YOLOv3](img/B16591_05_26.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.26 – The architecture of YOLOv3
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The different architectures have similarities and differences, namely the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**YOLO**: The initial model decomposes each image into grid cells of equal
+    size. Each cell is responsible for detecting an object if the location of the
+    center of the object is within the cell. Each cell can predict two bounding boxes,
+    their class, and their confidence score, but only one object (with a different
+    size and location). All the predictions are made simultaneously, using a CNN composed
+    of 24 convolutional layers and 2 fully connected layers. There is a large number
+    of overlapping bounding boxes, and NMS is used to reach the final output.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**YOLOv2**: YOLO architecture struggles to detect small objects in groups.
+    To solve this issue, on this iteration, a number of changes are introduced – batch
+    normalization to improve training accuracy, anchor boxes for regression, increased
+    detection capabilities to five bounding boxes per cell, and a new backbone network,
+    DarkNet-19, with 19 convolutional layers and 5 max pooling layers, with 11 more
+    layers for detection.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**YOLOv3**: In this last iteration, three changes are introduced. Firstly,
+    to increase further the detection accuracy of small objects, the backbone network
+    is updated to DarkNet-53, with 53 convolutional layers and 53 layers for the detection
+    head, allowing for predictions on three different scales. Secondly, the number
+    of bounding boxes per cell is reduced from five to three; however, taking into
+    account the three different scales, this provides nine anchor boxes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For our experiments, we will use DarkNet-53 as a backbone. We can load the
+    model with a single line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: The model then downloads successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The GluonCV implementation of this model is capable of detecting 100 distinct
+    objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating a YOLOv3 pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Using the *Penn-Fudan Pedestrian* dataset, we can now perform qualitative and
+    quantitative evaluation of the loaded model from the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can choose an image from the dataset and compare the output
+    of the model with the ground-truth output from the dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.27 – Comparing predictions and ground-truth for YOLOv3](img/B16591_05_27.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.27 – Comparing predictions and ground-truth for YOLOv3
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 5**.27*, we can see a very strong correlation between the bounding
+    boxes of the expected results from the ground-truth and the actual outputs of
+    the model, as well as strong confidence (+95%) and perfect class accuracy from
+    the model. This figure was computed using the GluonCV visualization utils package
+    (the `plot_bbox` function).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Quantitatively, we can perform a mAP evaluation and the runtime spent computing
+    this metric:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: The computed mAP for this model for *MS COCO* (see the object detection model
+    zoo) is 36.0; therefore, given the value of `0.53` for our model, we can conclude
+    that it is performing the task accurately. It took `113` seconds to complete.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we tackled the object detection problem. We analyzed the differences
+    between image classification problem and object detection problem for evaluation,
+    network architectures, and datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our examples, we used a publicly available dataset, the *Penn-Fudan Pedestrians*
+    dataset, and we used pre-trained models on MS COCO. This choice was not casual;
+    *MS COCO* has a `person` class, and therefore, the expectation was that these
+    pre-trained models would perform well, as they had already seen images from the
+    dataset class. However, as mentioned in the previous recipe, when this is not
+    possible, and we apply pre-trained models from a dataset to another dataset, the
+    data probability distribution will typically be very different; hence, the accuracy
+    obtained can be very low. This is known as the domain gap or domain adaptation
+    problem between the source dataset (the images that a model has been pre-trained
+    on) and the target dataset (the images that the model is evaluated on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: One way to tackle these issues for supervised learning problems is fine-tuning.
+    This approach is explored in detail in [*Chapter 7*](B16591_07.xhtml#_idTextAnchor148)*.*
+  prefs: []
+  type: TYPE_NORMAL
+- en: We ended the recipe by evaluating our two pre-trained models, Faster R-CNN and
+    YOLOv3, and we were able to confirm that our Faster R-CNN model was very accurate
+    but slow, while YOLOv3 was much faster (2x) with a slightly lower accuracy (~20%
+    decrease).
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Figure 5**.19* showed a static image corresponding to the mAP versus samples
+    per second graph for the Model Zoo for object detection (on *MS COCO*). There
+    is also a dynamic version at this link that is worth taking a look at: [https://cv.gluon.ai/model_zoo/detection.html](https://cv.gluon.ai/model_zoo/detection.html).
+    On this page, results from different models available in *GluonCV Model Zoo* are
+    included; I suggest that you reproduce these result,s as it is an interesting
+    exercise.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand more about the *MS COCO* dataset, the original paper is available
+    at https://arxiv.org/pdf/1405.0312.pdf.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, it is very interesting to read the original research papers and
+    see how object detectors have evolved from an academic point of view:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**R-CNN**: [https://www.cv-foundation.org/openaccess/content_cvpr_2014/papers/Girshick_Rich_Feature_Hierarchies_2014_CVPR_paper.pdf](https://www.cv-foundation.org/openaccess/content_cvpr_2014/papers/Girshick_Rich_Feature_Hierarchies_2014_CVPR_paper.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Fast** **R-CNN**: [https://arxiv.org/pdf/1504.08083.pdf](https://arxiv.org/pdf/1504.08083.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Faster** **R-CNN**: [https://proceedings.neurips.cc/paper/2015/file/14bfa6bb14875e45bba028a21ed38046-Paper.pdf](https://proceedings.neurips.cc/paper/2015/file/14bfa6bb14875e45bba028a21ed38046-Paper.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**YOLO**: [https://arxiv.org/pdf/1506.02640.pdf](https://arxiv.org/pdf/1506.02640.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**YOLOv2**: [https://arxiv.org/pdf/1612.08242.pdf](https://arxiv.org/pdf/1612.08242.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**YOLOv3**: [https://arxiv.org/pdf/1804.02767.pdf](https://arxiv.org/pdf/1804.02767.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this recipe, we have seen how Faster R-CNN was more accurate but slower,
+    and YOLOv3 was faster but less accurate. To balance the trade-off between accuracy
+    and inference time for object detection problems, there are different possibilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One option is to estimate the difficulty of an image and apply a different
+    object detector. If it is a challenging image, use the Faster R-CNN family; if
+    it is simpler, use YOLOv3\. This approach is explored in detail in this paper:
+    [https://arxiv.org/pdf/1803.08707.pdf](https://arxiv.org/pdf/1803.08707.pdf);
+    however, *fine-tuning* a fast model such as YOLOv3 is recommended as an initial
+    approach to this issue.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Segmenting objects in images with MXNet – PSPNet and DeepLab-v3
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this recipe, we will see how to use MXNet and GluonCV on a pre-trained model,
+    segmenting objects in images from a dataset. This means that we will be able to
+    split objects into different classes, such as `person`, `cat`, and `dog`. When
+    framing the problem as segmentation, the expected output is an image of the same
+    size as the input image, with each pixel value being the classified label (we
+    will analyze how this works in the following sections). We will see how to use
+    GluonCV Model Zoo with two very important models for **semantic segmentation**
+    – **PSPNet** and **DeepLab-v3**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this recipe, we will compare the performance of these two pre-trained models
+    to segment objects semantically on the dataset introduced in the previous chapter,
+    *Penn-Fudan Pedestrians*, as its ground-truth also includes segmentation masks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting ready
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As with previous chapters, in this recipe, we will use a few matrix operations
+    and linear algebra, but it will not be too difficult.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As we will unpack in this recipe, semantic segmentation is similar to classification
+    and object detection problems, and therefore, chapters and recipes where we explored
+    the foundations of these topics are recommended to revisit. Furthermore, we will
+    be working on image datasets. This recipe will combine what we learned in the
+    following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Understanding image datasets: load, manage, and visualize the Fashion MNIST
+    dataset*, the third recipe from [*Chapter 2*](B16591_02.xhtml#_idTextAnchor029),
+    *Working with MXNet and Visualizing Datasets: Gluon* *and DataLoader*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 4*](B16591_04.xhtml#_idTextAnchor075), *Solving* *Classification
+    Problems*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: How to do it...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this recipe, we will take the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduce semantic segmentation.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate segmentation models.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compare network architectures for semantic segmentation.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Explore the *Penn-Fudan Pedestrians* dataset with segmentation ground-truth.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introduce Semantic segmentation Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load a PSPNet pre-trained model from Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate a PSPNet pre-trained model from Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Load a DeepLab-v3 pre-trained model from Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Evaluate a DeepLab-v3 pre-trained model from Model Zoo.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Introducing semantic segmentation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In some of the previous chapters and recipes, we analyzed image classification
+    problems where the task of our models was to take an image and define the class
+    most likely associated with it. In semantic segmentation, however, there can be
+    multiple objects per image, corresponding to different classes, and in different
+    locations of the image. In object detection, the generated output to solve this
+    problem was two lists, one providing the most likely class of each detected object
+    and another indicating the estimated location of the object. For semantic segmentation,
+    the output for each image is a set of binary images, one per class expected to
+    be detected (dataset classes), where each pixel can have a value of 1 (active)
+    if that pixel has been classified with that label, or 0 (inactive) otherwise.
+    Each of these images is a **binary** **segmentation mask**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B16591_05_28(a).jpg)![](img/B16591_05_28(b).jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.28 – Binary segmentation masks
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The person''s image has been taken as an example here from the following source:
+    *azerbaijan_stockers* on Freepik: [https://www.freepik.com/free-photo/young-woman-crossing-road-using-phone_10705234.htm](https://www.freepik.com/free-photo/young-woman-crossing-road-using-phone_10705234.htm)#query=person%20in%20the%20street&position=13'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '&from_view=search&track=ais&uuid=c3458125-63b6-4899-96e5-df07c307fb46The *masks*
+    shown in *Figure 5**.28* can be seen as one-hot embeddings of the classes, and
+    they can be combined by associating each class with a different number (its class
+    index, for example) to form a new image:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.29 – Semantic segmentation](img/B16591_05_29.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.29 – Semantic segmentation
+  prefs: []
+  type: TYPE_NORMAL
+- en: The output of a semantic segmentation model is, therefore, the different binary
+    segmentation masks (see an example in *Figure 5**.29*), and the number depends
+    on the number of classes that the model has been trained on. Therefore, for each
+    image input to the model with the shape *[H, W]* (*H* being the height and *W*
+    being the *width*), the output array will have a shape of *[N, H, W]* (with *N*
+    being the number of classes).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating segmentation models
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An intuitive approach to evaluate models for a semantic segmentation task is
+    to report the percentage of pixels that have been correctly classified. This metric
+    is commonly used and is known as *pixel accuracy*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Pixel Accuracy =  #TP + #TN  __________________  #TP + #TN + #FP + #FN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, pixel accuracy has a problem; when objects to be segmented are small
+    in comparison to the image, this metric emphasizes the large number of pixels
+    that have been correctly classified as not being the object (the inactive detection).
+    For example, in a 1,000x1,000 image, we have a 100x100 object, and our model classifies
+    the image as the background for all the pixels, with a pixel accuracy of 99%.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To fix these issues, we can use another metric to evaluate semantic segmentation
+    models, **mean Intersection over** **Union** (**mIoU**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.30 – IoU for segmentation masks](img/B16591_05_30.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.30 – IoU for segmentation masks
+  prefs: []
+  type: TYPE_NORMAL
+- en: The computation of this metric is similar to the IoU we saw in the previous
+    recipe for object detection, in *Figure 5**.16*. However, for object detection,
+    the analysis was based on bounding boxes, whereas for semantic segmentation, as
+    shown in *Figure 5**.30*, it evaluates the number of pixels common (the intersection)
+    between the target and the predicted masks, divided by the total number of pixels
+    present across both masks (the union), and then its arithmetic mean is computed
+    for all classes in the dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing network architectures for semantic segmentation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Semantic segmentation models’ output is the different segmentation masks, which
+    are the same size as the image input. To reach this objective, several architectures
+    have been proposed, with the main difference with CNNs being that there are no
+    fully connected layers. Appropriately, this network architecture is named **Fully
+    Connected Networks** (**FCNs**). Several models evolved from this initial architecture
+    and were state-of-the-art when they were first proposed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Encoder–decoder**: The computation of feature maps by the convolutional and
+    max pooling layers of the CNNs can be seen as an encoder, as image information
+    is encoded in a multidimensional entity (feature maps). In this architecture,
+    after the CNN feature maps, a series of upsampling layers (the decoder) are cascaded
+    until images of the same size are computed. **U-Net** is an example of this architecture.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Spatial pyramid pooling**: One problem with FCNs is that the encoder does
+    not provide enough global scene cues to the downstream layers, resulting in objects
+    being misclassified due to a lack of global context (for example, boats labeled
+    as cars in water-based images, where boats are expected and not cars). In this
+    type of architecture, the feature map is aggregated to the output, along with
+    feature maps at different grid scales computed by different modules. **PSPNet**
+    is an example of this architecture.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Context modules**: Another option to capture multi-scale information is to
+    add extra modules cascaded on top of the original network. **DeepLab-v3** can
+    be seen as a combination of this type of network and spatial pyramid pooling networks.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 5.31 – Network architecture for semantic segmentation](img/B16591_05_31.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.31 – Network architecture for semantic segmentation
+  prefs: []
+  type: TYPE_NORMAL
+- en: For our experiments in this recipe, we will use pre-trained versions of PSPNet
+    and DeepLab-v3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring the Penn-Fudan Pedestrians dataset with segmentation ground-truth
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: This dataset is the one that we worked with in the previous recipe. However,
+    the ground-truth we will use in this recipe is not the bounding boxes required
+    for object detection but, instead, the masks required for semantic segmentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.32 – The Penn-Fudan Pedestrians dataset with mask ground-truth](img/B16591_05_32.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.32 – The Penn-Fudan Pedestrians dataset with mask ground-truth
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we can see in *Figure 5**.32*, each image can have one or more pedestrians,
+    with their corresponding masks. This figure was computed using the GluonCV visualization
+    utils package (the `plot_mask` function).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this dataset, there are no different classes to be classified, and no further
+    visualizations are computed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing Semantic Segmentation Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'GluonCV also provides pre-trained models for semantic segmentation in its Model
+    Zoo. For the *MS COCO* dataset, this is the accuracy (mIoU) versus performance
+    (samples per second) chart:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.33 – Model Zoo for semantic segmentation (MS COCO)](img/B16591_05_33.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.33 – Model Zoo for semantic segmentation (MS COCO)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Source: [https://cv.gluon.ai/model_zoo/detection.html](https://cv.gluon.ai/model_zoo/detection.html)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 5**.33* displays the most important pre-trained models in GluonCV Model
+    Zoo, comparing accuracy (mIoU on the vertical axis) and inference performance
+    (samples per second on the horizontal axis). There are no models (yet) in the
+    top-right quadrant, meaning that, currently, we need to balance between both characteristics.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using models from GluonCV Model Zoo can be done with just a couple of lines
+    of code, and we will explore this path to solve our *Penn-Fudan Pedestrians* dataset
+    for the segmentation task in the following steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading PSPNet pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Pyramid Scene Parsing Network** (**PSPNet**) is a spatial pyramid pooling
+    semantic segmentation architecture, which means that a pyramid pooling module
+    is added to provide global cues. It was developed by Zhao et al. (the Chinese
+    University of Hong Kong) in 2016\. It achieved first place in the 2016 **ILSVRC
+    Scene** **Parsing Challenge**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Apart from the global pooling module, it differentiates from FCNs by using dilated
+    convolutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.34 – The PSPNet architecture](img/B16591_05_34.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.34 – The PSPNet architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Source: [https://github.com/hszhao/PSPNet/issues/101](https://github.com/hszhao/PSPNet/issues/101)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In *Figure 5**.34*, we can see the overall architecture of PSPNet:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Feature Map**: A ResNet-based CNN architecture, with dilated convolutions,
+    is used to compute a feature map with 1/8 the size of the original image.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Pyramid Pooling Module**: Using a four-level pyramid (whole, half, quarter,
+    and eighth), global context is computed. It is concatenated with the original
+    feature map.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Final Prediction**: A final computation using a convolutional layer is done
+    to generate the final predictions.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For our experiments, we will use a ResNet-101 network as a backbone. We can
+    load the model with a single line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The model then downloads successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating a PSPNet pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: By using the *Penn-Fudan Pedestrian* dataset for a segmentation task, we can
+    now perform qualitative and quantitative evaluation of the loaded model from the
+    previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can choose an image from the dataset and compare the output
+    of the model with the ground-truth output from the dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 5.35 – Comparing predicted masks and ground-truth for PSPNet](img/B16591_05_35.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.35 – Comparing predicted masks and ground-truth for PSPNet
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 5**.35*, we can see a very strong correlation between the predicted
+    segmentation masks and the expected results from the ground-truth. This figure
+    was computed using the GluonCV visualization utils package (the `plot_mask` function).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Quantitatively, we can perform an mIoU evaluation and the runtime spent computing
+    this metric:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: The computed mIoU for this model for *MS COCO* (see *Semantic Segmentation Model
+    Zoo*) is `0.70`; therefore, given the value of `0.56` for our model, we can conclude
+    that our model performs the task accurately. However, it did take some time to
+    complete it (~340 seconds).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loading a DeepLab-v3 pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**DeepLab-v3** is a semantic segmentation architecture that combines both *encoder-decoder*
+    and **spatial pyramid pooling** architectures. It was developed by Chen et al.
+    (Google) from 2015 (**DeepLab-v1**) to 2017 (**DeepLab-v3**).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is the third iteration of a series of architectures that have evolved from
+    each other – DeepLab-v1, DeepLab-v2, and DeepLab-v3.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'From the research papers, also included in the There’s more section we can
+    see the DeepLab-v1 architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B16591_05_36.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.36 – The architecture of DeepLab-v1
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Secondly, we can see the DeepLab- v2 architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B16591_05_37.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.37 – The architecture of DeepLab-v2
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'And finally, we can see the DeepLab-v3+ architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B16591_05_38.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.38 – The architecture of DeepLab-v3+
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The different architectures have similarities and differences, namely the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**DeepLab-v1**: This architecture evolves from the original FCN and uses a
+    VGG-16 backbone network as well. The most important innovation is the usage of
+    atrous or diluted convolutions instead of standard convolutions. We discussed
+    this convolution parameter when we first introduced *convolutional layers* in
+    [*Chapter 3*](B16591_03.xhtml#_idTextAnchor052), *Solving Regression Problems*,
+    showing how it increased the receptive field. This architecture also uses fully
+    connected **Conditional Random Fields** (**CRFs**) for post-processing to polish
+    the final segmentation masks, although it is very slow and cannot be trained end
+    to end.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**DeepLab-v2**: The most important innovation for this model is a new module
+    called **Atrous Spatial Pyramid Pooling** (**ASPP**). With this module, on one
+    hand, the network can encode multi-scale features into a fixed-size feature map
+    (which is flexible to different input sizes), and on the ther hand, by using atrous
+    convolutions, it increases the receptive field, optimizing the computation cost.
+    In the original implementation, 4 to 6 scales were used. Furthermore, it uses
+    ResNet as the backbone network.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**DeepLab-v3**: In this last iteration, several changes are introduced. Firstly,
+    the network is modified to use batch normalization and dropout. Secondly, the
+    ASPP module is modified to add a new scale in a separate channel for global image
+    pooling, to use fine-grained details. Lastly, the multi-scale part of the training
+    is removed and is only applied to inference. A by-product of these small improvements
+    is that the CRF step is no longer needed, providing much faster results.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'For our experiments, we will use a ResNet-152 network as a backbone. We can
+    load the model with a single line of code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The model then downloads successfully.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating a DeepLab-v3 pre-trained model from Model Zoo
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Using the *Penn-Fudan Pedestrian* dataset for the segmentation task, we can
+    now perform qualitative and quantitative evaluation of the loaded model from the
+    previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Qualitatively, we can choose an image from the dataset and compare the output
+    of the model with the ground-truth output from the dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B16591_05_39.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 5.39 – Comparing predicted masks and ground-truth for DeepLab-v3
+  prefs: []
+  type: TYPE_NORMAL
+- en: From *Figure 5**.39*, we can see a very strong correlation between the predicted
+    segmentation masks and the expected results from the ground-truth. This figure
+    was computed using the GluonCV visualization utils package (the `plot_mask` function).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Quantitatively, we can perform mIoU evaluation and the runtime spent computing
+    this metric:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: The computed mIoU for this model for *MS COCO* (see *Semantic Segmentation Model
+    Zoo*) is `0.715`; therefore, given the value of `0.56` for our model, we can conclude
+    our model performs the task accurately, with a similar value to PSPNet. However,
+    it is much faster (~70 secs).
+  prefs: []
+  type: TYPE_NORMAL
+- en: How it works...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this recipe, we tackled the semantic segmentation problem. We analyzed the
+    differences between image classification and object detection for evaluation,
+    network architectures, and datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In our examples, we used a publicly available dataset, the *Penn-Fudan Pedestrians*
+    dataset, and we used pre-trained models on *MS COCO*. This choice was not casual;
+    *MS COCO* has a `person` class, and therefore, the expectation was that these
+    pre-trained models would perform well, as they had already seen images from the
+    dataset class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, as mentioned in the previous recipe, when this is not possible, and
+    we apply pre-trained models from a dataset to another dataset, the data probability
+    distribution will typically be very different; hence, the accuracy obtained can
+    be very low. This is known as the **domain gap** or **domain adaptation problem**
+    between the source dataset (the images that the model has been pre-trained on)
+    and the target dataset (the images that the model is evaluated on).
+  prefs: []
+  type: TYPE_NORMAL
+- en: One way to tackle these issues for supervised learning problems is fine-tuning.
+    This approach is explored in detail in a later chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We ended the recipe by evaluating our two pre-trained models, PSPNet and DeepLab-v3,
+    and we were able to compare qualitatively and quantitatively their results for
+    accuracy and computation speed, verifying how both models yield a similar pixel
+    accuracy (`0.46)` and mIoU (`0.56`), although DeepLab-v3 was faster (`~4.5x`).
+  prefs: []
+  type: TYPE_NORMAL
+- en: There’s more...
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '*Figure 5**.33* showed a static image corresponding to the mIoU versus samples
+    per second graph for the Model Zoo for Semantic Segmentation (on MS COCO); there
+    is a dynamic version at this link that is worth taking a look at: https://cv.gluon.ai/model_zoo/segmentation.html.
+    On this page, results from different models available in GluonCV Model Zoo are
+    included; I suggest that you reproduce these results, as it is an interesting
+    exercise.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'During our discussion of the evolution of network architectures, most notably
+    DeepLab, we mentioned how dilated/atrous convolutions help with multi-scale context
+    aggregation. This research paper explores this topic in depth: [https://arxiv.org/pdf/1511.07122.pdf](https://arxiv.org/pdf/1511.07122.pdf).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Furthermore, it is very interesting to read the original research papers and
+    see how the segmentation task has evolved from an academic point of view:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**FCN**: [https://arxiv.org/pdf/1605.06211v1.pdf](https://arxiv.org/pdf/1605.06211v1.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**U-Net**: [https://arxiv.org/pdf/1505.04597.pdf](https://arxiv.org/pdf/1505.04597.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**PSPNet**: [https://arxiv.org/pdf/1612.01105.pdf](https://arxiv.org/pdf/1612.01105.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**DeepLab-v1**: [https://arxiv.org/pdf/1412.7062.pdf](https://arxiv.org/pdf/1412.7062.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**DeepLab-v2**: [https://arxiv.org/pdf/1606.00915v2.pdf](https://arxiv.org/pdf/1606.00915v2.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**DeepLab-v3**: [https://arxiv.org/pdf/1706.05587.pdf](https://arxiv.org/pdf/1706.05587.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Semantic segmentation is an active area of research and, as such, is constantly
+    evolving, with new networks appearing and redefining the state of the art, such
+    as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**DeepLab-v3+**: The next step from DeepLab-v3, developed by Chen et al. (Google,
+    2018): [https://arxiv.org/pdf/1802.02611.pdf](https://arxiv.org/pdf/1802.02611.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Swin-V2G**: Using Transformers, developed by Liu et al. (Microsoft, 2021):
+    [https://arxiv.org/pdf/2111.09883v1.pdf](https://arxiv.org/pdf/2111.09883v1.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

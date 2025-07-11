@@ -1,0 +1,1139 @@
+- en: '*Chapter 17*: Smart City and Cybersecurity'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Smart cities are expected to be one of the defining experiences of the next
+    decades. A smart city collects a lot of data using sensors located in various
+    parts of the city, such as on the roads, utility infrastructures, and water resources.
+    The data is then used to make data-driven and automated decisions, such as how
+    to allocate the city''s resources, manage traffic in real time, and identify and
+    mitigate infrastructure problems. This prospect comes with two challenges: how
+    to program the automation and how to protect the highly connected city assets
+    from cyberattacks. Fortunately, **reinforcement learning** (**RL**) can help with
+    both.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will cover three problems related to smart cities and cybersecurity
+    and describe how to model them as RL problems. Along the way, we will introduce
+    you to the Flow library, a framework that connects traffic simulation software
+    with RL libraries, and use it to solve an example traffic light control problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In particular, here are the problems we will address in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traffic light control to optimize vehicle flow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Providing an ancillary service to a power grid
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Detecting cyberattacks in a smart grid
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This will be a fun ride, so let's get started!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traffic light control to optimize vehicle flow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'One of the key challenges of a smart city is optimizing traffic flows on road
+    networks. There are numerous benefits in reducing traffic congestions, such as
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Reducing the time and energy wasted in traffic
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Saving on gas and resulting exhaust emissions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Increasing vehicle and road lifetime
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Decreasing the number of accidents
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There has already been a lot of research gone into this area; but recently,
+    RL has emerged as a competitive alternative to traditional control approaches.
+    So, in this section, we will optimize the traffic flow on a road network by controlling
+    the traffic light behavior using multi-agent RL. To this end, we will use the
+    Flow framework, which is an open source library for RL, and run experiments on
+    realistic traffic microsimulations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing Flow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Transportation research significantly relies on simulation software, such as
+    **SUMO** (**Simulation** **of** **Urban** **Mobility**) and Aimsun, for areas
+    such as traffic light control, vehicle route choice, traffic surveillance, and
+    traffic forecast, which involves the optimal control of these agents. On the other
+    side, the rise of deep RL as an alternative to traditional control approaches
+    has led to the creation of numerous libraries, such as RLlib and OpenAI Baselines.
+    Flow is an open source framework that connects these two worlds of traffic simulators
+    and RL libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, as in previous chapters, we will use RLlib as the RL backend.
+    For traffic simulation, we will use SUMO, a powerful open source library that
+    has been developed since the early 2000s.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we will give only a glimpse into applying RL to traffic problems. Detailed
+    documentation and tutorials (which we closely follow here) are available on the
+    Flow website: [https://flow-project.github.io/](https://flow-project.github.io/).
+    SUMO documentation and libraries are available at [https://www.eclipse.org/sumo/](https://www.eclipse.org/sumo/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's start by installing Flow and SUMO.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Flow and SUMO
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In order to install Flow, we need to create a new virtual environment since
+    it depends on library versions different than what we used in earlier chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'To install Flow, we need to download the repo and run the following commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'These commands install the necessary dependencies, including TensorFlow and
+    RLlib. The last two commands are needed to run Flow on Jupyter Notebook, which
+    is what the Flow tutorials, as well as our example code, are on. To install SUMO
+    on Ubuntu 18.04, use the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Setup scripts for earlier Ubuntu versions and macOS are also available in the
+    same folder.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can see Flow and SUMO in action by running the following (in the Flow folder
+    and with your virtual environment activated):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'A window similar to the one shown in *Figure 17.1* should appear:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.1 – A sample SUMO window simulating the traffic on a ring road'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_17_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 17.1 – A sample SUMO window simulating the traffic on a ring road
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you run into issues with the setup, the Flow documentation can help you with
+    troubleshooting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have set things up, let's dive into how to put together a traffic
+    environment using Flow.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating an experiment in Flow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we have the setup, we can create environments and experiments in Flow.
+    We will then connect them to RLlib to train RL agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are certain ingredients that go into a Flow experiment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A road network**, such as a ring road (as in *Figure 17.1*), or a Manhattan-like
+    grid network. Flow comes with a set of predefined networks. For advanced users,
+    it also allows creating custom networks. Traffic lights are defined together with
+    the road network.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A simulation backend**, which is not our focus here. We will use the defaults
+    for this.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**An RL environment** that configures what is controlled, observed, and rewarded
+    in the experiment, similar to a Gym environment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Vehicles** are essential to the entire experiment, and their behavior and
+    characteristics are defined separately.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All of these components are parametrized and are passed to Flow separately.
+    We then pack them all to create a Flow parameters object.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It could be difficult to use a bottom-up approach here and start with individual
+    parameters for each component to compose the big picture. In addition, these details
+    are out of the scope of this chapter. Instead, it is much easier to unpack a prebuilt
+    Flow parameters object. Let's do that next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing a Flow parameters object
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Flow has some benchmark experiments defined for traffic light optimization
+    on a grid network. Take a look at the Flow parameters object for the Grid-0 experiment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Chapter17/Traffic Lights on a Grid Network.ipynb
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can, for example, inspect what is inside the network parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And, of course, a good way to understand what they do is to visually run the
+    experiment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will pop up a SUMO screen similar to the one shown in *Figure 17.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.2 – SUMO rendering of the grid network'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_17_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 17.2 – SUMO rendering of the grid network
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, now we have an example up and running. Before we go into RL modeling
+    and training, let's discuss how to get a baseline reward for this experiment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Getting a baseline reward
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The Jupyter notebook in our GitHub repo includes a code snippet taken from the
+    Flow code base to get a baseline reward on this environment. It has some carefully
+    optimized traffic light phase definitions that lead to a -204 reward on average.
+    We will use this reward to benchmark the RL result. Also, feel free to modify
+    the phases to see their impact on the traffic pattern on the network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we are now ready to define the RL environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Modeling the traffic light control problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As always, we need to define the action, observation, and reward for the RL
+    problem. We will do so in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the action
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We would like to train a single controller for all of the lights at a given
+    intersection that is illustrated in *Figure 17.2*, in example *b*. In the figure,
+    the lights are in a green-red-green-red state. We define a binary action that
+    tells us 0: continue and 1: switch. When instructed to switch, the state of the
+    lights on the figure would become yellow-red-yellow-red, and then red-green-red-green
+    after a few seconds.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The default environment accepts a continuous action for each intersection, ![](img/Formula_17_001.png),
+    and rounds it up to discretize as we described previously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Single versus multi-agent modeling
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The next design decision we have to make is whether to control all of the traffic
+    lights using a centralized agent or adapt a multi-agent approach. If we pick the
+    latter, whether we train a single policy for all intersections or train multiple
+    policies, we need to note the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advantage of the centralized approach is that, in theory, we can perfectly
+    coordinate all of the intersections and achieve a better reward. On the other
+    hand, a trained agent may not be easily applied to a different road network. In
+    addition, for larger networks, the centralized approach won't scale easily.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If we decide to use a multi-agent approach, we don't have a lot of reasons to
+    differentiate between the intersections and the policies they use. So, training
+    a single policy makes more sense.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training a single generic policy for all intersections where the agents (the
+    lights at the intersections) collaboratively try to maximize the reward is a scalable
+    and efficient approach. Of course, this lacks the full coordination capabilities
+    of a centralized, single-agent approach. In practice, this would be a trade-off
+    you would have to evaluate.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, we will go with the multi-agent setting, in which the policy will be trained
+    with the data coming from all of the agents. The agents will retrieve actions
+    from the policy according to their local observations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let's define the observation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the observation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The default multi-agent grid environment uses the following as the observations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Speeds of the ![](img/Formula_17_002.png) closest vehicles heading to the intersection
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Distances of the ![](img/Formula_17_003.png) closest vehicles heading to the
+    intersection
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The IDs of the road edges that these ­![](img/Formula_17_004.png) vehicles are
+    on
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The traffic density, average velocity, and traffic direction on each of the
+    local edges
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Whether the lights are currently in a yellow state
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For more detailed information, you can check the `flow.envs.multiagent.traffic_light_grid`
+    module in the Flow repo.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's define the reward.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the reward
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The environment has a simple and intuitive cost definition for a given time
+    step, which measures the average vehicle delay compared to the top speed allowed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_17_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_17_006.png) is the velocity of the ![](img/Formula_17_007.png)
+    of ![](img/Formula_17_008.png) total vehicles, and ![](img/Formula_17_009.png)
+    is the maximum allowed speed. The reward can then be defined as the negative of
+    this cost term.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have all the formulations in place, it is time to solve the problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Solving the traffic control problem using RLlib
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Since we will use the multi-agent interface of RLlib, we need to do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Register the environment in RLlib with a name and environment creation function.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Define the names of the policies we will train, which we have only one of, `tlight`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Define a function that generates the arguments needed for the RLlib trainer
+    for the policy.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Define a function that maps agents to the policies, which again is simple to
+    do in our case since all the agents map to the same policy.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'So, these can be achieved with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once defined, we need to pass these functions and lists to the RLlib config:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The rest is the regular RLlib training loop. We use the hyperparameters identified
+    in the Flow benchmarks with PPO. The full code for all of this is available in
+    `Chapter17/Traffic Lights on a Grid Network.ipynb`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obtaining and observing the results
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'After a couple million training steps, the reward converges around -243, which
+    is a bit lower than the handcrafted benchmark. The training progress can be observed
+    on TensorBoard:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.3 – Training progress of the multi-agent traffic light environment
+    in Flow'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_17_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 17.3 – Training progress of the multi-agent traffic light environment
+    in Flow
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You can also visualize how the trained agent is doing with a command on Jupyter
+    Notebook in the following format:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, the argument at the end refers to the checkpoint number, which is generated
+    regularly during training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's also discuss why the RL performance is falling a bit short of the
+    handcrafted policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further improvements
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are several reasons why RL may not have reached the baseline performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Lack of more hyperparameter tuning and training. This factor is always there.
+    There is no way to know whether the performance can be improved with more fiddling
+    with the model architecture and training until you try, which we encourage you
+    to do.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The baseline policy is exercising a finer control over the yellow light durations,
+    whereas the RL model did not have control over that.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The baseline policy coordinates all the intersections on the network, whereas
+    each RL agent makes local decisions. So, we might be running into the shortcomings
+    of decentralized control here.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This can be mitigated by adding observations that will help coordinate the agents
+    with their neighbors.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It is not uncommon for RL algorithms to struggle with crossing the last mile
+    in the optimization and reach the very peak of the reward curve. This may require
+    fine control over the training procedure by reducing the learning rates and adjusting
+    the batch sizes.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, although there is room for improvement, our agents have successfully learned
+    how to control traffic lights, which is much more scalable than manually crafting
+    policies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we wrap up this topic, let's discuss a few more resources to learn more
+    about the problem and the libraries we used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We have already provided links to the Flow and SUMO documentation. The Flow
+    library and the benchmarks obtained with it are explained in *Wu et al., 2019*,
+    and *Vinitsky et al*., *2018*. In these resources, you will discover additional
+    problems that you can model and solve using various RL libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Congratulations! We have done a lot in such a short time and space to leverage
+    RL for traffic control problems. Next, we will cover another interesting problem,
+    which is to modulate the electricity demand to stabilize a power grid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Providing an ancillary service to a power grid
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will describe how RL can help with integrating clean energy
+    resources into a power grid by managing smart appliances in home and office buildings.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Power grid operations and ancillary services
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The transmission and distribution of electrical power from generators to consumers
+    is a massive operation that requires continuous monitoring and control of the
+    system. In particular, the generation and consumption should be nearly equal in
+    a region to keep the electric current at the standard frequency (60 Hz in the
+    United States) to prevent blackouts and damages. This is a challenging undertaking
+    for various reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The power supply is planned ahead in energy markets with the generators in the
+    region to match the demand.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Despite this planning, the future power supply is uncertain, especially when
+    obtained from renewable resources. The amount of wind and solar energy may be
+    less or more than expected, causing under or oversupply.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Future demand is uncertain too, as consumers are mostly free to decide when
+    and how much to consume.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Failures in the grid, such as at generators or transmission lines, can cause
+    sudden changes in the supply or demand, putting the reliability of the system
+    at risk.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The balance between the supply and demand is maintained by authorities called
+    **Independent System Operators** (**ISOs**). Traditionally, ISOs ask generators
+    to ramp up or down their supply based on the changes in the grid, which is an
+    ancillary service provided by generators to ISOs for a price. On the other hand,
+    there are several issues regarding generators providing this service:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generators are usually slow to respond to sudden changes in the grid balance.
+    For example, it may take hours to bring in a new generation unit to address a
+    supply deficit in the grid.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In recent years, there has been a significant increase in renewable energy supply,
+    adding to the volatility in the grid.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For these reasons, a line of research has been initiated to enable consumers
+    to provide these ancillary services to the grid. In other words, the goal is to
+    modulate the demand in addition to the supply to better maintain the balance.
+    This requires more sophisticated control mechanisms, which is what we bring in
+    RL to help with.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this introduction, let's now more concretely define the control problem
+    here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Describing the environment and the decision-making problem
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: To reiterate, our goal is to dynamically increase or decrease the total electricity
+    consumption in an area. Let's first describe the parties involved in this setting
+    and their roles.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Independent system operator
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The ISO of the region continuously monitors the supply and demand balance and
+    broadcasts an automated signal to all ancillary service providers in the region
+    to adjust their demand. Let's call this signal ![](img/Formula_17_010.png), which
+    is simply a number in the range ![](img/Formula_17_011.png). We will come back
+    to what this number precisely means in a moment. For now, let's state that the
+    ISO updates this signal every 4 seconds (which is a particular type of ancillary
+    service called a regulation service).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Smart building operator
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'We assume that there is a **smart building operator** (**SBO**) that is in
+    charge of modulating the total demand in a (collection of) building(s) to follow
+    the ISO signal. The SBO, which will be our RL agent, operates as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The SBO sells the regulation service to the ISO of the region. According to
+    this obligation, the SBO promises to maintain the consumption at a rate of ![](img/Formula_17_012.png)
+    kW and adjust it up or down up to ![](img/Formula_17_013.png) kW at the ISO's
+    request. We assume that ![](img/Formula_17_014.png) and ![](img/Formula_17_015.png)
+    are predetermined for our problem.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When ![](img/Formula_17_016.png), the SBO needs to quickly decrease the consumption
+    in the neighborhood to ![](img/Formula_17_017.png) kW. When ![](img/Formula_17_018.png),
+    the consumption rate needs to go up to ![](img/Formula_17_019.png) kW.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In general, the SBO needs to control the consumption to follow an ![](img/Formula_17_020.png)
+    kW rate.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The SBO controls a population of smart appliances/units, such as **heating,
+    ventilation, and air conditioning** (**HVAC**) units and **electric** **vehicles**
+    (**EVs**), to abide by the signal. This is where we will leverage RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We illustrate this setup in *Figure 17.4*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.4 – Regulation service provision by a smart building operator'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_17_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 17.4 – Regulation service provision by a smart building operator
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's go a bit more into the details of how smart appliances operate.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Smart appliances
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: You may feel uncomfortable with the idea that some algorithm is interfering
+    with your appliances and causing them to turn on or off. After all, who would
+    want the TV to shut down to save power while watching the Super Bowl, or turn
+    it on in the middle of the night just because there is excess electricity generation
+    due to higher-than-anticipated winds outside? This certainly does not make sense.
+    On the other hand, you would be more okay if the AC turned on a minute late or
+    earlier than normal. Or you would not mind whether your EV reached full battery
+    at 4 a.m. or 5 a.m. in the morning as long as it is ready for you before you leave
+    home. So, the point is that some appliances have more room for flexibility in
+    terms of when to operate, which is of interest to us in this case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We also assume that these appliances are smart and have the following capabilities:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: They can communicate with the SBO to receive the actions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: They can assess the "utility," which is a measure of how much need there is
+    for the appliance to consume power at a given moment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Defining the utility
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Let''s give two examples of how the utility changes in different situations.
+    Consider an EV that needs to be fully charged by 7 a.m.:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The utility would be high if it is 6 a.m. and the battery is still low.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Conversely, the utility would be low if there is still plenty of time until
+    departure and/or the battery is close to full.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Similarly, an air conditioner would have high utility when the room temperature
+    is about to exceed the user's comfort zone and low utility when it is close to
+    the bottom.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'See *Figure 17.5* for an illustration of these situations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.5 – Utility levels under different conditions for an (a) EV and
+    (b) AC'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_17_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 17.5 – Utility levels under different conditions for an (a) EV and (b)
+    AC
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's discuss why this is a sequential decision-making problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the sequential decision-making problem
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: By now, you may have noticed how SBO actions taken now will have implications
+    later. Fully charging the EVs in the system too early may limit how much the consumption
+    may be ramped up later when needed. Conversely, keeping room temperatures too
+    high for too many rooms for too long may cause all ACs to turn on later together
+    to bring the room temperatures to normal levels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, let's cast this as an RL problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RL model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: As always, we need to define the action, observation, and reward to create an
+    RL model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the action
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'There are different approaches to how we can define the SBO control:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, and a more obvious approach, would be to directly control each appliance
+    in the system by observing their utilities. On the other hand, this would make
+    the model inflexible and potentially intractable: we would have to modify and
+    retrain the agent when a new appliance is added. In addition, when there are many
+    appliances, the action and observation space would be too big.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Another approach would be to train a policy for each appliance class (ACs, heating
+    units, and EVs) in a multi-agent setting. This would bring in the inherent complexities
+    of multi-agent RL. For example, we would have to design a mechanism for the coordination
+    of individual appliances.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A middle ground is to apply indirect control. In this approach, the SBO would
+    broadcast its action and let each appliance decide on what to do for itself.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's describe what such an indirect control might look like in more detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Indirect control of the appliances
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Here is how we define the indirect control/action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assume that there are ![](img/Formula_17_021.png) appliance types, such as ACs,
+    EVs, and refrigerators.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At any given time, an appliance, ![](img/Formula_17_022.png), has a utility,
+    ![](img/Formula_17_023.png), that takes a maximum value of ![](img/Formula_17_024.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: At every time step, the SBO broadcasts an action, ![](img/Formula_17_025.png),
+    for each appliance type, ![](img/Formula_17_026.png). Therefore, the action is
+    ![](img/Formula_17_027.png) and ![](img/Formula_17_028.png)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each appliance, when off, checks the action for its class once in a while. This
+    won't be at every time step and will depend on its type. For example, AC units
+    might check the broadcasted action more frequently than EVs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When an appliance, ![](img/Formula_17_029.png), of type ![](img/Formula_17_030.png)
+    checks action ![](img/Formula_17_031.png), it turns on if and only if ![](img/Formula_17_032.png).
+    Therefore, the action acts like the **price** for electricity. The appliance is
+    willing to turn on only when its utility is greater than or equal to the **price**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Once turned on, an appliance stays on for a certain time. Then, it turns off
+    and starts periodically checking the action again.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With this mechanism, the SBO is able to influence the demand indirectly. It
+    gives less precise control over the environment, but at a much-reduced complexity
+    compared to a direct or multi-agent control.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's define the observation space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the observation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The SBO could use the following observations to make informed decisions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ISO signal at time ![](img/Formula_17_033.png), ![](img/Formula_17_034.png),
+    as the SBO is obliged to track it by adjusting its demand.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of appliances that are on at time ![](img/Formula_17_035.png) for
+    each type, ![](img/Formula_17_036.png). For simplicity, a fixed electricity consumption
+    rate could be assumed for an appliance of type ![](img/Formula_17_037.png), ![](img/Formula_17_038.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Time and date features, such as time of day, day of the week, holiday calendar,
+    and more.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Auxiliary information, such as weather temperature.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition to making all these observations at each time step, what will also
+    be needed is to keep a memory of the observations. This is a partially observable
+    environment where the energy needs of the appliances and the state of the grid
+    are hidden from the agent. So, keeping a memory will help the agent uncover these
+    hidden states.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's describe the reward function.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining the reward function
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In this model, the reward function consists of two parts: the tracking cost
+    and the utility.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We mentioned that the SBO is obliged to track the ISO signal as it is paid for
+    this service.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Therefore, we assign a penalty for deviating from the target implied by the
+    signal at time ![](img/Formula_17_039.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_17_040.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_17_041.png) is the target and ![](img/Formula_17_042.png)
+    is the actual consumption rate at time ![](img/Formula_17_043.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second part of the reward function is the total utility realized by the
+    appliances. We want the appliances to turn on and consume energy but to do so
+    when they really need it. An example of why this is beneficial is the following:
+    an AC would consume less energy when the average room temperature is kept closer
+    to the top of the comfort zone (76°F in *Figure 17.3*) where the utility is the
+    highest than when it is kept closer to the bottom while the outside temperature
+    is above the comfort zone. So, the total utility realized at time ![](img/Formula_17_044.png)
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_17_045.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_17_046.png) is the set of appliances that turn on within
+    discrete time step ![](img/Formula_17_047.png). Then, the RL objective becomes
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_17_048.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_17_049.png) is some coefficient to control the trade-off
+    between utility and tracking cost, and ![](img/Formula_17_050.png) is the discount
+    factor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Terminal conditions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Finally, let's talk about the terminal conditions for this problem. Normally,
+    this is a continuous task without a natural terminal state. However, we can introduce
+    terminal conditions, for example, to stop the episode if the tracking error is
+    too large. Other than that, we can convert this into an episodic task by taking
+    the episode length as a day.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's it! We've left the exact implementation of this model out, but you now
+    have a solid idea about how to approach this problem. If you need more details,
+    you can check out the references at the end of this chapter by Bilgin and Caramanis.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Last but not least, let's switch gears to model the early detection of cyberattacks
+    in a power grid.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Detecting cyberattacks in a smart grid
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Smart cities, by definition, run on intense digital communications between their
+    assets. Despite its benefits, this makes smart cities prone to cyberattacks. As
+    RL is finding its way into cybersecurity, in this section, we will describe how
+    it can be applied to detecting attacks on a smart power grid infrastructure. Throughout
+    the section, we will follow the model proposed in *Kurt et al., 2019*, leaving
+    the details to the paper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's start by describing the power grid environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The problem of early detection of cyberattacks in a power grid
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'An electric power grid consists of nodes, called **buses**, which correspond
+    to generation, demand, or power line intersection points. Grid authorities collect
+    measurements from these buses to make certain decisions such as bringing in additional
+    power generation units. To this end, a critical quantity measured is the **phase
+    angle** at each bus (except the reference bus), which makes it a potential target
+    for cyber-attackers, hence our interest in it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not surprisingly, the measurements from the meters are noisy and subject to
+    errors.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A cyberattack on these meters and their measurements has the potential to mislead
+    the decisions made by grid authorities and cause the system to collapse.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Therefore, it is important to detect when there is an attack on the system.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: However, it is not easy to differentiate the noise and real system changes from
+    anomalies caused by an attack. Normally, waiting and collecting more measurements
+    are helpful to this end.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: On the other hand, being late in declaring an attack can lead to incorrect decisions
+    in the meantime. Therefore, our goal is to identify these attacks as soon as possible,
+    but without too many false alarms.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'So, the set of possible actions that our cybersecurity agent can take is simple:
+    declare an attack or not. A sample timeline of false and true (but delayed) alarms
+    is illustrated in *Figure 17.6*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 17.6 – A sample timeline of (a) false and (b) true but delayed alarms'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_17_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 17.6 – A sample timeline of (a) false and (b) true but delayed alarms
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are the details of the episode life cycle and rewards:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once an attack is declared, the episode terminates.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If it is a false alarm, a reward of ![](img/Formula_17_051.png) is incurred.
+    If it is a true alarm, the reward is 0.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If there is an attack but the action continues (and doesn't declare an attack),
+    for each time step, a reward of ![](img/Formula_17_052.png), ![](img/Formula_17_053.png)
+    is incurred.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The reward is 0 in all other time steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'With that, the goal of the agent is to minimize the following cost function
+    (or maximize its negative):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_17_054.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, the first term is the probability of a false alarm, the second term is
+    the expected (positive) delay in declaring an attack, and ![](img/Formula_17_055.png)
+    is the cost coefficient to manage the trade-off in between.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One missing piece is the observations, which we will discuss next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Partial observability of the grid state
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The true state of the system, which is whether there is an attack or not, is
+    not observable to the agent. Instead, it collects measurements of phase angles,
+    ![](img/Formula_17_056.png). A key contribution of *Kurt et al., 2019*, is to
+    use the phase angle measurements in the following way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use a Kalman filter to predict the true phase angles from the previous observations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Based on this prediction, estimate the expected measurements, ![](img/Formula_17_057.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Define ![](img/Formula_17_058.png) as a measure of the discrepancy between ![](img/Formula_17_059.png)
+    and ![](img/Formula_17_060.png), which then becomes the observation used by the
+    agent.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Observe ![](img/Formula_17_061.png) and carry a memory of past observations
+    for the agent's use.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The paper uses a tabular SARSA method to solve this problem by discretizing
+    ![](img/Formula_17_062.png), and shows the effectiveness of the approach. An interesting
+    extension would be to use deep RL methods without discretization and under varying
+    grid topographies and attack characteristics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we conclude our discussion on the topic and the chapter. Great job,
+    we have done a lot! Let's summarize what we have covered in the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RL is poised to play a significant role in automation. Smart cities are a great
+    field to leverage the power of RL. In this chapter, we discussed three sample
+    applications: traffic light control, ancillary service provision by electricity-consuming
+    appliances, and detecting cyberattacks in a power grid. The first problem allowed
+    us to showcase a multi-agent setting, we used a price-like indirect control mechanism
+    for the second one, and the last one was a good example of advanced input preprocessing
+    in partially observed environments.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next and final chapter, we will wrap up the book with a discussion on
+    the challenges of real-life RL and future directions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Wu, C., et al. (2019). *Flow: A Modular Learning Framework for Autonomy in
+    Traffic*. ArXiv:1710.05465 [Cs]. arXiv.org, [http://arxiv.org/abs/1710.05465](http://arxiv.org/abs/1710.05465)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Vinitsky, E., Kreidieh, A., Flem, L.L., Kheterpal, N., Jang, K., Wu, C., Wu,
+    F., Liaw, R., Liang, E., & Bayen, A.M. (2018). *Benchmarks for reinforcement learning
+    in mixed-autonomy traffic*. Proceedings of The 2nd Conference on Robot Learning,
+    in PMLR 87:399-409, [http://proceedings.mlr.press/v87/vinitsky18a.html](http://proceedings.mlr.press/v87/vinitsky18a.html)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bilgin, E., Caramanis, M. C., Paschalidis, I. C., & Cassandras, C. G. (2016).
+    *Provision of Regulation Service by Smart Buildings*. IEEE Transactions on Smart
+    Grid, vol. 7, no. 3, pp. 1683-1693, DOI: 10.1109/TSG.2015.2501428'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bilgin, E., Caramanis, M. C., & Paschalidis, I. C. (2013). *Smart building
+    real time pricing for offering load-side Regulation Service reserves*. 52nd IEEE
+    Conference on Decision and Control, Florence, pp. 4341-4348, DOI: 10.1109/CDC.2013.6760557'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Caramanis, M., Paschalidis, I. C., Cassandras, C., Bilgin, E., & Ntakou, E.
+    (2012). *Provision of regulation service reserves by flexible distributed loads*.
+    IEEE 51st IEEE Conference on Decision and Control (CDC), Maui, HI, pp. 3694-3700,
+    DOI: 10.1109/CDC.2012.6426025'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Bilgin, E. (2014). *Participation of distributed loads in power markets that
+    co-optimize energy and reserves*. Dissertation, Boston University
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Kurt, M. N., Ogundijo, O., Li C., & Wang, X. (2019). *Online Cyber-Attack Detection
+    in Smart Grid: A Reinforcement Learning Approach*. IEEE Transactions on Smart
+    Grid, vol. 10, no. 5, pp. 5174-5185, DOI: 10.1109/TSG.2018.2878570'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

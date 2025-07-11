@@ -1,0 +1,1675 @@
+- en: Training Magenta Models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll use the prepared data from the previous chapter to train
+    some of the RNN and VAE networks. Machine learning training is a finicky process
+    involving a lot of tuning, experimentation, and back and forth between your data
+    and your model. We'll learn to tune hyperparameters, such as batch size, learning
+    rate, and network size, to optimize network performance and training time. We'll
+    also show common training problems such as overfitting and models not converging.
+    Once a model's training is complete, we'll show how to use the trained model to
+    generate new sequences. Finally, we'll show how to use Google Cloud Platform to
+    train models faster on the cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following topics will be covered in this chapter:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Choosing the model and configuration
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Training and tuning a model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using Google Cloud Platform
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''ll use the following tools:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A **command line** or **Bash** to launch Magenta from the Terminal
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Python** and its libraries to write specific training configuration for a
+    model'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Magenta** and **Magenta GPU** to train our models'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**TensorBoard** to verify the training metrics'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Google Cloud Platform** to offload the training in the cloud'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In Magenta, we'll make the use of the **Drums RNN**, **Melody RNN**, and **MusicVAE**
+    models for training. We'll be explaining the training for those models, but if
+    you feel like you need more information, the model's README in Magenta's source
+    code ([github.com/tensorflow/magenta/tree/master/magenta/models](https://github.com/tensorflow/magenta/tree/master/magenta/models))
+    is a good place to start. You can also take a look at Magenta's code, which is
+    well documented. We have also provided additional content in the last section,
+    *Further reading*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The code for this chapter is in this book's GitHub repository in the `Chapter07` folder,
+    located at [github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter07](https://github.com/PacktPublishing/hands-on-music-generation-with-magenta/tree/master/Chapter07).
+    The examples and code snippets will assume you are located in the chapter folder.
+    For this chapter, you should go to `cd Chapter07` before you start.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Check out the following video to see the Code in Action:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[http://bit.ly/2OcaY5p](http://bit.ly/2OcaY5p)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Choosing the model and configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [Chapter 6](1ca56e24-b4d2-40de-b4cf-ae6bbb3c0eef.xhtml), *Data Preparation
+    for Training*, we looked at how to build a dataset. The datasets we produced were
+    symbolic ones composed of MIDI files containing specific instruments, such as
+    percussion or piano, and from specific genres, such as dance music and jazz music.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also looked at how to prepare a dataset, which corresponds to the action
+    of preparing the input formats (MIDI, MusicXML, or ABCNotation) into a format
+    that can be fed to the network. That format is specific to a Magenta model, meaning
+    the preparation will be different for the Drums RNN and MusicVAE models, even
+    if both models can train on percussion data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first step before starting the training is to choose the proper model and
+    configuration for our use case. Remember, a model in Magenta defines a deep neural
+    network architecture, and each network type has its advantages and disadvantages.
+    Let's have a look at how to choose a model, configure it, and train it from scratch.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing music generation use cases
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s take the example of training a percussion model. If we want to train
+    a model that generates rhythmic percussion, we can either choose the Drums RNN
+    model or the MusicVAE model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first model, Drums RNN, will be more efficient at **generating longer sequences**
+    that keep the global musical structure because the model can learn long-term dependencies
+    using the attention mechanism (refer to [Chapter 2](b60deee5-c58f-45eb-88a2-23718802e580.xhtml),
+    *Generating Drum Sequences with Drums RNN*, for a refresher on that).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The second model, MusicVAE, won't be able to do that but will be able to sample
+    from the latent space and **interpolate between sequences** (refer to [Chapter
+    4](838da33e-26a9-4701-bfd3-5014dfff4146.xhtml), *Latent Space Interpolation with
+    MusicVAE*, for a refresher on that).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Depending on your use case, you might want to train one or the other or both,
+    but keep in mind their strengths and weaknesses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If we take the example of training a melody model, we can use a monophonic model,
+    such as Melody RNN or MusicVAE (with the same restrictions as previously mentioned)
+    if we want the resulting generation to be monophonic. We can also use a polyphonic
+    model, such as Polyphony RNN if we want the generation to be polyphonic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes, we know what model to use, but the configuration doesn't fit our
+    use case. Let's look at how to create a new configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a new configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We'll take the example of a bass dataset we would like to train using the Music
+    VAE model. Looking at the `configs` module in the `magenta.models.music_vae` module,
+    we find the `cat-mel_2bar_small` configuration, which is close to what we want
+    to achieve, but when the dataset is converted, the notes that don't correspond
+    to a melody program (defined as 0 to 32 in Magenta) are thrown out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find this code in the `chapter_07_example_01.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To achieve that, we''ll create a new configuration called `cat-bass_2bar_small`
+    and we''ll change the valid programs to `bass` programs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s create a new `Config` instance with the following content:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: The only part we've changed here is the `valid_programs=BASS_PROGRAMS` argument
+    in `OneHotMelodyConverter`, but we could have changed other elements, such as
+    `NoteSequenceAugmenter` that we talked about in the previous chapter. Hyperparameters
+    can be changed using the `hparams` flag, but we can also define them in a configuration
+    if we want to define default values for a model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use the new configuration, we can call the `run` method of the `music_vae_train`
+    module:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we import the whole configuration map and add our new configuration before
+    calling the `run` method, so that we can still pass other configurations in the
+    `--config` flag.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can then call this code the same way as we would call the `music_vae_train`
+    command:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, `FLAGS` are the training flags we need to pass, such as `--run_dir` and
+    `--sequence_example_file`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Other models, such as the Drums RNN or Melody RNN models, will be configured
+    in the same manner. Refer to the next section for examples on how to do that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how to choose a model and a configuration (or create a new
+    one), let's look at how to start and configure the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training and tuning a model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Training a machine model is an empirical and iterative approach, where we first
+    prepare the data and the configuration, then train the model, fail, and restart
+    again. Getting models to train on the first try is rare, but we'll persevere through
+    hardship together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When launching a **training phase**, we'll be looking at specific metrics to
+    verify that our model is training properly and converging. We'll also be launching
+    an **evaluation phase**, which executes on a separate, smaller dataset, to verify
+    that the model can properly generalize on data that it hasn't seen yet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **evaluation** dataset is often called the **validation** dataset in machine
+    learning in general, but we'll keep the term evaluation since it is used in Magenta.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The validation dataset is different than the **test** dataset, which is an external
+    dataset, often curated by hand, and contains hard examples, giving a final test
+    to measure the network performance. The test dataset is often used to compare
+    different models' performance. We won't be looking at test datasets here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll break down and explain each step of the process. Let's start by looking
+    at some best practices and conventions we'll be using for this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Organizing datasets and training data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Because of the iterative nature of training, we'll get to produce many datasets
+    and many **training runs**. The best way to proceed is to keep both separate,
+    for example, in two folders named `datasets` and `training`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the `datasets` folder, we can copy what we produced from the previous chapter
+    in separate folders, for example, `dance_drums`, `jazz_drums`, `piano_drums`,
+    and so on, with the folders containing the MIDI files:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We keep the `notesequences.tfrecords` file in the proper dataset folder since
+    it is produced only once per dataset.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We keep the `sequence_examples` folder outside of this folder because it is
+    model dependent, meaning we'll be regenerating this folder for each model, for
+    example, once for Drums RNN and once for MusicVAE (even if we use the same data).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In the `training` folder, we''ll be creating a new folder for each model and
+    dataset, for example, `drums_rnn_dance_drums`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We'll be executing the `MODEL_create_dataset` command (if available), creating
+    the `sequence_examples` directory (if any) for the model.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Then, we''ll be launching multiple training runs, with proper naming, for example,
+    `run1_with_dropout`, or other configuration we might want to use:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/c44e2218-c64f-46ff-861b-3fcaea388f2a.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Having a single training folder with multiple runs is useful because we can
+    load multiple training runs in TensorBoard and compare how each model has performed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training on a CPU or a GPU
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Training is a computationally extensive activity. Training a simple model, such
+    as the Drums RNN model, on an entry-level GPU (for example, an RTX 2060) will
+    take around 5 hours. Training on the CPU takes a lot more time since the operations
+    needed in network training (namely, vector arithmetic) are optimized to be executed
+    in parallel on a GPU. To use a GPU, we also need to have properly installed the
+    `magenta-gpu` package, as well as the CUDA libraries (see [Chapter 1](c5602f6c-c094-42f2-936f-98746cf04a49.xhtml),
+    *Introduction on Magenta and Generative Art*, for more information on that).
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you don't have a GPU, don't despair, you can follow this chapter anyway.
+    You can do the data preparation steps and launch the training on a small network
+    (see the first training example later on how to do that). Then, let the network
+    train for a while, and if you see encouraging results, follow the steps in the
+    last section, *Using Google Cloud Platform*, to restart the training on a faster
+    machine. This will enable you to test the commands and datasets locally and then
+    offload the bulk of the work to GCP. Even if you have a GPU, this might be a good
+    way to proceed, especially if you want to train multiple models at the same time,
+    or test different hyperparameters at the same time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The following sections and commands still apply to both CPU and GPU training,
+    as well as GCP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training RNN models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We now have all of the elements to start training a model. Let's take a simple
+    example, we'll use the `dance_drums` dataset from the previous chapter and train
+    the Drums RNN model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find this code in the `README.md` file in the source code of this chapter.
+    Since most of the code snippets in this chapter are command line, we are not providing
+    example files for each example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: From the previous chapter, we should now have a `datasets/dance_drums` folder
+    ready with the MIDI files. We've already executed the `convert_dir_to_note_sequences`
+    command, which produces a `notesequences.tfrecord` file.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating the dataset and launching the training
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We'll now create the dataset (an operation we've already done in the previous
+    chapter, but we show it again here as a refresher) and launch the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s create the sequence examples. In the `training` folder, create
+    and change directory to a new folder called `drums_rnn_dance_drums`, and execute
+    (replacing `PATH_TO_NOTE_SEQUENCES` with the proper file):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: This should create a `sequence_examples` folder containing two files, a training
+    set and an evaluation set for the drum sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ideally, the `drums_rnn_create_dataset` command should be called only once for
+    all of the training runs. Since we are going to tune the hyperparameters between
+    each run, and that the hyperparameters are sensible to the training data, changing
+    the training and evaluation dataset while tuning the model is not a good idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ll now start the training using a small network:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: On Windows, the `--run_dir` flag should use a backslash. For this example and
+    all of the following examples, instead of writing `--run_dir="logdir/run1_small"`,
+    use `--run_dir="logdir\run1_small"`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We use an output directory named `run1_small`, so we can remember later what
+    run it is, and an input file named `training_drum_tracks.tfrecord`. The hyperparameters
+    are a batch size of 64 and a two-layer RNN network of 64 units for each layer,
+    the number of elements in the list defining the number of layers. For a 3 layers
+    RNN network, use [64, 64, 64].
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You should see in the Terminal the complete list of hyperparameters and their
+    values, which are taken from the configuration when not overridden by a flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We''ll soon see how hyperparameters affect training in the following sections.
+    If you are using a GPU, make sure TensorFlow can use your GPU by checking this
+    output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, the network will start training, and you should see outputs like this:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll be talking about the different metrics soon. When we launched the training,
+    we've used the `--num_training_steps=20000` flag, meaning the network will stop
+    its training after reaching 20,000 global steps. We won't be talking about epoch
+    here, which consists of a full cycle through the training data since we only handle
+    steps in Magenta. The model should converge before that, but giving an upper bound
+    is good so that it doesn't execute for too long for no reason.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you want to have an approximation on the time the training will take to reach
+    20,000 steps, you can use the `global_step`/`sec` output. For the previous output,
+    our job should finish in approximately 9 hours, but this is an upper bound, so
+    chances are we can stop it before.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that the training is launched, we can launch the evaluation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Launching the evaluation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The evaluation job executes on the evaluation dataset, which is a smaller (we
+    previously used a `--eval_ratio=0.10` flag, meaning 10%) and separate dataset
+    from the training set. The evaluation job evaluates the model and computes the
+    loss function, without updating any of the weights in the network. Therefore,
+    the evaluation process is fast and can be executed at the same time as the training
+    job on the CPU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To launch the evaluation, we use the same command, using the `--eval` flag.
+    If you are using a GPU, you'll need to deactivate the GPU for that execution,
+    using the `CUDA_VISIBLE_DEVICES=""` environment variable, because the previous
+    TensorFlow process takes all of the available memory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: On Windows, don't forget to use a backslash in the `--run_dir` flag. Also on
+    Windows, use the `set` command to set an environment variable for the current
+    command-line session. On Linux and macOS, you can set the environment variable
+    for a single command by prefixing the variable value before the command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On Windows, use the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'On Linux and macOS, use the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: For this command, the provided network size needs to correspond to the training
+    network size. If you used `rnn_layer_sizes=[64,64]` in the training command, then
+    you need to use the same here. The two flags we've changed from the previous command
+    are the `--eval` and `--sequence_example_file` flags.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The evaluation will execute when a new checkpoint (which happens approximately
+    every 40 steps) is added in the running directory. When that happens, you''ll
+    see outputs similar to this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: The evaluation job will stop automatically when the training job hasn't produced
+    a checkpoint for a while.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Looking at TensorBoard
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: During and after training, we can launch TensorBoard, which helps to visualize
+    the network metrics. We'll be using TensorBoard to tune the hyperparameters and
+    iterate with the data preparation phase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To launch TensorBoard, use the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Notice that we pass the parent output directory, meaning we''ll have access
+    to all of the contained runs (currently, there''s only one). We can find the URL
+    of TensorBoard in the console. Once opened, the page will look like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/805823b5-0ced-4f1f-903e-2d12343a48e9.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is the result of our trained model after 20,000 steps. On the left, we
+    have the training and evaluation jobs, which can be toggled. On the right, different
+    metrics are shown in the screenshot, with the abscissa being the global step count,
+    which goes to 20,000 steps. The two most interesting metrics for us are **loss**
+    and **accuracy**. We want the **loss to go down**, both for the training and evaluation
+    sets, and the **accuracy to go up**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We notice that this model has converged, meaning we have a successful training
+    at hand, but we need to verify that the resulting model is good, by looking at
+    the loss metric. Let''s have a look at the loss function, comparing the training
+    loss and the evaluation loss:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/4bc7a1a3-a4af-4278-bff6-ca8ab4d71cc1.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can see here that the model is slightly overfitting the training data. You
+    can find the model optimum by taking the **evaluation loss curve at its lowest
+    point** before it starts going up. On the left of that point, the model is underfitting
+    the training data; on the right, the model is overfitting the data. The difference
+    between both curves is called the generalization gap.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's explain underfitting and overfitting before continuing on to other examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Explaining underfitting and overfitting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Understanding underfitting and overfitting and how to prevent them is important
+    for proper network training. When a model is too simple and cannot learn from
+    the training dataset, we say the model is **underfitting**. On the other hand,
+    when a model is learning properly from the training dataset but cannot generalize
+    to data outside of it, we say the model is **overfitting**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We show underfitting, optimal solution, and overfitting in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/ebaab65a-ee21-416e-a484-ce3e621229e8.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: On the left, we show underfitting, meaning the model didn't learn on the dataset.
+    In the middle, we show an optimal solution, and on the right, we show overfitting,
+    where the resulting model is overly complex for the given data, meaning the model
+    won't generalize to other datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Remember that the objective of a neural network is to perform well on the training
+    dataset as well as **new data that it has never seen**, which will be used to
+    make predictions. Achieving that is hard since it requires a proper combination
+    of quality and quantity of data, as well as proper network size and learning parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's have a look at how to fix those issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing underfitting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Underfitting is easy to address and can be solved by **increasing the capacity
+    of the model**—basically, by adding more layers and units. By increasing the model's
+    capacity, the network can learn more types of functions for mapping inputs to
+    outputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For our previous example, we can increase the capacity of the model by adding
+    more units (neurons) in each of the two layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: We also need to train long enough, which might be hardware dependent, since
+    if we are training on slow hardware, it might take a lot of time to reach the
+    optimal point.
+  prefs: []
+  type: TYPE_NORMAL
+- en: See the section, *Defining proper network size and hyperparameters*, for more
+    information on network size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing overfitting
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Overfitting, on the other hand, is harder to address since it comes from a
+    variety of factors. The two most common causes are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: When a model overfits, it is because it has the capacity of overfitting the
+    training dataset. By keeping the same training dataset, you can **reduce the network
+    capacity**, so that the network won't have the necessary resources to overfit
+    the training data anymore. To reduce the network capacity, use the `rnn_layer_sizes`
+    hyperparameter as in the previous example.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By keeping the same network capacity, you can **augment the training dataset
+    size** so that, with more data, the network might not have the capacity to overfit
+    it anymore. The added data needs to be varied enough to fix overfitting and might
+    not always work. To augment the training dataset size, go back to [Chapter 6](1ca56e24-b4d2-40de-b4cf-ae6bbb3c0eef.xhtml),
+    *Data Preparation for Training*, and add content to the dataset. Be aware that
+    augmenting the dataset with data that isn't diverse enough won't help to resolve
+    overfitting.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There is a relationship between the training dataset and the network size:
+    **the bigger and more diverse the dataset, the bigger the network has to be**.
+    A bigger network won''t necessarily produce better results if the training dataset
+    isn''t big enough or qualitative enough.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are other ways of fixing overfitting that can be used in Magenta models:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Early stopping** of the training phase at the optimal point is one way since
+    all of the training after that point makes the resulting network worse. To use
+    early stopping, see the next section, *Using a specific checkpoint to implement
+    early stop*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using regularization techniques such as **dropout**, which randomly and temporarily
+    drops a unit/neuron out of the network, is another way. To use dropout, use the
+    `dropout_keep_prob` hyperparameter.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Regularization techniques are a class of approach that aims at constraining
+    the size of the weights in a neural network and is widely used as a way to prevent
+    overfitting.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you might have noticed by now, there's a relationship between our dataset
+    and our model that needs to be taken into account when tuning the training phase.
+    Let's have a more detailed look into network size and hyperparameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Defining network size and hyperparameters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Defining a proper network size is a trial and error process, but a good starting
+    point, if your hardware is good enough, are the values in the configuration of
+    the model you want to use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take an example using the `attention_rnn` configuration of the Melody
+    RNN model, using `batch_size=128`, `rnn_layer_sizes=[128, 128]`, `dropout_keep_prob=0.5`,
+    `learning_rate=0.001`, and `clip_norm=3`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the model is overfitting, we can try the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Using more dropout, for example, `dropout_keep_prob=0.4` and lower values
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Adding more data
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Reducing the network size using `rnn_layer_sizes=[64, 64]`
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the model is converging and not overfitting, we can try using a bigger model, `rnn_layer_sizes=[256,
+    256]`. If we have good data, using a bigger model will yield better results, so
+    we want to optimize that.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: When changing something, we need to make sure we are making a single modification
+    and then testing the result before making any other change. Changing multiple
+    parameters at the same time will prevent us from knowing the direct impact of
+    each one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sometimes, when increasing the network size, we might stumble into a model that
+    doesn't converge, meaning the loss function starts increasing again, which will
+    result in a training error. That can be fixed by changing `learning_rate` or `clip_norm`.
+    See the next section, *Fixing a model not converging*, for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Determining the batch size
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We haven't talked about `batch_size` yet. The batch size is the amount of data
+    the network will handle at once. A bigger batch size may improve the training
+    time by making the model parameters converge faster. It also should remove some
+    computational overhead from transferring a larger chunk of data to the GPU memory
+    at once.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A rule of thumb is that when you increase the batch size, you'll also need to
+    **increase the learning rate**. Since more data is taken into account at the same
+    time, the model's weight can get updated using a bigger ratio.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Increasing the batch size might improve training time, but it might as well
+    **decrease the performance of the model**, so using a too big batch size might
+    not be a good idea. Overall, the batch size is often a trade-off between execution
+    time and the resulting quality of the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We provide more information on this in the last section, *Further reading*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing out of memory errors
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Sometimes, when using a batch size or network size too big, you might end up
+    with the following error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Reduce the batch size and network size until the out of memory error disappears.
+    Sometimes, the error is not fatal, in which case it will negatively impact the
+    training performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing a wrong network size
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When using an existing run directory, either from continuing a previous training,
+    starting an evaluation job, or starting a generation job, we need to provide the
+    same network size as when it was first launched.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If the training run was first started using `rnn_layer_sizes=[256,256,256]`
+    and then restarted using `rnn_layer_sizes=[128,128,128]`, we''ll end up with the
+    following error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: In this case, we'll need to use the network size that was first used when we
+    started the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing a model not converging
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: A model that converges is defined by a **decreasing loss function** on both
+    the training and evaluation sets. If our loss function goes up at some point,
+    the model is unstable and isn't properly converging. There are many reasons as
+    to why a model might not converge.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s take a simple example (this example uses the `jazz_drums` dataset we
+    created in the previous chapter):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When a model is diverging, we might get an error at some point:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The resulting TensorBoard graph will show the loss function going up. Let''s
+    fix the problem by using a smaller learning rate. The default learning rate value
+    that was used in the previous command is `learning_rate=0.001`, so we''ll make
+    that 10 times smaller:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Here is the resulting TensorBoard graph with both runs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/d4808a0e-2910-49a0-944b-25004a1a3f21.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see that `run1_diverge` has a loss function that goes up, and `run2_learning_rate` is
+    training properly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are many ways of fixing a diverging model, but since the problem is dependent
+    on the data and the network size, you''ll have to test various methods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Try **reducing the learning rate**, like in our previous example. Learning rate
+    decay (available in the Music VAE model), where the learning rate is gradually
+    reduced, can also help.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Try **changing the network size**. In this example, using a network size of
+    `rnn_layer_sizes=[256,256,256]` will also fix the problem.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Try **decreasing the gradient clipping**. In our previous example, the gradient
+    clipping default value is `clip_norm=3`, so you will want to decrease the `clip_norm`
+    hyperparameter, for example, to `clip_norm=2`. Remember, default hyperparameter
+    values are in the configurations for each model (see the previous section, *Creating
+    a new configuration*, for more information on this).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sometimes, fixing a diverging model will make another problem arise. For example,
+    fixing the problem using a bigger network size might result in the network overfitting.
+    Make sure you test multiple solutions so that the chosen one is best.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Most often than not, the NaN loss during training error is caused by the exploding
+    gradients problem we've already talked about in [Chapter 4](48023567-4100-492a-a28e-53b18a63e01e.xhtml),
+    *Generating Polyphonic Melodies*. This problem is common in RNNs, and even if
+    LSTM cells helps a lot to make the model converge, the exploding gradient problem
+    can still occur, given the accumulation of gradients unrolled over hundreds of
+    input time steps.
+  prefs: []
+  type: TYPE_NORMAL
+- en: During training, the loss is calculated on the training examples, and then its
+    derivative is backpropagated through the network, updating the weights by a fraction
+    of the propagated error, this fraction being the learning rate. When the weights
+    get updated over and over by large values, they tend to explode, or overflow,
+    which is why using a smaller learning rate might fix the problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gradient clipping has a similar effect but is useful if we prefer not changing
+    the learning rate. By using gradient clipping, we can rescale, or clip to a maximum
+    value, the gradient vector (the error derivative) that will be backpropagated
+    through the network. The parameter we have available in Magenta is `clip_norm`,
+    which is used by TensorFlow as `tf.clip_by_norm(t, clip_norm)`. By decreasing
+    the parameter's value, we effectively normalize the error gradient so that the
+    norm is equal or less than the provided value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing not enough training data
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Let''s now train the Melody RNN model using our previous chapter''s jazz piano
+    dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We first create the dataset using the `attention_rnn` configuration. In the
+    `training` folder, create and change the directory to a new folder called `melody_rnn_jazz_piano`,
+    and execute (replacing `PATH_TO_NOTE_SEQUENCES` with the proper file, which should
+    be in your `datasets` folder):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We then train the model using the following:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'When checked in TensorFlow, we can look at the `run1_few_data` run:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/974cbacb-aadb-44c5-afc9-130d1afdc52c.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In the **loss** diagram, the first two lines at the top are the train and evaluation
+    metrics for the run, `run1_few_data`. The evaluation loss goes up, meaning the
+    model is overfitting really fast. This is because we don't have a lot of data
+    (659 outputs to be exact).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fixing this problem requires us to go back to preparing the data. For the `run2_more_data` run,
+    in the loss diagram, the two lowest curves show us that the problem is fixed.
+    To get more data, we came back to the pipeline from the previous chapter, `melody_rnn_pipeline_example.py`,
+    and changed `ignore_polyphonic_notes=False` to `True` in the `MelodyExtractor`
+    pipeline. This means that, instead of throwing out polyphonic melodies, the pipeline
+    converts them into a monophonic one, keeping the highest note. The conversion
+    method is in the `melodies_lib` module, so if we want to change that behavior,
+    we'll have to write our own pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because this change modifies the musical content of our dataset, we''ll need
+    to carefully listen to the generated results, to verify that the trained model
+    outputs interesting samples. Here is a generated sample from the `run2_more_data` trained
+    model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/2bd8188d-e618-42bd-8cca-e7a60ff35b15.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: This example is a good example of the necessity of going back and forth between
+    the data preparation step and the training step. See the next section, *Generating
+    sequences from a trained model*, for more information on how to generate sequences
+    from a trained model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Configuring attention and other hyperparameters
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Melody RNN model uses attention during training to look at previous steps
+    (see [Chapter 3](48023567-4100-492a-a28e-53b18a63e01e.xhtml), *Generating Polyphonic
+    Melodies*, for a refresher on that). You can use the `attn_length` hyperparameter to
+    configure the length of the attention spawn.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each model has its own configuration. Make sure you check them out in their
+    respective configuration files to see what parameter you can tune during training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Generating sequences from a trained model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have a trained model, `run1_small`, and we understand that it slightly
+    overfits, let's try and generate a sequence out of it to see how it goes. To generate
+    a sequence when the network has finished training or during training, we can use
+    the model's `generate` command.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s call the `drums_rnn_generate` method using the following parameters
+    (if you are launching this command during training and you are using a GPU, don''t
+    forget to use `CUDA_VISIBLE_DEVICES=""`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `generate` command will take the latest checkpoint in the run directory
+    and use it to generate a sequence. We need to use the same network size as for
+    the training phase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is a generated sequence from our training phase:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/be288cd0-828d-4787-87b0-3c039172c22f.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: The model should have generated 10 sequences; we should listen to hear what
+    it sounds like. Congratulations! You've heard the first notes of your own generated
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The advantage of using the `dance` dataset is that it is easy to verify that
+    the training model is generating what we expected: in the resulting 10 sequences,
+    each of them mostly has a bass drum on beat. Now, we need to ask ourselves whether
+    the resulting generation is diverse and interesting. If not, we should go back
+    to prepare a new dataset and iterate on it.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a specific checkpoint to implement early stops
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We previously talked about early stopping, which is the action of stopping training
+    at the optimum, instead of letting the model degrade further, as a way to prevent
+    overfitting. There are multiple ways of doing that, such as coding a stop condition
+    that checks whether the evaluation loss function starts going up, but the easiest
+    approach is to keep only the checkpoint that is nearest to the optimum after the
+    training phase is over.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Going back to our previous example, we find the evaluation loss curve minimum
+    to be at around 7,000 steps. In the `logdir/run1_small` directory, we find that
+    we have a checkpoint near our optimum that we can use: `model.**ckpt-6745**.data-00000.`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To use that checkpoint, we need to use the `--checkpoint_file` flag instead
+    of the `--run_dir` flag:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice we don't pass the full filename (only `model.ckpt-6745` and not `model.ckpt-6745.data-00000-of-00001`)
+    because TensorFlow expects only the first part. The command should generate 10
+    new elements using that checkpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Packaging and distributing the result using bundles
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'When we are satisfied with our trained model, we can package it using Magenta''s
+    bundle for distribution. Remember that bundles are available for RNN models only,
+    but we''ll provide ways of bundling other models such as Music VAE when we get
+    there. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To package a bundle, we call the generate command using the `--bundle_file`
+    and `--save_generator_bundle` flags:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will save the bundle in the `drums_rnn_dance_small.mag` file using the
+    latest checkpoint. We can also use the `--checkpoint_file` flag from the previous
+    command if we need another checkpoint that is not the latest.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can now use the bundle as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: Notice how the hyperparameters are left out—this is because they are configured
+    in the bundle file. This also means the bundle hyperparameters overrides the ones
+    configured in the `drum_kit` configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have our first model trained, tuned, and packaged, we'll have a
+    look at training other models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training MusicVAE
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Let's now train the MusicVAE model so that we can compare the sampling with
+    an RNN generation. One thing that differs for the MusicVAE training is that the
+    data preparation step (the `create dataset` command) doesn't exist because the
+    data conversion is made right before the model starts training. We'll manually
+    create the dataset using a pipeline and then start the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Splitting the dataset into evaluation and training sets
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Since there is no dataset creation command but we still need to split the dataset
+    into training and evaluation data, we're going to write a pipeline to do that.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can find this code in the `chapter_07_example_02.py` file in the source
+    code of this chapter. There are more comments and content in the source code,
+    so you should go check it out.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We''ll also convert the note sequences into tensors, which will help us to
+    validate the data before we start the training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s write the `partition` method that will split the dataset into
+    training and evaluation data:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: We've already seen similar code in the previous chapter; we are actually reusing
+    the `RandomPartition` class we've already covered, which will split the input
+    into two sets using a given ratio.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, let''s write the `TensorValidator` class:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: What is interesting here is that we are using the configuration to find the
+    data converter (drums conversion, melody conversion, and so on) and then converting
+    into tensors, a step that will be done before the model starts training. This
+    step validates our input data and can help us to make statistics about the number
+    of "valid" tensors as well as how much data we have. Unfortunately, the fact that
+    we don't have a "create dataset" command makes it harder for us to know exactly
+    what kind of data will be fed to the network, which is why this class is useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, we''ll call the `partition` method and declare some flags for the
+    command line:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, let''s create a new training directory and then call our new Python script
+    (replacing `PATH_TO_PYTHON_SCRIPT` and `PATH_TO_DATASET_TFRECORDS` with proper
+    values):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will create a `sequence_examples` directory containing the `eval.tfrecords` and
+    `train.tfrecords` datasets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Launching the training and evaluation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have validated our data and split it into two datasets, we can start
+    the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Launching the training, evaluation, and TensorBoard is similar to the previous
+    sections:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: Like for the previous models, you can pass hyperparameters using the `--hparams=FLAGS`
+    flag. Here, we are using the "small" configuration since MusicVAE models can get
+    big in terms of size pretty fast. A small model is enough for good performance,
+    for example, the Magenta pre-trained drum model uses the `cat-drums_2bar_small` configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When training Music VAE, we''ll also want to tune the following two hyperparameters:
+    `free_bits` and `max_beta`. By increasing `free_bits` or decreasing `max_beta`,
+    we are decreasing the effect of the KL loss, resulting in a model that is better
+    at reconstruction, with potentially worse random samples. See the previous chapter,
+    [Chapter 4](838da33e-26a9-4701-bfd3-5014dfff4146.xhtml), *Latent Space Interpolation
+    with MusicVAE*, if you don''t remember how **Kulback-Leibler** (**KL**) divergence
+    affects the model performance.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distributing a trained model
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Unfortunately, for MusicVAE, we cannot create a Magenta bundle. The simplest
+    way to distribute a TensorFlow checkpoint is to copy the checkpoint files and
+    zip them for the transfer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let''s copy the corresponding files (replace `STEP` with the checkpoint
+    step you want to keep):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: You should now have three files in the `complete/cat-drums_2bar_small` directory.
+    Remember, TensorFlow checkpoints should be loaded using their prefix, for example, `model.ckpt-157780`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Enter the following to use the checkpoint in a generation (replace `STEP` with
+    the checkpoint you want to use):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: Remember that checkpoints do not contain information about the changes you've
+    made to the hyperparameters (unlike Magenta bundles), so you'll need to pass the
+    same hyperparameters you've used during training each time you use it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some hyperparameters can be changed. For example, there is no sense in using
+    a batch size of 512 when you are sampling (unless you are sampling 512 sequences
+    at once, perhaps), but it could be the value you've used for training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: You will want to keep everything related to the TensorFlow graph, which means
+    the network size and anything related to encoding and decoding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a configuration for this specific training is probably the easiest
+    way of keeping track of the hyperparameters that were used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training other models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: We won't be training every model here, but training other models should be fairly
+    similar to the one we've shown. The same model tuning, regarding overfitting,
+    for example, can be applied to other models. Refer to the README files of the
+    model you want to train for more information.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Google Cloud Platform
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Using a cloud computing provider is useful to offload computing to faster machines.
+    It can also be used if we want to make multiple runs at the same time. For example,
+    we could try fixing exploding gradients by launching two runs: one with a lower
+    learning rate and one with a lower gradient clipping. We could spawn two different
+    VMs, each training its own model, and see which performs better.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We are going to use Google Cloud Platform (GCP), but other cloud providers,
+    such as Amazon AWS or Microsoft Azure, will also work. We'll go through the different
+    steps needed to train a Melody RNN model on the piano jazz dataset from the previous
+    chapter, including the GCP account configuration and VM instance creation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating and configuring an account
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'First, head to [console.cloud.google.com](https://console.cloud.google.com)
+    and create a new Google account (or use an existing one). Once in GCP, follow
+    these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If this is your first time logging in, you will need to create a new project,
+    which you can call `Magenta`. If not, find your current project at the top of
+    the screen, and create a new one if you want.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Then, we'll need to set up quotas, since when a new account is created, it cannot
+    create VM instances with GPUs. On the left, go to **IAM & Admin** > **Quotas**,
+    and find the **GPUs (all regions)** quotas by searching `GPU` in the **Metrics**
+    field. Click on the checkbox, then **Edit**, and change the quota to another value,
+    like 5\. The quota modification will take a bit of time to get validated.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, we'll need to set up billing. On the left, go to **Billing** and then
+    follow the instructions to add a **Billing Account**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Our account being properly setup, we can now create a new VM instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Preparing an SSH key (optional)
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Using an SSH key is useful to connect to the VM instance from a local Terminal.
+    This is an optional step since, in GCP, you can connect to the VM instance using
+    a Terminal in a browser, which works pretty well, but with really slow upload
+    and download speeds.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you already have an SSH key ready, you can skip this step. If you are unsure,
+    check the file at `~/.ssh/id_rsa.pub`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On Linux and macOS, you can generate a new SSH key by entering the following
+    in a Terminal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will save a key in `~/.ssh/id_rsa.pub`. On Windows, the easiest way to
+    do this is to install Git Bash ([git-scm.com/download/win](https://git-scm.com/download/win)),
+    which contains two commands we'll use—`ssh-keygen` and `scp`, which we'll be using
+    in the next sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once generated, the public key looks like this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: The `user` part before the host is important since it will be the user to provide
+    to GCP when you log in.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a VM instance from a Tensforflow image
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Now, we return to GCP then, on the menu on the left, we go to **Compute Engine**:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once in **Compute** **Engine**, choose **I****mages** from the left menu.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the **Filter Images** search, type `TensorFlow` and find the most recent
+    image. At the time of writing, the image is called **c3-deeplearning-tf-1-15-cu100-20191112**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Choose the image and then choose **Create instance**; you will see the create
+    instance screen:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/155d37d9-c178-45eb-9bb5-ccfcc9e69c28.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We''ll now fill the information as in the preceding diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In **Name**, use `Magenta`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In **Region** and **Zone**, find a place that is near you.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In **Machine** **Type**, use at least **n1-standard-4**, a 4 core CPU with 15
+    GB of RAM.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In **CPU platform and GPU**, click on **Add GPU** and choose a **GPU type**,
+    using at least an **NVIDIA Tesla K80**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Depending on the chosen region and the current availability, you'll have different
+    GPUs available. The NVIDIA Tesla K80 GPUs have an average computing power (0.45
+    global step/second on Melody RNN) and the P100 GPUs are almost twice as powerful
+    (0.75 global step/second on Melody RNN). As a comparison, an entry-level gaming
+    GPU such as the RTX 2060 makes 0.6 global step/second on Melody RNN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s go on to the disk content:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/95410c03-38bb-410c-a776-1663a11e0a93.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We will initialize the instance using the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The boot disk should be already filled with a **Deep Learning Image** of 50
+    GB.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: After expanding the **Management, security, disks, networking, sole tenancy**
+    section, in the **Security** tab, paste your public SSH key (if you have one).
+    The resulting user (in this case, **user**) will be shown on the left.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Check the resulting price in the upper-right corner, which is **about $1.269
+    hourly** for this machine. Note that we are billed for the machine uptime. If
+    we don't use the machine, we won't be billed for it, so we'll need to close it
+    when we are finished.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Click on **Create**.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: In the **VM instances** menu on the left, you should see the newly created VM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initializing the VM
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Now that we have a new VM to work with, we need to install all of the required
+    software. We can refer to [Chapter 1](c5602f6c-c094-42f2-936f-98746cf04a49.xhtml),
+    *Introduction on Magenta and Generative Art*, for the detailed installation instructions,
+    but we'll also put the main commands here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing the NVIDIA CUDA drivers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Fortunately, the VM image we are using does a lot of the installation for us.
+    Let''s first connect and install the required drivers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to connect to the VM. If we don''t have an SSH key, we use the
+    **SSH** button on the right of the VM instance, which should start a new browser
+    Terminal. If we have an SSH key, we can use the following command, on Linux, macOS,
+    and Windows (using Git Bash):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: Here, we have to replace `USER` with the user in our SSH key and `IP` with the
+    external IP shown in the VM instance page.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The VM will greet us with the following message, which we answer with `y`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: The NVIDIA drivers (CUDA drivers and cuDNN), in the proper versions for TensorFlow,
+    should get installed. Unfortunately, there is a problem with the cuDNN versions,
+    so we'll have to manually reinstall it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Download the latest cuDNN a.b.c for CUDA 10.0 at [developer.nvidia.com/rdp/cudnn-download](https://developer.nvidia.com/rdp/cudnn-download)
+    (download the full cuDNN Library) on your local machine.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Transfer the cuDNN archive to the VM instance. If we don''t have an SSH key,
+    we will use the interface to transfer the file (in the upper-right corner). If
+    we have an SSH key, we use our Terminal:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll have to replace `PATH_TO_CUDNN_ARCHIVE`, `USER`, and `IP` with proper
+    values. The archive should now be in our home directory in the VM instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, log in to the machine using SSH (we don''t have to do this if we are using
+    the browser Terminal):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll have to replace `USER` and `IP` with proper values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Extract the archive:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll have to replace `CUDNN_ARCHIVE_NAME` with the archive name.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now let''s override the current cuDNN installation with the new versions:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have the CUDA drivers with the proper versions up and running, let's
+    install the prerequisite software and Magenta GPU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing Magenta GPU
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Some packages are not installed by default on this image, so we''ll have to
+    install them manually:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we''ll install some audio dependencies:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we''ll install Miniconda ([docs.conda.io/en/latest/miniconda.html](https://docs.conda.io/en/latest/miniconda.html))
+    and create a new environment:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, let''s install the Magenta GPU:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: We are now good to go, so let's start a training job on our new VM instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Launching the training
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'To start the training, we''ll need to first transfer the dataset to the VM
+    instance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To transfer a dataset to the VM instance, first zip it, and then use the Terminal
+    browser interface to upload it if you aren''t using an SSH key. If you are using
+    an SSH key, you can use `scp` to do that:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll have to replace `PATH_TO_DATASET`, `USER`, and `IP` with proper values.
+    The archive should now be in our home directory in the VM instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once uploaded, we unzip the archive, and then we start the training process
+    as we would on a local machine, for example, for the Melody RNN model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll have to replace `PATH_TO_NOTE_SEQUENCE_TFRECORDS` with a proper value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To start the evaluation, we have to start a new Terminal; SSH again on the
+    VM instance, and then we can launch the evaluation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can also see TensorBoard by using connection-forwarding in SSH. In a new
+    Terminal, use the following command to connect to the VM instance:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: We'll have to replace `USER` and `IP` with proper values. This command redirects
+    the local port `16006` to port `6006` in the VM instance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Then, in the previous Terminal, we can launch TensorBoard:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: The TensorBoard can be opened locally by using the `127.0.0.1:16006` address
+    in the browser. Once the training is finished, we can zip the training folder
+    on the VM instance, and then get it back using `scp` or the browser Terminal.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once this is finished, don't forget to **stop the running instance**. Remember,
+    we are billed on usage on GCP; we don't want to keep our VM instance running without
+    a reason.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: At the time of writing, the cost of training a Melody RNN model for 20,000 steps
+    on a P100 GPU is around $5.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we used the datasets that we prepared in the previous chapter
+    to train the Magenta models on different instruments and genres. We first compared
+    different models and configurations for specific use cases and then showed how
+    to create a new one if necessary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we launched different training runs and looked at how to tune the model
+    for better training. We showed how to launch the training and evaluation jobs
+    and how to check the resulting metrics on the TensorBoard. Then, we saw a case
+    of overfitting and explained how to fix overfitting and underfitting. We also
+    showed how to define the proper network size and hyperparameters, by looking at
+    problems such as incorrect batch size, memory errors, a model not converging,
+    and not having enough training data. Using our newly trained model, we've generated
+    sequences and showed how to package and handle checkpoints.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we've shown how to use GCP to train our model in the cloud on powerful
+    machines. We've introduced how to create a Magenta VM instance and how to launch
+    training, evaluation, and TensorBoard on it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This chapter marks the end of the training content for this book. In the next
+    chapters, we'll be looking at parts that are outside the core features of Magenta,
+    such as Magenta.js, and making Magenta interact with a **Digital Audio Workstation**
+    (**DAW**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Questions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Write a new configuration for the Drums RNN model that uses an attention length
+    of 64 and that encodes only the snares and bass drums, but inverted.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We have a model that underfits: what does this mean and how do we fix the problem?'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'We have a model that overfits: what does this mean and how do we fix the problem?'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is a technique that makes sure that, for a given training run, we stop
+    at the optimum?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why might increasing batch size make the model worse in terms of performance?
+    Will it make it worse in terms of efficiency or training time?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: What is a good network size?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Does limiting the value of the error derivative before backpropagation help
+    or worsen the problem of exploding gradients? What is another solution to that
+    problem?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Why is using a cloud provider useful to train our models?
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**How to Choose Loss Functions When Training Deep Learning Neural Networks**:
+    A very thorough article on how to write a loss function ([machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/](https://machinelearningmastery.com/how-to-choose-loss-functions-when-training-deep-learning-neural-networks/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**How to Avoid Overfitting in Deep Learning Neural Networks**: An article on
+    underfitting and overfitting and its solutions ([machinelearningmastery.com/introduction-to-regularization-to-reduce-overfitting-and-improve-generalization-error/](https://machinelearningmastery.com/introduction-to-regularization-to-reduce-overfitting-and-improve-generalization-error/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**How to Avoid Exploding Gradients With Gradient Clipping**: An article on
+    exploding gradients and how to fix it using gradient clipping ([machinelearningmastery.com/how-to-avoid-exploding-gradients-in-neural-networks-with-gradient-clipping/](https://machinelearningmastery.com/how-to-avoid-exploding-gradients-in-neural-networks-with-gradient-clipping/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Use Weight Regularization to Reduce Overfitting of Deep Learning Models**:
+    An article on weight regularization, which helps reduce overfitting ([machinelearningmastery.com/weight-regularization-to-reduce-overfitting-of-deep-learning-models/](https://machinelearningmastery.com/weight-regularization-to-reduce-overfitting-of-deep-learning-models/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A Gentle Introduction to Dropout for Regularizing Deep Neural Networks**:
+    An article on dropout, which helps to reduce overfitting ([machinelearningmastery.com/dropout-for-regularizing-deep-neural-networks/](https://machinelearningmastery.com/dropout-for-regularizing-deep-neural-networks/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A Gentle Introduction to Early Stopping to Avoid Overtraining Neural Networks**:
+    An article on early stopping, which helps to reduce overfitting ([machinelearningmastery.com/early-stopping-to-avoid-overtraining-neural-network-models/](https://machinelearningmastery.com/early-stopping-to-avoid-overtraining-neural-network-models/))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**On Large-Batch Training for Deep Learning: Generalization Gap and Sharp Minima**:
+    A paper (2017) explaining why a larger batch size might lead to a less efficient
+    network ([arxiv.org/abs/1609.04836](https://arxiv.org/abs/1609.04836))'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

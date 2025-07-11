@@ -1,0 +1,1101 @@
+- en: '*Chapter 8*: Deploying a DL Inference Pipeline at Scale'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Deploying a **deep learning** (**DL**) inference pipeline for production usage
+    is both exciting and challenging. The exciting part is that, finally, the DL model
+    pipeline can be used for prediction with real-world production data, which will
+    provide real value to the business scenarios. However, the challenging part is
+    that there are different DL model serving platforms and host environments. It
+    is not easy to choose the right framework for the right model serving scenarios,
+    which can minimize deployment complexity but provide the best model serving experiences
+    in a scalable and cost-effective way. This chapter will cover the topics as an
+    overview of different deployment scenarios and host environments, and then provide
+    hands-on learning on how to deploy to different environments, including local
+    and remote cloud environments using MLflow deployment tools. By the end of this
+    chapter, you should be able to confidently deploy an MLflow DL inference pipeline
+    to various host environments for either batching or real-time inference services.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we''re going to cover the following main topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the landscape of deployment and hosting environments
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Deploying locally for batch and web service inference
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Deploying using Ray Serve and MLflow deployment plugins
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Deploying to AWS SageMaker – a complete end-to-end guide
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following items are required for this chapter''s learning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'GitHub repository code for this chapter: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter08](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter08).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Ray serve and `mlflow-ray-serve` plugin: [https://github.com/ray-project/mlflow-ray-serve](https://github.com/ray-project/mlflow-ray-serve).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'AWS SageMaker: You will need to have an AWS account. You can create a free
+    AWS account easily through the free signup website at [https://aws.amazon.com/free/](https://aws.amazon.com/free/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'AWS **command-line interface** (**CLI**): [https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Docker Desktop: [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Complete the example in [*Chapter 7*](B18120_07_ePub.xhtml#_idTextAnchor083),
+    *Multi-Step Deep Learning Inference Pipeline,* of this book. This will give you
+    a ready-to-deploy inference pipeline to use in this chapter.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding different deployment tools and host environments
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are different deployment tools in the MLOps technology stack that have
+    different target use cases and host environments for deploying different model
+    inference pipelines. In [*Chapter 7*](B18120_07_ePub.xhtml#_idTextAnchor083),
+    *Multi-Step Deep Learning Inference Pipeline*, we learned the different inference
+    scenarios and requirements and implemented a multi-step DL inference pipeline
+    that can be deployed into a model hosting/serving environment. Now, we will learn
+    how to deploy such a model to a few specific model hosting and serving environments.
+    This is visualized in *Figure 8.1* as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.1 – Using model deployment tools to deploy a model inference pipeline
+    to'
+  prefs: []
+  type: TYPE_NORMAL
+- en: a model hosting and serving environment
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_08_01.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.1 – Using model deployment tools to deploy a model inference pipeline
+    to a model hosting and serving environment
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As can be seen from *Figure 8.1*, there can be different deployment tools for
+    different model hosting and serving environments. Here, we list the three typical
+    scenarios as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Batch inference at scale**: If we want to do batch inference at a regular
+    schedule, we can use the PySpark **user defined function** (**UDF**) to load an
+    MLflow model flavor to do this, since we can leverage Spark''s scalable computational
+    approach on a distributed cluster ([https://mlflow.org/docs/latest/models.html#export-a-python-function-model-as-an-apache-spark-udf](https://mlflow.org/docs/latest/models.html#export-a-python-function-model-as-an-apache-spark-udf)).
+    We will show an example of how to do this in the next section.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Streaming inference at scale**: This usually requires an endpoint that hosts
+    the **Model as a Service** (**MaaS**). There exist quite a few tools and frameworks
+    for production-grade deployment and model serving. We will compare a few tools
+    in this section to understand how they work and how well they integrate with MLflow
+    before we start learning how to do this type of deployment in this chapter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**On-device model inference**: This is an emerging area called **TinyML**,
+    which deploys ML/DL models in a resource-limited environment such as mobile, sensor,
+    or edge device ([https://www.kdnuggets.com/2021/11/on-device-deep-learning-pytorch-mobile-tensorflow-lite.html](https://www.kdnuggets.com/2021/11/on-device-deep-learning-pytorch-mobile-tensorflow-lite.html)).
+    Two popular frameworks are PyTorch Mobile ([https://pytorch.org/mobile/home/](https://pytorch.org/mobile/home/))
+    and TensorFlow Lite ([https://www.tensorflow.org/lite](https://www.tensorflow.org/lite)).
+    This is not the focus of this book. You are encouraged to check out some further
+    reading for this area at the end of this chapter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Now, let''s look at what kind of tools are available for deploying model inference
+    as a service, especially those tools that have support for MLflow model deployment.
+    There are three types of model deployment and serving tools, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**MLflow built-in model deployment**: This comes out of the box from MLflow
+    releases, which includes deployments to a local web server, AWS SageMaker, and
+    Azure ML. There is also a managed MLflow on Databricks that supports model serving
+    in public review as of this writing, which we will not cover in this book since
+    this is well presented in the official Databricks documentation (interested readers
+    should look up the official documentation on this Databricks feature at this website:
+    [https://docs.databricks.com/applications/mlflow/model-serving.html](https://docs.databricks.com/applications/mlflow/model-serving.html)).
+    However, we will show you how to use the MLflow built-in model deployment to deploy
+    to local and remote AWS SageMaker in this chapter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`mlflow-torchserv` ([https://github.com/mlflow/mlflow-torchserve](https://github.com/mlflow/mlflow-torchserve)),
+    `mlflow-ray-serve` ([https://github.com/ray-project/mlflow-ray-serve](https://github.com/ray-project/mlflow-ray-serve)),
+    and `mlflow-triton-plugin` ([https://github.com/triton-inference-server/server/tree/v2.17.0/deploy/mlflow-triton-plugin](https://github.com/triton-inference-server/server/tree/v2.17.0/deploy/mlflow-triton-plugin)).
+    We will show how to use the `mlflow-ray-serve` plugin for deployment in this chapter.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`mlflow-ray-serve` plugin to deploy the MLflow Python model. Note that, although
+    in this book we show how to use an MLflow customized plugin to deploy with a generic
+    ML serve tool such as Ray Serve, it is important to note that a generic ML serve
+    tool can do much more with or without an MLflow customized plugin.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Optimize DL Inference through Specialized Inference Engines
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: There are some special MLflow model flavors such as **ONNX** ([https://onnx.ai/](https://onnx.ai/))
+    and **TorchScript** ([https://huggingface.co/docs/transformers/v4.17.0/en/serialization#torchscript](https://huggingface.co/docs/transformers/v4.17.0/en/serialization#torchscript))
+    that are specially designed for DL model inference runtime. We can convert a DL
+    model into an ONNX model flavor ([https://github.com/microsoft/onnxruntime](https://github.com/microsoft/onnxruntime))
+    or a TorchScript server ([https://pytorch.org/serve/](https://pytorch.org/serve/)).
+    As both ONNX and TorchScript are still evolving and are specifically designed
+    for the original DL model part, but not the entire inference pipeline, we are
+    not covering them in this chapter.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Now that we have a good understanding of the varieties of the deployment tools
+    and model serving frameworks, let's learn how to do the deployment in the following
+    sections with concrete examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying locally for batch and web service inference
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'For development and testing purposes, we usually need to deploy our model locally
+    to verify it works as expected. Let''s see how to do it for two scenarios: batch
+    inference and web service inference.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Batch inference
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'For batch inference, follow these instructions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Make sure you have completed [*Chapter 7*](B18120_07_ePub.xhtml#_idTextAnchor083),
+    *Multi-Step Deep Learning Inference Pipeline*. This will produce an MLflow `pyfunc`
+    DL inference model pipeline URI that can be loaded using standard MLflow Python
+    functions. The logged model can be uniquely located by the `run_id` and model
+    name as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The model can also be identified by the model name and version number using
+    the model registry as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: Follow the instructions under the *Batch inference at-scale using PySpark UDF
+    function* section of this `README.md` file ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter08/README.md](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter08/README.md))
+    to set up the local virtual environment, a full-fledged MLflow tracking server,
+    and a few environment variables so that we can execute the code on your local
+    environment.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Load the model with the MLflow `mlflow.pyfunc.spark_udf` API to create a PySpark
+    UDF function as follows. You may want to check out the `batch_inference.py` file
+    from GitHub to follow through ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter08/batch/batch_inference.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter08/batch/batch_inference.py)):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will wrap the inference pipeline as a PySpark UDF function with a return
+    result type of `String`. This is because our model inference pipeline has a model
+    signature requiring the output as a `string` type column.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we can apply the PySpark UDF function to the input DataFrame. Note that
+    the input DataFrame must have a `text` column with a `string` data type since
+    that''s what the model signature requires:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Because our model inference pipeline has defined a model signature, we don't
+    need to specify any column parameters if it finds the `text` column in the input
+    DataFrame, which is `df` in this example. Note that we can read a large volume
+    of data using Spark's `read` API, which supports different data format reading,
+    such as CSV, JSON, Parquet, and many more. In our example, we read the `test.csv`
+    file from the IMDB dataset. This will leverage Spark's powerful distributed computation
+    on a cluster if we have a large volume of data. This enables us to do batch inference
+    at scale effortlessly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To run the batch inference code from end to end, you should check out the complete
+    code provided in the repository at this location: [https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter08/batch/batch_inference.py](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/blob/main/chapter08/batch/batch_inference.py).
+    Make sure you replace the `logged_model` variable with your own `run_id` and model
+    name or the registered model name and version before you run the following command
+    in the `batch` folder:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'You should see the output in *Figure 8.2* on the screen:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 8.2 – Batch inference using PySpark UDF function'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_08_02.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.2 – Batch inference using PySpark UDF function
+  prefs: []
+  type: TYPE_NORMAL
+- en: As can be seen from *Figure 8.2*, the multi-step inference pipeline we loaded
+    worked correctly and even detected non-English texts and duplicates, although
+    the language detector probably produced some false positives. The output is a
+    two-column DataFrame where the JSON response of the model prediction is saved
+    in the `predictions` column. Note that you can use the same code provided in `batch_inference.py`
+    in a Databricks notebook and process a very large volume of input data with a
+    Spark cluster by changing the input data and the logged model location.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how to do batch inference at scale, let's see how to deploy
+    to a local web service for the same model inference pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Model as a web service
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We can deploy the same logged model inference pipeline to a web service locally
+    and have an endpoint that accepts HTTP requests with an HTTP response.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The local deployment is quite straightforward with just one command line. We
+    can deploy a logged model or a registered model using the model URI as in the
+    previous batch inference, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should be able to see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will create the conda environment using the logged model so that it will
+    have all the dependencies to run. After the conda environment is created, you
+    should see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Now, the model is deployed as a web service and ready to accept HTTP requests
+    for model prediction. Open a different Terminal window and type the following
+    command to invoke the model web service to get a prediction response:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We can see the following prediction response immediately:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: If you have followed the steps so far and saw the prediction results, you should
+    feel very proud that you just deployed a DL model inference pipeline into a local
+    web service! This is great for testing and debugging, and the behavior of the
+    model will not change on a production web server, so we should make sure it works
+    on a local web server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we have learned how to use the built-in MLflow deployment tool. Next,
+    we will see how to use a generic deployment tool, Ray Serve, to deploy an MLflow
+    inference pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying using Ray Serve and MLflow deployment plugins
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'A more generic way to do deployment is to use a framework such as Ray Serve
+    ([https://docs.ray.io/en/latest/serve/index.html](https://docs.ray.io/en/latest/serve/index.html)).
+    Ray Serve has several advantages, such as DL model frameworks agnostics, native
+    Python support, and supporting complex model composition inference patterns. Ray
+    Serve supports all major DL frameworks and any arbitrary business logic. So, can
+    we leverage both Ray Serve and MLflow to do model deployment and serve? The good
+    news is that we can use the MLflow deployment plugins provided by Ray Serve to
+    do this. Let''s walk through how to use the `mlflow-ray-serve` plugin to do MLflow
+    model deployment using Ray Serve ([https://github.com/ray-project/mlflow-ray-serve](https://github.com/ray-project/mlflow-ray-serve)).
+    Before we begin, we need to install the `mlflow-ray-serve` package:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we need to start a single node Ray cluster locally first using the following
+    two commands:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will start a Ray cluster locally, and you can access its dashboard from
+    your web browser at `http://127.0.0.1:8265/#/` as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.3 – A locally running Ray cluster'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_08_03.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.3 – A locally running Ray cluster
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 8.3* shows a locally running Ray cluster. You can then issue the following
+    command to deploy `inference_pipeline_model` into Ray Serve as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will show the following screen output:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This means that an endpoint at `http://127.0.0.1:8000/dl-inference-model-on-ray`
+    is ready to serve an online inference request! You can test this deployment using
+    the Python code provided at `chapter08/ray_serve/query_ray_serve_endpoint.py`
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will show results on the screen as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should see the inference model response as expected. If you followed through
+    up to this point, congratulations on your successful deployment using the `mlflow-ray-serve`
+    MLflow deployment plugin! If you no longer need this Ray Serve instance, you can
+    stop it by executing the following command line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: This will stop all running Ray instances on your local machine.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deployment Using MLflow Deployment Plugins
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are several MLflow deployment plugins. We just showed how to use `mlflow-ray-serve`
+    to deploy a generic MLflow Python model, `inference_pipeline_model`. This opens
+    doors to deploying to many target destinations where you can launch a Ray cluster
+    in any cloud provider. We will not cover more details in this chapter as it''s
+    beyond the scope of this book. If you are interested, refer to the Ray documentation
+    on how to launch cloud clusters (AWS, Azure, and **Google Cloud Platform** (**GCP**)):
+    [https://docs.ray.io/en/latest/cluster/cloud.html#:~:text=The%20Ray%20Cluster%20Launcher%20can,ready%20to%20launch%20your%20cluster](https://docs.ray.io/en/latest/cluster/cloud.html#:~:text=The%20Ray%20Cluster%20Launcher%20can,ready%20to%20launch%20your%20cluster).
+    Once there is a Ray cluster, you can follow the same procedure to deploy an MLflow
+    model.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know several ways to deploy locally and could further deploy to
+    the cloud using Ray Serve if desirable, let's see how we can deploy to a cloud-managed
+    inference service, AWS SageMaker, in the next section, since it is widely used
+    and can provide a good lesson on how to deploy in a realistic scenario.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying to AWS SageMaker – a complete end-to-end guide
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'AWS SageMaker has a cloud-hosted model service managed by AWS. We will use
+    AWS SageMaker as an example to show you how to deploy to a remote cloud provider
+    for hosted web services that can serve real production traffic. AWS SageMaker
+    has a suite of ML/DL-related services including supporting annotation and model
+    training and many more. Here, we show how to **bring your own model** (**BYOM**)
+    for deployment. This means that you have a model inference pipeline trained outside
+    of AWS SageMaker, and now just need to deploy to SageMaker for hosting. Follow
+    the next steps to prepare and deploy a DL sentiment model. A few prerequisites
+    are required:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You must have Docker Desktop running in your local environment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You must have an AWS account. You can create a free AWS account easily through
+    the free signup website at [https://aws.amazon.com/free/](https://aws.amazon.com/free/).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Once you have these requirements , activate the `dl-model-chapter08` conda
+    virtual environment to follow through a few steps for deploying to SageMaker.
+    We breakdown these steps into six subsections as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Build a local SageMaker Docker image
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Add additional model artifacts layers onto the SageMaker Docker image
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Test local deployment with the newly built SageMaker Docker image
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Push the SageMaker Docker image to AWS Elastic Container Registry
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Deploy the inference pipeline model to create a SageMaker endpoint
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Query the SageMaker endpoint for online inference
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Let's start with the first step to build a local SageMaker Docker image.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 1: Build a local SageMaker Docker image'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We intentionally start with a local build without pushing to the AWS so that
+    we can learn how to add additional layers on top of this basic image and verify
+    everything locally before incurring any cloud cost:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You will see a lot of screen outputs and at the end, it will show something
+    like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'If you see the image name `mlflow-dl-inference`, that means you have successfully
+    created a SageMaker-compatible MLflow-model-serving Docker image. You can verify
+    this by running the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You should see output like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Step 2: Add additional model artifacts layers onto the SageMaker Docker image'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Recall that our inference pipeline model builds on top of a fine-tuned DL model
+    and we load the model through the MLflow PythonModel API's `load_context` function
+    ([https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel](https://www.mlflow.org/docs/latest/python_api/mlflow.pyfunc.html#mlflow.pyfunc.PythonModel))
+    without serializing the fine-tuned model itself. This is partly because MLflow
+    cannot serialize the PyTorch DataLoader ([https://pytorch.org/docs/stable/data.html#single-and-multi-process-data-loading](https://pytorch.org/docs/stable/data.html#single-and-multi-process-data-loading))
+    properly using pickle since the DataLoader does not implement pickle serialization
+    as of this writing. This does give us an opportunity to learn how we can deploy
+    when some of the dependencies cannot be serialized properly, especially when dealing
+    with a real-world DL model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Two Ways to Allow a Docker Container to Access an MLflow Tracking Server
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are two ways to allow a Docker container such as `mlflow-dl-inference`
+    to access and load a fine-tuned model at runtime. The first method is to allow
+    the container to include the MLflow tracking server URL and access token. This
+    may cause some security concerns in an enterprise environment since the Docker
+    image now contains some security credentials. The second method is to directly
+    copy all the referenced artifacts to create a new Docker image that's self-sufficient.
+    At runtime, it does not have to know where the original MLflow tracking server
+    is located since it has all model artifacts locally. This self-contained approach
+    eliminates any concerns of security leaking. We use this second approach in this
+    chapter for deployment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will copy the referenced fine-tuned model into a new Docker
+    image that's built on top of the basic `mlflow-dl-inference` Docker image. This
+    will make a new self-contained Docker image without relying on any external MLflow
+    tracking server. To do this, you need to either download the fine-tuned DL model
+    from a model tracking server to your current local folder, or you can just run
+    our MLproject's pipeline locally using the local filesystem as the MLflow tracking
+    server backend. Follow the *Deploy to AWS SageMaker* section in the `README.md`
+    file to reproduce the local MLflow runs to prepare a fine-tuned model and `inference-pipeline-model`
+    in the local folder. For learning purposes, we have provided two example `mlruns`
+    artifacts and the `huggingface` cache folder in the GitHub repository in the `chapter08`
+    folder ([https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter08](https://github.com/PacktPublishing/Practical-Deep-Learning-at-Scale-with-MLFlow/tree/main/chapter08)),
+    so that we can start building a new Docker image right away by using these existing
+    artifacts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To build a new Docker image, we need to create a Dockerfile as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: The first line means that it starts with the existing `mlflow-dl-inference`
+    Docker image, and the following three lines of `ADD` will copy one `meta.yaml`
+    file and two folders to the corresponding locations in the Docker image. Note
+    that if you already have produced your own runs by following the `README` file,
+    then you do not need to add the third line. Note that, by default, when the Docker
+    container starts, it automatically goes to this`/opt/mlflow/` working directory
+    so everything needs to be copied to this folder for easy access. Also, note that
+    the `/opt/mlflow` directory requires superuser permission, so you need to be prepared
+    to enter your local machine's admin password (usually, on your own laptop, that's
+    your own password).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Copy Privately Built Python Packages into Docker Images
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is also possible to copy privately built Python packages into Docker images
+    so that we can directly reference them in the `conda.yaml` file without going
+    outside of the container itself. For example, we can copy a private Python wheel
+    package, `cool-dl-package-1.0.py3-none-any.whl`, to the `/usr/private-wheels/cool-dl-package/cool-dl-package-1.0-py3-none-any.whl`
+    Docker folder, and then we can point to this path in the `conda.yaml` file. This
+    allows MLflow model artifacts to load these locally accessible Python packages
+    successfully. In our current example, we don't use this approach since we haven't
+    used any privately built Python packages. This is useful for future reference
+    if you are interested in exploring this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, you can run the following command to build a new Docker image in the `chapter08`
+    folder as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will build a new Docker image, `mlflow-dl-inference-w-finetuned-model`,
+    on top of `mlflow-dl-inference`. You should see the following output (only the
+    first and last couple of lines are presented for brevity):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now, you have a new Docker image named `mlflow-dl-inference-w-finetuned-model`,
+    which contains the fine-tuned model. Now, we are ready to deploy our inference
+    pipeline model using this new Docker image, which is SageMaker compatible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 3: Test local deployment with the newly built SageMaker Docker image'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before we deploy to the cloud, let''s test the deployment locally with this
+    new SageMaker Docker image. MLflow provides a convenient way to test this locally
+    using the following command:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: This command will start running the `mlflow-dl-inference-w-finetuned-model`
+    Docker container locally and deploy the inference pipeline model with a `dc5f670efa1a4eac95683633ffcfdd79`
+    run ID into this container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fix a Potential Docker Error
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that you may encounter a Docker error saying **The path /opt/mlflow/mlruns/1/
+    dc5f670efa1a4eac95683633ffcfdd79/artifacts/inference_pipeline_model is not shared
+    from the host and is not known to Docker**. You can configure shared paths from
+    **Docker** | **Preferences...** | **Resources** | **File Sharing** to fix this
+    Docker error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We already provided this inference pipeline model in the GitHub repository,
+    so this should work out-of-the-box when you check out the repository in your local
+    environment. The port for web service is `5555`. Once the command is running,
+    you will see a lot of outputs on the screen, and finally, you should see the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This means that the service is up and running. You might see a few warnings
+    about the PyTorch version not being compatible, but they can be safely ignored.
+    Once this service is up and running, you can then test against it in a different
+    Terminal window by issuing a `curl` web request as follows, like we have tried
+    before:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Note that the port number is `5555` for the localhost. You should then see
+    the response as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: You may wonder how this is different from the previous section's local web service
+    for the inference model. The difference is that this time, we are using a SageMaker
+    container locally, while previously, it was just a local web service without a
+    Docker container. Having the SageMaker container tested locally is very important
+    so that you don't waste time and money deploying a failed model service to the
+    cloud.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we are ready to deploy this container to AWS SageMaker.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 4: Push the SageMaker Docker image to AWS Elastic Container Registry'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now, you can push your newly built `mlflow-dl-inference-w-finetuned-model`
+    Docker image to AWS **Elastic Container Registry** (**ECR**) with the following
+    command. Make sure you have your AWS access token and access ID set up correctly
+    (the real one, not the local development one). Once you have your access key ID
+    and token, run the following command to set up your access to the real AWS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Answer all the questions after executing the command and you will be ready
+    to go. Now, you can run the following command to push the `mlflow-dl-inference-w-finetuned-model`
+    Docker image to the AWS ECR:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Make sure you don''t build a new image with the `--no-build` option included
+    in the command since we just want to push the image, not build a new one. You
+    will see the following output, which shows the image is being pushed to the ECR.
+    Note that in the following output, the AWS account is masked with `xxxxx`. You
+    will see your account number showing in the output. Make sure you have the permission
+    to write to the AWS ECR store:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once this is done, if you go to the AWS website (for example, if you use the
+    `us-west-2` region data center, the URL is [https://us-west-2.console.aws.amazon.com/ecr/repositories?region=us-west-2](https://us-west-2.console.aws.amazon.com/ecr/repositories?region=us-west-2)),
+    you should find your newly pushed image in the ECR with a folder named `mlflow-dl-inference-w-finetuned-model`.
+    You will then find the image in this folder as follows (*Figure 8.4*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.4 – AWS ECR repositories with mlflow-dl-inference-w-finetuned-model
+    image tag 1.23.1'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_08_04.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.4 – AWS ECR repositories with mlflow-dl-inference-w-finetuned-model
+    image tag 1.23.1
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that the image tag number `Copy URI` option. It will look as follows (with
+    the AWS account masked with `xxxxx`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: You will need this image URI to deploy to SageMaker in the next step. Let's
+    now deploy to SageMaker to create an inference endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 5: Deploy the inference pipeline model to create a SageMaker endpoint'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Now, it is time to deploy the inference pipeline model to SageMaker using this
+    image URI we just pushed to the AWS ECR registry. We have included the `sagemaker/deploy_to_sagemaker.py`
+    code in the `chapter08` folder in the GitHub repository. You will need to use
+    the correct AWS role for the deployment. You can create a new `AWSSageMakerExecutionRole`
+    role in your account and assign two permissions policies to this role, `AmazonS3FullAccess`
+    and `AmazonSageMakerFullAccess`. In a real-world scenario, you might want to tighten
+    the permission to a more restricted policy, but for learning purposes, this will
+    work fine. The following figure shows the screen after the role is created:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.5 – Create a role that can be used for deployment in SageMaker'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_08_05.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.5 – Create a role that can be used for deployment in SageMaker
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'You also need to create an S3 bucket for SageMaker to upload the model artifacts
+    and deploy them to SageMaker. In our example, we created a bucket called `dl-inference-deployment`.
+    When we execute the deployment script, as shown here, the model to be deployed
+    will be first uploaded to the `dl-inference-deployment` bucket and then deployed
+    to SageMaker. We have provided the complete deployment script in the `chapter08/sagemaker/deploy_to_sagemaker.py`
+    GitHub repository so you can download and execute it as follows (as a reminder,
+    before you run this script, make sure you reset the environment variable of `MLFLOW_TRACKING_URI`
+    to empty, as in `export MLFLOW_TRACKING_URI=`):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This script executes the following two tasks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Makes a copy of the local `mlruns` under the `chapter08` folder to a local `/opt/mlflow`
+    folder so that SageMaker deployment code can pick up the `inference-pipeline-model`
+    to upload. Because the `/opt` path is usually restricted, here we use `sudo` (superuser)
+    to do this copy. This will prompt you to type in your user password on your laptop.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Uses the `mlflow.sagemaker.deploy` API to create a new SageMaker endpoint, `dl-sentiment-model`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The code snippet is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The parameters need some explanations so that we fully understand all the preparation
+    work that is needed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`model_uri`: This is the inference pipeline model''s URI. In our example, it
+    is `runs:/dc5f670efa1a4eac95683633ffcfdd79/inference_pipeline_model`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`image_url`: This is the Docker image we uploaded to the AWS ECR. In our example,
+    it is `xxxxx.dkr.ecr.us-west-2.amazonaws.com/mlflow-dl-inference-w-finetuned-model:1.23.1`.
+    Note that you need to replace the masked AWS account number, `xxxxx`, with your
+    actual account number.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`execution_role_arn`: This is the role we created to allow SageMaker to do
+    the deployment. In our example, it is `arn:aws:iam::565251169546:role/AWSSageMakerExecutionRole`.
+    Again, you need to replace `xxxxx` with your actual AWS account number.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`bucket`: This is the S3 bucket we created to allow SageMaker to upload the
+    model and then do the actual deployment. In our example, it is `dl-inference-deployment`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The rest of the parameters are self-explanatory.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After you execute the deployment script, you will see the following output
+    (where `xxxxx` is the masked AWS account number):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This may take several minutes (sometimes more than 10 minutes). You may see
+    some warning messages regarding PyTorch version compatibility as you saw when
+    doing local SageMaker deployment testing. You can also go directly to the SageMaker
+    website and you will see the status of the endpoints starting with **Creating**,
+    and then eventually turning to a green-colored **InService** status as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.6 – AWS SageMaker dl-sentiment-model endpoint InService'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B18120_08_06.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 8.6 – AWS SageMaker dl-sentiment-model endpoint InService
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you see the **InService** status, then congratulations! You have successfully
+    deployed a DL inference pipeline model into SageMaker and you can now use it for
+    production traffic!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that the status of the service is inService, you can query it using the
+    command line in the next step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Step 6: Query the SageMaker endpoint for online inference'
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'To query the SageMaker endpoint, you can use the following command line:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You will then see the output as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The actual prediction results are stored in a local `response.json` file, which
+    can be viewed by running the following command to show the content of the response:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will display the content as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE41]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This is the expected response pattern from our inference pipeline model! It
+    is also possible to run the query against the SageMaker inference endpoint using
+    Python code, which we have provided in the `chapter08/sagemaker/ query_sagemaker_endpoint.py`
+    file in the GitHub repository. The core code snippet uses `SageMakerRuntime` client''s
+    `invoke_endpoint` to query, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE42]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE43]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE44]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE45]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE46]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE47]'
+  prefs: []
+  type: TYPE_PRE
+- en: '[PRE48]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The parameters for `invoke_endpoint` need some explanation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`EndpointName`: This is the inference endpoint name. In our example, it is
+    `dl-inference-model`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`ContentType`: This is the MIME type of the input data in the request body.
+    In our example, we use `application/json; format=pandas-split`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Accept`: This is the desired MIME type of the inference in the response body.
+    In our example, we expect the `text/plain` string type.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Body`: This is the actual text that we want to predict the sentiment using
+    the DL model inference service. In our example, it is `{"columns": ["text"],"data":
+    [["This is the best movie we saw."], ["What a movie!"]]}`.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The full code is provided in the GitHub repository, and you can run it in the
+    command line as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE49]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'You will see the following output on your Terminal screen:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE50]'
+  prefs: []
+  type: TYPE_PRE
+- en: This is what we expect from our inference pipeline model's response! If you
+    have followed this chapter up to here, congratulate yourself on successfully deploying
+    our inference pipeline model into production in a remote cloud host, AWS SageMaker!
+    When you are done following the lessons in this chapter, make sure to delete the
+    endpoint so that it doesn't incur unnecessary costs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's summarize what we've learned in this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have learned different ways to deploy an MLflow inference
+    pipeline model for both batch inference and online real-time inference. We started
+    with a brief survey on different model serving scenarios (batch, streaming, and
+    on-device) and looked at three different categories of tools for MLflow model
+    deployment (the MLflow built-in deployment tool, MLflow deployment plugins, and
+    generic model inference serving frameworks that could work with the MLflow inference
+    model). Then, we covered several local deployment scenarios, using the PySpark
+    UDF function to do batch inference and MLflow local deployment for web service.
+    Afterward, we learned how to use Ray Serve in conjunction with the `mlflow-ray-serve`
+    plugin to deploy an MLflow Python inference pipeline model into a local Ray cluster.
+    This opens doors to deploy to any cloud platform such as AWS, Azure ML, or GCP,
+    as long as we can set up a Ray cluster in the cloud. Finally, we provided a complete
+    end-to-end guide on how to deploy to AWS SageMaker, focusing on a common scenario
+    of BYOM, where we have a trained inference pipeline model that's built outside
+    of AWS SageMaker and now needs to be deployed to AWS SageMaker for a hosting model
+    service. Our step-by-step guide should provide you with the confidence to deploy
+    an MLflow inference pipeline model for real production usage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the landscape of deploying DL inference pipeline models is still evolving,
+    and we just learned some foundational skills. You are encouraged to explore more
+    from the *Further reading* section for more advanced topics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we know how to deploy and host a DL inference pipeline, we will learn
+    how to do model explainability in the next chapter, which is of great importance
+    for trustworthy and interpretable model prediction results in many real-world
+    scenarios.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Further reading
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '*An Introduction to TinyML*: [https://towardsdatascience.com/an-introduction-to-tinyml-4617f314aa79](https://towardsdatascience.com/an-introduction-to-tinyml-4617f314aa79)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Performance Optimizations and MLFlow Integrations – Seldon Core 1.10.0 Released*:
+    [https://www.seldon.io/performance-optimizations-and-mlflow-integrations-seldon-core-1-10-0-released/](https://www.seldon.io/performance-optimizations-and-mlflow-integrations-seldon-core-1-10-0-released/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Ray & MLflow: Taking Distributed Machine Learning Applications to Production*:
+    [https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88](https://medium.com/distributed-computing-with-ray/ray-mlflow-taking-distributed-machine-learning-applications-to-production-103f5505cb88)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Managing your machine learning lifecycle with MLflow and Amazon SageMaker*:
+    [https://aws.amazon.com/blogs/machine-learning/managing-your-machine-learning-lifecycle-with-mlflow-and-amazon-sagemaker/](https://aws.amazon.com/blogs/machine-learning/managing-your-machine-learning-lifecycle-with-mlflow-and-amazon-sagemaker/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Deploy A Locally Trained ML Model In Cloud Using AWS SageMaker*: [https://medium.com/geekculture/84af8989d065](https://medium.com/geekculture/84af8989d065)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*PyTorch vs TensorFlow in 2022*: [https://www.assemblyai.com/blog/pytorch-vs-tensorflow-in-2022/](https://www.assemblyai.com/blog/pytorch-vs-tensorflow-in-2022/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Try Databricks: Free Trial or Community Edition*: [https://docs.databricks.com/getting-started/try-databricks.html#free-trial-or-community-edition](https://docs.databricks.com/getting-started/try-databricks.html#free-trial-or-community-edition)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*MLOps with MLflow and Amazon SageMaker Pipelines*: [https://towardsdatascience.com/mlops-with-mlflow-and-amazon-sagemaker-pipelines-33e13d43f238](https://towardsdatascience.com/mlops-with-mlflow-and-amazon-sagemaker-pipelines-33e13d43f238)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*PyTorch JIT and TorchScript*: [https://towardsdatascience.com/pytorch-jit-and-torchscript-c2a77bac0fff](https://towardsdatascience.com/pytorch-jit-and-torchscript-c2a77bac0fff)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*ML Model Serving Best Tools*: [https://neptune.ai/blog/ml-model-serving-best-tools](https://neptune.ai/blog/ml-model-serving-best-tools)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Deploying Machine Learning models to production — Inference service architecture
+    patterns*: [https://medium.com/data-for-ai/deploying-machine-learning-models-to-production-inference-service-architecture-patterns-bc8051f70080](https://medium.com/data-for-ai/deploying-machine-learning-models-to-production-inference-service-architecture-patterns-bc8051f70080)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*How to Deploy Large-Size Deep Learning Models into Production*: [https://towardsdatascience.com/how-to-deploy-large-size-deep-learning-models-into-production-66b851d17f33](https://towardsdatascience.com/how-to-deploy-large-size-deep-learning-models-into-production-66b851d17f33)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Serving ML models at scale using Mlflow on Kubernetes*: [https://medium.com/artefact-engineering-and-data-science/serving-ml-models-at-scale-using-mlflow-on-kubernetes-7a85c28d38e](https://medium.com/artefact-engineering-and-data-science/serving-ml-models-at-scale-using-mlflow-on-kubernetes-7a85c28d38e)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*When PyTorch meets MLflow*: [https://mlops.community/when-pytorch-meets-mlflow/](https://mlops.community/when-pytorch-meets-mlflow/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Deploy a model to an Azure Kubernetes Service Cluster*: [https://docs.microsoft.com/en-us/azure/machine-learning/how-to-deploy-azure-kubernetes-service?tabs=python](https://docs.microsoft.com/en-us/azure/machine-learning/how-to-deploy-azure-kubernetes-service?tabs=python)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*ONNX and Azure Machine Learning: Create and accelerate ML models*: [https://docs.microsoft.com/en-us/azure/machine-learning/concept-onnx](https://docs.microsoft.com/en-us/azure/machine-learning/concept-onnx)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

@@ -1,0 +1,2097 @@
+- en: '4'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Computer Vision with Convolutional Networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 2*](B19627_02.xhtml#_idTextAnchor047) and [*Chapter 3*](B19627_03.xhtml#_idTextAnchor079),
+    we set high expectations for **deep learning** (**DL**) and computer vision. First,
+    we mentioned the ImageNet competition, and then we talked about some of its exciting
+    real-world applications, such as semi-autonomous cars. In this chapter, and the
+    next two chapters, we’ll deliver on those expectations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vision is arguably the most important human sense. We rely on it for almost
+    any action we take. But image recognition has (and in some ways still is), for
+    the longest time, been one of the most difficult problems in computer science.
+    Historically, it’s been very difficult to explain to a machine what features make
+    up a specified object, and how to detect them. But, as we’ve seen, in DL, a **neural
+    network** (**NN**) can learn those features by itself.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Intuition and justification for **convolutional neural** **networks** (**CNNs**)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Convolutional layers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Pooling layers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The structure of a convolutional network
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Classifying images with PyTorch and Keras
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Advanced types of convolutions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Advanced CNN models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We’ll implement the example in this chapter using Python, PyTorch, and Keras.
+    If you don’t have an environment set up with these tools, fret not – the example
+    is available as a Jupyter Notebook on Google Colab. You can find the code examples
+    in this book’s GitHub repository: [https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter04](https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter04).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Intuition and justification for CNNs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The information we extract from sensory inputs is often determined by their
+    context. With images, we can assume that nearby pixels are closely related, and
+    their collective information is more relevant when taken as a unit. Conversely,
+    we can assume that individual pixels don’t convey information related to each
+    other. For example, to recognize letters or digits, we need to analyze the dependency
+    of pixels close by because they determine the shape of the element. In this way,
+    we could figure out the difference between, say, a 0 or a 1\. The pixels in an
+    image are organized in a two-dimensional grid, and if the image isn’t grayscale,
+    we’ll have a third dimension for the color channels.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Alternatively, a **magnetic resonance image** (**MRI**) also uses three-dimensional
+    space. You might recall that, until now, if we wanted to feed an image to an NN,
+    we had to reshape it from a two-dimensional array into a one-dimensional array.
+    CNNs are built to address this issue: how to make information about units that
+    are closer more relevant than information coming from units that are further apart.
+    In visual problems, this translates into making units process information coming
+    from pixels that are near to one another. With CNNs, we’ll be able to feed one-,
+    two-, or three-dimensional inputs and the network will produce an output of the
+    same dimensionality. As we’ll see later, this will give us several advantages.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: You may recall that at the end of the previous chapter, we successfully classified
+    the MNIST images (with around 98% accuracy) using an NN of `airplane`, `automobile`,
+    `bird`, `cat`, `deer`, `dog`, `frog`, `horse`, `ship`, and `truck`. Had we tried
+    to classify CIFAR-10 with an FC NN with one or more hidden layers, its validation
+    accuracy would have been just around 50% (trust me, we did just that in the previous
+    edition of this book). Compared to the MNIST result of nearly 98% accuracy, this
+    is a dramatic difference, even though CIFAR-10 is also a toy problem. Therefore,
+    FC NNs are of little practical use for computer vision problems. To understand
+    why, let’s analyze the first hidden layer of our hypothetical CIFAR-10 network,
+    which has 1,000 units. The input size of the image is
+  prefs: []
+  type: TYPE_NORMAL
+- en: 32 * 32 * 3 = 3,072\. Therefore, the first hidden layer had a total of 2,072
+    * 1,000 = 2,072,000 weights. That’s no small number! Not only is it easy to overfit
+    such a large network, but it’s also memory inefficient.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Even more important, each input unit (or pixel) is connected to every unit
+    in the hidden layer. Because of this, the network cannot take advantage of the
+    spatial proximity of the pixels since it doesn’t have a way of knowing which pixels
+    are close to each other. In contrast, CNNs have properties that provide an effective
+    solution to these problems:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: They connect units that only correspond to neighboring pixels of the image.
+    In this way, the units are “forced” to only take input from other units that are
+    spatially close. This also reduces the number of weights since not all units are
+    interconnected.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: CNNs use parameter sharing. In other words, a limited number of weights are
+    shared among all units in a layer. This further reduces the number of weights
+    and helps fight overfitting. It might sound confusing, but it will become clear
+    in the next section.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we’ll discuss CNNs in the context of computer vision, because
+    computer vision is their most common application. However, CNNs are successfully
+    applied in areas such as speech recognition and **natural language processing**
+    (**NLP**). Many of the explanations we’ll describe here are also valid for those
+    areas – that is, the principles of CNNs are the same regardless of the field of
+    use.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To understand CNNs, we’ll first discuss their basic building blocks. Once we’ve
+    done this, we’ll show you how to assemble them in a full-fledged NN. Then, we’ll
+    demonstrate that such a network is good enough to classify the CIFAR-10 with high
+    accuracy. Finally, we’ll discuss advanced CNN models, which can be applied to
+    real-world computer vision tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Convolutional layers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The convolutional layer is the most important building block of a CNN. It consists
+    of a set of **filters** (also known as **kernels** or **feature detectors**),
+    where each filter is applied across all areas of the input data. A filter is defined
+    by a **set of** **learnable weights**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To add some meaning to this laconic definition, we’ll start with the following
+    figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.1 – Convolution operation start](img/B19627_04_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.1 – Convolution operation start
+  prefs: []
+  type: TYPE_NORMAL
+- en: The preceding figure shows a two-dimensional input layer of a CNN. For the sake
+    of simplicity, we’ll assume that this is the input layer, but it can be any layer
+    of the network. We’ll also assume that the input is a grayscale image, and each
+    input unit represents the color intensity of a pixel. This image is represented
+    by a two-dimensional tensor.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll start the convolution by applying a 3×3 filter of weights (again, a two-dimensional
+    tensor) in the top-left corner of the image. Each input unit is associated with
+    a single weight of the filter. It has nine weights, because of the nine input
+    units, but, in general, the size is arbitrary (2×2, 4×4, 5×5, and so on). The
+    convolution operation is defined as the following weighted sum:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:mrow></mml:mrow><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mi>b</mml:mi></mml:math>](img/289.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *row* and *col* represent the input layer position, where we apply the
+    filter (*row=1* and *col=1* in the preceding figure); ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/290.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/291.png)
+    are the height and width of the filter size (3×3); *i* and *j* are the filter
+    indices of each filter weight, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:math>](img/292.png);
+    *b* is the bias weight. The group of units, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/293.png),
+    which participates in the input, is called the **receptive field**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can see that in a convolutional layer, the unit activation value is defined
+    in the same way as the activation value of the unit we defined in [*Chapter 2*](B19627_02.xhtml#_idTextAnchor047)
+    – that is, a weighted sum of its inputs. But here, the unit takes input only from
+    a limited number of input units in its immediate surroundings (the receptive field).
+    This is opposed to an FC layer, where the input comes from all input units. The
+    difference matters because the purpose of the filter is to highlight a specific
+    feature in the input, for example, an edge or a line in an image. In the context
+    of the NN, the filter output represents the activation value of a unit in the
+    next layer. The unit will be active if the feature is present at this spatial
+    location. In hierarchically structured data, such as images, neighboring pixels
+    form meaningful shapes and objects such as an edge or a line. However, a pixel
+    at one end of the image is unlikely to have a relationship with a pixel at another
+    end. Because of this, using an FC layer to connect all of the input pixels with
+    each output unit is like asking the network to find a needle in a haystack. It
+    has no way of knowing whether an input pixel is relevant (in the immediate surroundings)
+    to the output unit or not (the other end of the image). Therefore, the limited
+    receptive field of the convolutional layer is better suited to highlight meaningful
+    features in the input data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ve calculated the activation of a single unit, but what about the others?
+    It’s simple! For each new unit, we’ll slide the filter across the input image,
+    and we’ll compute its output (the weighted sum) with each new set of input units.
+    The following diagram shows how to compute the activations of the next two positions
+    (one pixel to the right):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.2 – The first three steps of a convolution operation](img/B19627_04_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.2 – The first three steps of a convolution operation
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By “slide,” we mean that the weights of the filter don’t change across the
+    image. In effect, we’ll use the same nine filter weights and the single bias weight
+    to compute the activations of all output units, each time with a different set
+    of inputs. We call this **parameter sharing**, and we do it for two reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By reducing the number of weights, we reduce the memory footprint and prevent
+    overfitting.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The filter highlights a specific visual feature in the image. We can assume
+    that this feature is useful, regardless of its position on the image. Since we
+    apply the same filter throughout the image, the convolution is translation invariant;
+    that is, it can detect the same feature, regardless of its location on the image.
+    However, the convolution is neither rotation-invariant (it is not guaranteed to
+    detect a feature if it’s rotated) nor scale-invariant (it is not guaranteed to
+    detect the same artifact in different scales).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: To compute all output activations, we’ll repeat the sliding process until we’ve
+    covered the whole input. The spatially arranged input and output units are called
+    **depth slices** (**feature maps** or **channels**), implying that there is more
+    than one slice. The slices, like the image, are represented by tensors. A slice
+    tensor can serve as an input to other layers in the network. Finally, just as
+    with regular layers, we can use an activation function, such as the **rectified
+    linear unit** (**ReLU**), after each unit.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: It’s interesting to note that each input unit is part of the input of multiple
+    output units. For example, as we slide the filter, the green unit in the preceding
+    diagram will form the input of nine output units.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can illustrate what we’ve learned so far with a simple example. The following
+    diagram illustrates a 2D convolution with a 2×2 filter applied over a single 3×3
+    slice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.3 – A 2D convolution with a 2×2 ﬁlter applied over a single 3×3
+    slice for a 2×2 output slice](img/B19627_04_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.3 – A 2D convolution with a 2×2 ﬁlter applied over a single 3×3 slice
+    for a 2×2 output slice
+  prefs: []
+  type: TYPE_NORMAL
+- en: This example also shows us that the input and output feature maps have different
+    dimensions. Let’s say we have an input layer with a size of `(width_i, height_i)`
+    and a filter with dimensions, `(filter_w, filter_h)`. After applying the convolution,
+    the dimensions of the output layer are `width_o = width_i - filter_w + 1` and
+    `height_o = height_i - filter_h + 1`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, we have `width_o = height_o = 3 – 2 + 1 =` `2`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we’ll illustrate convolutions with a simple coding example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A coding example of the convolution operation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We’ve now described how convolutional layers work, but we’ll gain better intuition
+    with a visual example. Let’s implement a convolution operation by applying a couple
+    of filters across an image. For the sake of clarity, we’ll implement the sliding
+    of the filters across the image manually and we won’t use any DL libraries. We’ll
+    only include the relevant parts and not the full program, but you can find the
+    full example in this book’s GitHub repository. Let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Import `numpy`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the `conv` function, which applies the convolution across the image.
+    `conv` takes two parameters, both two-dimensional numpy arrays: `image`, for the
+    pixel intensities of the grayscale image itself, and the hardcoded `im_filter`,
+    for the filter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: First, we’ll compute the output image size, which depends on the input `image`
+    and `im_filter` sizes. We’ll use it to instantiate the output image, `im_c`.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Then, we’ll iterate over all pixels of `image`, applying `im_filter` at each
+    location. This operation requires four nested loops: the first two for the `image`
+    dimensions and the second two for iterating over the two-dimensional filter.'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: We’ll check if any value is out of the [0, 255] interval and fix it, if necessary.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This is shown in the following example:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Apply different filters across the image. To better illustrate our point, we’ll
+    use a 10×10 blur filter, as well as Sobel edge detectors, as shown in the following
+    example (`image_grayscale` is the two-dimensional `numpy` array, which represents
+    the pixel intensities of a grayscale image):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The full program will produce the following output:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 4.4 – The ﬁrst image is the grayscale input. The second image is the
+    result of a 10×10 blur ﬁlter. The third and fourth images use detectors and vertical
+    Sobel edge detectors](img/B19627_04_04.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.4 – The ﬁrst image is the grayscale input. The second image is the
+    result of a 10×10 blur ﬁlter. The third and fourth images use detectors and vertical
+    Sobel edge detectors
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this example, we used filters with hardcoded weights to visualize how the
+    convolution operation works in NNs. In reality, the weights of the filter will
+    be set during the network’s training. All we’ll need to do is define the network
+    architecture, such as the number of convolutional layers, the depth of the output
+    volume, and the size of the filters. The network will figure out the features
+    highlighted by each filter during training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we saw in this example, we had to implement four nested loops to implement
+    the convolution. However, with some clever transformations, the convolution operation
+    can be implemented with matrix-matrix multiplication. In this way, it can take
+    full advantage of GPU parallelization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next few sections, we’ll discuss some of the finer details of the convolutional
+    layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cross-channel and depthwise convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'So far, we have described the one-to-one slice relation, where we apply a single
+    filter over a single input slice to produce a single output slice. But this arrangement
+    is limiting for the following reasons:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A single input slice works well for a grayscale image, but it doesn’t work for
+    color images with multiple channels or any other multi-dimensional input
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A single filter can detect a single feature in the slice, but we are interested
+    in detecting many different features
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'How do we solve these limitations? It’s simple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the input, we’ll split the image into color channels. In the case of an
+    RGB image, that would be three. We can think of each color channel as a depth
+    slice, where the values are the pixel intensities for the given color (R, G, or
+    B), as shown in the following example:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![Figure 4.5 – An example of an input slice with a depth of 3](img/B19627_04_05.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.5 – An example of an input slice with a depth of 3
+  prefs: []
+  type: TYPE_NORMAL
+- en: The combination of input slices is called **input volume** with a **depth**
+    of 3\. An RGB image is represented by a 3D tensor of three 2D slices (one slice
+    per color channel).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The CNN convolution can have multiple filters, highlighting different features,
+    which results in multiple output feature maps (one for each filter), combined
+    in an **output volume**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s say we have ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/294.png)
+    input (uppercase *C*) and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/295.png)
+    output slices. Depending on the relationship of the input and output slice, we
+    get cross-channel and depthwise convolutions, as illustrated in the following
+    diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.6 – Cross-channel convolution (left); depthwise convolution (right)](img/B19627_04_06.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.6 – Cross-channel convolution (left); depthwise convolution (right)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s discuss their properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Cross-channel convolutions**: One output slice receives input from all input
+    slices (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:mi>t</mml:mi><mml:mi>o</mml:mi><mml:mo>-</mml:mo><mml:mi>o</mml:mi><mml:mi>n</mml:mi><mml:mi>e</mml:mi></mml:math>](img/296.png)
+    relationship). With multiple output slices, the relationship becomes ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>-</mml:mo><mml:mi>t</mml:mi><mml:mi>o</mml:mi><mml:mo>-</mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/297.png).
+    In other words, each input slice contributes to the output of each output slice.
+    Each pair of input/output slices uses a separate filter slice that’s unique to
+    that pair. Let’s denote the index of the input slice with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/298.png)
+    (lowercase *c*); the index of the output slice with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/299.png);
+    the dimensions of the filter with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:math>](img/300.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:math>](img/301.png).
+    Then, the cross-channel 2D convolution of a single output cell in one of the output
+    slices is defined as the following weighted sum:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:math>](img/302.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note that we have a unique bias, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub><mml:mo>,</mml:mo></mml:math>](img/303.png)
+    for each output slice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also compute the total number of weights, *W*, in a cross-channel 2D
+    convolution with the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi>W</mml:mi><mml:mo>=</mml:mo><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/304.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *+1* represents the bias weight for each filter. Let’s say we have three
+    input slices and want to apply four 5×5 filters to them. If we did this, the convolution
+    filter would have a total of (3 * 5 * 5 + 1) * 4 = 304 weights, four output slices
+    (an output volume with a depth of 4), and one bias per slice. The filter for each
+    output slice will have three 5×5 filter patches for each of the three input slices
+    and one bias for a total of 3 * 5 * 5 + 1 = 76 weights.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Depthwise convolutions**: One output slice receives input from a single input
+    slice. It’s a kind of reversal of the previous case. In its simplest form, we
+    apply a filter over a single input slice to produce a single output slice. In
+    this case, the input and output volumes have the same depth – that is, *C*. We
+    can also specify a channel multiplier (an integer, *M*), where we apply *M* filters
+    over a single output slice to produce *M* output slices per input slice. In this
+    case, the total number of output slices is ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:mi>M</mml:mi></mml:math>](img/305.png).
+    The depthwise 2D convolution is defined as the following weighted sum:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi>y</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>m</mml:mi><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>m</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>r</mml:mi><mml:mi>o</mml:mi><mml:mi>w</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>l</mml:mi><mml:mo>+</mml:mo><mml:mi>j</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:mrow><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>m</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>b</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi><mml:mo>,</mml:mo><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/306.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can compute the number of weights, *W*, in a 2D depthwise convolution with
+    the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi>W</mml:mi><mml:mo>=</mml:mo><mml:mi>C</mml:mi><mml:mo>×</mml:mo><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>M</mml:mi><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>h</mml:mi></mml:mrow></mml:msub><mml:mo>×</mml:mo><mml:msub><mml:mrow><mml:mi>F</mml:mi></mml:mrow><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mi>M</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/307.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *+M* represents the biases of each output slice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll discuss some more properties of the convolution operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stride and padding in convolutional layers
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'So far, we’ve assumed that sliding of the filter happens one pixel at a time,
+    but that’s not always the case. We can slide the filter over multiple positions.
+    This parameter of the convolutional layers is called **stride**. Usually, the
+    stride is the same across all dimensions of the input. In the following diagram,
+    we can see a convolutional layer with *stride = 2* (also called **stride convolution**):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.7 – With stride = 2, the ﬁlter is translated by two pixels at a
+    time](img/B19627_04_07.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.7 – With *stride = 2*, the ﬁlter is translated by two pixels at a time
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The main effect of the larger stride is an increase in the receptive field
+    of the output units at the expense of the size of the output slice itself. To
+    understand this, let’s recall that in the previous section, we introduced a simple
+    formula for the output size, which included the sizes of the input and the kernel.
+    Now, we’ll extend it to also include the stride: `width_o = (width_i - filter_w)
+    / stride_w + 1` and `height_o = 1 + (height_i - filter_h) / stride_h`. For example,
+    the output size of a square slice generated by a 28×28 input image, convolved
+    with a 3×3 filter with *stride = 1*, would be 1 + 28 - 3 = 26\. But with *stride
+    = 2*, we get 1 + (28 - 3) / 2 = 13\. Therefore, if we use *stride = 2*, the size
+    of the output slice will be roughly four times smaller than the input. In other
+    words, one output unit will “cover” an area, which is four times larger compared
+    to the input units. The units in the following layers will gradually capture input
+    from larger regions from the input image. This is important because it would allow
+    them to detect larger and more complex features of the input.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The convolution operations we have discussed so far have produced smaller output
+    than the input (even with *stride = 1*). But, in practice, it’s often desirable
+    to control the size of the output. We can solve this by **padding** the edges
+    of the input slice with rows and columns of zeros before the convolution operation.
+    The most common way to use padding is to produce output with the same dimensions
+    as the input. In the following diagram, we can see a convolutional layer with
+    *padding = 1* and *stride =* *1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.8 – A convolutional layer with padding = 1](img/B19627_04_08.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.8 – A convolutional layer with padding = 1
+  prefs: []
+  type: TYPE_NORMAL
+- en: The white units represent the padding. The input and the output slices have
+    the same dimensions (dark units). The newly padded zeros will participate in the
+    convolution operation with the slice, but they won’t affect the result. The reason
+    is that, even though the padded areas are connected with weights to the following
+    layer, we’ll always multiply those weights by the padded value, which is 0\. At
+    the same time, sliding the filter across the padded input slice will produce an
+    output slice with the same dimensions as the unpadded input.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now that we know about stride and padding, we can introduce the full formula
+    for the size of the output slice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: We now have a basic knowledge of convolutions, and we can continue to the next
+    building block of CNNs – the pooling layer. Once we know all about pooling layers,
+    we’ll introduce our first full CNN, and we’ll implement a simple task to solidify
+    our knowledge. Then, we’ll focus on more advanced CNN topics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Pooling layers
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous section, we explained how to increase the receptive field of
+    the units by using *stride > 1*. But we can also do this with the help of pooling
+    layers. A pooling layer splits the input slice into a grid, where each grid cell
+    represents a receptive field of several units (just as a convolutional layer does).
+    Then, a pooling operation is applied over each cell of the grid. Pooling layers
+    don’t change the volume depth because the pooling operation is performed independently
+    on each slice. They are defined by two parameters: stride and receptive field
+    size, just like convolutional layers (pooling layers usually don’t use padding).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll discuss three types of pooling layers – max pooling,
+    average pooling, and **global average pooling** (**GAP**). These three types of
+    pooling are displayed in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.9 – Max, average, and global average pooling](img/B19627_04_09.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.9 – Max, average, and global average pooling
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Max pooling** is the most common way of pooling. The max pooling operation
+    takes the unit with the highest activation value in each local receptive field
+    (grid cell) and propagates only that value forward. In the preceding figure (left),
+    we can see an example of max pooling with a receptive field of 2×2 and *stride
+    = 2*. This operation discards 3/4 of the input units. Pooling layers don’t have
+    any weights. In the backward pass of max pooling, the gradient is routed only
+    to the unit with the highest activation during the forward pass. The other units
+    in the receptive field backpropagate zeros.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Average pooling** is another type of pooling, where the output of each receptive
+    field is the mean value of all activations within the field. In the preceding
+    figure (middle), we can see an example of average pooling with a receptive field
+    of 2×2 and *stride =* *2*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: GAP is similar to average pooling, but a single pooling region covers the whole
+    input slice. We can think of GAP as an extreme type of dimensionality reduction
+    because it outputs a single value that represents the average of the whole slice.
+    This type of pooling is usually applied at the end of the convolutional portion
+    of a CNN. In the preceding figure (right), we can see an example of a GAP operation.
+    Stride and receptive field size don’t apply to the GAP operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In practice, only two combinations of stride and receptive field size are used.
+    The first is a 2×2 receptive field with *stride = 2*, and the second is a 3×3
+    receptive field with *stride = 2* (overlapping). If we use a larger value for
+    either parameter, the network loses too much information. Alternatively, if the
+    stride is 1, the size of the layer wouldn’t be smaller, and nor will the receptive
+    field increase.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Based on these parameters, we can compute the output size of a pooling layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Pooling layers are still very much used, but often, we can achieve similar
+    or better results by simply using convolutional layers with larger strides. (See,
+    for example, *J. Springerberg, A. Dosovitskiy, T. Brox, and M. Riedmiller, Striving
+    for Simplicity: The All Convolutional Net, (**2015)*, [https://arxiv.org/abs/1412.6806](https://arxiv.org/abs/1412.6806).)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We now have sufficient knowledge to introduce our first full CNN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The structure of a convolutional network
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The following figure shows the structure of a basic classification CNN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.10 – A basic convolutional network with convolutional, FC, and pooling
+    layers](img/B19627_04_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.10 – A basic convolutional network with convolutional, FC, and pooling
+    layers
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most CNNs share basic properties. Here are some of them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We would typically alternate one or more convolutional layers with one pooling
+    layer (or a stride convolution). In this way, the convolutional layers can detect
+    features at every level of the receptive field size. The aggregated receptive
+    field size of deeper layers is larger than the ones at the beginning of the network.
+    This allows them to capture more complex features from larger input regions. Let’s
+    illustrate this with an example. Imagine that the network uses 3×3 convolutions
+    with *stride = 1* and 2×2 pooling with *stride =* *2*:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The units of the first convolutional layer will receive input from 3×3 pixels
+    of the image.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A group of 2×2 output units of the first layer will have a combined receptive
+    field size of 4×4 (because of the stride).
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After the first pooling operation, this group will be combined in a single unit
+    of the pooling layer.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The second convolution operation takes input from 3×3 pooling units. Therefore,
+    it will receive input from a square with side 3×4 = 12 (or a total of 12×12 =
+    144) pixels from the input image.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use the convolutional layers to extract features from the input. The features
+    detected by the deepest layers are highly abstract, but they are also not readable
+    by humans. To solve this problem, we usually add one or more FC layers after the
+    last convolutional/pooling layer. In this example, the last FC layer (output)
+    will use softmax to estimate the class probabilities of the input. You can think
+    of the FC layers as translators between the network’s language (which we don’t
+    understand) and ours.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The deeper convolutional layers usually have more filters (hence higher volume
+    depth), compared to the initial ones. A feature detector at the beginning of the
+    network works on a small receptive field. It can only detect a limited number
+    of features, such as edges or lines, shared among all classes. On the other hand,
+    a deeper layer would detect more complex and numerous features. For example, if
+    we have multiple classes such as cars, trees, or people, each will have its own
+    set of features, such as tires, doors, leaves and faces, and so on. This would
+    require more feature detectors.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now that we know the structure of a CNN, let’s implement one with PyTorch and
+    Keras.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying images with PyTorch and Keras
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll try to classify the images of the CIFAR-10 dataset with
+    both PyTorch and Keras. It consists of 60,000 32x32 RGB images, divided into 10
+    classes of objects. To understand these examples, we’ll first focus on two prerequisites
+    that we haven’t covered until now: how images are represented in DL libraries
+    and data augmentation training techniques.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Convolutional layers in deep learning libraries
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'PyTorch, Keras, and **TensorFlow** (**TF**) have out-of-the-gate support for
+    1D, 2D, and 3D convolutions. The inputs and outputs of the convolution operation
+    are tensors. A 1D convolution with multiple input/output slices would have 3D
+    input and output tensors. Their axes can be in either *SCW* or *SWC* order, where
+    we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*S*: The index of the sample in the mini-batch'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*C*: The index of the depth slice in the volume'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*W*: The content of the slice'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the same way, a 2D convolution will be represented by *SCHW* or *SHWC* ordered
+    tensors, where *H* and *W* are the height and width of the slices. A 3D convolution
+    will have *SCDHW* or *SDHWC* order, where *D* stands for the depth of the slice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data augmentation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'One of the most efficient regularization techniques is data augmentation. If
+    the training data is too small, the network might start overfitting. Data augmentation
+    helps counter this by artificially increasing the size of the training set. In
+    the CIFAR-10 examples, we’ll train a CNN over multiple epochs. The network will
+    “see” every sample of the dataset once per epoch. To prevent this, we can apply
+    random augmentations to the images, before feeding them to train the CNN. The
+    labels will stay the same. Some of the most popular image augmentations are as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Rotation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Horizontal and vertical flip
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Zoom in/out
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Crop
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Skew
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Contrast and brightness adjustment
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The emboldened augmentations are shown in the following example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.11 – Examples of diﬀerent image augmentations](img/B19627_04_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.11 – Examples of diﬀerent image augmentations
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we’re ready to proceed with the examples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying images with PyTorch
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'We’ll start with PyTorch first:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Select the device, preferably a GPU. This NN is larger than the MNIST ones
+    and the CPU training would be very slow:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Load the training dataset (followed by the validation):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '`train_transform` is of particular interest. It performs random horizontal
+    and vertical flips, and it normalizes the dataset with `transforms.Normalize`
+    using z-score normalization. The hardcoded numerical values represent the manually
+    computed channel-wise mean and `std` values for the CIFAR-10 dataset. `train_loader`
+    takes care of providing training minibatches.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Load the validation dataset. Note that we normalize the validation set with
+    the mean and `std` values of the training dataset:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define our CNN using the `Sequential` class. It has the following properties:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Three blocks of two convolutional layers (3×3 filters) and one max pooling layer.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Batch normalization after each convolutional layer.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The first two blocks apply `padding=1` to the convolutions, so they don’t decrease
+    the size of the feature maps.
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`Linear` (FC) layer with 10 outputs (one of each class). The final activation
+    is softmax.'
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s see the definition:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the training and validation. We’ll use the same `train_model` and `test_model`
+    functions that we implemented in the MNIST PyTorch example in [*Chapter 3*](B19627_03.xhtml#_idTextAnchor079).
+    Because of this, we won’t implement them here, but the full source code is available
+    in this chapter’s GitHub repository (including a Jupyter Notebook). We can expect
+    the following results: 51% accuracy in 1 epoch, 70% accuracy in 5 epochs, and
+    around 82% accuracy in 75 epochs.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This concludes our PyTorch example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Classifying images with Keras
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Our second example is the same task, but this time implemented with Keras:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Start by downloading the dataset. We’ll also convert the numerical labels into
+    one-hot-encoded tensors:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Create an instance of `ImageDataGenerator`, which applies z-normalization over
+    each channel of the training set images. It also provides data augmentation (random
+    horizontal and vertical flips) during training. Also, note that we apply the mean
+    and standard variation of the training over the test set for the best performance:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we can define our CNN using the `Sequential` class. We’ll use the same
+    architecture we defined in the *Classifying images with PyTorch* section. The
+    following is the Keras definition of that model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define the training parameters (we’ll also print the model summary for clarity):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the training for 50 epochs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Depending on the number of epochs, this model will produce the following results:
+    50% accuracy in 1 epoch, 72% accuracy in 5 epochs, and around 85% accuracy in
+    45 epochs. Our Keras example has slightly higher accuracy compared to the one
+    in PyTorch, although they should be identical. Maybe we’ve got a bug somewhere.
+    We might never know, but we can learn a lesson, nevertheless: ML models aren’t
+    easy to debug because they can fail with slightly degraded performance, instead
+    of outright error. Finding the exact reason for this performance penalty can be
+    hard.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve implemented our first full CNN twice, we’ll focus on some more
+    advanced types of convolutions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advanced types of convolutions
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: So far, we’ve discussed the “classic” convolutional operation. In this section,
+    we’ll introduce several new variations and their properties.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1D, 2D, and 3D convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this chapter, we’ve used **2D convolutions** because computer vision with
+    two-dimensional images is the most common CNN application. But we can also have
+    1D and 3D convolutions, where the units are arranged in one-dimensional or three-dimensional
+    space, respectively. In all cases, the filter has the same number of dimensions
+    as the input, and the weights are shared across the input. For example, we would
+    use 1D convolution with time series data because the values are arranged across
+    a single time axis. In the following diagram, on the left, we can see an example
+    of 1D convolution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.12 –1D convolution (left); 3D convolution (right)](img/B19627_04_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.12 –1D convolution (left); 3D convolution (right)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The weights with the same dashed lines share the same value. The output of the
+    1D convolution is also 1D. If the input is 3D, such as a 3D MRI, we could use
+    3D convolution, which will also produce 3D output. In this way, we’ll maintain
+    the spatial arrangement of the input data. We can see an example of 3D convolution
+    in the preceding diagram, on the right. The input has dimensions of H/W/L, and
+    the filter has a single size, *F*, for all dimensions. The output is also 3D.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1×1 convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A 1×1 (pointwise) convolution is a special case of convolution where each dimension
+    of the convolution filter is of size 1 (1×1 in 2D convolutions and 1×1×1 in 3D).
+    At first, this doesn’t make sense – a 1×1 filter doesn’t increase the receptive
+    field size of the output units. The result of such a convolution would be pointwise
+    scaling. But it can be useful in another way – we can use them to change the depth
+    between the input and output volumes. To understand this, let’s recall that, in
+    general, we have an input volume with a depth of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub></mml:math>](img/308.png)
+    slices and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/309.png)
+    filters for ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/309.png)
+    output slices. Each output slice is generated by applying a unique filter over
+    all the input slices. If we use a 1×1 filter and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>≠</mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/311.png),
+    we’ll have output slices of the same size, but with different volume depths. At
+    the same time, we won’t change the receptive field size between the input and
+    output. The most common use case is to reduce the output volume, or ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mi>n</mml:mi></mml:mrow></mml:msub><mml:mo>></mml:mo><mml:msub><mml:mrow><mml:mi>C</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/312.png)
+    (dimension reduction), nicknamed the **“****bottleneck” layer**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Depthwise separable convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: An output slice in a cross-channel convolution receives input from all of the
+    input slices using a single filter. The filter tries to learn features in a 3D
+    space, where two of the dimensions are spatial (the height and width of the slice)
+    and the third is the channel. Therefore, the filter maps both spatial and cross-channel
+    correlations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Depthwise separable convolutions** (**DSCs**, *Xception: Deep Learning with
+    Depthwise Separable Convolutions*, [https://arxiv.org/abs/1610.02357](https://arxiv.org/abs/1610.02357))
+    can completely decouple'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'cross-channel and spatial correlations. A DSC combines two operations: a depthwise
+    convolution and a 1×1 convolution. In a depthwise convolution, a single input
+    slice produces a single output slice, so it only maps spatial (and not cross-channel)
+    correlations. With 1×1 convolutions, we have the opposite. The following diagram
+    represents the DSC:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.13 – A depth-wise separable convolution](img/B19627_04_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.13 – A depth-wise separable convolution
+  prefs: []
+  type: TYPE_NORMAL
+- en: The DSC is usually implemented without non-linearity after the first (depthwise)
+    operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s compare the standard and depthwise separable convolutions. Imagine that
+    we have 32 input and output channels and a filter with a size of 3×3\. In a standard
+    convolution, one output slice is the result of applying one filter for each of
+    the 32 input slices for a total of 32 * 3 * 3 = 288
+  prefs: []
+  type: TYPE_NORMAL
+- en: weights (excluding bias). In a comparable depthwise convolution, the filter
+    has only 3 * 3 = 9 weights and the filter for the 1×1 convolution has 32 * 1 *
+    1 = 32 weights. The total number of weights is 32 + 9 = 41\. Therefore, the depthwise
+    separable convolution is faster and more memory-efficient compared to the standard
+    one.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dilated convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The regular convolution applies an *n×n* filter over an *n×n* receptive field.
+    With dilated convolutions, we apply the same filter sparsely over a receptive
+    field of size *(n * l - 1) × (n * l - 1)*, where *l* is the **dilation factor**.
+    We still multiply each filter weight by one input slice cell, but these cells
+    are at a distance of *l* away from each other. The regular convolution is a special
+    case of dilated convolution with *l = 1*. This is best illustrated with the following
+    diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.14 – A dilated convolution with a dilation factor of l=2\. Here,
+    the ﬁrst two steps of the operation are displayed. The bottom layer is the input
+    while the top layer is the output. Source: https://github.com/vdumoulin/conv_arithmetic](img/B19627_04_14.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.14 – A dilated convolution with a dilation factor of l=2\. Here, the
+    ﬁrst two steps of the operation are displayed. The bottom layer is the input while
+    the top layer is the output. Source: [https://github.com/vdumoulin/conv_arithmetic](https://github.com/vdumoulin/conv_arithmetic)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dilated convolutions can increase the receptive field’s size exponentially without
+    losing resolution or coverage. We can also increase the receptive field with stride
+    convolutions or pooling but at the cost of resolution and/or coverage. To understand
+    this, let’s imagine that we have a stride convolution with stride *s > 1*. In
+    this case, the output slice is *s* times smaller than the input (loss of resolution).
+    If we increase *s > F* further (*F* is the size of either the pooling or convolutional
+    kernel), we get a loss of coverage because some of the areas of the input slice
+    will not participate in the output at all. Additionally, dilated convolutions
+    don’t increase the computation and memory costs because the filter uses the same
+    number of weights as the regular convolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Transposed convolutions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the convolutional operations we’ve discussed so far, the output dimensions
+    are either equal or smaller than the input dimensions. In contrast, transposed
+    convolutions (first proposed in *Deconvolutional Networks by Matthew D. Zeiler,
+    Dilip Krishnan, Graham W. Taylor, and Rob Fergus*: [https://www.matthewzeiler.com/mattzeiler/deconvolutionalnetworks.pdf](https://www.matthewzeiler.com/mattzeiler/deconvolutionalnetworks.pdf))
+    allow us to upsample the input data (their output is larger than the input). This
+    operation is also known as **deconvolution**, **fractionally strided convolution**,
+    or **sub-pixel convolution**. These names can sometimes lead to confusion. To
+    clarify things, note that the transposed convolution is, in fact, a regular convolution
+    with a slightly modified input slice or convolutional filter.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the longer explanation, we’ll start with a 1D regular convolution over
+    a single input and output slice:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.15 – 1D regular convolution](img/B19627_04_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.15 – 1D regular convolution
+  prefs: []
+  type: TYPE_NORMAL
+- en: It uses a filter with *size = 4*, *stride = 2*, and *padding = 2* (denoted with
+    gray in the preceding diagram). The input is a vector of size 6 and the output
+    is a vector of size 4\. The filter, a vector, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi mathvariant="bold">f</mml:mi><mml:mo>=</mml:mo><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:mn>1,2</mml:mn><mml:mo>,</mml:mo><mml:mn>3,4</mml:mn></mml:mrow></mml:mfenced></mml:math>](img/313.png),
+    is always the same, but it’s denoted with different colors for each position we
+    apply it to. The respective output cells are denoted with the same color. The
+    arrows show which input cells contribute to one output cell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The example that is being discussed in this section is inspired by the paper
+    *Is the deconvolution layer the same as a convolutional* *layer?* ([https://arxiv.org/abs/1609.07009](https://arxiv.org/abs/1609.07009)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we’ll discuss the same example (1D, single input and output slices, and
+    a filter with *size = 4*, *padding = 2*, and *stride = 2*), but for transposed
+    convolution. The following diagram shows two ways we can implement it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.16 – A convolution with stride = 2, applied with the transposed
+    ﬁlter f. The 2 pixels at the beginning and the end of the output are cropped (left);
+    a convolution with stride 0.5, applied over input data, padded with subpixels.
+    The input is ﬁlled with 0-valued pixels (gray) (right)](img/B19627_04_16.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.16 – A convolution with stride = 2, applied with the transposed ﬁlter
+    f. The 2 pixels at the beginning and the end of the output are cropped (left);
+    a convolution with stride 0.5, applied over input data, padded with subpixels.
+    The input is ﬁlled with 0-valued pixels (gray) (right)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s discuss them in detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the first case, we have a regular convolution with *stride = 2* and a filter
+    represented as a transposed row matrix (equivalent to a column matrix) with size
+    4: ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi
+    mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:msup><mml:mrow><mml:mfenced
+    open="[" close="]" separators="|"><mml:mrow><mml:mn>1,2</mml:mn><mml:mo>,</mml:mo><mml:mn>3,4</mml:mn></mml:mrow></mml:mfenced></mml:mrow><mml:mrow><mml:mi>⊤</mml:mi></mml:mrow></mml:msup></mml:math>](img/314.png)
+    (shown in the preceding diagram, left). Note that the stride is applied over the
+    output layer as opposed to the regular convolution, where we stride over the input.
+    By setting the stride larger than 1, we can increase the output size, compared
+    to the input. Here, the size of the input slice is *I*, the size of the filter
+    is *F*, the stride is *S*, and the input padding is *P*. Due to this, the size,
+    *O*, of the output slice of a transposed convolution is given by the following
+    formula: ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>O</mml:mi><mml:mo>=</mml:mo><mml:mi>S</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>I</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:mfenced><mml:mo>+</mml:mo><mml:mi>F</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn><mml:mi>P</mml:mi></mml:math>](img/315.png).
+    In this scenario, an input of size 4 produces an output of size 2 * (4 - 1) +
+    4 - 2 * 2 = 6\. We also crop the two cells at the beginning and the end of the
+    output vector because they only gather input from a single input cell.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the second case, the input is filled with imaginary 0-valued subpixels between
+    the existing ones (shown in the preceding diagram, right). This is where the name
+    subpixel convolution comes from. Think of it as padding but within the image itself
+    and not only along the borders. Once the input has been transformed in this way,
+    a regular convolution is applied.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s compare the two output cells, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>o</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/316.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>o</mml:mi></mml:mrow><mml:mrow><mml:mn>3</mml:mn></mml:mrow></mml:msub></mml:math>](img/317.png),
+    in both scenarios. As shown in the preceding diagram, in either case, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>o</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/318.png)
+    receives input from the first and the second input cells and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>o</mml:mi></mml:mrow><mml:mrow><mml:mn>3</mml:mn></mml:mrow></mml:msub></mml:math>](img/319.png)
+    receives input from the second and third cells. The only difference between these
+    two cases is the index of the weight, which participates in the computation. However,
+    the weights are learned during training, and, because of this, the index is not
+    important. Therefore, the two operations are equivalent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let’s take a look at a 2D transposed convolution from a subpixel point
+    of view. As with the 1D case, we insert 0-valued pixels and padding in the input
+    slice to achieve upsampling (the input is at the bottom):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.17 – The ﬁrst three steps of a 2D transpose convolution with padding
+    = 1 and stride = 2\. Source: https://github.com/vdumoulin/conv_arithmetic, https://arxiv.org/abs/1603.07285](img/B19627_04_17.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 4.17 – The ﬁrst three steps of a 2D transpose convolution with padding
+    = 1 and stride = 2\. Source: [https://github.com/vdumoulin/conv_arithmetic](https://github.com/vdumoulin/conv_arithmetic),
+    https://arxiv.org/abs/1603.07285'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The backpropagation operation of a regular convolution is a transposed convolution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our extended introduction to the various types of convolutions.
+    In the next section, we’ll learn how to build some advanced CNN architectures
+    with the advanced convolutions we’ve learned about so far.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advanced CNN models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we’ll discuss some complex CNN models. They are available in
+    both PyTorch and Keras, with pre-trained weights on the ImageNet dataset. You
+    can import and use them directly, instead of building them from scratch. Still,
+    it’s worth discussing their central ideas as an alternative to using them as black
+    boxes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Most of these models share a few architectural principles:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: They start with an “entry” phase, which uses a combination of stride convolutions
+    and/or pooling to reduce the input image size at least two to eight times, before
+    propagating it to the rest of the network. This makes a CNN more computationally-
+    and memory-efficient because the deeper layers work with smaller slices.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The main network body comes after the entry phase. It is composed of multiple
+    repeated composite modules. Each of these modules utilizes padded convolutions
+    in such a way that its input and output slices are the same size. This makes it
+    possible to stack as many modules as necessary to reach the desired depth. The
+    deeper modules utilize a higher number of filters (output slices) per convolution,
+    compared to the earlier ones.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The downsampling in the main body is handled by special modules with stride
+    convolutions and/or pooling operations.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase usually ends with GAP over all slices.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The output of the GAP operation can serve as input for various tasks. For example,
+    we can add an FC layer for classification.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'We can see a prototypical CNN built with these principles in the following
+    figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.18 – A prototypical CNN](img/B19627_04_18.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.18 – A prototypical CNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let’s dig deeper into deep CNNs (get it?).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing residual networks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Residual networks** (**ResNets**, *Deep Residual Learning for Image Recognition*,
+    [https://arxiv.org/abs/1512.03385](https://arxiv.org/abs/1512.03385)) were released
+    in 2015 when they won all five categories of the ImageNet challenge that year.
+    In [*Chapter 2*](B19627_02.xhtml#_idTextAnchor047), we discussed that the layers
+    of an NN are not restricted to sequential order but form a directed graph instead.
+    This is the first architecture we’ll learn about that takes advantage of this
+    flexibility. This is also the first network architecture that has successfully
+    trained a network with a depth of more than 100 layers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Thanks to better weight initializations, new activation functions, as well as
+    normalization layers, it’s now possible to train deep networks. However, the authors
+    of the paper conducted some experiments and observed that a network with 56 layers
+    had higher training and testing errors compared to a network with 20 layers. They
+    argue that this should not be the case. In theory, we can take a shallow network
+    and stack identity layers (these are layers whose output just repeats the input)
+    on top of it to produce a deeper network that behaves in the same way as the shallow
+    one. Yet, their experiments have been unable to match the performance of the shallow
+    network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To solve this problem, they proposed a network constructed of residual blocks.
+    A residual block consists of two or three sequential convolutional layers and
+    a separate parallel **identity** (repeater) shortcut connection, which connects
+    the input of the first layer and the output of the last one. We can see three
+    types of residual blocks in the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.19 – From left to right – original residual block; original bottleneck
+    residual block; pre-activation residual block; pre-activation bottleneck residual
+    block](img/B19627_04_19.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.19 – From left to right – original residual block; original bottleneck
+    residual block; pre-activation residual block; pre-activation bottleneck residual
+    block
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each block has two parallel paths. The left-hand path is similar to the other
+    networks we’ve seen and consists of sequential convolutional layers and batch
+    normalization. The right path contains the identity shortcut connection (also
+    known as the **skip connection**). The two paths are merged via an element-wise
+    sum – that is, the left and right tensors have the same shape, and an element
+    of the first tensor is added to the element in the same position in the second
+    tensor. The output is a single tensor with the same shape as the input. In effect,
+    we propagate the features learned by the block forward, but also the original
+    unmodified signal. In this way, we can get closer to the original scenario, as
+    described by the authors. The network can decide to skip some of the convolutional
+    layers thanks to the skip connections, in effect reducing its depth. The residual
+    blocks use padding in such a way that the input and the output of the block have
+    the same dimensions. Thanks to this, we can stack any number of blocks for a network
+    with an arbitrary depth.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s see how the blocks in the diagram differ:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first block contains two 3×3 convolutional layers. This is the original
+    residual block, but if the layers are wide, stacking multiple blocks becomes computationally
+    expensive.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The second block is equivalent to the first, but it uses a **bottleneck layer**.
+    First, we use a 1×1 convolution to downsample the input volume depth (we discussed
+    this in the *1×1 convolutions* section). Then, we apply a 3×3 (bottleneck) convolution
+    to the reduced input. Finally, we expand the output back to the desired depth
+    with another 1×1 upsampling convolution. This layer is less computationally expensive
+    than the first.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The third block is the latest revision of the idea, published in 2016 by the
+    same authors (*Identity Mappings in Deep Residual Networks*, [https://arxiv.org/abs/1603.05027](https://arxiv.org/abs/1603.05027)).
+    It uses pre-activations, and the batch normalization and the activation function
+    come before the convolutional layer. This may seem strange at first, but thanks
+    to this design, the skip connection path can run uninterrupted throughout the
+    network. This is contrary to the other residual blocks, where at least one activation
+    function is on the path of the skip connection. A combination of stacked residual
+    blocks still has the layers in the right order.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The fourth block is the bottleneck version of the third layer. It follows the
+    same principle as the bottleneck residual layer v1.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In the following table, we can see the family of networks proposed by the authors
+    of the paper:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.20 – The family of the most popular residual networks. The residual
+    blocks are represented by rounded rectangles. Inspired by https://arxiv. org/abs/1512.03385](img/B19627_04_20.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.20 – The family of the most popular residual networks. The residual
+    blocks are represented by rounded rectangles. Inspired by [https://arxiv.org/abs/1512.03385](https://arxiv.org/abs/1512.03385)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Some of their properties are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: They start with a 7×7 convolutional layer with *stride = 2*, followed by 3×3
+    max pooling. This phase serves as a downsampling step, so the rest of the network
+    can work with a much smaller slice of 56×56, compared to 224×224 of the input.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Downsampling in the rest of the network is implemented with a modified residual
+    block with *stride =* *2*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: GAP downsamples the output after all residual blocks and before the 1,000-unit
+    FC softmax layer.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of parameters for the various ResNets range from 25.6 million to
+    60.4 million and their depth ranges from 18 to 152 layers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The ResNet family of networks is popular not only because of their accuracy
+    but also because of their relative simplicity and the versatility of the residual
+    blocks. As we mentioned previously, the input and output shape of the residual
+    block can be the same due to the padding. We can stack residual blocks in different
+    configurations to solve various problems with wide-ranging training set sizes
+    and input dimensions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inception networks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Inception networks** (*Going Deeper with Convolutions*, [https://arxiv.org/abs/1409.4842](https://arxiv.org/abs/1409.4842))
+    were introduced in 2014 when they won the ImageNet challenge of that year (there
+    seems to be a pattern here). Since then, the authors have released multiple improvements
+    (versions) of the architecture.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Fun fact
+  prefs: []
+  type: TYPE_NORMAL
+- en: The name *inception* comes in part from the *We need to go deeper* internet
+    meme, related to the movie Inception.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The idea behind inception networks started from the basic premise that the
+    objects in an image have different scales. A distant object might take up a small
+    region of the image, but the same object, once nearer, might take up a large part
+    of the image. This presents a difficulty for standard CNNs, where the units in
+    the different layers have a fixed receptive field size, as imposed on the input
+    image. A regular network might be a good detector of objects at a certain scale
+    but could miss them otherwise. To solve this problem, the authors of the paper
+    proposed a novel architecture: one composed of inception blocks. An inception
+    block starts with a common input and then splits it into different parallel paths
+    (or towers). Each path contains either convolutional layers with a different-sized
+    filter or a pooling layer. In this way, we apply different receptive fields to
+    the same input data. At the end of the Inception block, the outputs of the different
+    paths are concatenated.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next few sections, we’ll discuss the different variations of Inception
+    networks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Inception v1
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The following diagram shows the first version of the inception block, which
+    is part of the **GoogLeNet** network architecture ([https://arxiv.org/abs/1409.4842](https://arxiv.org/abs/1409.4842)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.21 – Inception v1 block; inspired by https://arxiv.org/abs/1409.4842](img/B19627_04_21.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.21 – Inception v1 block; inspired by https://arxiv.org/abs/1409.4842
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The v1 block has four paths:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 1×1 convolution, which acts as a kind of repeater to the input
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 1×1 convolution, followed by a 3×3 convolution
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 1×1 convolution, followed by a 5×5 convolution
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 3×3 max pooling with *stride = 1*
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The layers in the block use padding in such a way that the input and the output
+    have the same shape (but different depths). The padding is also necessary because
+    each path would produce an output with a different shape, depending on the filter
+    size. This is valid for all versions of inception blocks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The other major innovation of this inception block is the use of downsampling
+    1×1 convolutions. They are needed because the output of all paths is concatenated
+    to produce the final output of the block. The result of the concatenation is an
+    output with a quadrupled depth. If another inception block followed the current
+    one, its output depth would quadruple again. To avoid such exponential growth,
+    the block uses 1×1 convolutions to reduce the depth of each path, which, in turn,
+    reduces the output depth of the block. This makes it possible to create deeper
+    networks, without running out of resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The full GoogLeNet has the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Like ResNets, it starts with a downsampling phase, which utilizes two convolutional
+    and two max pooling layers to reduce the input size from 224×224 to 56×56, before
+    the inception blocks get involved.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The network has nine inception v1 blocks.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase ends with global average pooling.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The network utilizes auxiliary classifiers—that is, it has two additional classification
+    outputs (with the same ground truth labels) at various intermediate layers. During
+    training, the total value of the loss is a weighted sum of the auxiliary losses
+    and the real loss.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The model has a total of 6.9 million parameters and a depth of 22 layers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Inception v2 and v3
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Inception v2 and v3 were released together and proposed several improved inception
+    blocks over the original v1 (*Rethinking the Inception Architecture for Computer
+    Vision*, [https://arxiv.org/abs/1512.00567](https://arxiv.org/abs/1512.00567)).
+    We can see the first new inception block, A, in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.22 – Inception block A, inspired by https://arxiv.org/abs/1512.00567](img/B19627_04_22.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.22 – Inception block A, inspired by https://arxiv.org/abs/1512.00567
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first new property of block A is the factorization of the 5×5 convolution
+    in two stacked 3×3 convolutions. This structure has several advantages.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The receptive field of the units of the last stacked layer is equivalent to
+    the receptive field of a single layer with a large convolutional filter. The stacked
+    layers achieve the same receptive field size with fewer parameters, compared to
+    a single layer with a large filter. For example, let’s replace a single 5×5 layer
+    with two stacked 3×3 layers. For the sake of simplicity, we’ll assume that we
+    have single input and output slices. The total number of weights (excluding biases)
+    of the 5×5 layer is 5 * 5 = 25\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the other hand, the total weights of a single 3×3 layer is 3 * 3 = 9, and
+    simply 2 * (3 * 3) = 18 for two layers, which makes this arrangement 28% more
+    efficient (18/25 = 0.72). The efficiency gain is preserved even with multiple
+    input and output slices for the two layers. The next improvement is the factorization
+    of an *n×n* convolution in two stacked asymmetrical 1×*n* and *n*×1 convolutions.
+    For example, we can split a single 3×3 convolution into two 1×3 and 3×1 convolutions,
+    where the 3×1 convolution is applied over the output of the 1×3 convolution. In
+    the first case, the filter size would be 3 * 3 = 9, while in the second case,
+    we would have a combined size of (3 * 1) + (1 * 3) = 3 + 3 = 6, resulting in 33%
+    efficiency, as seen in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.23 – Factorization of a 3×3 convolution in 1×3 and 3×1 convolutions;
+    inspired by https://arxiv.org/abs/1512.00567](img/B19627_04_23.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.23 – Factorization of a 3×3 convolution in 1×3 and 3×1 convolutions;
+    inspired by https://arxiv.org/abs/1512.00567
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The authors introduced two new blocks that utilize factorized convolutions.
+    The first of these blocks (and the second in total), inception block B, is equivalent
+    to inception block A:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.24 – Inception block B. When n=3, it is equivalent to block A; inspired
+    by https://arxiv.org/abs/1512.00567](img/B19627_04_24.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.24 – Inception block B. When n=3, it is equivalent to block A; inspired
+    by https://arxiv.org/abs/1512.00567
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The second (third in total) inception block, C, is similar, but the asymmetrical
+    convolutions are parallel, resulting in a higher output depth (more concatenated
+    paths). The hypothesis here is that the more features (different filters) the
+    network has, the faster it learns. On the other hand, the wider layers take more
+    memory and computation time. As a compromise, this block is only used in the deeper
+    part of the network, after the other blocks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.25 – Inception block C; inspired by https://arxiv.org/abs/1512.00567](img/B19627_04_25.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.25 – Inception block C; inspired by https://arxiv.org/abs/1512.00567
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another major improvement in this version is the use of batch normalization,
+    which was introduced by the same authors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These new blocks create two new inception networks: v2 and v3\. Inception v3
+    uses batch normalization and is the more popular of the two. It has the following
+    properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The network starts with a downsampling phase, which utilizes stride convolutions
+    and max pooling to reduce the input size from 299×299 to 35×35 before the inception
+    blocks get involved
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The layers are organized into three inception blocks, A, five inception blocks,
+    B, and two inception blocks, C
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase ends with global average pooling
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It has 23.9 million parameters and a depth of 48 layers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Inception v4 and Inception-ResNet
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The latest revisions of inception networks introduce three new streamlined
+    inception blocks (**Inception-v4**, *Inception-v4, Inception-ResNet and the Impact
+    of Residual Connections on Learning*, [https://arxiv.org/abs/1602.07261](https://arxiv.org/abs/1602.07261)).
+    More specifically, the new versions introduce 7×7 asymmetric factorized convolutions
+    average pooling instead of max pooling and new Inception-ResNet blocks with residual
+    connections. We can see one such block in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.26 – An inception block (any kind) with a residual skip connection](img/B19627_04_26.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.26 – An inception block (any kind) with a residual skip connection
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Inception-ResNet family of models share the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The networks start with a downsampling phase, which utilizes stride convolutions
+    and max pooling to reduce the input size from 299×299 to 35×35 before the inception
+    blocks get involved.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The main body of the model consists of three groups of four residual-inception-A
+    blocks, seven residual-inception-B blocks, three residual inception-B blocks,
+    and special reduction modules between the groups. The different models use slightly
+    different variations of these blocks.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase ends with global average pooling.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The models have around 56 million weights.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this section, we discussed different types of inception networks and the
+    different principles used in the various inception blocks. Next, we’ll talk about
+    a newer CNN architecture that takes the inception concept to a new depth (or width,
+    as it should be).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing Xception
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'All inception blocks we’ve discussed so far start by splitting the input into
+    several parallel paths. Each path continues with a dimensionality-reduction 1×1
+    cross-channel convolution, followed by regular cross-channel convolutions. On
+    one hand, the 1×1 connection maps cross-channel correlations, but not spatial
+    ones (because of the 1×1 filter size). On the other hand, the subsequent cross-channel
+    convolutions map both types of correlations. Let’s recall that earlier in this
+    chapter, we introduced DSCs, which combine the following two operations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**A depthwise convolution**: In a depthwise convolution, a single input slice
+    produces a single output slice, so it only maps spatial (and not cross-channel)
+    correlations'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**A 1×1 cross-channel convolution**: With 1×1 convolutions, we have the opposite
+    – that is, they only map cross-channel correlations'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The author of Xception (*Xception: Deep Learning with Depthwise Separable Convolutions*,
+    [https://arxiv.org/abs/1610.02357](https://arxiv.org/abs/1610.02357)) argues that
+    we can think of DSC as an extreme (hence the name) version of an inception block,
+    where each depthwise input/output slice pair represents one parallel path. We
+    have as many parallel paths as the number of input slices. The following diagram
+    shows a simplified inception block and its transformation to an Xception block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.27 –A simpliﬁed inception module (left); an Xception block (right);
+    inspired by https://arxiv.org/abs/1610.02357](img/B19627_04_27.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.27 –A simpliﬁed inception module (left); an Xception block (right);
+    inspired by https://arxiv.org/abs/1610.02357
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Xception block and the DSC have two differences:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In Xception, the 1×1 convolution comes first, instead of last as in DSC. However,
+    these operations are meant to be stacked anyway, and we can assume that the order
+    is of no significance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Xception block uses ReLU activations after each convolution, while the DSC
+    doesn’t use non-linearity after the cross-channel convolution. According to the
+    author’s experiments, networks with absent non-linearity depthwise convolution
+    converged faster and were more accurate.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The full Xception network has the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It starts with an entry flow of convolutional and pooling operations, which
+    reduces the input size from 299×299 to 19×19.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It has 14 Xception modules, all of which have linear residual connections around
+    them, except for the first and last modules.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: All convolutions and DSCs are followed by batch normalization. All DSCs have
+    a depth multiplier of 1 (no depth expansion).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase ends with global average pooling.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A total of 23 million parameters and a depth of 36 convolutional layers.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This section concludes the series of inception-based models. In the next section,
+    we’ll focus on a novel NN architectural element.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Squeeze-and-Excitation Networks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Squeeze-and-Excitation Networks** (**SENet**, *Squeeze-and-Excitation Networks*,
+    [https://arxiv.org/abs/1709.01507](https://arxiv.org/abs/1709.01507)) introduce
+    a new NN architectural unit, which the authors call – you guessed it – the **Squeeze-and-Excitation**
+    (**SE**) block. Let’s recall that the convolutional operation applies multiple
+    filters across the input channels to produce multiple output feature maps (or
+    channels). The authors of SENet observe that each of these channels has “equal
+    weight” when it serves as input to the next layer. However, some channels could
+    be more informative than others. To emphasize their importance, the authors propose
+    the content-aware SE block, which weighs each channel adaptively. We can also
+    think of the SE block as an **attention mechanism**. To understand how it works,
+    let’s start with the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.28 – The Squeeze-and-Excitation block](img/B19627_04_28.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.28 – The Squeeze-and-Excitation block
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The block introduces a parallel path to the main NN data flow. Let’s see its
+    steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Squeeze phase**: A GAP operation is applied across the channels. The output
+    of the GAP is a single scalar value for each channel. For example, if the input
+    is an RGB image, the unique GAP operations across each of the R, G, and B channels
+    will produce a one-dimensional tensor with size 3\. Think of these scalar values
+    as the distilled state of the channels.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '`FC layer -> ReLU -> FC layer -> sigmoid`. It resembles an autoencoder because
+    the first hidden layer reduces the size of the input tensor and the second hidden
+    layer upscales it to the original size (3 in the case of RGB input). The final
+    sigmoid activation ensures that all values of the output are in the (0:1) range.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Scale**: The output values of the excitement NN serve as scaling coefficients
+    of the channels of the original input tensor. All the values of a channel are
+    scaled (or excited) by its corresponding coefficient produced by the excitement
+    phase. In this way, the excitement NN can emphasize the importance of a given
+    channel.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The authors added SE blocks to different existing models, which improved their
+    accuracy. In the following figure, we can see how we can add SE blocks to inception
+    and residual modules:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.29 – An SE-inception module (left) and an SE-ResNet module (right)](img/B19627_04_29.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.29 – An SE-inception module (left) and an SE-ResNet module (right)
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we’ll see the SE block applied to a model, which prioritizes
+    a small footprint and computational efficiency.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing MobileNet
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll discuss a lightweight CNN model called **MobileNet**
+    (*MobileNetV3: Searching for MobileNetV3*, [https://arxiv.org/abs/1905.02244](https://arxiv.org/abs/1905.02244)).
+    We’ll focus on the third revision of this idea (MobileNetV1 was introduced in
+    *MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications*,
+    [https://arxiv.org/abs/1704.04861](https://arxiv.org/abs/1704.04861) and MobileNetV2
+    was introduced in *MobileNetV2: Inverted Residuals and Linear* *Bottlenecks*,
+    [https://arxiv.org/abs/1801.04381](https://arxiv.org/abs/1801.04381)).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'MobileNet is aimed at devices with limited memory and computing power, such
+    as mobile phones (the name kind of gives it away). The NN introduces a new **inverted
+    residual block** (or **MBConv**) with a reduced footprint. MBConv uses DSC, **linear
+    bottlenecks**, and **inverted residuals**. V3 also introduces SE blocks. To understand
+    all this, here’s the structure of the MBConv block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.30 – MobileNetV3 building block. The shortcut connection exists
+    only if the stride s=1](img/B19627_04_30.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.30 – MobileNetV3 building block. The shortcut connection exists only
+    if the stride s=1
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s discuss its properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Linear bottlenecks**: We’ll assume that our input is an RGB image. As it’s
+    propagated through the NN, each layer produces an activation tensor with multiple
+    channels. It has long been assumed that the information encoded in these tensors
+    can be compressed in the so-called “manifold of interest,” which is represented
+    by a smaller tensor than the original. One way to force the NN to seek such manifolds
+    is with 1×1 bottleneck convolutions. However, the authors of the paper argue that
+    if this convolution is followed by non-linearity like ReLU, this might lead to
+    a loss of manifold information because of the dying-ReLUs problem. To avoid this,
+    MobileNet uses a 1×1 bottleneck convolution without non-linear activation.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`input -> 1×1 bottleneck conv -> 3×3 conv -> 1×1 unsampling conv`. In other
+    words, it follows a `wide -> narrow -> wide` data representation. On the other
+    hand, the inverted residual block follows a `narrow -> wide -> narrow` representation.
+    Here, the bottleneck convolution expands its input with an **expansion** **factor**,
+    *t*.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The authors argue that the bottlenecks contain all the necessary information,
+    while an expansion layer acts merely as an implementation detail that accompanies
+    a non-linear transformation of the tensor. Because of this, they propose having
+    shortcut connections between the bottleneck connections instead.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**DSC**: We already introduced this operation earlier in this chapter. MobileNet
+    V3 introduces **H-swish** activation in the DSC. H-swish resembles the swish function,
+    which we introduced in [*Chapter 2*](B19627_02.xhtml#_idTextAnchor047). The V3
+    architecture includes alternating ReLU and H-swish activations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**SE blocks**: We’re already familiar with this block. The difference here
+    is the **hard sigmoid** activation, which approximates the sigmoid but is computationally
+    more efficient. The module is placed after the expanding depthwise convolution,
+    so the attention can be applied to the largest representation. The SE block is
+    a new addition to V3 and was not present in V2.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Stride** *s*: The block implements downsampling with stride convolutions.
+    The shortcut connection exists only when *s*=1.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'MobileNetV3 introduces large and small variations of the network with the following
+    properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Both networks start with a stride convolution that downsamples the input from
+    224×224 to 112×112
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The small and large variations have 11 and 15 MBConv blocks, respectively
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase ends with global average pooling for both networks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The small and large networks have 3 and 5 million parameters, respectively
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the next section, we’ll discuss an improved version of the MBConv block.
+  prefs: []
+  type: TYPE_NORMAL
+- en: EfficientNet
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**EfficientNet** (*EfficientNet: Rethinking Model Scaling for Convolutional
+    Neural Networks*, [https://arxiv.org/abs/1905.11946](https://arxiv.org/abs/1905.11946),
+    and *EfficientNetV2: Smaller Models and Faster Training*, [https://arxiv.org/abs/2104.00298](https://arxiv.org/abs/2104.00298))
+    introduces the concept of **compound scaling**. It starts with a small baseline
+    model and then simultaneously expands it in three directions: depth (more layers),
+    width (more feature maps per layer), and higher input resolution. The compound
+    scaling produces a series of new models. The EfficientNetV1 baseline model uses
+    the MBConv building block of MobileNetV2\. EfficientNetV2 introduces the new **fused-MBConv**
+    block, which replaces the expanding 1×1 bottleneck convolution and the 3×3 depthwise
+    convolution of MBConv, with a single expanding 3×3 cross-channel convolution:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 4.31 – Fused-MBConv block](img/B19627_04_31.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 4.31 – Fused-MBConv block
+  prefs: []
+  type: TYPE_NORMAL
+- en: The new 3×3 convolution handles both the expanding (with a factor of *t*) and
+    the stride (1 or 2).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The authors of EfficientNetV2 observed that a CNN, which uses a combination
+    of fused-MBConv and MBConv blocks, trains faster compared to a CNN with MBConv
+    blocks only. However, the
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'fused-MBConv block is computationally more expensive, compared to the plain
+    MBConv block. Because of this, EfficientNetV2 replaces the blocks gradually, starting
+    from the early stages. This makes sense because the earlier convolutions use a
+    smaller number of filters (and hence slices), so the memory and computational
+    penalty are less pronounced at this stage. Finding the right combination of the
+    two blocks is not trivial, hence the need for compound scaling. This process produced
+    multiple models with the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The networks start with a stride convolution that downsamples the input twice
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The early stages of the main body use fused-MBConv blocks, and the later stages
+    use MBConv blocks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The convolutional phase ends with global average pooling for all networks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of parameters ranges between 5.3 million and 119 million
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This concludes our introduction to advanced CNN models. We didn’t discuss all
+    the available models, but we focused on some of the most popular ones. I hope
+    that you now have sufficient knowledge to explore new models yourself. In the
+    next section, we’ll demonstrate how to use these advanced models in PyTorch and
+    Keras.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using pre-trained models with PyTorch and Keras
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Both PyTorch and Keras have a collection of pre-trained ready-to-use models.
+    All the models we discussed in the *Advanced network models* section are available
+    in this way. The models are usually pre-trained on classifying the ImageNet dataset
+    and can serve as backbones to various computer vision tasks, as we’ll see in [*Chapter
+    5*](B19627_05.xhtml#_idTextAnchor146).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can load a pre-trained model in PyTorch with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The weights will be automatically downloaded. In addition, we can list all
+    available models and load an arbitrary model using the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Keras supports similar functionality. We can load a pre-trained model with
+    the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: These short but very useful code examples conclude this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we introduced CNNs. We talked about their main building blocks
+    – convolutional and pooling layers – and we discussed their architecture and features.
+    We paid special attention to the different types of convolutions. We also demonstrated
+    how to use PyTorch and Keras to implement the CIFAR-10 classification CNN. Finally,
+    we discussed some of the most popular CNN models in use today.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we’ll build upon our new-found computer vision knowledge
+    with some exciting additions. We’ll discuss how to train networks faster by transferring
+    knowledge from one problem to another. We’ll also go beyond simple classification
+    with object detection, or how to find the object’s location on the image. We’ll
+    even learn how to segment each pixel of an image.
+  prefs: []
+  type: TYPE_NORMAL

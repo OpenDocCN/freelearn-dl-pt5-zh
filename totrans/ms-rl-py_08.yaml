@@ -1,0 +1,2379 @@
+- en: '*Chapter 6*: Deep Q-Learning at Scale'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous chapter, we covered **dynamic programming** (**DP**) methods
+    to solve **Markov decision processes** (**MDPs**), and then mentioned that they
+    suffer from two important limitations: DP firstly assumes complete knowledge of
+    the environment''s reward and transition dynamics, and secondly uses tabular representations
+    of state and actions, which is not scalable as the number of possible state-action
+    combinations is too big in many realistic applications. We addressed the former
+    by introducing the **Monte Carlo** (**MC**) and **temporal difference** (**TD**)
+    methods, which learn from their interactions with the environment (often in simulation)
+    without needing to know the environment dynamics. On the other hand, the latter
+    is yet to be addressed, and this is where deep learning comes in. **Deep reinforcement
+    learning** (**deep RL or DRL**) is about utilizing neural networks'' representational
+    power to learn policies for a wide variety of situations.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: As great as it sounds, though, it is quite tricky to make function approximators
+    work well in the context of **reinforcement learning** (**RL**) since many of
+    the theoretical guarantees that we had in tabular Q-learning are lost. Therefore,
+    the story of deep Q-learning, to a great extent, is about the tricks that make
+    neural networks work well for RL. This chapter takes you on a tour of what fails
+    with function approximators and how to address these failures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once we make neural networks get along with RL, we then face another challenge:
+    the great hunger for data in deep RL that is even more severe than that of supervised
+    learning. This requires us to develop highly scalable deep RL algorithms, which
+    we will also do in this chapter for deep Q-learning using the modern Ray library.
+    Finally, we will introduce you to RLlib, a production-grade RL library based on
+    Ray. So, the focus throughout the chapter will be to deepen your understanding
+    of the connections between various deep Q-learning approaches, what works, and
+    why; and rather than implementing every single algorithm in Python, you will use
+    Ray and RLlib to build and use scalable methods.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This will be an exciting journey, so let''s dive in! Specifically, here is
+    what this chapter covers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: From tabular Q-learning to deep Q-learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Deep Q-networks
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Extensions to DQN – Rainbow
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Distributed deep Q-learning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Implementing scalable deep Q-learning algorithms using Ray
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using RLlib for production-grade deep RL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: From tabular Q-learning to deep Q-learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we covered the tabular Q-learning method in [*Chapter 5*](B14160_05_Final_SK_ePub.xhtml#_idTextAnchor106),
+    *Solving the Reinforcement Learning Problem*, it should have been obvious that
+    we cannot really extend those methods to most real-life scenarios. Think about
+    an RL problem that uses images as input. A ![](img/Formula_06_001.png) image with
+    three 8-bit color channels would lead to ![](img/Formula_06_002.png) possible
+    images, a number that your calculator won't be able to calculate. For this very
+    reason, we need to use function approximators to represent the value function.
+    Given their success in supervised and unsupervised learning, neural networks/deep
+    learning emerges as the clear choice here. On the other hand, as we mentioned
+    in the introduction, the theoretical guarantees of tabular Q-learning fall apart
+    when function approximators come in. This section introduces two deep Q-learning
+    algorithms, **neural-fitted Q-iteration** (**NFQ**) and online Q-learning, and
+    then discusses what does not go so well with them. With that, we will have set
+    the stage for the modern deep Q-learning methods that we will discuss in the following
+    sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Neural-fitted Q-iteration
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The NFQ algorithm aims to fit a neural network that represents the action values,
+    the Q-function, to target Q-values sampled from the environment and bootstrapped
+    by the previously available Q-values (Riedmiller, 2015). Let's first go into how
+    NFQ works, then discuss some practical considerations of NFQ and its limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Recall that in tabular Q-learning, action values are learned from samples collected
+    from the environment, which are ![](img/Formula_06_003.png) tuples, by repeatedly
+    applying the following update rule:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_06_005.png) represents an estimate of the action values
+    of the optimal policy, ![](img/Formula_06_006.png) (and note that we started using
+    a capital ![](img/Formula_06_005.png), which is the convention in the deep RL
+    literature). The goal is to update the existing estimate, ![](img/Formula_06_008.png),
+    toward a "target" value, ![](img/Formula_06_009.png), by applying the sampled
+    Bellman optimality operator to the ![](img/Formula_06_010.png) sample. NFQ has
+    a similar logic with the following differences:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Q-values are represented by a neural network parameterized by ![](img/Formula_06_011.png),
+    instead of a table, which we denote by ![](img/Formula_06_012.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Instead of updating Q-values with each sample incrementally, NFQ collects a
+    batch of samples from the environment and fits the neural network to the target
+    values at once.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There are multiple rounds of calculating the target values and fitting the parameters
+    to be able to obtain new target values with the latest Q function.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'After this overall description, here is the NFQ algorithm in detail:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize ![](img/Formula_06_013.png) and a policy, ![](img/Formula_05_035.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Collect a set of ![](img/Formula_06_015.png) samples, ![](img/Formula_06_016.png),
+    using the ![](img/Formula_05_046.png) policy.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Apply the sampled Bellman optimality operator to obtain the target values, ![](img/Formula_06_018.png),
+    to all samples, ![](img/Formula_06_019.png), but if ![](img/Formula_06_020.png)
+    is a terminal state, set ![](img/Formula_06_021.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Obtain ![](img/Formula_06_022.png) by minimizing the gap between ![](img/Formula_06_023.png)
+    and the target values. More formally,
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_024.png), where ![](img/Formula_06_025.png) is a loss function,
+    such as squared error, ![](img/Formula_06_026.png).'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Update ![](img/Formula_05_035.png) with respect to the new ![](img/Formula_06_028.png)
+    value.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: There are numerous improvements that can be done on fitted Q-iteration, but
+    that is not our focus here. Instead, next, we will mention a couple of essential
+    considerations when implementing the algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practical considerations for fitted Q-iteration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To make fitted Q-iteration work in practice, there are several important points
+    to pay attention to, which we have noted here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The ![](img/Formula_05_221.png) policy should be a soft policy, allowing enough
+    exploration of different state-action pairs during sample collection, such as
+    an ![](img/Formula_06_030.png)-greedy policy. The rate of exploration, therefore,
+    is a hyperparameter.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Setting ![](img/Formula_06_031.png) too large could be problematic as some states
+    can only be reached after sticking with a good policy (once it starts to improve)
+    for a number of steps. An example is that in a video game, later levels are reached
+    only after finishing the earlier steps successfully, which a highly random policy
+    is unlikely to achieve.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When the target values are obtained, chances are these values use inaccurate
+    estimates for the action values because we bootstrap with inaccurate ![](img/Formula_06_032.png)
+    values. Therefore, we need to repeat *steps 2* and *3* ![](img/Formula_06_033.png)
+    times to hopefully obtain more accurate target values in the next round. This
+    gives us another hyperparameter, ![](img/Formula_06_034.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The policy that we initially used to collect samples is probably not good enough
+    to lead the agent to some parts of the state space, similar to the case with high
+    ![](img/Formula_05_272.png). Therefore, it is usually a good idea to collect more
+    samples after updating the policy, add them to the sample set, and repeat the
+    procedure.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that this is an off-policy algorithm, so the samples could come from the
+    chosen policy or somewhere else, such as an existing non-RL controller deployed
+    in the environment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Even with these improvements, in practice, it may be difficult to solve MDPs
+    using NFQ. Let's look into the whys in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Challenges with fitted Q-iteration
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Although there are some successful applications with fitted Q-iteration, it
+    suffers from several major drawbacks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It requires learning ![](img/Formula_06_036.png) from scratch every time we
+    repeat *step 3* using the target batch at hand. In other words, *step 3* involves
+    an ![](img/Formula_06_037.png) operator, as opposed to a gradual update of ![](img/Formula_06_036.png)
+    with new data like we have in gradient descent. In some applications, RL models
+    are trained over billions of samples. Training a neural network over billions
+    of samples again and again with updated target values is impractical.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SARSA and Q-learning-like methods have convergence guarantees in the tabular
+    case. However, these theoretical guarantees are lost when function approximations
+    are used.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using function approximations with Q-learning, an off-policy method using bootstrapping,
+    is especially unstable, which is called **the deadly triad**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Before going into how to address these, let's dive into the latter two points
+    in a bit more detail. Now, this will involve a bit of theory, which if you understand
+    it is going to help you gain a deeper intuition about the challenges of deep RL.
+    On the other hand, if you don't want to know the theory, feel free to skip ahead
+    to the *Online Q-learning* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Convergence issues with function approximators
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'To explain why the convergence guarantees with Q-learning are lost when function
+    approximators are used, let''s remember why tabular Q-learning converges in the
+    first place:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The definition of ![](img/Formula_06_039.png) is the expected discounted return
+    if we deviate from policy ![](img/Formula_05_046.png) only once at the beginning
+    while in state ![](img/Formula_06_041.png) by choosing action ![](img/Formula_05_059.png),
+    but then follow the policy for the rest of the horizon:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_043.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The Bellman optimality operator, denoted by ![](img/Formula_06_044.png) takes
+    an action-value function of ![](img/Formula_06_045.png), ![](img/Formula_06_046.png),
+    and ![](img/Formula_06_047.png), and maps to the following quantity:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_048.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Note the use of ![](img/Formula_06_049.png) inside the expectation, rather than
+    following some other policy, ![](img/Formula_05_035.png). ![](img/Formula_06_051.png)
+    is an operator, a function, *different from the definition of the action-value
+    function*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If, and only if, the action-value function is optimal, ![](img/Formula_06_052.png)
+    maps ![](img/Formula_06_053.png) back to ![](img/Formula_06_054.png) for all instances
+    of ![](img/Formula_06_055.png) and ![](img/Formula_05_059.png):'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_057.jpg)![](img/Formula_06_058.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: More formally, the unique fixed point of operator ![](img/Formula_06_059.png)
+    is the optimal ![](img/Formula_06_060.png), denoted by ![](img/Formula_06_061.png).
+    This is what the Bellman optimality equation is about.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_062.png) is a **contraction**, which means that every time
+    we apply it to any two different action-value functions, such as ![](img/Formula_06_054.png)
+    and ![](img/Formula_06_064.png) vectors, whose entries are some action-value estimates
+    for all instances of ![](img/Formula_05_010.png) and ![](img/Formula_05_059.png),
+    they get close to each other. This is with respect to the ![](img/Formula_06_067.png)
+    norm, which is the maximum of the absolute differences between the ![](img/Formula_06_068.png)
+    tuples of ![](img/Formula_06_069.png) and ![](img/Formula_06_070.png): ![](img/Formula_06_071.png)
+    Here, ![](img/Formula_06_072.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'If we pick one of these action-value vectors to be the optimal one, we obtain
+    the following relation:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_073.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This means that we can get closer and closer to ![](img/Formula_06_074.png)
+    by starting with some arbitrary ![](img/Formula_06_075.png) value, repeatedly
+    applying the Bellman operator, and updating the ![](img/Formula_06_076.png) values.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With these, ![](img/Formula_06_077.png) turns into an update rule to obtain
+    ![](img/Formula_06_078.png) from an arbitrary ![](img/Formula_06_079.png) value,
+    very similar to how the value iteration method works.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, notice that fitting a neural network to a batch of sampled targets does
+    not actually guarantee to make the action-value estimates closer to the optimal
+    value for *each* ![](img/Formula_06_080.png) tuple, because the fitting operation
+    does not care about the individual errors – nor does it necessarily have the ability
+    to do so because it assumes a certain structure in the action-value function due
+    to parametrization – but it minimizes the average error. As a result, we lose
+    the contraction property of the Bellman operation with respect to the ![](img/Formula_06_081.png)
+    norm. Instead, NFQ fits ![](img/Formula_06_082.png) to the target values with
+    respect to an ![](img/Formula_06_083.png) norm, which does not have the same convergence
+    properties.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: For a detailed and more visual explanation of why the value function theory
+    fails with function approximations, check out Professor Sergey Levine's lecture
+    at [https://youtu.be/doR5bMe-Wic?t=3957](https://youtu.be/doR5bMe-Wic?t=3957),
+    which also inspired this section. The entire course is available online, and it
+    is a great resource for you to go deeper into the theory of RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let's now look into the famous deadly triad, which gives another
+    perspective into why it is problematic to use function approximators with bootstrapping
+    in off-policy algorithms such as Q-learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The deadly triad
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Sutton and Barto coined the term **the deadly triad**, which suggests that
+    an RL algorithm is likely to diverge if it involves using all of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Function approximators
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Bootstrapping
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Off-policy sample collection
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'They provided this simple example to explain the problem. Consider a part of
+    an MDP that consists of two states, left and right. There is only one action on
+    the left, which is to go right with a reward of 0\. The observation in the left
+    state is 1, and it is 2 in the right state. A simple linear function approximator
+    is used to represent the action values with one parameter, ![](img/Formula_06_084.png).
+    This is represented in the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1 – A diverging MDP fragment (source: Sutton & Barto, 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.1 – A diverging MDP fragment (source: Sutton & Barto, 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, imagine that a behavior policy only samples from the state on the left.
+    Also, imagine that the initial value of ![](img/Formula_06_085.png) is 10 and
+    ![](img/Formula_06_086.png). The TD error is then calculated as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_087.jpg)![](img/Formula_06_088.jpg)![](img/Formula_06_089.jpg)![](img/Formula_06_090.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Now, if the linear function approximation is updated with the only data on
+    hand, the transition from left to right, say, using ![](img/Formula_06_091.png),
+    then the new ![](img/Formula_06_092.png) value becomes ![](img/Formula_06_093.png)
+    Note that this updates the action-value estimate of the right state as well. In
+    the next round, the behavior policy again only samples from the left, and the
+    new TD error becomes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_094.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'It is even greater than the first TD error! You can see how this will diverge
+    eventually. The problem occurs due to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This is an off-policy method and the behavior policy happens to visit only one
+    part of the state-action space.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A function approximator is used, whose parameters are updated based on the limited
+    sample we have, but the value estimates for the unvisited state actions also get
+    updated with that.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We bootstrap and use the bad value estimates from the state actions we never
+    actually visited to calculate the target values.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This simple example illustrates how it can destabilize the RL methods when these
+    three components come together. For other examples and a more detailed explanation
+    of the topic, we recommend you read the related sections in Sutton & Barto, 2018.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As we have only talked about the challenges, we will now finally start addressing
+    them. Remember that NFQ required us to completely fit the entire neural network
+    to the target values on hand and how we looked for a more gradual update. This
+    is what online Q-learning gives us, which we will introduce next. On the other
+    hand, online Q-learning introduces other challenges, which we will address with
+    **deep** **Q-networks** (**DQNs**) in the following section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Online Q-learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As we mentioned previously, one of the disadvantages of fitted Q-iteration
+    is that it requires finding the ![](img/Formula_06_095.png) value with each batch
+    of samples, which is impractical when the problem is complex and requires a lot
+    of data for training. Online Q-learning goes to the other extreme: it takes a
+    gradient step to update ![](img/Formula_06_096.png) after observing every single
+    sample, ![](img/Formula_06_097.png). Next, let''s go into the details of the online
+    Q-learning algorithm.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The online Q-learning algorithm works as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize ![](img/Formula_06_098.png) and a policy, ![](img/Formula_06_099.png),
+    then initialize the environment and observe ![](img/Formula_06_100.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For ![](img/Formula_06_101.png) to ![](img/Formula_06_102.png), continue with
+    the following steps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Take some action, ![](img/Formula_06_103.png), using a policy, ![](img/Formula_06_104.png),
+    given the state, ![](img/Formula_06_105.png), then observe ![](img/Formula_06_106.png)
+    and ![](img/Formula_06_107.png), which form the ![](img/Formula_06_108.png) tuple.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Obtain the target value, ![](img/Formula_06_109.png), but if ![](img/Formula_06_110.png)
+    is a terminal state, set ![](img/Formula_06_111.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Take a gradient step to update ![](img/Formula_06_112.png), where ![](img/Formula_06_113.png)
+    is the step size.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Update the policy to ![](img/Formula_06_114.png) with respect to the new ![](img/Formula_06_115.png)
+    value.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**End for**'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'As you can see, the key difference compared to NFQ is to update the neural
+    network parameters after each ![](img/Formula_06_116.png) tuple is sampled from
+    the environment. Here are some additional considerations about online Q-learning:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Similar to the NFQ algorithm, we need a policy that continuously explores the
+    state-action space. Again, this can be achieved by using an ![](img/Formula_06_117.png)-greedy
+    policy or another soft policy.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Also similar to fitted Q-iteration, the samples may come from a policy that
+    is not relevant to what the Q-network is suggesting, as this is an off-policy
+    method.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Other than these, there can be numerous other improvements to the online Q-learning
+    method. We will momentarily focus on DQNs, a breakthrough improvement over Q-learning,
+    rather than discussing somewhat less important tweaks to online Q-learning. But
+    before doing so, let's look into why it is difficult to train online Q-learning
+    in its current form.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Challenges with online Q-learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The online Q-learning algorithm suffers from the following issues:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The gradient estimates are noisy**: Similar to the other gradient descent
+    methods in machine learning, online Q-learning aims to estimate the gradient using
+    samples. On the other hand, it uses a single sample while doing so, which results
+    in noisy estimates that make it hard to optimize the loss function. Ideally, we
+    should use a minibatch with more than one sample to estimate the gradient.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The gradient step is not truly gradient descent**: This is because ![](img/Formula_06_118.png)
+    includes ![](img/Formula_06_119.png), which we treat as a constant even though
+    it is not. ![](img/Formula_06_120.png) itself depends on ![](img/Formula_06_011.png),
+    yet we ignore this fact by not taking its derivative with respect to ![](img/Formula_06_122.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Target values are updated after each gradient step, which becomes a moving
+    target that the network is trying to learn from**: This is unlike supervised learning
+    where the labels (of images, let''s say) don''t change based on what the model
+    predicts, and it makes the learning very difficult.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The samples are not independent and identically distributed (i.i.d.)**: In
+    fact, they are usually highly correlated since an MDP is a sequential decision
+    setting, and what we observe next highly depends on the actions we have taken
+    earlier. This is another deviation from the classical gradient descent, which
+    breaks its convergence properties.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Because of all these challenges, and what we mentioned in general in the NFQ
+    section regarding the deadly triad, the online Q-learning algorithm is not quite
+    a viable method to solve complex RL problems. This changed with the revolutionary
+    work of DQNs, which addressed the latter two challenges we mentioned previously.
+    In fact, it is with the DQN that we started talking about deep RL. So, without
+    further ado, let's dive into discussing DQNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deep Q-networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The DQN is a seminal work by Mnih et al. (2015) that made deep RL a viable approach
+    to complex sequential control problems. The authors demonstrated that a single
+    DQN architecture can achieve super-human-level performance in many Atari games
+    without any feature engineering, which created a lot of excitement regarding the
+    progress of AI. Let's look into what makes DQNs so effective compared to the algorithms
+    we mentioned earlier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Key concepts in DQNs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The DQN modifies online Q-learning with two important concepts by using experience
+    replay and a target network, which greatly stabilizes the learning. We will describe
+    these concepts next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Experience replay
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: As mentioned earlier, simply using the experience sampled sequentially from
+    the environment leads to highly correlated gradient steps. The DQN, on the other
+    hand, stores those experience tuples, ![](img/Formula_06_123.png), in a replay
+    buffer (memory), an idea that was introduced back in 1993 (Lin, 1993). During
+    learning, the samples are drawn from this buffer uniformly at random, which eliminates
+    the correlations between the samples used to train the neural network and gives
+    i.i.d.-like samples.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another benefit of using experience replay over online Q-learning is that experience
+    is reused rather than discarded, which reduces the amount of interaction necessary
+    with the environment – an important benefit given the need for vast amounts of
+    data in RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An interesting note about experience replay is that there is evidence that a
+    similar process takes place in animal brains. Animals appear to replay their past
+    experiences in their hippocampus, which contributes to their learning (McClelland,
+    1995).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Target networks
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Another problem with using bootstrapping with function approximations is that
+    it creates a moving target to learn from. This makes an already-challenging undertaking,
+    such as training a neural network from noisy samples, a task that is destined
+    for failure. A key insight presented by the authors is to create a copy of the
+    neural network that is only used to generate the Q-value estimates used in sampled
+    Bellman updates. Namely, the target value for sample ![](img/Formula_06_124.png)
+    is obtained as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_125.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_06_126.png) is the parameter of a target network, which
+    is updated every ![](img/Formula_06_127.png) time steps by setting ![](img/Formula_06_128.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Creating a lag in updating the target network potentially makes its action-value
+    estimations slightly stale compared to the original network. On the other hand,
+    in return, the target values become stable, and the original network can be trained.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before giving you the full DQN algorithm, let's also discuss the loss function
+    it uses.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The loss function
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'With experience replay and the target network introduced, the DQN minimizes
+    the following loss function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_129.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_06_130.png) is the replay buffer, from which a minibatch
+    of ![](img/Formula_06_131.png) tuples are drawn uniformly at random to update
+    the neural network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, it's finally time to give the complete algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The DQN algorithm
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The DQN algorithm consists of the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize ![](img/Formula_06_132.png) and a replay buffer, ![](img/Formula_06_133.png),
+    with a fixed capacity, ![](img/Formula_06_134.png). Set the target network parameters
+    as ![](img/Formula_06_135.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set the policy, ![](img/Formula_05_035.png), to be ![](img/Formula_06_117.png)-greedy
+    with respect to ![](img/Formula_06_138.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Given the state, ![](img/Formula_05_165.png), and the policy, ![](img/Formula_05_011.png),
+    take an action, ![](img/Formula_05_044.png), and observe ![](img/Formula_06_142.png)
+    and ![](img/Formula_06_143.png). Add the transition, ![](img/Formula_06_144.png),
+    to the replay buffer, ![](img/Formula_06_145.png). If ![](img/Formula_06_146.png),
+    eject the oldest transition from the buffer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If ![](img/Formula_06_147.png), uniformly sample a random minibatch of ![](img/Formula_06_148.png)
+    transitions from ![](img/Formula_06_149.png), else return to *step 2*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Obtain the target values, ![](img/Formula_06_150.png), ![](img/Formula_06_151.png)
+    except if ![](img/Formula_06_152.png) is a terminal state, set ![](img/Formula_06_153.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Take a gradient step to update ![](img/Formula_06_154.png), which is ![](img/Formula_06_155.png).
+    Here,![](img/Formula_06_156.jpg)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Every ![](img/Formula_06_157.png) steps, update the target network parameters,
+    ![](img/Formula_06_158.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Return to *step 1*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The DQN algorithm can be illustrated as in the diagram in *Figure 6.2*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.2 – DQN algorithm overview (source: Nair et al., 2015)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 6.2 – DQN algorithm overview (source: Nair et al., 2015)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: After the seminal work on DQNs, there have been many extensions proposed to
+    improve them in various papers. Hessel et al. (2018) combined some of the most
+    important of those and called them Rainbow, which we will turn to next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Extensions to the DQN – Rainbow
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The Rainbow improvements bring in a significant performance boost over the vanilla
+    DQN and they have become standard in most Q-learning implementations. In this
+    section, we will discuss what those improvements are, how they help, and what
+    their relative importance is. At the end, we will talk about how the DQN and these
+    extensions collectively overcome the deadly triad.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The extensions
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: There are six extensions to the DQN included in the Rainbow algorithm. These
+    are double Q-learning, prioritized replay, dueling networks, multi-step learning,
+    distributional RL, and noisy nets. Let's start describing them, starting with
+    double Q-learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Double Q-learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: One of the well-known issues in Q-learning is that the Q-value estimates we
+    obtain during learning are higher than the true Q-values because of the maximization
+    operation, ![](img/Formula_06_159.png). This phenomenon is called **maximization
+    bias**, and the reason we run into it is that we do a maximization operation over
+    noisy observations of the Q-values. As a result, we end up estimating not the
+    maximum of the true values but the maximum of the possible observations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For two simple illustrations of how this happens, consider the examples in
+    *Figure 6.3*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.3 – Two examples of maximization bias'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.3 – Two examples of maximization bias
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figures 6.3 (a)* and *6.3 (b)* show the probability distributions of obtaining
+    various Q-value estimates for the available actions for a given state, ![](img/Formula_05_290.png),
+    where the vertical lines correspond to the true action values. In *(a)*, there
+    are three available actions. After some round of sample collection, just by chance,
+    the estimates we obtain happen to be ![](img/Formula_06_161.png). Not only is
+    the best action incorrectly predicted as ![](img/Formula_06_162.png), but its
+    action value is overestimated. In *(b)*, there are six available actions with
+    the same probability distribution of Q-value estimates. Although their true action
+    values are the same, when we take a random sample, an order will appear between
+    them just by chance. Moreover, since we take the maximum of these noisy observations,
+    chances are it will be above the true value and again the Q-value is overestimated.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Double Q-learning proposes a solution to the maximization bias by decoupling
+    finding the maximizing action and obtaining an action-value estimate for it by
+    using two separate action-value functions, ![](img/Formula_06_163.png)and ![](img/Formula_06_164.png).
+    More formally, we find the maximizing action using one of the functions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_165.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Then, we obtain the action value using the other function as ![](img/Formula_06_166.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In tabular Q-learning, this requires the extra effort of maintaining two action-value
+    functions. ![](img/Formula_06_167.png) and ![](img/Formula_06_168.png) are then
+    swapped randomly in each step. On the other hand, the DQN already proposes maintaining
+    a target network with ![](img/Formula_06_169.png) parameters dedicated to providing
+    action-value estimates for bootstrapping. Therefore, we implement double Q-learning
+    on top of the DQN to obtain the action-value estimate for the maximizing action,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_170.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, the corresponding loss function for the state-action pair ![](img/Formula_06_171.png)
+    becomes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_172.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: That's it! This is how double Q-learning works in the context of the DQN. Now,
+    let's look into the next improvement, prioritized replay.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prioritized replay
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As we mentioned, the DQN algorithm suggests sampling the experiences from the
+    replay buffer uniformly at random. On the other hand, it is natural to expect
+    that some of the experiences will be more "interesting" than others, in the sense
+    that there will be more to learn from them for the agent. This is especially the
+    case in hard-exploration problems with sparse rewards, where there are a lot of
+    uninteresting "failure" cases and only a few "successes" with non-zero rewards.
+    Schaul et al. (2015) propose using the TD error to measure how "interesting" or
+    "surprising" an experience is to the agent. The probability of sampling a particular
+    experience from the replay buffer is then set to be proportional to the TD error.
+    Namely, the probability of sampling an experience encountered at time ![](img/Formula_06_173.png),
+    ![](img/Formula_06_174.png), has the following relationship with the TD error:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_175.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_06_176.png) is a hyperparameter controlling the shape
+    of the distribution. Note that for ![](img/Formula_06_177.png), this gives a uniform
+    distribution over the experiences, while larger ![](img/Formula_06_178.png) values
+    put more and more weight on experiences with a large TD error.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dueling networks
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'One of the common situations encountered in RL problems is that in some states,
+    actions taken by the agent have little or no effect on the environment. As an
+    example, consider the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A robot moving in a grid world should avoid a "trap" state, from which the robot
+    cannot escape through its actions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Instead, the environment randomly transitions the robot out of this state with
+    some low probability.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While in this state, the robot loses some reward points.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this situation, the algorithm needs to estimate the value of the trap state
+    so that it knows it should avoid it. On the other hand, trying to estimate the
+    individual action values is meaningless as it would just be chasing the noise.
+    It turns out that this harms the DQN's effectiveness.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Dueling networks propose a solution to this issue through an architecture that
+    simultaneously estimates the state value and the action **advantages** in parallel
+    streams for a given state. The **advantage value** of an action in a given state,
+    as is apparent from the term, is the additional expected cumulative reward that
+    comes with choosing that action instead of what the policy in use, ![](img/Formula_05_040.png),
+    suggests. It is formally defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_180.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: So, choosing the action with the highest advantage is equivalent to choosing
+    the action with the highest Q-value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'By obtaining the Q-values from the explicit representations of the state value
+    and the action advantages, as represented in *Figure 6.4*, we enable the network
+    to have a good representation of the state value without having to accurately
+    estimate each action value for a given state:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/B14160_06_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Figure 6.4 – (a) regular DQN and (b) dueling DQN (source: Wang et al., 2016)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'At this point, you might expect that the action-value estimates are just obtained
+    in this architecture using the formula we gave previously. It turns out that this
+    vanilla implementation does not work well. This is because this architecture alone
+    does not enforce the network to learn the state and action values in the corresponding
+    branches, because they are supervised indirectly through their sum. For example,
+    the sum would not change if you were to subtract 100 from the state value estimate
+    and add 100 to all advantage estimates. To overcome this issue of "identifiability,"
+    we need to remember this: in Q-learning, the policy is to pick the action with
+    the highest Q-value. Let''s represent this best action with ![](img/Formula_06_181.png).
+    Then, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_182.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'This leads to ![](img/Formula_06_183.png). To enforce this, one way of obtaining
+    the action-value estimates is to use the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_184.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, ![](img/Formula_06_185.png), and ![](img/Formula_06_186.png) represent
+    the common encoder, state value, and advantage streams; and ![](img/Formula_06_187.png).
+    On the other hand, the authors use the following alternative, which leads to more
+    stable training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_188.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: With this architecture, the authors obtained state-of-the-art results at the
+    time on the Atari benchmarks, proving the value of the approach.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, let''s look into another important improvement over DQNs: multi-step
+    learning.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-step learning
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the previous chapter, we mentioned that a more accurate target value for
+    a state-action pair can be obtained by using multi-step discounted rewards in
+    the estimation obtained from the environment. In such cases, the Q-value estimates
+    used in bootstrapping will be discounted more heavily, diminishing the impact
+    of the inaccuracies of those estimates. Instead, more of the target value will
+    come from the sampled rewards. More formally, the TD error in a multi-step setting
+    becomes the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_189.jpg)![](img/Formula_06_190.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: You can see that with increasing ![](img/Formula_05_193.png), the impact of
+    the ![](img/Formula_06_192.png) term diminishes since ![](img/Formula_06_193.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next extension is distributional RL, one of the most important ideas in
+    value-based learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distributional RL
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In a traditional Q-learning setting, the action-value function estimates the
+    expected discounted return when action ![](img/Formula_06_194.png) is taken in
+    state ![](img/Formula_05_045.png), and then some target policy is followed. The
+    distributional RL model proposed by Bellemare et al. (2017) instead learns a probability
+    mass function over discrete support ![](img/Formula_06_196.png) for state values.
+    This ![](img/Formula_06_197.png) is a vector with ![](img/Formula_06_198.png)
+    atoms, where ![](img/Formula_06_199.png), ![](img/Formula_06_200.png). The neural
+    network architecture is then modified to estimate ![](img/Formula_06_201.png)
+    on each atom, ![](img/Formula_06_202.png). When distributional RL is used, the
+    TD error can be calculated using **Kullback-Leibler** (**KL**) divergence between
+    the current and target distributions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To give an example here, let's say the state value in an environment for any
+    state can range between ![](img/Formula_06_203.png) and ![](img/Formula_06_204.png).
+    We can discretize this range into 11 atoms, leading to ![](img/Formula_06_205.png).
+    The value network then estimates, for a given ![](img/Formula_06_206.png) value,
+    what the probability is that its value is 0, 10, 20, and so on. It turns out that
+    this granular representation of the value function leads to a significant performance
+    boost in deep Q-learning. Of course, the additional complexity here is that ![](img/Formula_06_207.png)
+    and ![](img/Formula_06_208.png) are additional hyperparameters to be tuned.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, we will introduce the last extension, noisy nets.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Noisy nets
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The exploration in regular Q-learning is controlled by ![](img/Formula_06_031.png),
+    which is fixed across the state space. On the other hand, some states may require
+    higher exploration than others. Noisy nets introduce noise to the linear layers
+    of the action-value function, whose degree is learned during training. More formally,
+    noisy nets locate the linear layer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_210.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'And then they replace it with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_06_211.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, ![](img/Formula_06_212.png), and ![](img/Formula_06_213.png) are learned
+    parameters, whereas ![](img/Formula_06_214.png) and ![](img/Formula_06_215.png)
+    are random variables with fixed statistics, and ![](img/Formula_06_216.png) denotes
+    an element-wise product. With this setup, the exploration rate becomes part of
+    the learning process, which is helpful especially in hard-exploration problems
+    (Fortunato et al., 2017).
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes the discussion on extensions. Next, we will turn to discussing
+    the results of the combination of these extensions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The performance of the integrated agent
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The contribution of the Rainbow paper is that it combines all of the preceding
+    improvements into a single agent. As a result, it obtained the state-of-the-art
+    results on the famous Atari 2600 benchmarks back then, showing the importance
+    of bringing these improvements together. Of course, a natural question that arises
+    is whether each individual improvement contributed significantly to the outcome.
+    The authors demonstrated results from some ablations to answer this, which we
+    will discuss next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: How to choose which extensions to use – ablations to Rainbow
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The Rainbow paper arrives at the following findings in terms of the significance
+    of the individual extensions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Prioritized replay and multi-step learning turned out to be the most important
+    extensions contributing to the result. Taking these extensions out of the Rainbow
+    architecture led to the highest decrease in performance, indicating their significance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The distributional DQN was shown to be the next important extension, which became
+    more apparent especially in the later stages of the training.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Removing noisy nets from the Rainbow agent led to decreases in performance,
+    although its effect was not as significant as the other extensions mentioned previously.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Removing the dueling architecture and double Q-learning had no notable effect
+    on the performance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Of course, the effects of each of these extensions depend on the problem at
+    hand, and their inclusion becomes a hyperparameter. However, these results show
+    that prioritized replay, multi-step learning, and the distributional DQN are important
+    extensions to try while training an RL agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we close this section, let's revisit the discussion on the deadly triad
+    and try to understand why it turns out to be less of a problem with all these
+    improvements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: What happened to the deadly triad?
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The deadly triad hypothesizes that when off-policy algorithms are combined with
+    function approximators and bootstrapping, training could diverge easily. On the
+    other hand, the aforementioned work in deep Q-learning exhibits great success
+    stories. So, how come we can achieve such results if the rationale behind the
+    deadly triad is accurate?
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Hasselt et al. looked into this question and found support for the following
+    hypotheses:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unbounded divergence is uncommon when combining Q-learning and conventional
+    deep RL function spaces. So, the fact that the divergence could happen does not
+    mean that it will happen. The authors presented results concluding that this is
+    not that much of a significant problem to begin with.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is less divergence when bootstrapping on separate networks. The target
+    networks introduced in the DQN work help with divergence.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is less divergence when correcting for overestimation bias, meaning that
+    the double DQN is mitigating divergence issues.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Longer multi-step returns will diverge less easily as it reduces the influence
+    of bootstrapping.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Larger, more flexible networks will diverge less easily because their representation
+    power is closer to the tabular representation than function approximators with
+    less capacity.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Stronger prioritization of updates (high ![](img/Formula_06_176.png)) will diverge
+    more easily, which is bad. But then, the amount of update can be corrected via
+    importance sampling and that helps to prevent divergence.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These provide great insight into why the situation with deep Q-learning is not
+    as bad as it seemed at the beginning. This is also apparent from the very exciting
+    results that have been reported over the past few years, and deep Q-learning has
+    emerged as a very promising solution approach to RL problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This concludes our discussion on the theory of deep Q-learning. Next, we will
+    turn to a very important dimension in deep RL, which is its scalable implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distributed deep Q-learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Deep learning models are notorious for their hunger for data. When it comes
+    to RL, the hunger for data is much greater, which mandates using parallelization
+    in training RL models. The original DQN model is a single-threaded process. Despite
+    its great success, it has limited scalability. In this section, we will present
+    methods to parallelize deep Q-learning to many (possibly thousands) of processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The key insight behind distributed Q-learning is its off-policy nature, which
+    virtually decouples the training from experience generation. In other words, the
+    specific processes/policies that generate the experience do not matter to the
+    training process (although there are caveats to this statement). Combined with
+    the idea of using a replay buffer, this allows us to parallelize the experience
+    generation and store the data in central or distributed replay buffers. In addition,
+    we can parallelize how the data is sampled from these buffers and the action-value
+    function is updated.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's dive into the details of distributed deep Q-learning.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Components of a distributed deep Q-learning architecture
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we will describe the main components of a distributed deep
+    Q-learning architecture, and then we will look into specific implementations,
+    following the structure introduced in Nair et al, (2015).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Actors
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Actors** are processes that interact with a copy of the environment given
+    a policy, take the actions given the state they are in, and observe the reward
+    and the next state. If the task is to learn how to play chess, for example, each
+    actor plays its own chess game and collects the experience. They are provided
+    with a copy of the Q-network by a **parameter server**, as well as an exploration
+    parameter, for them to obtain actions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Experience replay memory (buffer)
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: When the actors collect experience tuples, they store them in the replay buffer(s).
+    Depending on the implementation, there could be a global replay buffer or multiple
+    local replay buffers, possibly one associated with each actor. When the replay
+    buffer is a global one, the data can still be stored in a distributed fashion.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Learners
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A **learner**'s job is to calculate the gradients that will update the Q-network
+    in the parameter server. To do so, a learner carries a copy of the Q-network,
+    samples a minibatch of experiences from the replay memory, and calculates the
+    loss and the gradients before communicating them back to the parameter server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Parameter server
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The **parameter server** is where the main copy of the Q-network is stored and
+    updated as the learning progresses. All processes periodically synchronize their
+    version of the Q-network from this parameter server. Depending on the implementation,
+    the parameter server could comprise multiple shards to allow storing large amounts
+    of data and reduce communication load per shard.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After introducing this general structure, let's go into the details of the Gorila
+    implementation – one of the early distributed deep Q-learning architectures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gorila – general RL architecture
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The Gorila architecture introduces a general framework to parallelize deep
+    Q-learning using the components we described previously. A specific version of
+    this architecture, which is implemented by the authors, bundles an actor, a learner,
+    and a local replay buffer together for learning. Then, you can create many bundles
+    for distributed learning. This architecture is described in the following figure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.5 – Gorila architecture'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.5 – Gorila architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that the exact flow will change slightly with the Rainbow improvements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The details of the distributed deep Q-learning algorithm are as follows within
+    a bundle:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize a replay buffer, ![](img/Formula_06_218.png), with a fixed capacity,
+    ![](img/Formula_06_219.png). Initialize the parameter server with some ![](img/Formula_06_220.png).
+    Sync the action-value function and the target network with the parameters in the
+    parameter server, ![](img/Formula_06_221.png) and ![](img/Formula_06_222.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For ![](img/Formula_06_223.png) ![](img/Formula_06_224.png) to ![](img/Formula_06_225.png)
+    continue with the following steps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Reset the environment to an initial state, ![](img/Formula_06_226.png). Sync
+    ![](img/Formula_06_227.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For ![](img/Formula_06_228.png) to ![](img/Formula_06_229.png), continue with
+    the following steps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Take an action, ![](img/Formula_06_230.png), according to an ![](img/Formula_06_231.png)-greedy
+    policy given ![](img/Formula_06_232.png) and ![](img/Formula_06_233.png); observe
+    ![](img/Formula_06_234.png) and ![](img/Formula_06_235.png). Store the experience
+    in the replay buffer, ![](img/Formula_06_236.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sync ![](img/Formula_06_237.png); sample a random minibatch from ![](img/Formula_06_238.png)
+    and calculate the target values, ![](img/Formula_06_239.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calculate the loss; compute the gradients and send them to the parameter server.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Every ![](img/Formula_06_240.png) gradient updates in the parameter server;
+    sync ![](img/Formula_06_241.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: End for.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Some of the details in the pseudo-code are omitted, such as how to calculate
+    the target values. The original Gorila paper implements a vanilla DQN without
+    the Rainbow improvements. However, you could modify it to use, let's say, ![](img/Formula_05_193.png)-step
+    learning. The details of the algorithm would then need to be filled in accordingly.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the drawbacks of the Gorila architecture is that it involves a lot of
+    passing of the ![](img/Formula_06_154.png) parameters between the parameter server,
+    actors, and learners. Depending on the size of the network, this would mean a
+    significant communication load. Next, we will look into how the Ape-X architecture
+    improves Gorila.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ape-X – distributed prioritized experience replay
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Horgan et al, (2018) introduced the Ape-X DQN architecture, which achieved some
+    significant improvements over the DQN, Rainbow, and Gorila. Actually, the Ape-X
+    architecture is a general framework that could be applied to learning algorithms
+    other than the DQN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Key contributions of Ape-X
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here are the key points in how Ape-X distributes RL training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Similar to Gorila, each actor collects experiences from its own instance of
+    the environment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unlike Gorila, there is a single replay buffer in which all the experiences
+    are collected.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unlike Gorila, there is a single learner that samples from the replay buffer
+    to update the central Q and target networks.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Ape-X architecture completely decouples the learner from the actors, and
+    they run at their own pace.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Unlike the regular prioritized experience replay, actors calculate the initial
+    priorities before adding the experience tuples to the replay buffer, rather than
+    setting them to a maximum value.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The Ape-X DQN adapts the double Q-learning and multi-step learning improvements,
+    in their paper, although other Rainbow improvements can be integrated into the
+    architecture.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Each actor is assigned different exploration rates, within the ![](img/Formula_06_244.png)
+    spectrum, where actors with low ![](img/Formula_06_117.png) values exploit what
+    has been learned about the environment, and actors with high ![](img/Formula_05_291.png)
+    values increase the diversity in the collected experience.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The Ape-X DQN architecture is described in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.6 – Ape-X architecture for the DQN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.6 – Ape-X architecture for the DQN
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's look into the details of the algorithms for the actor and the learners.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The actor algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here is the algorithm for the actor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize ![](img/Formula_06_247.png), ![](img/Formula_06_248.png), and ![](img/Formula_06_249.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For ![](img/Formula_06_250.png) to ![](img/Formula_06_251.png), continue with
+    the following steps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Take an action, ![](img/Formula_06_252.png), obtained from ![](img/Formula_06_253.png)),
+    and observe ![](img/Formula_06_254.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Add the ![](img/Formula_06_255.png) experience to a local buffer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If the number of tuples in the local buffer exceeds a threshold, ![](img/Formula_06_256.png),
+    continue with the following steps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Obtain ![](img/Formula_06_257.png) from the local buffer, a batch of multi-step
+    transitions.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calculate ![](img/Formula_06_258.png) for ![](img/Formula_06_259.png), and initial
+    priorities for the experience.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Send ![](img/Formula_06_259.png) and ![](img/Formula_06_261.png) to the central
+    replay buffer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: End if
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sync the local network parameters every ![](img/Formula_06_262.png) steps from
+    the learner, ![](img/Formula_06_263.png)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: End for
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'One clarification with the preceding algorithm: don''t confuse the local buffer
+    with the replay buffer. It is just temporary storage to accumulate the experience
+    before sending it to the replay buffer, and the learner does not interact with
+    the local buffer. Also, the process that sends data to the replay buffer runs
+    in the background and does not block the process that steps through the environment.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's look into the algorithm for the learner.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The learner algorithm
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Here is how the learner works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Initialize Q and the target network, ![](img/Formula_06_264.png)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For ![](img/Formula_06_265.png) to ![](img/Formula_06_266.png), continue with
+    the following steps.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Sample a batch of experiences, ![](img/Formula_06_267.png), where ![](img/Formula_06_268.png)
+    helps uniquely identify which experience is sampled.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compute the gradients, ![](img/Formula_06_269.png), using ![](img/Formula_06_270.png),
+    ![](img/Formula_06_271.png) and ![](img/Formula_06_272.png); update the network
+    parameters to ![](img/Formula_06_273.png) with the gradients.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compute the new priorities, ![](img/Formula_06_274.png), for ![](img/Formula_06_275.png)
+    and update the priorities in the replay buffer using the ![](img/Formula_06_276.png)
+    information.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Periodically remove old experiences from the replay buffer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Periodically update the target network parameters.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: End for
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: If you look into the actor and learner algorithms, they are not that complicated.
+    However, the key intuition of decoupling them brings significant performance gains.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we wrap up our discussion in this section, let's discuss some practical
+    details of the Ape-X framework next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Practical considerations in implementing Ape-X DQN
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The Ape-X paper includes additional details about the implementation. Some
+    key ones are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The exploration rate for actors ![](img/Formula_06_277.png) as ![](img/Formula_06_278.png)
+    with ![](img/Formula_06_279.png) and ![](img/Formula_06_280.png), and these values
+    are held constant during training.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is a grace period to collect enough experiences before learning starts,
+    which the authors set to 50,000 transitions for Atari environments.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The rewards and gradient norms are clipped to stabilize the learning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, remember to pay attention to these details in your implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This has been a long journey so far with all the theory and abstract discussions
+    – and thanks for your patience! Now, it is finally time to dive into some practice.
+    In the rest of the chapter, and the book, we will heavily rely on the Ray/RLlib
+    libraries. So, let's get an introduction to Ray next, and then implement a distributed
+    deep Q-learning agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing scalable deep Q-learning algorithms using Ray
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will implement a parallelized DQN variant using the Ray
+    library. Ray is a powerful, general-purpose, yet simple framework for building
+    and running distributed applications on a single machine as well as on large clusters.
+    Ray has been built for applications that have heterogeneous computational needs
+    in mind. This is exactly what modern deep RL algorithms require as they involve
+    a mix of long- and short-running tasks, usage of GPU and CPU resources, and more.
+    In fact, Ray itself has a powerful RL library that is called RLlib. Both Ray and
+    RLlib have been increasingly adopted in academia and industry.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: For a comparison of Ray to other distributed backend frameworks, such as Spark
+    and Dask, see [https://bit.ly/2T44AzK](https://bit.ly/2T44AzK). You will see that
+    Ray is a very competitive alternative, even beating Python's own multiprocessing
+    implementation in some benchmarks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Writing a production-grade distributed application is a complex undertaking,
+    which is not what we aim for here. For that, we will cover RLlib in the next section.
+    On the other hand, implementing your own custom – albeit simple – deep RL algorithm
+    is highly beneficial, if nothing else, for educational reasons. So, this exercise
+    will help you with the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introduce you to Ray, which you can also use for tasks other than RL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Give you an idea about how to build your custom parallelized deep RL algorithm
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Serve as a stepping stone if you would prefer to dive into the RLlib source
+    code
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can then build your own distributed deep RL ideas on top of this exercise
+    if you would prefer to do so.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let's dive in!
+  prefs: []
+  type: TYPE_NORMAL
+- en: A primer on Ray
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We will start with an introduction to Ray before going into our exercise. This
+    will be a rather brief tour to ensure continuity. For comprehensive documentation
+    on how Ray works, we refer you to Ray's website.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The Ray and RLlib documentation is available at [https://docs.ray.io/en/latest/index.html](https://docs.ray.io/en/latest/index.html),
+    which includes API references, examples, and tutorials. The source code is on
+    GitHub at [https://github.com/ray-project/ray](https://github.com/ray-project/ray).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's discuss the main concepts in Ray.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Main concepts in Ray
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Before we look into writing some Ray applications, we first need to discuss
+    the main components it would involve. Ray enables your regular Python functions
+    and classes to run on separate remote processes with a simple Python decorator,
+    `@ray.remote`. During execution, Ray takes care of where these functions and classes
+    will live and execute – be it in a process on your local machine or somewhere
+    on the cluster if you have one. In more detail, here is what they are:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Remote functions (tasks)** are like regular Python functions except they
+    are executed asynchronously, in a distributed fashion. Once called, a remote function
+    immediately returns an object ID, and a task is created to execute it on a worker
+    process. Note that remote functions do not maintain a state between calls.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Object IDs (futures)** are references to remote Python objects, for example,
+    an integer output of a remote function. Remote objects are stored in shared-memory
+    object stores and can be accessed by remote functions and classes. Note that an
+    object ID might refer to an object that will be available in the future, for example,
+    once the execution of a remote function finishes.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Remote classes (actors)** are similar to regular Python classes, but they
+    live on a worker process. Unlike remote functions, they are stateful, and their
+    methods behave like remote functions, sharing the state in the remote class. As
+    a side note, the "actor" term here is not to be confused with the distributed
+    RL "actor" – although an RL actor can be implemented using a Ray actor.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Next, let's look at how you can install Ray and use remote functions and classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Installing and starting Ray
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Ray can be installed through a simple `pip install -U ray` command. To install
+    it together with the RLlib library that we will use later, simply use `pip install
+    -U ray[rllib]`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that Ray is supported on Linux and macOS. At the time of writing this book,
+    its Windows distribution is still in beta.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once installed, Ray needs to be initialized before creating any remote functions,
+    objects, or classes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, let's create a few simple remote functions. In doing so, we are going
+    to use Ray's examples in their documentation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using remote functions
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As mentioned earlier, Ray converts a regular Python function into a remote
+    one with a simple decorator:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once invoked, this function will execute a worker process. Therefore, invoking
+    this function multiple times will create multiple worker processes for parallel
+    execution. To do so, a remote function needs to be called with the `remote()`
+    addition:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the function calls will not wait for each other to finish. However,
+    once called, the function immediately returns an object ID. To retrieve the result
+    of a function as a regular Python object using the object ID, we just use `objects
+    = ray.get(object_ids)`. Note that this makes the process wait for the object to
+    be available.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Object IDs can be passed to other remote functions or classes just like regular
+    Python objects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'There are several things to note here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: This creates a dependency between the two tasks. The `remote_chain_function`
+    call will wait for the output of the `remote_function` call.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Within `remote_chain_function`, we did not have to call `ray.get(value)`. Ray
+    handles it, whether it is an object ID or an object that has been received.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the two worker processes for these two tasks were on different machines,
+    the output is copied from one machine to the other.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: This was a brief overview of the Ray remote functions. Next, we will look into
+    remote objects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using remote objects
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A regular Python object can be converted into a Ray remote object easily, as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: This stores the object in the shared-memory object store. Note that remote objects
+    are immutable, and their values cannot be changed after creation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's go over Ray remote classes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using remote classes
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Using remote classes (actors) in Ray is very similar to using remote functions.
+    An example of how to decorate a class with Ray''s remote decorator is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In order to initiate an object from this class, we use `remote` in addition
+    to calling the class:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Again, calling a method on this object requires using `remote`:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: That's it! This brief overview of Ray lays the ground for us to move on to implementing
+    a scalable DQN algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Ray implementation of a DQN variant
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In this section, we will implement a DQN variant using Ray, which will be similar
+    to the Ape-X DQN structure, except we don''t implement prioritized replay for
+    simplicity. The code will have the following components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`train_apex_dqn.py` is the main script that accepts the training configs and
+    initializes the other components.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`actor.py` includes the RL actor class that interacts with the environment
+    and collects experiences.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`parameter_server.py` includes a parameter server class that serves the optimized
+    Q model weights to actors.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`replay.py` includes the replay buffer class.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`learner.py` includes a learner class that receives samples from the replay
+    buffer, takes gradient steps, and pushes the new Q-network weights to the parameter
+    server.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`models.py` includes functions to create a feedforward neural network using
+    TensorFlow/Keras.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We then run this model on Gym's CartPole (v0) and see how it performs. Let's
+    get started!
+  prefs: []
+  type: TYPE_NORMAL
+- en: The main script
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The initial step in the main script is to receive a set of configs to be used
+    during training. This looks like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Let''s look into some of the details of some of these configs:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`env` is the name of the Gym environment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`num_workers` is the number of training environments/agents that will be created
+    to collect experiences. Note that each worker consumes a CPU on the computer,
+    so you need to adjust it to your machine.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`eval_num_workers` is the number of evaluation environments/agents that will
+    be created to evaluate the policy at that point in training. Again, each worker
+    consumes a CPU. Note that these agents have ![](img/Formula_06_281.png) since
+    we don''t need them to explore the environment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`n_step` is the number of steps for multi-step learning.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`max_eps` will set the maximum exploration rate, ![](img/Formula_06_282.png),
+    in training agents, as we will assign each training agent a different exploration
+    rate between ![](img/Formula_06_283.png).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`timesteps_per_iteration` decides how frequently we run the evaluation; the
+    number of steps for multi-step learning. Note that this is not how frequently
+    we take a gradient step, as the learner will continuously sample and update the
+    network parameters.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'With this config, we create the parameter server, replay buffer, and learner.
+    We will go into the details of these classes momentarily. Note that since they
+    are Ray actors, we use `remote` to initiate them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We mentioned that the learner is a process on its own that continuously samples
+    from the replay buffer and updates the Q-network. We kick the learning off in
+    the main script:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Of course, this won''t do anything alone since the actors are not collecting
+    experiences yet. We next kick off the training actors and immediately let them
+    start sampling from their environments:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We also start the evaluation actors, but we don''t want them to sample yet.
+    That will happen as the learner updates the Q-network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we have the main loop where we alternate between training and evaluation.
+    As the evaluation results improve, we will save the best model up to that point
+    in the training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that there is a bit more in the code that is not included here (such as
+    saving the evaluation metrics to TensorBoard). Please see the full code for all
+    the details.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's look into the details of the actor class.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RL actor class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The RL actor is responsible for collecting experiences from its environment
+    given an exploratory policy. The rate of exploration is determined in the main
+    script for each actor and it remains the same throughout the sampling. The actor
+    class also stores the experiences locally before pushing it to the replay buffer
+    to reduce the communication overhead. Also note that we differentiate between
+    a training and evaluation actor since we run the sampling step for the evaluation
+    actors only for a single episode. Finally, the actors periodically pull the latest
+    Q-network weights to update their policies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is how we initialize an actor:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The actor uses the following method to update and sync its policies:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: The reason why the evaluation weights are stored and pulled separately is that
+    since the learner always learns, regardless of what is happening in the main loop,
+    we need to take a snapshot of the Q-network for evaluation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, we write the sampling loop for an actor. Let''s start with initializing
+    the variables that will be updated in the loop:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The first thing to do in the loop is to get an action and take a step in the
+    environment:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Our code supports multi-step learning. To implement that, the rolling trajectory
+    is stored in a deque with a maximum length of ![](img/Formula_06_284.png). When
+    the deque is at its full length, it indicates the trajectory is long enough to
+    make an experience to be stored in the replay buffer:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We remember the update the counters we have:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'At the end of the episode, we reset the environment and the episode-specific
+    counters. We also save the experience in the local buffer, regardless of its length.
+    Also note that we break the sampling loop at the end of the episode if this is
+    an evaluation rollout:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We periodically send the experience to the replay buffer, and also periodically
+    update the network parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, let''s look into the details of action sampling. The actions are selected
+    ![](img/Formula_06_282.png)-greedily, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The experience is extracted from the trajectory deque, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, the experience tuples that are stored locally are sent to the replay
+    buffer, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs: []
+  type: TYPE_PRE
+- en: That's all with the actor! Next, let's look into the parameter server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Parameter server class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The parameter server is a simple structure that receives the updated parameters
+    (weights) from the learner and serves them to actors. It consists of mostly setters
+    and getters, and a save method. Again, remember that we periodically take a snapshot
+    of the parameters and use them for evaluation. If the results beat the previous
+    best results, the weights are saved:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the parameter server stores the actual Q-network structure just to
+    be able to use TensorFlow's convenient save functionality. Other than that, only
+    the weights of the neural network, not the full model, are passed between different
+    processes to avoid unnecessary overhead and pickling issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will cover the replay buffer implementation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Replay buffer class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'As we mentioned previously, for simplicity, we implement a standard replay
+    buffer (without prioritized sampling). As a result, the replay buffer receives
+    experiences from actors and sends sampled ones to the learner. It also keeps track
+    of how many total experience tuples it has received up to that point in the training:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: Model generation
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Since we are passing only the weights of the Q-network between processes, each
+    relevant actor creates its own copy of the Q-network. The weights of these Q-networks
+    are then set with what is received from the parameter server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The Q-network is created using Keras, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'One important implementation detail here is that this Q-network is not what
+    we want to train because, given a state, it predicts Q-values for all possible
+    actions. On the other hand, a given experience tuple includes a target value only
+    for one of these possible actions: the one that was selected in that tuple by
+    the agent. Therefore, when we update the Q-network using that experience tuple,
+    gradients should flow through only the selected action''s output. The rest of
+    the actions should be masked. We achieve that by using a masking input based on
+    the selected action a custom layer on top of this Q-network that calculates the
+    loss only for the selected action. That gives us a model that we can train.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here is how we implement the masked loss:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE28]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, the trainable model is obtained as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE29]'
+  prefs: []
+  type: TYPE_PRE
+- en: It is this trainable model that the learner will optimize. The compiled Q-network
+    model will never be trained alone, and the optimizer and loss function we specify
+    in it are just placeholders.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's look into the learner next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The learner class
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The learner's main job is to receive a sample of experiences from the replay
+    buffer, unpack them, and take gradient steps to optimize the Q-network. Here,
+    we only include a part of the class initialization and the optimization step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The class is initialized as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE30]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'And now the optimization step. We start with sampling from the replay buffer
+    and updating the counters we keep:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE31]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, we unpack the samples and reshape them:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE32]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'We create the masks to only update the Q-value for the action selected in the
+    experience tuple:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE33]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'In the main section, we first prepare the inputs to the trainable Q-network,
+    and then call the `fit` function on it. In doing so, we use a double DQN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE34]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Finally, we periodically update the target network:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE35]'
+  prefs: []
+  type: TYPE_PRE
+- en: For more details, see the full code in `learner.py`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: That's it! Let's look at how this architecture performs in the CartPole environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Results
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'You can kick off training by simply running the main script. There are a couple
+    of things to note before running it:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Don't forget to activate the Python environment in which Ray is installed. A
+    virtual environment is highly recommended.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Set the total number of workers (for training and evaluation) to be less than
+    the number of CPUs on your machine.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'With that, you can kick off the training as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE36]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The full code includes some additions that save the evaluation progress on
+    TensorBoard. You can start TensorBoard within the same folder with scripts, as
+    follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE37]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Then, go to the default TensorBoard address at `http://localhost:6006/`. The
+    evaluation graph from our experiment looks as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.7 – Distributed DQN evaluation results for CartPole v0'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_7.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.7 – Distributed DQN evaluation results for CartPole v0
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can see that after 150,000 iterations or so, the reward reaches the maximum
+    of 200.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Great job! You have implemented a deep Q-learning algorithm that you can scale
+    to many CPUs, even to many nodes on a cluster, using Ray! Feel free to improve
+    this implementation, add further tricks, and incorporate your own ideas!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's close this chapter with how you can run a similar experiment in RLlib.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using RLlib for production-grade deep RL
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'As we mentioned at the beginning, one of the motivations of Ray''s creators
+    was to build an easy-to-use distributed computing framework that can handle complex
+    and heterogenous applications such as deep RL. With that, they also created a
+    widely used deep RL library based on Ray. Training a model similar to ours is
+    very simple using RLlib. The main steps are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Import the default training configs for Ape-X DQN as well as the trainer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Customize the training configs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train the trainer.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'That''s it! The code necessary for that is very simple. All you need is the
+    following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE38]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With that, your training should start. RLlib has great TensorBoard logging.
+    Initialize TensorBoard by running the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE39]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The results from our training look like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.8 – RLlib evaluation results for CartPole v0'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_06_8.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 6.8 – RLlib evaluation results for CartPole v0
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'It turns out that our DQN implementation was very competitive! But now, with
+    RLlib, you have access to many improvements from the RL literature. You can customize
+    your training by changing the default configs. Please take a moment to go over
+    the very long list of all the available options to you that we print in our code.
+    It looks like the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE40]'
+  prefs: []
+  type: TYPE_PRE
+- en: Again, the list is long. But this shows the power you have at your fingertips
+    with RLlib! We will continue to use RLlib in the following chapters and go into
+    more details.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Congratulations! You have done a great job and accomplished a lot in this chapter.
+    What we have covered here alone gives you an incredible arsenal to solve many
+    sequential decision-making problems. The next chapters will dive into even more
+    advanced material in deep RL, and now you are ready to take them on!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we have come a long way from using tabular Q-learning to implementing
+    a modern, distributed deep Q-learning algorithm. Along the way, we covered the
+    details of NFQ, online Q-learning, DQN with Rainbow improvements, Gorila, and
+    Ape-X DQN algorithms. We also introduced you to Ray and RLlib, which are powerful
+    distributed computing and deep RL frameworks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the next chapter, we will look into another class of deep Q-learning algorithms:
+    policy-based methods. Those methods will allow us to directly learn random policies
+    and use continuous actions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Sutton, R. S. & Barto, A. G. (2018). *Reinforcement Learning: An Introduction*. *The
+    MIT Press*. URL: [http://incompleteideas.net/book/the-book.html](http://incompleteideas.net/book/the-book.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Mnih, V. et al. (2015). *Human-level control through deep reinforcement learning*. *Nature*,
+    518(7540), 529–533
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Riedmiller, M. (2005) Neural Fitted Q Iteration – First Experiences with a
+    Data Efficient Neural Reinforcement Learning Method. In: Gama, J., Camacho, R.,
+    Brazdil, P.B., Jorge, A.M., & Torgo L. (eds) Machine Learning: ECML 2005\. ECML
+    2005\. *Lecture Notes in Computer Science*, vol. 3720\. Springer, Berlin, Heidelberg'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Lin, L. (1993). *Reinforcement learning for robots using neural networks*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'McClelland, J. L., McNaughton, B. L., & O''Reilly, R. C. (1995). *Why there
+    are complementary learning systems in the hippocampus and neocortex: Insights
+    from the successes and failures of connectionist models of learning and memory*.
+    Psychological Review, 102(3), 419–457'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'van Hasselt, H., Guez, A., & Silver, D. (2016). *Deep reinforcement learning
+    with double Q-learning*. In: Proc. of AAAI, 2094–2100'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Schaul, T., Quan, J., Antonoglou, I., & Silver, D. (2015). *Prioritized experience
+    replay*. In: Proc. of ICLR'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Wang, Z., Schaul, T., Hessel, M., van Hasselt, H., Lanctot, M., & de Freitas,
+    N. (2016). *Dueling network architectures for deep reinforcement learning*. In:
+    Proceedings of the 33rd International Conference on Machine Learning, 1995–2003'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Sutton, R. S. (1988). *Learning to predict by the methods of temporal differences*.
+    Machine learning 3(1), 9–44
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bellemare, M. G., Dabney, W., & Munos, R. (2017). *A distributional perspective
+    on reinforcement learning*. In: ICML'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Fortunato, M., Azar, M. G., Piot, B., Menick, J., Osband, I., Graves, A., Mnih,
+    V., Munos, R., Hassabis, D., Pietquin, O., Blundell, C., & Legg, S. (2017). *Noisy
+    networks for exploration*. URL: [https://arxiv.org/abs/1706.10295](https://arxiv.org/abs/1706.10295)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Hessel, M., Modayil, J., Hasselt, H.V., Schaul, T., Ostrovski, G., Dabney,
+    W., Horgan, D., Piot, B., Azar, M.G., & Silver, D. (2018). *Rainbow: Combining
+    Improvements in Deep Reinforcement Learning*. URL: [https://arxiv.org/abs/1710.02298](https://arxiv.org/abs/1710.02298)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Hasselt, H.V., Doron, Y., Strub, F., Hessel, M., Sonnerat, N., & Modayil, J.
+    (2018). *Deep Reinforcement Learning and the Deadly Triad*. URL: [https://arxiv.org/abs/1812.02648](https://arxiv.org/abs/1812.02648)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Nair, A., Srinivasan, P., Blackwell, S., Alcicek, C., Fearon, R., Maria, A.D.,
+    Panneershelvam, V., Suleyman, M., Beattie, C., Petersen, S., Legg, S., Mnih, V.,
+    Kavukcuoglu, K., & Silver, D. (2015). *Massively Parallel Methods for Deep Reinforcement
+    Learning*. URL: [https://arxiv.org/abs/1507.04296](https://arxiv.org/abs/1507.04296)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Horgan, D., Quan, J., Budden, D., Barth-Maron, G., Hessel, M., Hasselt, H.V.,
+    & Silver, D. (2018). *Distributed Prioritized Experience Replay*. URL: [https://arxiv.org/abs/1803.00933](https://arxiv.org/abs/1803.00933)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

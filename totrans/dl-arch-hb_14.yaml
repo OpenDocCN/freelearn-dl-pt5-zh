@@ -1,0 +1,1035 @@
+- en: '14'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Analyzing Adversarial Performance
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An adversary, in the context of machine learning models, refers to an entity
+    or system that actively seeks to exploit or undermine the performance, integrity,
+    or security of these models. They can be malicious actors, algorithms, or systems
+    designed to target vulnerabilities within machine learning models. Adversaries
+    perform adversarial attacks, where they intentionally input misleading or carefully
+    crafted data to deceive the model and cause it to make incorrect or unintended
+    predictions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adversarial attacks can range from subtle perturbations of input data to sophisticated
+    methods that exploit the vulnerabilities of specific algorithms. The objectives
+    of adversaries can vary depending on the context. They may attempt to bypass security
+    measures, gain unauthorized access, steal sensitive information, or cause disruption
+    in the model’s intended functionality. Adversaries can also target the fairness
+    and ethics of machine learning models, attempting to exploit biases or discrimination
+    present in the training data or model design. One example of adversaries targeting
+    fairness and ethics in machine learning models is in the context of facial recognition
+    systems. Consider that a facial recognition system has a bias and it performs
+    better for men than for women. Adversaries can exploit this bias by deliberately
+    manipulating their appearance to mislead the system. They may use makeup, hairstyles,
+    or accessories to confuse the facial recognition algorithms and make it harder
+    for the system to accurately identify them. By doing so, adversaries can exploit
+    the system’s weaknesses and potentially evade detection or misdirect law enforcement
+    efforts.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To counter adversaries and adversarial attacks, the best first step is to analyze
+    the adversarial performance of the trained machine learning models. This analysis
+    allows for a better understanding of potential vulnerabilities and weaknesses
+    in the models, enabling the development of targeted mitigation methods. Additionally,
+    evaluating the adversarial performance can provide insights into the effectiveness
+    of existing mitigation strategies and guide the improvement of future model designs.
+    As an added benefit, it helps ensure that your model is well-equipped to handle
+    any possible natural changes that may occur in its deployed environment, even
+    in the absence of specific adversaries targeting the system.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will go through the adversarial performance evaluation
+    of image, text, and audio data-based models separately. Specifically, the following
+    topics will be discussed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using data augmentations for adversarial analysis
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Analyzing adversarial performance for audio-based models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Analyzing adversarial performance for image-based models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Exploring adversarial analysis for text-based models
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter includes some practical implementations in the Python programming
+    language. To complete it, you will need to have a computer with the following
+    libraries installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`matplotlib`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`scikit-learn`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`numpy`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pytorch`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`accelerate==0.15.0`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`captum`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`catalyst`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`adversarial-robustness-toolbox`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`torchvision`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pandas`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The code files for this chapter are available on GitHub: [https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_14](https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_14).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using data augmentations for adversarial analysis
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The core of the adversarial performance analysis method focuses on utilizing
+    data augmentations. Data augmentation refers to the process of introducing realistic
+    variations to existing data programmatically. Data augmentations are commonly
+    employed during the model training process to enhance the validation performance
+    and generalizability of deep learning models. However, we can also leverage augmentations
+    as an evaluation method to ensure the robustness of performance under various
+    conditions. By applying augmentations during evaluation, practitioners can obtain
+    a more detailed and comprehensive estimation of the model’s performance when deployed
+    in production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Adversarial performance analysis offers two main advantages. Firstly, it assists
+    in building a more generalizable model by enabling better model selection during
+    validation in training and after training between multiple trained models. This
+    is achieved through the use of augmentation prerequisite metrics. Certain use
+    cases might have special conditions that are not necessarily representative of
+    what is available in the raw validation or holdout partition. Augmentations can
+    help change the representation of the evaluation dataset to mimic conditions in
+    production. Secondly, adversarial performance analysis can be used to establish
+    targeted guardrails when the model is deployed in production. By thoroughly assessing
+    the model’s performance under different adversarial conditions, practitioners
+    can set up specific thresholds, actions, and operating guidelines to ensure the
+    model’s behavior aligns with their requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Choosing all possible augmentations that you can think of will undoubtedly
+    help align performance expectations in different conditions. However, thoughtfully
+    chosen augmentations for adversarial analysis can help you more effectively extract
+    value from the process instead of doing it merely for an understanding. Here are
+    a few recommendations when performing adversarial performance analysis using augmentations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Consider choosing augmentations that you can detect, measure, and control**:
+    Do you have a system or a machine learning model that can already detect the component
+    that an augmentation can change? Having a measurable component that you want to
+    perform adversarial analysis associated with a chosen augmentation can help set
+    up actual guardrails in production. Guardrails can range from rejecting automated
+    prediction-based decisions from a model and delegating the decision to a human
+    reviewer, to requiring the user or participant in the system that utilizes the
+    machine learning model to resubmit input data that follows the requirements of
+    the system. An example of this is having a guardrail that makes sure that the
+    face is straight without any tilting in a face verification system.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Think of conditions that are more likely to happen in real-life deployments**:
+    By focusing on augmentations that mimic realistic conditions, practitioners can
+    assess the model’s robustness and performance in situations that are relevant
+    to its intended deployment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Evaluate the performance of the model at various degrees of strength of a
+    chosen augmentation to understand performance more comprehensively**: Knowing
+    the range of values where performance is at its peak and its bottom will help
+    you make the proper actions. However, some augmentation methods only have a binary
+    parameter such as added or not added augmentation and it’s okay to just compare
+    the difference in performance from applying and not applying. For example, whether
+    a horizontal flip has been applied or not.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Consider evaluating performance jointly with multiple augmentations**: Real-world
+    situations often involve a combination of factors that can affect the performance
+    of a model. By testing the model’s performance with multiple augmentations applied
+    simultaneously, you can better understand its ability to handle complex scenarios
+    and identify potential weaknesses that may not be apparent when evaluating single
+    augmentations individually.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Consider using popular adversarial examples or methods that generate adversarial
+    examples**: Utilizing well-known adversarial examples or techniques can help you
+    identify common vulnerabilities in your model that may have been overlooked. By
+    identifying and mitigating them, you would have already defended against a significant
+    portion of potential attacks, as these popular methods are more likely to be employed
+    by adversaries.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Grouping real data with targeted traits for assessment can be more effective
+    for adversarial performance analysis instead of using augmentations**: Sometimes,
+    augmentations can’t replicate real-life situations properly, so collecting and
+    analyzing against real data samples with specific adversarial characteristics
+    can provide a more accurate assessment of the model’s performance in real-world
+    scenarios.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In short, evaluate augmentations that are actionable. In general, valuable model
+    insights are the ones that are actionable by any means. Next, we will go through
+    our first practical example of adversarial analysis using audio-based models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing adversarial performance for audio-based models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Adversarial analysis for audio-based models requires audio augmentations. In
+    this section, we will be leveraging the open source `audiomentations` library
+    to apply audio augmentation methods. We will analyze the adversarial accuracy-based
+    performance of a speech recognition model practically. The accuracy metric we’ll
+    use is the **Word Error Rate** (**WER**), which is a commonly used metric in automatic
+    speech recognition and machine translation systems. It measures the dissimilarity
+    between a system’s output and the reference transcription or translation by calculating
+    the sum of word substitutions, insertions, and deletions divided by the total
+    number of reference words, resulting in a percentage value. The formula for WER
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: WER = (S + I + D) / N
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here, we have the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: S represents the number of word substitutions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I represents the number of word insertions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: D represents the number of word deletions
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: N is the total number of words in the reference transcription or translation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following augmentations are considered for the analysis:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Pronunciation speed augmentation**: Altering the speed of word pronunciation
+    can have a significant impact on WER. Increasing the speed (time compression)
+    may lead to more errors due to compressed phonetic information, while decreasing
+    the speed (time expansion) may result in more accurate transcriptions. As words
+    can be long and short, syllables per minute will be a good estimator of this without
+    any special machine learning model.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Speech pitch**: Changing the pitch of speech can affect the perception and
+    recognition of spoken words. Augmentations such as pitch shifting can introduce
+    variations in pitch, which can influence WER performance. Women and men generally
+    have different pitch ranges, which can work as a proxy for measuring this, so
+    we will not directly analyze pitch in this topic. Pitch can be measured either
+    by machine learning models or rule-based scientific methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Background noise**: The presence of background noise can negatively impact
+    speech recognition systems. Background noise can be created algorithmically, such
+    as Gaussian noise, or it can be strategically chosen types of real-world background
+    noise that can exist in real environments, such as car or motorbike sounds. However,
+    its presence can’t be detected simply and has to depend on a machine learning
+    model or manual environment controls.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Speech loudness/magnitude**: The loudness or volume of speech can play a
+    crucial role in speech recognition. Increasing or decreasing the loudness of the
+    speech can introduce variability that reflects real-world conditions. Common speech
+    datasets are collected in a closed environment without any external noise. This
+    makes it easy to control the loudness of the speech by using simple mathematical
+    methods.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Figure 14**.1* shows the adversarial performance analysis graph plots of four
+    components: pronunciation speed performance analysis in graph *(a)*, Gaussian
+    noise performance analysis in graph *(b)*, speech loudness performance analysis
+    in graph *(c)*, and real-life background noise performance analysis (motorbikes
+    noise) in graph *(d)*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.1 – Adversarial analysis results for a speech recognition model
+    with WER](img/B18187_14_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.1 – Adversarial analysis results for a speech recognition model with
+    WER
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 14**.1(a)*, the performance seems to be the best at between 2.5 to
+    4 syllables spoken per second across all categories, and males seem to be more
+    susceptible to performance degradations going out of this range. In *Figure 14**.1(b)*,
+    the models perform at an optimum level at every SNR value after 30 dB. Therefore,
+    a simple guardrail would be to ensure speech is always at least 30 dB louder than
+    any background noise, which can be measured by hardware. In *Figure 14**.1(c)*,
+    it’s obvious that the performance for females doesn’t specifically degrade no
+    matter how loud or soft the speech sounds made are. However, for males, the best
+    performance can be obtained when the absolute magnitude of the voice is at around
+    the 20 dB range and not over it. This shows some form of bias of the model toward
+    gender. *Figure 14**.1(d)* shows that there isn’t any particular special behavior
+    of motorbike noises versus Gaussian noise. Consider evaluating more real-life
+    background noises you can think of at the end of the practical steps!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Executing adversarial performance analysis for speech recognition models
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let’s start a step-by-step practical example that will show how to obtain the
+    adversarial performance analysis results of the speech recognition model presented
+    in *Figure 13**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will be using the Speech2Text model from the Hugging Face open source platform,
+    which is an English speech-trained transformer-based speech recognition model.
+    Let’s start by importing the necessary libraries, the highlights of which are
+    `matplotlib` for graph plotting, `numpy` for array handling, `pytorch` for handling
+    the PyTorch Speech2Text model, `audiomentations` for augmentations, the Speech2Text
+    model, and the preprocessor from Hugging Face:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will load the trained Speech2Text model and preprocessor, and assign
+    the model to a GPU device:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The dataset we will use as a base to evaluate the model is the English speech
+    recognition `fleurs` dataset from Google, which conveniently contains gender information
+    that allows us to indirectly evaluate pitch performance differences and also perform
+    bias analysis. Let’s download and load the dataset:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will load the WER evaluation method from the Hugging Face `evaluate`
+    library and define the helper method to extract the WER scores from the Speech2Text
+    model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Three scores will be returned here, which are the male-specific score, the female-specific
+    score, and the overall score.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'As a follow-up, we will define the main method that will apply the augmentation
+    to all the baseline samples and obtain a WER score:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'First, we will analyze the adversarial performance for the pronunciation speed
+    component using the time stretch method from `audiomentation`. The dataset contains
+    audio data with different numbers of syllables spoken per second, so we have to
+    make sure all of the audio data has the same number of syllables per second before
+    starting the analysis. Let’s start by finding the mean number of syllables spoken
+    per second:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we can obtain the initial set of baseline audio samples for pronunciation-based
+    analysis:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we will perform the adversarial WER analysis using a range of different
+    speed-up and speed-down rates:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'By running the following plotting code, you will obtain the graph shown in
+    *Figure 14**.1(a)*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we will move forward to the next augmentation component that algorithmically
+    generates Gaussian background noise. In this example, we will be controlling the
+    **signal-to-noise ratio** (**SNR**) of the speech signal and the Gaussian noise.
+    In this case, the original data can be used as the baseline without any equalization:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'By running the following plotting code, you will obtain the graph shown in
+    *Figure 14**.1(b)*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will analyze the WER performance at different speech loudness. The
+    dataset from [https://huggingface.co/datasets/google/fleurs](https://huggingface.co/datasets/google/fleurs)
+    was made in a closed environment without background noise, which makes it straightforward
+    to compute magnitude with the raw speech audio data array with the following code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'By running the following plotting code, you will obtain the graph shown in
+    *Figure 14**.1(c)*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we will be analyzing the adversarial performance of real background
+    noise from the real world. We will use motorbike sounds from the `Freesound50k`
+    dataset and mix them into the original audio data at different SNRs with the following
+    code:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'By running the following plotting code, you will obtain the graph shown in
+    *Figure 14**.1(d)*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: With that, we have attempted to analyze the adversarial performance of a speech
+    recognition model. Consider extending the analysis on your end and try to evaluate
+    multiple augmentations jointly. For example, consider scenarios where multiple
+    background voices are present. Augmenting audio with different magnitudes of background
+    voices can simulate scenarios with varying levels of interference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After performing the analysis, apart from using these augmentations during training
+    to mitigate poor performance, you can add guardrails in the production environment.
+    As an example, consider the situation in which speech recognition outputs are
+    used as input to an LLM model such as ChatGPT to prevent wrong results under the
+    hood. An example guardrail would be to reroute the system to ask for manual verification
+    of the speech recognized before submitting it to ChatGPT when specific background
+    noises are detected in the audio background. Making subsequent actionable processes
+    is crucial to unlocking value from insights. Next, let’s discover adversarial
+    analysis for image-based models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Analyzing adversarial performance for image-based models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Augmentations-based adversarial analysis can also be applied to image-based
+    models. The key here is to discover possible degradations of accuracy-based performance
+    in original non-existent conditions in the validation dataset. Here are some examples
+    of components that could be evaluated by augmentations for the image domain:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Object of interest size**: In use cases that use CCTV camera image input,
+    adversarial analysis can help us set up the camera with an appropriate distance
+    so that optimal performance can be achieved. The original image can be iteratively
+    resized into various sizes and overlayed on top of a base black image to perform
+    analysis.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The roll orientation of the object of interest**: Pitch and yaw orientation
+    is not straightforward to augment. However, rotation augmentation can help stress
+    test roll orientation performance. Optimal performance can be enforced by any
+    pose orientation detection model or system.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Level of blurriness**: Images can be blurred and there are off-the-shelf
+    image blurriness detectors from the OpenCV library for this. Blur augmentation
+    can help stress test this component.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`albumentations` library provides rain, snow, fog, and sun augmentations!'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In addition to the method of using augmentation for adversarial analysis to
+    assess performance under different conditions, numerous other widely recognized
+    and extensively researched approaches exist for conducting adversarial attacks
+    against image-based models. The term “popular” here also means that the techniques
+    are easily accessible to potential attackers, allowing them to readily experiment
+    with these methods. Consequently, it becomes crucial to thoroughly analyze such
+    attacks due to their increased likelihood and potential impact.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'These attacks try to obtain an adversarial image to fool the model through
+    the optimization of one of the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An image perturbation matrix that acts as a noise mixer to the original image
+    while maintaining a high perceived visual similarity to the original image
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An image patch that can be digitally overlayed on the original image and printed
+    in the real world to evade detection or confuse the model
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Figure 14**.2* shows examples of these two optimization approaches for adversarial
+    attacks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 14.2 – Examples of adversarial image patches and adversarial image
+    noise mixers](img/B18187_14_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.2 – Examples of adversarial image patches and adversarial image noise
+    mixers
+  prefs: []
+  type: TYPE_NORMAL
+- en: The top left adversarial image patch is targeted on the **YOLOv2** image detection
+    model on the class that represents a traffic stop sign and is capable of fooling
+    the model to predict some other random class when printed and patched on the stop
+    sign physically in the real world. The patch can also transfer its adversarial
+    properties to the **Faster-RCNN** image object detection model. The bottom left
+    adversarial image patch is an image that’s been optimized to fool the YOLOv2 detector
+    model into not detecting a human when the printed patch is anywhere on a person.
+    The right adversarial image noise mixer example shows the original image when
+    added with the noise on the right produces an image that is visually indistinguishable
+    from the original image. The ResNet50 model, which was used to build the model
+    in the previous chapter, accurately predicts the right person on the original
+    image but fails to predict the right person after adding the noise shown in the
+    top right of the figure. Image patches are relevant attacks for CCTV based on
+    real-time computer vision applications. For example, thieves want to prevent facial
+    object detection. An adversarial image noise mixer is relevant for use cases where
+    a user can provide their own data. For example, social media platforms and media-sharing
+    platforms such as Instagram and YouTube want to filter and control media that
+    can be uploaded using machine learning, and users would want to bypass the machine
+    learning guardrails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Audio noise mixers and audio patches can also be employed in adversarial attacks
+    against audio-based models, following a similar approach as with image-based models.
+    Audio noise mixers introduce carefully crafted noise to the original audio signal
+    to create an adversarial example that maintains a high perceived auditory similarity
+    to the original audio while fooling the model. This can be particularly relevant
+    in applications such as voice recognition systems and audio content filtering,
+    where adversaries might attempt to bypass security measures or manipulate system
+    outputs. Audio patches, on the other hand, involve creating and overlaying adversarial
+    audio segments onto the original audio signal. These patches can be designed to
+    either mask certain elements in the audio or introduce new elements that deceive
+    the model. For instance, adversarial audio can be played naturally in the environment
+    with any audio speaker device to evade voice identification systems or to trick
+    speech recognition models into misinterpreting specific words or phrases.
+  prefs: []
+  type: TYPE_NORMAL
+- en: These techniques are engineered forms of adversarial attacks that are categorized
+    into either techniques that require access to the neural network gradients and
+    the model itself, or techniques that only require the prediction probabilities
+    or logits of the model to optimize an image. Since it is highly unlikely that
+    an attacker would have access to the neural network gradients and the model itself,
+    it is more practical to evaluate adversarial image generation methods that only
+    require the prediction probabilities or logits.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An attacker can opt to randomly generate the noise perturbation matrix and
+    hope that it’ll work to fool the model. However, some algorithms can automatically
+    optimize the generation of a useful noise perturbation matrix, so long as you
+    have access to the probabilities or logits. One such algorithm that requires only
+    the prediction logits to produce the noise needed to fool a model is called the
+    **HopSkipJump** algorithm. This algorithm aims to minimize the number of queries
+    that are required to generate effective adversarial examples. Here is a summary
+    of the algorithm:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Initialization**: The algorithm starts by initializing the target class and
+    the initial adversarial example.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Main loop**: The algorithm iteratively performs a series of steps until it
+    successfully generates an adversarial example or reaches a predefined query limit:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Hop**: In this step, the algorithm performs a local search to find a perturbation
+    that moves the initial adversarial example closer to the target class while ensuring
+    that the perturbed example remains adversarial.'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Skip**: If the *hop* step fails to find a suitable perturbation, the algorithm
+    attempts a more global search by skipping some pixels. This step is designed to
+    explore a larger search space efficiently.'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Jump**: If both the *hop* and *skip* steps fail, the algorithm resorts to
+    a jump operation, which performs a random perturbation on a small subset of pixels
+    to encourage exploration of different directions.'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Decision**: After each perturbation step (*hop*, *skip*, or *jump*), the
+    algorithm queries the target model to obtain its predicted class label for the
+    perturbed example.'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '**Stopping criteria**: The algorithm terminates if it successfully generates
+    an adversarial example – that is, the target model predicts the target class for
+    the perturbed example. It can also stop if the number of queries exceeds a predefined
+    threshold.'
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The HopSkipJump algorithm combines both local and global search strategies to
+    efficiently explore the space of adversarial examples while minimizing the number
+    of queries to the target model. This is one of the many attacks readily available
+    in an open source adversarial attack toolkit at [https://github.com/Trusted-AI/adversarial-robustness-toolbox](https://github.com/Trusted-AI/adversarial-robustness-toolbox).
+    We will go through practical steps that allow us to get the adversarial image
+    noise mixer results seen in *Figure 14**.2* and more next.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Executing adversarial performance analysis for a face recognition model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Before we start, please put yourselves in the shoes and mindset of an attacker!
+    The steps are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we will load the necessary libraries. The highlights are `albumentations`
+    for augmentation, `torch` for the neural network model, and `art` for the adversarial
+    example generation algorithm:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will reuse the trained face classification model we built in [*Chapter
+    13*](B18187_13.xhtml#_idTextAnchor196), *Exploring Bias and Fairness*, which is
+    a ResNet50 backbone model with ArcFace:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will also reuse the same dataset:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To start using the `HopSkipJump` class from the `art` library, we need to define
+    an `art` library black box classifier instance. The class is a wrapper that sets
+    the expected generated image noise matrix shape, and has access to only a fully
+    isolated prediction method of any image-based model. First, let’s prepare the
+    inference prediction method so that the art classifier can use it:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, let’s take an example image from the dataset and create the black box
+    classifier with the isolated prediction method, the target image shape, the number
+    of classes, and the range of accepted pixel values:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we will initialize the `HopSkipJump` attack class with the classifier
+    and set the max iteration per evaluation to `10`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We will be running the algorithm for just 30 iterations. At every multiple
+    of the tenth iteration, we will evaluate the algorithm by printing the minimum
+    and maximum pixel difference to the original image, plotting the generated adversarial
+    image, and predicting the generated image:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we will plot the original image, obtain the model’s prediction on
+    the original image, and print the actual label:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The results are shown in *Figure 14**.3*. The more steps you take, the more
+    visually similar the generated adversarial is to the original image while still
+    fooling the model! The minimum and maximum pixel difference here provides a sense
+    of how similar the generated image is to the original image, which will transfer
+    to visual similarity:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '![Figure 14.3 – The adversarial performance of a single face example](img/B18187_14_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 14.3 – The adversarial performance of a single face example
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With just the predictions of the model, we successfully fooled the model into
+    misidentifying a facial identity! To advance, it would be beneficial to gain a
+    deeper understanding of the model’s vulnerability to perturbation attacks by examining
+    additional examples. To benchmark the method more widely, we need a way to ensure
+    that the adversarial image that was generated is visually similar to the original
+    image so that it makes sense from a likelihood standpoint. From the result shown
+    in *Figure 14**.3*, it’s safe to assume that anything lower than the absolute
+    minimum and maximum difference of 10 pixels should retrain a high enough visual
+    similarity to fool a human evaluator into believing nothing is wrong while being
+    able to fool the model. We will use the same HopSkipJump algorithm and a total
+    of 30 iterations but will add a condition that the generated adversarial image
+    needs to be under 10 pixels maximum and have a minimum absolute difference from
+    the original image. If it is not, we will use the prediction on the original image
+    treating it as a failure to generate a meaningful adversarial attack:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start by taking 1,000 random stratified samples so that the evaluation
+    can be done more quickly:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will compute the predictions using the mentioned workflow and use
+    the original images on the 1,000 images:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, let’s compare the accuracy performance of the model on the original images
+    and on the adversarial images workflow we went through previously in *s**tep 7*.
+    We will be using the Hugging Face `evaluate` library’s accuracy metric method:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE25]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: This will result in an accuracy of 56.9 on the original images and 30.9 accuracy
+    with the adversarial image workflow!
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: In this practical example, we managed to use an automated algorithm to identify
+    adversarial noise mixers that can successfully fool the model we built in the
+    previous chapter!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Image models are highly susceptible to adversarial noise mixer types and adversarial
+    image patch types due to their divergence from natural occurrences in the real
+    world, which models may struggle to properly digest. While machine learning models
+    excel at learning patterns and features from real-world data, they often struggle
+    to handle synthetic perturbations that deviate significantly from the typical
+    environmental conditions. These adversarial techniques exploit the vulnerabilities
+    of image models, causing them to misclassify or produce erroneous outputs. Consequently,
+    understanding and addressing these vulnerabilities becomes crucial in building
+    robust defenses against such attacks. So, consider diving into the adversarial
+    robustness toolbox repository to explore more adversarial examples and attack
+    algorithms! As a recommendation to mitigate adversarial attacks in your image
+    model, consider using adversarial targeted augmentation such as Gaussian noise
+    and random pixel perturbator during training. By incorporating these augmentations
+    during training, models can learn to be more resilient to synthetic perturbations,
+    thereby increasing their overall robustness.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will delve into adversarial attacks that target text-based models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Exploring adversarial analysis for text-based models
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'Text-based models can sometimes have performance vulnerabilities toward the
+    usage of certain words, a specific inflection of a word stem, or a different form
+    of the same word. Here’s an example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE26]'
+  prefs: []
+  type: TYPE_PRE
+- en: So, adversarial analysis can be done by benchmarking performance on when you
+    add important words to a sentence versus without. To mitigate such attacks, similar
+    word replacement augmentation can be applied during training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, when it comes to text-based models in the modern day, most widely adopted
+    models now rely on a pre-trained language modeling foundation. This allows them
+    to be capable of understanding natural language even after domain fine-tuning,
+    and as a result, a more complex adversarial attack that utilizes natural language
+    deception can be used. Consequently, it is crucial to thoroughly analyze and develop
+    robust defense mechanisms against these sophisticated adversarial attacks that
+    exploit natural language deception, to ensure the reliability and security of
+    modern text-based models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Think of natural language deception to be similar to how humans try to deceive
+    each other through natural language speech. Just as people may employ various
+    tactics to mislead or manipulate others, such as social engineering, context poisoning,
+    and linguistic exploitation, these same methods can be used to trick a text model.
+    Here is an example of a natural language-based deception on a spam/malicious email
+    detection machine learning use case:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE27]'
+  prefs: []
+  type: TYPE_PRE
+- en: Social engineering involves using psychological manipulation to deceive others
+    into divulging sensitive information or performing specific actions. Context poisoning
+    refers to the deliberate introduction of misleading or irrelevant information
+    to confuse the recipient. Meanwhile, linguistic exploitation takes advantage of
+    the nuances and ambiguities of language to create confusion or misinterpretation.
+    By understanding and addressing these deceptive techniques between humans and
+    applying them to adversarial text analysis, we can enhance the resilience of text-based
+    models against adversarial attacks and maintain their accuracy and reliability.
+    Unfortunately, there isn’t an algorithmic way to benchmark such natural language
+    deceptions that completely reform sentences. We will need to rely on collecting
+    real-world deception data to perform adversarial analysis on this component.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, there is another form of natural language adversarial attack worth
+    mentioning that is becoming more widely used today to attack general questions
+    and answer LLMs such as ChatGPT. Instead of reformatting the entire original text
+    data, an additional malicious context is used as a pretext for the original text
+    data. LLM API providers usually have built-in guardrails to prevent explicit,
+    offensive, objectionable, discriminative, and personal attacks, as well as harassment,
+    violence, illegal activities, misinformation, propaganda, self-harm, and any inappropriate
+    content. This is to ensure the responsible use of AI and to prevent anything that
+    can negatively impact individuals and society. However, a popular adversarial
+    attack called “jailbreak” can remove all content generation restrictions ChatGPT
+    has enforced. The jailbreak attack method is an engineered prompt that’s shared
+    publicly by people and can be used as a pretext before any actual user prompt.
+    Many versions of such engineered prompts are shared publicly and can be found
+    easily through Google searches, allowing everybody in the world to attack ChatGPT.
+    Fortunately, OpenAI has been diligently mitigating such jailbreak adversarial
+    attacks as soon as they get their hands on the prompts. New versions of the jailbreak
+    prompt get introduced pretty frequently and OpenAI has gotten stuck in a continuous
+    loop trying to mitigate newly engineered jailbreak attacks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In conclusion, it’s crucial to perform adversarial analysis on text models to
+    enhance their resilience against deceptive techniques and attacks. By understanding
+    human deception and staying vigilant against evolving threats, we can improve
+    the reliability and security of these text models beyond mere accuracy on crafted
+    testing data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, the concept of adversarial performance analysis for machine
+    learning models was introduced. Adversarial attacks aim to deceive models by intentionally
+    inputting misleading or carefully crafted data to cause incorrect predictions.
+    This chapter highlighted the importance of analyzing adversarial performance to
+    identify potential vulnerabilities and weaknesses in machine learning models and
+    to develop targeted mitigation methods. Adversarial attacks can target various
+    aspects of machine learning models, which include their bias and fairness behavior,
+    and their accuracy-based performance. For instance, facial recognition systems
+    may be targeted by adversaries who exploit biases or discrimination present in
+    the training data or model design.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We also explored practical examples and techniques for analyzing adversarial
+    performance in image, text, and audio data-based models. For image-based models,
+    various approaches such as object size, orientation, blurriness, and environmental
+    conditions were discussed. We also practically explored an algorithmic approach
+    that’s used to generate a noise matrix so that it can mix and perturb the original
+    image and generate an adversarial image capable of fooling a trained face classifier
+    model; this was taken from [*Chapter 13*](B18187_13.xhtml#_idTextAnchor196), *Exploring
+    Bias and Fairness*. For audio-based models, augmentations such as pronunciation
+    speed, speech pitch, background noise, and speech loudness were analyzed, while
+    for text-based models, word variation-based attacks, natural language deception,
+    and jailbreak attacks were explored.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In conclusion, adversarial analysis is essential for enhancing the resilience
+    of machine learning models against deceptive techniques and attacks. By understanding
+    human deception and staying vigilant against evolving adversarial threats, we
+    can improve the reliability and security of our neural network models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will be moving on to the next stage in the deep learning
+    life cycle and explore the world of deep learning models in production.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Part 3 – DLOps
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this part of the book, you will dive into the exciting realm of deploying,
+    monitoring, and governing deep learning models in production, drawing parallels
+    with MLOps and DevOps. This part will provide you with a comprehensive understanding
+    of the essential components required to ensure the success and impact of your
+    deep learning models in production with real-world utilization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Throughout the chapters in this part, we’ll explore the various aspects of deploying
+    deep learning models in production, touching upon important considerations such
+    as hardware infrastructure, model packaging, and user interfaces. We’ll also delve
+    into the three fundamental pillars of model governance, which are model utilization,
+    model monitoring, and model maintenance. You’ll learn about the concept of drift
+    and its impact on the performance of deployed deep learning models over time,
+    as well as strategies to handle drift effectively. We’ll also discuss the benefits
+    of AI platforms such as DataRobot, which streamline the complex stages of the
+    machine learning life cycle and accelerate the creation, training, deployment,
+    and governance of intricate deep learning models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a bonus, building upon the foundational transformer method from [*Chapter
+    6*](B18187_06.xhtml#_idTextAnchor092)*, Understanding Neural Network Transformers*,
+    we’ll delve into **Large Language Model (LLM**) solutions, which are revolutionizing
+    various domains. You’ll learn about architecting LLM solutions and building autonomous
+    agents, equipping you with the knowledge to harness their potential.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part contains the following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 15*](B18187_15.xhtml#_idTextAnchor217)*, Deploying Deep Learning
+    Models in Production*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 16*](B18187_16.xhtml#_idTextAnchor238)*, Governing Deep Learning
+    Models*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 17*](B18187_17.xhtml#_idTextAnchor247)*, Managing Drift Effectively
+    in a Dynamic Environment*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 18*](B18187_18.xhtml#_idTextAnchor265)*, Exploring the DataRobot
+    AI Platform*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 19*](B18187_19.xhtml#_idTextAnchor286)*, Architecting LLM Solutions*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

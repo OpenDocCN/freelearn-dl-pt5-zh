@@ -1,0 +1,1102 @@
+- en: '13'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: How Well Does It Work? – Evaluation
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we will address the question of quantifying how well a **natural
+    language understanding** (**NLU**) system works. Throughout this book, we assumed
+    that we want the NLU systems that we develop to do a good job on the tasks that
+    they are designed for. However, we haven’t dealt in detail with the tools that
+    enable us to tell how well a system works – that is, how to evaluate it. This
+    chapter will illustrate a number of evaluation techniques that will enable you
+    to tell how well the system works, as well as to compare systems in terms of performance.
+    We will also look at some ways to avoid drawing erroneous conclusions from evaluation
+    metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The topics we will cover in this chapter are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why evaluate an NLU system?
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluation paradigms
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Data partitioning
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Evaluation metrics
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: User testing
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Statistical significance of differences
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Comparing three text classification methods
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We will start by asking the question of why it’s important to evaluate NLU systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why evaluate an NLU system?
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: There are many questions that we can ask about the overall quality of an NLU
+    system, and evaluating it is the way that we answer these questions. How we evaluate
+    depends on the goal of developing the system and what we want to learn about the
+    system to make sure that the goal is achieved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Different kinds of developers will have different goals. For example, consider
+    the goals of the following types of developers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: I am a researcher, and I want to learn whether my ideas advance the science
+    of NLU. Another way to put this is to ask how my work compares to the **state
+    of the art** (**SOTA**) – that is, the best results that anyone has reported on
+    a particular task.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I am a developer, and I want to make sure that my overall system performance
+    is good enough for an application.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I am a developer, and I want to see how much my changes improve a system.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I am a developer, and I want to make sure my changes have not decreased a system’s
+    performance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: I am a researcher or developer who wants to know how my system performs on different
+    classes of data.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The most important question for all of these developers and researchers is,
+    *how well does the system perform its* *intended function?*
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This is the question we will focus on in this chapter, and we will address
+    how each of these different kinds of developers discovers the information they
+    need. However, there are other important NLU system properties that can be evaluated,
+    and sometimes, these will be more important than overall system performance. It
+    is worth mentioning them briefly so that you are aware of them. For example, other
+    aspects of evaluation questions include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**The size of the machine learning model that supports the application**: Today’s
+    models can be very large, and there is significant research effort directed at
+    making models smaller without significantly degrading their performance. If it
+    is important to have a small model, you will want to look at the trade-offs between
+    model size and accuracy.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Training time**: Some algorithms require training time on the order of several
+    weeks on highly capable GPU processors, especially if they are training on large
+    datasets. Reducing this time makes it much easier to experiment with alternative
+    algorithms and tuning hyperparameters. In theory, larger models will provide better
+    results, at the cost of more training time, but in practice, we need to ask how
+    much difference do they make in the performance of any particular task?'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Amount of training data**: Today’s **large language models** (**LLMs**) require
+    enormous amounts of training data. In fact, in the current SOTA, this amount of
+    data is prohibitively large for all but the largest organizations. However, as
+    we saw in [*Chapter 11*](B19005_11.xhtml#_idTextAnchor193), LLMs can be fine-tuned
+    with application-specific data. The other consideration for training data is whether
+    there is enough data available to train a system that works well.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The expertise of developers**: Depending on highly expert developers is expensive,
+    so a development process that can be performed by less expert developers is usually
+    desirable. The rule-based systems discussed in [*Chapter 8*](B19005_08.xhtml#_idTextAnchor159),often
+    require highly expert developers, which is one reason that they tend to be avoided
+    if possible. On the other hand, experimenting with SOTA deep learning models can
+    call for the knowledge of expert data scientists, who can also be expensive and
+    hard to find.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Cost of training**: The training costs for very large models are in the range
+    of millions of dollars, even if we are only taking into account the cost of computing
+    resources. A lower training cost is clearly a desirable property of an NLU system.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Environmental impact**: Closely related to the cost of training is its environmental
+    impact in terms of energy expenditure, which can be very high. Reducing this is
+    obviously desirable.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Processing time for inference**: This question relates to how long it takes
+    a trained system to process an input and deliver results. With today’s systems,
+    this is not usually a problem, with the short inputs that are used with interactive
+    systems such as chatbots or spoken dialog systems. Almost any modern approach
+    will enable them to be processed quickly enough that users will not be annoyed.
+    However, with offline applications such as analytics, where an application may
+    need to extract information from many hours of audio or gigabytes of text, slow
+    processing times will add up.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Budget**: Paid cloud-based LLMs such as GPT-4 usually provide very good results,
+    but a local open source model such as BERT could be much cheaper and give results
+    that are good enough for a specific application.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Even though these properties can be important to know when we’re deciding on
+    which NLU approach to use, how well an NLU system works is probably the most important.
+    As developers, we need the answers to such fundamental questions as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Does this system perform its intended functions well enough to* *be useful?*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*As changes are made in the system, is it* *getting better?*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*How does this system’s performance compare to the performance of* *other systems?*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The answers to these questions require evaluation methods that assign numerical
+    values to a system’s performance. Subjective or non-quantitative evaluation, where
+    a few people look at a system’s performance and decide whether it *looks good*
+    or not, is not precise enough to provide reliable answers to those questions.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start our discussion of evaluation by reviewing some overall approaches
+    to evaluation, or *evaluation paradigms*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluation paradigms
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will review some of the major evaluation paradigms that
+    are used to quantify system performance and compare systems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing system results on standard metrics
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: This is the most common evaluation paradigm and probably the easiest to carry
+    out. The system is simply given data to process, and its performance is evaluated
+    quantitatively based on standard metrics. The upcoming *Evaluation metrics* section
+    will delve into this topic in much greater detail.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluating language output
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Some NLU applications produce natural language output. These include applications
+    such as translation or summarizing text. They differ from applications with a
+    specific right or wrong answer, such as classification and slot filling, because
+    there is no single correct answer – there could be many good answers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One way to evaluate machine translation quality is for humans to look at the
+    original text and the translation and judge how accurate it is, but this is usually
+    too expensive to be used extensively. For that reason, metrics have been developed
+    that can be applied automatically, although they are not as satisfactory as human
+    evaluation. We will not cover these in detail here, but we will briefly list them
+    so that you can investigate them if you need to evaluate language output.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The **bilingual evaluation understudy** (**BLEU**) metric is one well-established
+    metric to evaluate translations. This metric is based on comparing machine translation
+    results to human translations and measuring the difference. Because it is possible
+    that a very good machine translation will be quite different from any particular
+    human translation, the BLEU scores will not necessarily correspond to human judgments
+    of translation quality. Other evaluation metrics for applications that produce
+    language output include the **metric for evaluation for translation with explicit
+    ordering** (**METEOR**), the **recall-oriented understudy for gisting evaluation**
+    (**ROUGE**), and the **cross-lingual optimized metric for evaluation of** **translation**
+    (**COMET**).
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will discuss an approach to evaluation that involves
+    removing part of a system to determine what effect it has on the results. Does
+    it make the results better or worse, or does it not result in any changes?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Leaving out part of a system – ablation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: If an experiment includes a pipeline of several operations, it’s often informative
+    to compare results by removing steps in the pipeline. This is called **ablation**,
+    and it is useful in two different situations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The first case is when an experiment is being done for a research paper or an
+    academic project that includes some innovative techniques in the pipeline. In
+    that case, you want to be able to quantify what effect every step in the pipeline
+    had on the final outcome. This will allow readers of the paper to evaluate the
+    importance of each step, especially if the paper is attempting to show that one
+    or more of the steps is a major innovation. If the system still performs well
+    when the innovations are removed, then they are unlikely to be making a significant
+    contribution to the system’s overall performance. Ablation studies will enable
+    you to find out exactly what contributions are made by each step.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The second case for ablation is more practical and occurs when you’re working
+    on a system that needs to be computationally efficient for deployment. By comparing
+    versions of a system with and without specific steps in the pipeline, you can
+    decide whether the amount of time that they take justifies the degree of improvement
+    they make in the system’s performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: An example of why you would want to consider doing an ablation study for this
+    second reason could include finding out whether preprocessing steps such as stopword
+    removal, lemmatization, or stemming make a difference in the system’s performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another approach to evaluation involves a test where several independent systems
+    process the same data and the results are compared. These are shared tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Shared tasks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The field of NLU has long benefited from comparing systems on **shared tasks**,
+    where systems developed by different developers are all tested on a single set
+    of shared data on a specific topic and the results are compared. In addition,
+    the teams working on the shared task usually publish system descriptions that
+    provide very useful insights into how their systems achieved their results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The shared task paradigm has two benefits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, it enables developers who participate in the shared task to get precise
+    information about how their system compares to others because the data is exactly
+    the same
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Second, the data used in the shared tasks is made available to the research
+    community for use in developing future systems
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Shared data can be useful for a long time because it is not affected by changes
+    in NLU technology – for example, the **air travel information system** (**ATIS**)
+    data from a travel planning task has been in use since the early 1990s.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The *NLP-progress* website at [http://nlpprogress.com/](http://nlpprogress.com/)
+    is a good source of information on shared tasks and shared task data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will look at ways of dividing data into subsets in preparation
+    for evaluation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data partitioning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In earlier chapters, we divided our datasets into subsets used for *training*,
+    *validation*, and *testing*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: As a reminder, training data is used to develop the NLU model that is used to
+    perform the eventual task of the NLU application, whether that is classification,
+    slot-filling, intent recognition, or most other NLU tasks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Validation data** (sometimes called **development test** data) is used during
+    training to assess the model on data that was not used in training. This is important
+    because if the system is tested on the training data, it could get a good result
+    simply by, in effect, memorizing the training data. This would be misleading because
+    that kind of system isn’t very useful – we want the system to generalize or work
+    well on the new data that it’s going to get when it is deployed. Validation data
+    can also be used to help tune hyperparameters in machine learning applications,
+    but this means that during development, the system has been exposed a bit to the
+    validation data, and as a consequence, that data is not as novel as we would like
+    it to be.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: For that reason, another set of completely new data is typically held out for
+    a final test; this is the test data. In preparation for system development, the
+    full dataset is partitioned into training, validation, and test data. Typically,
+    around 80% of the full dataset is allocated to training, 10% is allocated to validation,
+    and 10% is allocated to testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are three general ways that data can be partitioned:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In some cases, the dataset is already partitioned into training, validation,
+    and testing sets. This is most common in generally available datasets such as
+    those we have used in this book or shared tasks. Sometimes, the data is only partitioned
+    into training and testing. If so, a subset of the training data should be used
+    for validation. Keras provides a useful utility, `text_dataset_from_directory`,
+    that loads a dataset from a directory, using subdirectory names for the supervised
+    categories of the text in the directories, and partitions a validation subset.
+    In the following code, the training data is loaded from the `aclImdb/train` directory,
+    and then 20% of the data is split out to be used as validation data:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Of course, making use of a previous partition is only useful when you work with
+    generally available datasets that have already been partitioned. If you have your
+    own data, you will need to do your own partitioning. Some of the libraries that
+    we’ve been working with have functions that can automatically partition the data
+    when it is loaded. For example, scikit-learn, TensorFlow, and Keras have `train_test_split`
+    functions that can be used for this.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can also manually write Python code to partition your dataset. Normally,
+    it would be preferable to work with pretested code from a library, so writing
+    your own Python code for this would not be recommended unless you are unable to
+    find a suitable library, or you are simply interested in the exercise of learning
+    more about the partitioning process.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The final data partitioning strategy is called **k-fold cross-validation**.
+    This strategy involves partitioning the whole dataset into *k* subsets, or *folds*,
+    and then treating each of the folds as test data for an evaluation of the system.
+    The overall system score in *k*-fold cross-validation is the average score of
+    all of the tests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The advantage of this approach is that it reduces the chances of an accidental
+    difference between the test and training data, leading to a model that gives poor
+    predictions for new test examples. It is harder for an accidental difference to
+    affect the results in *k*-fold cross-validation because there is no strict line
+    between training and test data; the data in each fold takes a turn at being the
+    test data. The disadvantage of this approach is that it multiplies the amount
+    of time it takes to test the system by *k*, which could become very large if the
+    dataset is also large.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Data partitioning is necessary for almost every evaluation metric that we will
+    discuss in this chapter, with the exception of user testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will look at some of the most common specific quantitative
+    metrics. In [*Chapter 9*](B19005_09.xhtml#_idTextAnchor173), we went over the
+    most basic and intuitive metric, accuracy. Here, we will review other metrics
+    that can usually provide better insights than accuracy and explain how to use
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Evaluation metrics
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'There are two important concepts that we should keep in mind when selecting
+    an evaluation metric for NLP systems or, more generally, any system that we want
+    to evaluate:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Validity**: The first is validity, which means that the metric corresponds
+    to what we think of intuitively as the actual property we want to know about.
+    For example, we wouldn’t want to pick the length of a text as a measurement for
+    its positive or negative sentiment because the length of a text would not be a
+    valid measure of its sentiment.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Reliability**: The other important concept is reliability, which means that
+    if we measure the same thing repeatedly, we always get the same result.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In the next sections, we will look at some of the most commonly used metrics
+    in NLU that are considered to be both valid and reliable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Accuracy and error rate
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In [*Chapter 9*](B19005_09.xhtml#_idTextAnchor173), we defined accuracy as the
+    number of correct system responses divided by the overall number of inputs. Similarly,
+    we defined **error rate** as incorrect responses divided by the number of inputs.
+    Note that you might encounter a **word error rate** when you read reports of speech
+    recognition results. Because the word error rate is calculated according to a
+    different formula that takes into account different kinds of common speech recognition
+    errors, this is a different metric, which we will not cover here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next section will go over some more detailed metrics, precision, recall,
+    and F1 score, which were briefly mentioned in [*Chapter 9*](B19005_09.xhtml#_idTextAnchor173).
+  prefs: []
+  type: TYPE_NORMAL
+- en: These metrics usually provide more insight into a system’s processing results
+    than accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Precision, recall, and F1
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Accuracy** can give misleading results under certain conditions. For example,
+    we might have a dataset where there are 100 items but the classes are unbalanced,
+    and the vast majority of cases (say, 90) belong to one class, which we call the
+    majority class. This is very common in real datasets. In that situation, 90% accuracy
+    could be obtained by automatically assigning every case to the majority class,
+    but the 10 remaining instances that belong to the other class (let’s assume we
+    only have two classes for simplicity) would always be wrong. Intuitively, accuracy
+    would seem to be an invalid and misleading metric for this situation. To provide
+    a more valid metric, some refinements were introduced – most importantly, the
+    concepts of recall and precision.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Recall** means that a system finds every example of a class and does not
+    miss any. In our example, it correctly finds all 90 instances of the majority
+    class but no instances of the other class.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The formula for recall is shown in the following equation, where *true positives*
+    are instances of the class that were correctly identified, and *false negatives*
+    are instances of that class that were missed. In our initial example, assuming
+    that there are 100 items in the dataset, the system correctly found 90 (the majority
+    class) but missed the 10 examples of the other class. Therefore, the recall score
+    of the majority class is 1.0, but the recall score of the other class is 0:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: recall =  true positives  _____________________  true positives + false negatives
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'On the other hand, **precision** means that whatever was identified was correct.
+    Perfect precision means that no items were misidentified, although some items
+    might have been missed. The following is the formula for precision, where *false
+    positives* are instances that were misidentified. In this example, the false positives
+    are the 10 items that were incorrectly identified as belonging to the majority
+    class. In our example, the precision score for the majority class is 1.0, but
+    for the other class, it is 0 because there are no *true positives*. The precision
+    and recall scores in this example give us more detail about the kinds of mistakes
+    that the system has made:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: precision =  true positives  ____________________  true positives + false positives
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Finally, there is another important metric, **F**1, that combines precision
+    and recall scores. This is a useful metric because we often want to have a single
+    overall metric to describe a system’s performance. This is probably the most commonly
+    used metric in NLU. The formula for F1 is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: F 1 =  precision × recall  ____________  precision + recall
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 13**.1* shows correct and incorrect classifications graphically for
+    one class. Items in the ellipse are identified as **Class 1**. The round markers
+    inside the ellipse are true positives – items identified as **Class 1** that are
+    actually **Class 1**. The square markers inside the ellipse are false positives
+    – items in **Class 2** that are incorrectly identified as **Class 1**. Round markers
+    outside of the ellipse are false negatives – items that are actually in **Class
+    1** but were not recognized:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.1 – The classification for one class](img/B19005_13_01.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.1 – The classification for one class
+  prefs: []
+  type: TYPE_NORMAL
+- en: There is an assumption with the `F`1 metric that the recall and precision scores
+    are equally important. This is true in many cases, but not always. For example,
+    consider an application whose goal is to detect mentions of its company’s products
+    in tweets. The developers of this system might consider it to be very important
+    not to miss any tweets about their products. In that case, they will want to emphasize
+    recall at the expense of precision, which means that they might get a lot of false
+    positives – tweets that the system categorized as being about their product but
+    actually were not. There are more general versions of the `F`1 metric that can
+    be used to weight recall and precision if you develop a system where recall and
+    precision are not equally important.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The receiver operating characteristic and area under the curve
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The decision of the class to which a test item belongs depends on its score
+    for that class. If the item’s score exceeds a given threshold score (selected
+    by the developer), then the system decides that the item does actually belong
+    in that class. We can see that true positive and false positive scores can be
+    affected by this threshold. If we make the threshold very high, few items will
+    fall into that class, and the true positives will be lower. On the other hand,
+    if the threshold is very low, the system will decide that many items fall into
+    that class, the system will accept many items that don’t belong, and the false
+    positives will be very high. What we really want to know is how good the system
+    is at discriminating between classes at every threshold.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A good way to visualize the trade-off between false positives (precision failures)
+    and false negatives (recall failures) is a graph called the **receiver operating
+    characteristic** (**ROC**) and its related metric, the **area under the curve**
+    (**AUC**). The ROC curve is a measurement of how good a system is overall at discriminating
+    between classes. The best way to understand this is to look at an example of an
+    ROC curve, which we can see in *Figure 13**.2*. This figure is based on randomly
+    generated data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.2 – The ROC curve for a perfect classifier compared to a random
+    classifier](img/B19005_13_02.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.2 – The ROC curve for a perfect classifier compared to a random classifier
+  prefs: []
+  type: TYPE_NORMAL
+- en: In *Figure 13**.2*, we can see that at point (**0**, **1)**, the system has
+    no false positives, and all of the true positives are correctly detected. If we
+    set the acceptance threshold to **1**, the system will still accept all of the
+    true positives, and there will still be no false positives. On the other hand,
+    if the classifier can’t tell the classes apart at all, we would get something
+    like the **Random Classifier** line. No matter where we set the threshold, the
+    system will still make many mistakes, as if it was randomly assigning classes
+    to inputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A common way to summarize a system’s ability to discriminate between classes
+    is the area under the ROC curve, or AUC. The perfect classifier’s AUC score will
+    be **1.0**, a random classifier’s AUC score will be around **0.5**, and if the
+    classifier performs at a level that is worse than random, the AUC score will be
+    less than **0.5**. Note that we look at a binary classification problem here because
+    it is simpler to explain, but there are techniques to apply these ideas to multi-class
+    problems as well. We will not go into these here, but a good discussion of the
+    techniques to look at ROC curves for multi-class datasets can be found in the
+    scikit-learn documentation at [https://scikit-learn.org/stable/auto_examples/model_selection/plot_roc.html](https://scikit-learn.org/stable/auto_examples/model_selection/plot_roc.html).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Confusion matrix
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Another important evaluation tool is a **confusion matrix**, which shows how
+    often each class is confused with each other class. This will be much clearer
+    with an example, so we will postpone discussing confusion matrices until we go
+    over the example at the end of this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: User testing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In addition to direct system measurements, it is also possible to evaluate systems
+    with user testing, where test users who are representative of a system’s intended
+    users interact with it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**User testing** is a time-consuming and expensive type of testing, but sometimes,
+    it is the only way that you can find out qualitative aspects of system performance
+    – for example, how easy it is for users to complete tasks with a system, or how
+    much they enjoy using it. Clearly, user testing can only be done on aspects of
+    the system that users can perceive, such as conversations, and users should be
+    only expected to evaluate the system as a whole – that is, users can’t be expected
+    to reliably discriminate between the performance of the speech recognition and
+    the NLU components of the system.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Carrying out a valid and reliable evaluation with users is actually a psychological
+    experiment. This is a complex topic, and it’s easy to make mistakes that make
+    it impossible to draw conclusions from the results. For those reasons, providing
+    complete instructions to conduct user testing is outside of the scope of this
+    book. However, you can do some exploratory user testing by having a few users
+    interact with a system and measuring their experiences. Some simple measurements
+    that you can collect in user testing include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Having users fill out a simple questionnaire about their experiences.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Measuring how long users spend interacting with the system. The amount of time
+    users spend interacting with the system can be a positive or negative measurement,
+    depending on the purpose of the system, such as the following:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you are developing a social system that’s just supposed to be fun, you will
+    want them to spend more time interacting with the system
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: On the other hand, if you are developing a task-oriented system that will help
+    users complete a task, you will usually want the users to spend less time interacting
+    with the system
+  prefs:
+  - PREF_IND
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'However, you also have to be cautious with user testing:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is important for users to be representative of the actual intended user population.
+    If they are not, the results can be very misleading. For example, a company chatbot
+    intended for customer support should be tested on customers, not employees, since
+    employees have much more knowledge about the company than customers and will ask
+    different questions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Keep questionnaires simple, and don’t ask users to provide information that
+    isn’t relevant to what you are trying to learn. Users who are bored or impatient
+    with the questionnaire will not provide useful information.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If the results of user testing are very important to the project, you should
+    find a human factors engineer – that is, someone with experience designing experiments
+    with human users – to design the testing process so that the results are valid
+    and reliable.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So far, we have looked at several different ways to measure the performance
+    of systems. Applying each of these techniques will result in one or more numerical
+    values, or *metrics* that quantify a system’s performance. Sometimes, when we
+    use these metrics to compare several systems, or several versions of the same
+    system, we will find that the different values of the metrics are small. It is
+    then worth asking whether small differences are really meaningful. This question
+    is addressed by the topic of statistical significance, which we will cover in
+    the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Statistical significance of differences
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'The last general topic we will cover in evaluation is the topic of determining
+    whether the differences between the results of experiments we have done reflect
+    a real difference between the experimental conditions, or whether they reflect
+    differences that are due to chance. This is called **statistical significance**.
+    Whether a difference in the values of the metrics represents a real difference
+    between systems isn’t something that we can know for certain, but what we can
+    know is how likely it is that a difference that we’re interested in is due to
+    chance. Let’s suppose we have the situation with our data that’s shown in *Figure
+    13**.3*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.3 – Two distributions of measurement values – do they reflect a
+    real difference between the things they’re measuring?](img/B19005_13_03.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.3 – Two distributions of measurement values – do they reflect a real
+    difference between the things they’re measuring?
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 13**.3* shows two sets of measurements, one with a mean of **0**, on
+    the left, and one with a mean of **0.75**, on the right. Here, we might be comparing
+    the performance of two classification algorithms on different datasets, for example.
+    It looks like there is a real difference between the algorithms, but could this
+    difference be an accident? We usually consider that if the probability of a difference
+    of this size occurring by chance is once out of 20, then the difference is considered
+    to be statistically significant, or not due to chance. Of course, that means that
+    1 out of 20 statistically significant results is probably actually due to chance.
+    This probability is determined by standard statistical formulas such as the *t-statistic*
+    or the *analysis* *of variance*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you read a paper that performs a significance test on its results and it
+    states something such as *p<.05*, the *p* refers to the probability of the difference
+    being due to chance. This kind of statistical analysis is most commonly performed
+    with data where knowing whether differences are statistically significant is very
+    important, such as academic papers for presentation at conferences or for publication
+    in academic journals. We will not cover the process of how statistical significance
+    is calculated here, since it can become quite a complex process, but you should
+    be aware of what it means if you have a need for it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is also important to consider that a result can be statistically significant
+    but not really meaningful in realistic situations. If the results of one classification
+    algorithm are only slightly better than another but the better algorithm is much
+    more complicated to compute, it might not be worth bothering with the better algorithm.
+    These trade-offs are something that has to be considered from the perspective
+    of how the algorithm will be used. Even a small, but significant, difference could
+    be important in an academic paper but not important at all in a deployed application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we have reviewed several approaches to evaluating systems, let’s take
+    a look at applying them in practice. In the next section, we will work through
+    a case study that compares three different approaches to text classification on
+    the same data.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Comparing three text classification methods
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: One of the most useful things we can do with evaluation techniques is to decide
+    which of several approaches to use in an application. Are the traditional approaches
+    such as **term frequency - inverse document frequency** (**TF-IDF**), **support
+    vector machines** (**SVMs**), and **conditional random fields** (**CRFs**) good
+    enough for our task, or will it be necessary to use deep learning and transformer
+    approaches that have better results at the cost of longer training time?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will compare the performance of three approaches on a larger
+    version of the movie review dataset that we looked at in [*Chapter 9*](B19005_09.xhtml#_idTextAnchor173).
+    We will look at using a small BERT model, TF-IDF vectorization with the Naïve
+    Bayes classification, and a larger BERT model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: A small transformer system
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: We will start by looking at the BERT system that we developed in [*Chapter 11*](B19005_11.xhtml#_idTextAnchor193).
+    We will use the same BERT model as in [*Chapter 11*](B19005_11.xhtml#_idTextAnchor193),
+    which is one of the smallest BERT models, `small_bert/bert_en_uncased_L-2_H-128_A-2`,
+    with two layers, a hidden size of `128`, and two attention heads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will be making a few changes in order to better evaluate this model’s performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we will add new metrics, precision and recall, to the `BinaryAccuracy`
+    metric that we used in [*Chapter 11*](B19005_11.xhtml#_idTextAnchor193):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'With these metrics, the `history` object will include the changes in precision
+    and recall during the 10-epoch training process. We can look at these with the
+    following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As shown in the preceding code snippet, the first steps are to pull out the
+    results we are interested in from the `history` object. The next step is to plot
+    the results as they change over training epochs, which is calculated in the following
+    code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: The preceding code shows the plotting process for the training and validation
+    loss, which results in the top plot in *Figure 13**.4*. The rest of the plots
+    in *Figure 13**.4* and the plots in *Figure 13**.5* are calculated in the same
+    manner, but we will not show the full code here, since it is nearly the same as
+    the code for the first plot.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Figure 13**.4* shows decreasing loss and increasing accuracy over training
+    epochs, which we saw previously. We can see that loss for both the training and
+    validation data is leveling off between **0.40** and **0.45**. At epoch **7**,
+    it looks like additional training is unlikely to improve performance:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.4 – Loss and accuracy over 10 training epochs](img/B19005_13_04.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.4 – Loss and accuracy over 10 training epochs
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Since we have added the precision and recall metrics, we can also see that
+    these metrics level off at around **0.8** at around **7** epochs of training,
+    as shown in *Figure 13**.5*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.5 – Precision and recall over 10 training epochs](img/B19005_13_05.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.5 – Precision and recall over 10 training epochs
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can also look at the confusion matrix and classification report for more
+    information with the following code, using functions from scikit-learn:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'This will plot the confusion matrix as shown in *Figure 13**.6*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.6 – The confusion matrix for a small BERT model](img/B19005_13_06.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.6 – The confusion matrix for a small BERT model
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The dark cells in *Figure 13**.6* show the number of correct classifications,
+    where actual negative and positive reviews were assigned to the right classes.
+    We can see that there are quite a few incorrect classifications. We can see more
+    detail by printing a summary classification report with the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The classification report shows the `recall`, `precision`, and `F1` scores
+    for both classes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs: []
+  type: TYPE_PRE
+- en: From this report, we can see that the system is almost equally good at recognizing
+    positive and negative reviews. The system correctly classifies many reviews but
+    is still making many errors.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, we will compare the BERT test with one of our earlier tests, based on TF-IDF
+    vectorization and Naïve Bayes classification.
+  prefs: []
+  type: TYPE_NORMAL
+- en: TF-IDF evaluation
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In [*Chapter 9*](B19005_09.xhtml#_idTextAnchor173), we learned about vectorizing
+    with TF-IDF and classifying with Naïve Bayes. We illustrated the process with
+    the movie review corpus. We want to compare these very traditional techniques
+    with the newer transformer-based LLMs, such as BERT, that we just saw. How much
+    better are transformers than the traditional approaches? Do the transformers justify
+    their much bigger size and longer training time? To make the comparison between
+    BERT and TF-IDF/Naïve Bayes fair, we will use the larger `aclimdb` movie review
+    dataset that we used in [*Chapter 11*](B19005_11.xhtml#_idTextAnchor193).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will use the same code we used in [*Chapter 9*](B19005_09.xhtml#_idTextAnchor173)
+    to set up the system and perform the TF-IDF/Naïve Bayes classification, so we
+    won’t repeat it here. We will just add the final code to show the confusion matrix
+    and display the results graphically:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The text version of the confusion matrix is the array:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`[[``9330 3171]`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`[``3444 9056]]`'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'However, this is not very easy to understand. We can display it more clearly
+    by using `matplotlib` in the following code:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The result is shown in *Figure 13**.7*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 13.7 – The confusion matrix for TF\uFEFF-IDF/the Naïve Bayes classification](img/B19005_13_07.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.7 – The confusion matrix for TF-IDF/the Naïve Bayes classification
+  prefs: []
+  type: TYPE_NORMAL
+- en: The dark cells in *Figure 13**.7* show the correct classifications, where actual
+    negative and positive reviews were assigned to the right classes. We can also
+    see that **3171** actual negative reviews were misclassified as positive and **3444**
+    actual positive reviews were misclassified as negative.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To see the recall, precision, and F1 scores, we can print the classification
+    report:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The resulting classification report shows the recall, precision, and F1 scores,
+    along with the accuracy, the number of items in each class (`support`), and other
+    statistics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs: []
+  type: TYPE_PRE
+- en: From this report, we can see that the system is slightly better at recognizing
+    negative reviews. The system correctly classifies many reviews but is still making
+    many errors. Comparing these results to the results for the BERT system in *Figure
+    13**.6*, we can see that the BERT results are quite a bit better. The BERT F1
+    score is **0.81**, while the TF-IDF/Naïve Bayes F1 score is **0.74**. For this
+    task, the BERT system would be the better choice, but can we do better?
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will ask another question that compares two systems.
+    The question concerns what might happen with other BERT transformer models. Larger
+    models will almost always have better performance than smaller models but will
+    take more training time. How much better will they be in terms of performance?
+  prefs: []
+  type: TYPE_NORMAL
+- en: A larger BERT model
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: So far, we have compared a very small BERT model to a system based on TF-IDF
+    and Naïve Bayes. We saw from the comparison between the two systems’ classification
+    reports that the BERT system was definitely better than the TF-IDF/Naïve Bayes
+    system. For this task, BERT is better as far as correct classification goes. On
+    the other hand, BERT is much slower to train.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Can we get even better performance with another transformer system, such as
+    another variation of BERT? We can find this out by comparing our system’s results
+    to the results from other variations of BERT. This is easy to do because the BERT
+    system includes many more models of various sizes and complexities, which can
+    be found at [https://tfhub.dev/google/collections/bert/1](https://tfhub.dev/google/collections/bert/1).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s compare another model to the BERT system we just tested. The system that
+    we’ve tested is one of the smaller BERT systems, `small_bert/bert_en_uncased_L-2_H-128_A-2`.
+    The name encodes its important properties – two layers, a hidden size of `128`,
+    and two attention heads. We might be interested in finding out what happens with
+    a larger model. Let’s try one, `small_bert/bert_en_uncased_L-4_H-512_A-8`, which
+    is nevertheless not too large to train on a CPU (rather than a GPU). This model
+    is still rather small, with four layers, a hidden size of `512`, and eight attention
+    heads. Trying a different model is quite easy to do, with just a minor modification
+    of the code that sets up the BERT model for use by including the information for
+    the new model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'As the code shows, all we have to do is select the model’s name, map it to
+    the URL where it is located, and assign it to a preprocessor. The rest of the
+    code will be the same. *Figure 13**.8* shows the confusion matrix for the larger
+    BERT model:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.8 – The confusion matrix for the larger BERT model](img/B19005_13_08.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 13.8 – The confusion matrix for the larger BERT model
+  prefs: []
+  type: TYPE_NORMAL
+- en: The performance of this model, as shown in the confusion matrix, is superior
+    to that of the smaller BERT model as well as the TF-IDF/Naïve Bayes model. The
+    classification report is shown in the following snippet, and it also shows that
+    this model performs the best of the three models we have looked at in this section,
+    with an average `F1` score of `0.85`, compared to `0.81` for the smaller BERT
+    model and `0.74` for the TF-IDF/Naïve Bayes model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs: []
+  type: TYPE_PRE
+- en: The training time for this model on the `aclimdb` dataset with 25,000 items
+    was about eight hours on a standard CPU, which is probably acceptable for most
+    applications. Is this performance good enough? Should we explore even bigger models?
+    There is clearly quite a bit of room for improvement, and there are many other
+    BERT models that we can experiment with. The decision of whether the results are
+    acceptable or not is up to the developers of the application and depends on the
+    importance of getting correct answers and avoiding wrong answers. It can be different
+    for every application. You are encouraged to experiment with some of the larger
+    models and consider whether the improved performance justifies the additional
+    training time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, you learned about a number of important topics related to evaluating
+    NLU systems. You learned how to separate data into different subsets for training
+    and testing, and you learned about the most commonly used NLU performance metrics
+    – accuracy, precision, recall, F1, AUC, and confusion matrices – and how to use
+    these metrics to compare systems. You also learned about related topics, such
+    as comparing systems with ablation, evaluation with shared tasks, statistical
+    significance testing, and user testing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The next chapter will start *Part 3* of this book, where we cover systems in
+    action – applying NLU at scale. We will start *Part 3* by looking at what to do
+    if a system isn’t working. If the original model isn’t adequate or the system
+    models a real-world situation that changes, what has to be changed? The chapter
+    discusses topics such as adding new data and changing the structure of the application.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Part 3: Systems in Action – Applying Natural Language Understanding at Scale'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In *Part 3*, you will learn about applying natural language understanding in
+    running applications. This part will cover adding new data to existing applications,
+    dealing with volatile applications, adding and removing categories, and will include
+    a final chapter summarizing the book and looking to the future of natural language
+    understanding.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We focus on getting NLU systems out of the lab and making them do real work
+    solving practical problems.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This part comprises the following chapters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[*Chapter 14*](B19005_14.xhtml#_idTextAnchor248), *What to Do If the System
+    Isn’t Working*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[*Chapter 15*](B19005_15.xhtml#_idTextAnchor262), *Summary and Looking to the
+    Future*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL

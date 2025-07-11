@@ -1,0 +1,1280 @@
+- en: '10'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Operationalizing Inference Workloads
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In [*Chapter 8*](B17519_08.xhtml#_idTextAnchor121), *Considering Hardware for
+    Inference*, and [*Chapter 9*](B17519_09.xhtml#_idTextAnchor137), *Implementing
+    Model Servers*, we discussed how to engineer your **deep learning** (**DL**) inference
+    workloads on Amazon SageMaker. We also reviewed how to select appropriate hardware
+    for inference workloads, optimize model performance, and tune model servers based
+    on specific use case requirements. In this chapter, we will focus on how to operationalize
+    your DL inference workloads once they have been deployed to test and production
+    environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will start by reviewing advanced model hosting options such
+    as **multi-model**, **multi-container**, and **Serverless Inference** endpoints
+    to optimize your resource utilization and workload costs. Then, we will cover
+    the **Application Auto Scaling** service for SageMaker, which provides another
+    mechanism to improve resource utilization. Auto Scaling allows you to dynamically
+    match your inference traffic requirements with provisioned inference resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, we will discuss how to continuously promote models and model versions
+    without this impacting your end users. We will also cover some advanced deployment
+    patterns required for A/B testing and quality assurance of model candidates. For
+    this, we will review SageMaker’s **Model Variant** and **Deployment Guardrails**
+    capabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then, we review how to monitor model and inference data quality using SageMaker
+    **Model Monitor**. We will close this chapter by discussing how to select an optimal
+    inference workload configuration based on your use case type, its business, and
+    technical requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Managing inference deployments
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Monitoring inference workloads
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Selecting your workload configuration
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: By the end of this chapter, you will have an understanding and practical skills
+    on how to operationalize SageMaker inference workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will provide code samples so that you can develop practical
+    skills. The full code examples are available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To follow along with this code, you will need the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An AWS account and IAM user with permission to manage Amazon SageMaker resources.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A SageMaker Notebook, SageMaker Studio Notebook, or local SageMaker-compatible
+    environment established.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to GPU training instances in your AWS account. Each example in this chapter
+    will provide the recommended instance types to use. You may need to increase your
+    compute quota for *SageMaker Training Job* to have GPU instances enabled. In this
+    case, please follow the instructions at [https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You will need to install the required Python libraries by running `pip install
+    -r requirements.txt`. The file that contains the required libraries can be found
+    in the `chapter10` directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we will provide examples of compiling models for inference,
+    which requires access to specific accelerator types. Please review the instance
+    recommendations as part of the model server examples.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Managing inference deployments
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In [*Chapter 1*](B17519_01.xhtml#_idTextAnchor013), *Introducing Deep Learning
+    with Amazon SageMaker*, we discussed that SageMaker provides several options when
+    it comes to running your inference workloads, depending on your use case’s requirements,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Real-time endpoints** are designed for inference use cases with low latency
+    requirements. It comes with certain limitations on payload size (up to 5 MB) and
+    response latency (up to 60 seconds).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Batch transform jobs** are an option for processing large-scale batched inference
+    requests in an offline fashion.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Asynchronous endpoints** allow you to queue and process inference requests
+    in near-real time. It also has a much higher limit on inference payload size (up
+    to 1 GB) compared to real-time endpoints.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So far in this book, we have covered how to deploy a **single model** for your
+    inference workload. This is supported by all three inference options listed previously.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, for real-time endpoints, it’s possible to package and deploy several
+    models and model versions (known as **production** **variants**) behind a single
+    endpoint. In this section, we will dive deeper into these model deployment strategies
+    and highlight implementation details, their advantages, and certain limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Additionally, we will review the recently introduced **Serverless Inference**
+    endpoints. Like real-time endpoints, serverless endpoints are designed to serve
+    users in real time. However, in the case of serverless endpoints, you will have
+    access to compute resources without the need to choose provision and scale inference
+    instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Considering model deployment options
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In many situations, hosting a single model behind a dedicated SageMaker real-time
+    endpoint can lead to sub-optimal resource utilization and additional costs that
+    can be avoided. For example, when you need to simultaneously host a fleet of models,
+    each with low resource requirements, hosting each model behind an individual endpoint
+    would be a major avoidable cost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SageMaker provides a range of model deployment options that can address more
+    complex use cases. In the following subsections, we will discuss their target
+    use cases, advantages, and limitations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-model endpoints
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: A **multi-model endpoint** (**MME**) is a special type of SageMaker model endpoint
+    that allows you to host thousands of models behind a single endpoint simultaneously.
+    This type of endpoint is suitable for scenarios for similarly sized models with
+    relatively low resource requirements that can be served from the same inference
+    container.
+  prefs: []
+  type: TYPE_NORMAL
+- en: MMEs and their underlying model servers manage resource allocation, such as
+    unloading infrequently used models and loading requested ones when an instance
+    runs out of memory. This leads to additional inference latency when the user requests
+    a model that is currently not loaded into memory. Hence, MMEs may not be a good
+    fit for scenarios where consistently low latency is required. This additional
+    latency can increase when hosting large models with evenly distributed traffic
+    patterns as this will lead to frequent unloading and loading of models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To provision an MME, you need to package each model (model artifacts and inference
+    code) into a separate archive and upload it to Amazon S3\. Once the MME instance
+    has been provisioned, it is downloaded from the S3 location to the instance disk,
+    which loads the models into instance memory. By default, if the MME runs out of
+    instance disk space and/or instance memory, SageMaker deletes the least recently
+    used models from the local disk and/or unloads models from memory to accommodate
+    the requested models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following diagram shows the MME architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.1 – MME architecture ](img/B17519_10_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.1 – MME architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: MMEs are supported by PyTorch and TensorFlow inference containers. You can also
+    automatically scale MMEs in and out to match your inference traffic. MMEs allow
+    you to directly invoke models as well as inference pipelines comprising several
+    models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When selecting an instance type and family, consider the following aspects:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Instance memory defines how many models can be loaded simultaneously
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Instance disk size defines how many models can be cached locally to avoid expensive
+    download procedures from S3
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The number of vCPUs defines how many inference requests can be handled simultaneously
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that GPU-based instances are not supported for MMEs, which limits what
+    model architectures can be served using MMEs within reasonable SLAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s learn how to implement an MME.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing an MME
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In this code sample, we will learn how to deploy two NLP models simultaneously
+    using an MME. One model analyzes the sentiment of German text, while the other
+    analyzes the sentiment of English text. We will use the HuggingFace PyTorch container
+    for this. The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/1_Multi_Model_Endpoint.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/1_Multi_Model_Endpoint.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this task, we will use two models, trained to predict the sentiment of
+    English and German texts: `distilbert-base-uncased-finetuned-sst-2-english` and
+    `oliverguhr/german-sentiment-bert`, respectively. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will start by fetching the models from the HuggingFace Model hub and saving
+    them locally. The following code shows the English model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'As a result, the following artifacts are downloaded:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: These model artifacts will be added to the model data package later. But first,
+    we need to develop the inference script.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An MME has the same requirements as those for the inference scripts of single-model
+    endpoints. The following code shows the inference script for the English model,
+    which implements the required methods for model loading, inference, and data pre-/post-processing:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we need to package the model and inference code for the MME. SageMaker
+    requests a specific directory structure that varies for PyTorch and TensorFlow
+    containers. For PyTorch containers, the model and code should be packaged into
+    a single `tar.gz` archive and have the following structure:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Each model should have a model package. Once the packages have been prepared
+    locally, we need to upload them to Amazon S3 and save the respective URI:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the data has been uploaded, we need to define the respective serving container
+    and configure it to be used for the MME. The following code locates the PyTorch
+    container based on the desired runtime configuration and task (inference):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we need to configure the MME parameters. Specifically, we must define
+    the `MultiModel` mode. Note that we provide two specific environment variables
+    – `SAGEMAKER_PROGRAM` and `SAGEMAKER_SUBMIT_DIRECTORY` – so that the SageMaker
+    inference framework knows how to register the model handler:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The last step of configuring the MME is to create a SageMaker model instance,
+    endpoint configuration, and the endpoint itself. When creating the model, we must
+    provide the `MultiModel`-enabled container from the preceding step. We have omitted
+    the creation of the endpoint configuration and endpoint for brevity:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Once the endpoint has been created, we can run and invoke our models. For this,
+    in the invocation request, we need to supply a special parameter called `TargetModel`,
+    as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: While the MME capability provides a convenient way to optimize your inference
+    costs when running multiple similar models, it requires models to have the same
+    runtime environment (in other words, they must use the same inference container).
+    To address scenarios where you need to host multiple models within different inference
+    containers, SageMaker supports **multi-container endpoints** (**MCEs**), as shown
+    in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-Container Endpoints
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An MCE allows you to host up to 15 inference containers simultaneously. In this
+    case, each container would serve its own model. MCEs are a good fit for use cases
+    where models require different runtime environments/containers but not every single
+    model can fully utilize the available instance resources. Another scenario is
+    when models are called at different times.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unlike an MME, an MCE doesn’t cache or unload containers based on their invocation
+    patterns. Hence, you need to ensure that the inference containers will collectively
+    have enough resources to run on the endpoint instance. If the instance resources
+    (for example, instance memory) are not enough to run all containers, you may see
+    an error during MCE creation time. Hence, you need to consider the total resource
+    requirements of all the inference containers when choosing an instance configuration.
+    Each inference container will have a proportional amount of resources available
+    for it. The following diagram shows the MCE architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.2 – MCE architecture ](img/B17519_10_002.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.2 – MCE architecture
+  prefs: []
+  type: TYPE_NORMAL
+- en: You can automatically scale an MCE. It supports **Direct** mode (invoking inference
+    containers directly) or **Serial** mode (invoking several containers sequentially).
+  prefs: []
+  type: TYPE_NORMAL
+- en: At the time of writing this book, MCEs don’t support GPU-based instances.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s learn how to create an MCE by using a simple example of running TensorFlow
+    and PyTorch models simultaneously. This will give you some practical skills in
+    terms of how to create and use an MCE.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing an MCE
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In this example, we will run an inference workload with two NLP models using
+    different runtime environments: TensorFlow and PyTorch. We will host the Q&A model
+    in a TensorFlow container and the text summarization model in a PyTorch container.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Creating an MCE is very similar to creating an MME with a few notable exceptions,
+    which we will highlight in the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Fetching the model data, inference scripts, and model packaging is identical
+    to what we did for the MME. Note that since one of our endpoints will run the
+    TensorFlow container, the Q&A model should comply with the following directory
+    structure:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will configure the container and create the model package. Note that
+    we provide two containers and endpoint mode, `Direct`, while creating the model
+    package:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Then, we will create the endpoint configuration and endpoint. This step is similar
+    to that for the MME, so we have omitted the code snippet for brevity.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Once the endpoint has been deployed, we are ready to send inference traffic.
+    Note that we supply the `TargetContainerHostname` header so that SageMaker knows
+    where to route our inference request:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: So far, we have discussed how to host multiple models on SageMaker. Next, we
+    will discuss how to safely promote a new version of the model (or a different
+    model altogether) while keeping the endpoint operational for end users. For this,
+    we will review SageMaker multi-variant endpoints.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Multi-variant endpoints
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'A production variant is a SageMaker-specific concept that defines a combination
+    of the model, its container, and the resources required to run this model. As
+    such, this is an extremely flexible concept that can be used for different use
+    cases, such as the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Different model versions with the same runtime and resource requirements
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Different models with different runtimes and/or resource requirements
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The same model with different runtimes and/or resource requirements
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Additionally, as part of the variant configuration, you also define its traffic
+    weights, which can be then updated without them having any impact on endpoint
+    availability. Once deployed, the production variant can be invoked directly (so
+    you can bypass SageMaker traffic shaping) or as part of the SageMaker endpoint
+    call (then, SageMaker traffic shaping is not bypassed). The following diagram
+    provides more details:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.3 – Using production variants with traffic shaping (left) and with
+    a direct invocation (right) ](img/B17519_10_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.3 – Using production variants with traffic shaping (left) and with
+    a direct invocation (right)
+  prefs: []
+  type: TYPE_NORMAL
+- en: When updating production variants, the real-time endpoint stays available and
+    no interruption occurs for the end users. This also means that you will incur
+    additional costs, as each production variant will have an associated cost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s see how we can use production variants to test a new production variant.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using production variants for A/B testing
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In this example, we will register two different models for the same Q&A NLP
+    task. Then, we will shape the inference traffic using the production variant weights
+    and invoke the models directly. The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/4_AB_Testing.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/4_AB_Testing.ipynb).
+    Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start by creating two HuggingFace models using the `HuggingFaceModel`
+    class. We have omitted this for brevity.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Then, we will create two different endpoint variants. We start with the equal
+    weights parameter, which tells SageMaker that inference traffic should split evenly
+    between model variants:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'After that, we create the endpoint based on our configured production variants:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Once the endpoint has been deployed, we can run inference against the newly
+    created endpoint. Once you run the following code, the resulting statistics should
+    show that each production variant served ~50% of inference traffic:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we can update the weights of our endpoint variants. Re-running the previous
+    inference test loop should now show that only ~10% of traffic is served by `"Variant1"`,
+    which is expected based on the provided variant traffic weights:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'We can also bypass SageMaker traffic shaping and directly invoke a specific
+    variant by using the `TargetVariant` parameter, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: SageMaker’s production variants provide you with a flexible mechanism to operate
+    your inference workloads in production or production-like environments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Serverless inference endpoints
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Using **serverless inference endpoints** (**SIEs**) is another deployment option
+    available on SageMaker. It allows you to provision real-time inference endpoints
+    without the need to provision and configure the underlying endpoint instances.
+    SageMaker automatically provisions and scales the underlying available compute
+    resources based on your inference traffic. Your SIE can scale them down to 0 in
+    cases where there is no inference traffic.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SIEs are a good fit for scenarios where there’s an uneven traffic pattern and
+    you can tolerate short periods of elevated latency during a **cold start**. A
+    cold start period specifies the time needed to provision new serverless resources
+    and deploy your model runtime environment. Since larger models generally have
+    longer deployment times than smaller ones, they will have longer cold start periods
+    too. One potential use case for Serverless Inference is using it in test and sandbox
+    environments. With an SIE, you pay only for the time that the SIE takes to process
+    the inference request.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Serverless Inference is functionally similar to SageMaker real-time inference.
+    It supports many types of inference containers, including PyTorch and TensorFlow
+    inference containers. However, Serverless Inference also has several limitations,
+    including the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: No GPU resources are available
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The instance disk size is 5 GB
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The maximum concurrency for the endpoint is 200; requests beyond this limit
+    will be throttled by SageMaker
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The cold start period depends on your model size and inference container start
+    time
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When creating SIE resources, you can choose from the list of available memory
+    options, and SageMaker will automatically assign the proportional number of vCPUs.
+    During the memory configuration, you will need the size of the memory to be at
+    least slightly higher than your model size, and the minimum memory size must be
+    1,024 MB; the maximum is 6,144 MB. If your model performance is CPU-bound, you
+    may choose a bigger memory configuration to have more vCPU resources.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let’s see how we can deploy a serverless endpoint using the SageMaker Python
+    SDK.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Deploying a serverless endpoint
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In this example, we will deploy the Q&A NLP model from the HuggingFace Model
+    hub. The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/3_Serverless_Inference.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/3_Serverless_Inference.ipynb).
+    Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We will start by defining the SageMaker model to deploy. For this, we will
+    fetch a CPU version of the HuggingFace inference container using the built-in
+    `image_uris` method, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we will use the `HuggingFaceModel` instance to configure the model architecture
+    and target NLP task:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will define the serverless configuration and deploy our first endpoint.
+    Here, the `memory_size_in_mb` parameter defines the initial memory behind your
+    endpoint and the `max_concurrency` parameter defines the maximum number of concurrent
+    invocations your endpoint can handle before inference traffic gets throttled by
+    SageMaker:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: That’s it! In several minutes, your endpoint will be deployed. After that, you
+    can use it as any other real-time endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With Serverless Inference, SageMaker automatically scales in and out of your
+    endpoints without much input from your side other than the memory sizing and concurrency.
+    In the next section, we will review the endpoint autoscaling capability, which
+    provides you more with fine-grained control over scaling behavior.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advanced model deployment techniques
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we will discuss some advanced techniques for managing your
+    SageMaker inference resources, namely autoscaling and blue/green deployments.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Autoscaling endpoints
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'SageMaker allows you to automatically scale out (increase the number of instances)
+    and scale in (decrease the number of instances) for real-time endpoints and asynchronous
+    endpoints. When inference traffic increases, scaling out maintains steady endpoint
+    performance while keeping costs to a minimum. When inference traffic decreases,
+    scaling in allows you to minimize the inference costs. For real-time endpoints,
+    the minimum instance size is 1; asynchronous endpoints can scale to 0 instances.
+    The following diagram shows this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.4 – Autoscaling concepts ](img/B17519_10_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.4 – Autoscaling concepts
+  prefs: []
+  type: TYPE_NORMAL
+- en: During scaling events, SageMaker endpoints remain fully available for end users.
+    In the case of downsizing an endpoint, SageMaker automatically drains traffic
+    from instances so that they can be removed. To ensure additional resiliency, SageMaker
+    places instances in different **availability zones**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To autoscale your endpoint, you need to create a production variant for your
+    model. After that, you must define the desired scaling behavior in the **autoscaling
+    policy**. SageMaker supports four types of scaling policies, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`TargetTrackingScaling`) allows you to scale endpoints based on the value of
+    specific Amazon CloudWatch metrics. SageMaker supports several endpoint metrics
+    out of the box, but you can also use your own custom metrics. The **CPUUtilization**,
+    **GPUUtilization**, and **SageMakerVariantInvocationsPerInstance** metrics are
+    usually good starting choices.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Step scaling** is a more advanced scaling policy that allows you to have
+    finer control over how many instances are provisioned based on the size of the
+    metric value change. This policy requires careful configuration and testing with
+    various load profile values.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Scheduled scaling** allows you to scale endpoints based on a predefined schedule.
+    For instance, you can scale in after hours, and scale out during peak work hours.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**On-Demand scaling** changes the endpoint instance count based on explicit
+    user requests.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: When selecting and configuring autoscaling policies, you may start by analyzing
+    your traffic patterns and how they correlate with your endpoint metrics. Load
+    profiles define which type of scaling policy to choose, while correlating to endpoint
+    metrics allows you to select good tracking metrics. It’s recommended that you
+    start with a simple baseline (for example, simple scaling with the CPUUtilization
+    tracking metric). Then, you can fine-tune it over time as you observe other traffic
+    patterns and how autoscaling reacts to them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the following example, we will learn how to apply autoscaling policies to
+    a SageMaker real-time endpoint.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing autoscaling for inference endpoints
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'In this example, we will learn how to apply the target tracking autoscaling
+    policy to a real-time endpoint. The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/5_AutoScaling.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter10/5_AutoScaling.ipynb).
+    Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start by creating a regular SageMaker real-time endpoint. We have omitted
+    this code for brevity.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Next, we will create two autoscaling resources: a **scalable target** and a
+    **scaling policy**. The scalable target defines a specific AWS resource that we
+    want to scale using the Application Auto Scaling service.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In the following code snippet, we are instantiating the client for the Application
+    Auto Scaling service and registering our SageMaker endpoint as a scalable target.
+    Note that the `ResourceId` parameter defines a reference to a specific endpoint
+    and production variant. The `ScalableDimension` parameter for SageMaker resources
+    always references the number of instances behind the production variant. `MinCapacity`
+    and `MaxCapacity` define the instance scaling range:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will create a policy for our scalable target. Here, we chose to use
+    the target tracking policy type with the following parameters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Once the policy is in place, we can test it. For this, we need to generate sufficient
+    inference traffic to breach the target metric value for a duration longer than
+    the scale-out cooldown period. For this purpose, we can use the Locust.io load
+    testing framework ([https://locust.io/](https://locust.io/)), which provides a
+    simple mechanism to mimic various load patterns. Follow the instructions in the
+    notebook to create a Locust configuration for your endpoint and provide your AWS
+    credentials for authorization purposes.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Once the configuration is complete, you can start your Locust client to generate
+    load using the following terminal command. It generates an inference load of up
+    to 20 concurrent users for 5 minutes. This load profile should trigger a scaling-out
+    event for our endpoint:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'During the load test, you can observe your endpoint status as well as the associated
+    scaling alerts in the Amazon CloudWatch console. First, you can see that scale-out
+    and scale-in alerts have been configured based on the provided cooldown periods
+    and target metric value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 10.5 – Autoscaling alerts for SageMaker endpoints ](img/B17519_10_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.5 – Autoscaling alerts for SageMaker endpoints
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After the initial scale-out cooldown period has passed, the scale-out alert
+    switches to the **In alarm** state, which causes the endpoint to scale out. Note
+    that in the following screenshot, the red line is the desired value of the tracking
+    metric, while the blue line is the number of invocations per endpoint instance:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 10.6 – Triggered a scaling-out alert ](img/B17519_10_006.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.6 – Triggered a scaling-out alert
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'After triggering scaling out, your endpoint status will change from `in Service`
+    to `Updating`. Now, we can run the `describe_endpoint()` method to confirm that
+    the number of instances has been increased. Since we are generating a sufficiently
+    large concurrent load in a short period, SageMaker immediately scaled our endpoint
+    to the maximum number of instances. The following code is for the `describe_endpoint()`
+    method:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Since we are no longer running an inference traffic generator, we should expect
+    our endpoint to scale in once the scale-in cooldown period has passed.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will review how to securely and reliably deploy model
+    candidates using SageMaker Deployment Guardrails.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using blue/green deployment patterns
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: So far, we have discussed how to deploy and update SageMaker endpoints via APIs
+    or SDK calls. However, this approach may not fit when you’re updating mission-critical
+    workloads in production, where you need to have additional checks to ensure smooth
+    production rollout.
+  prefs: []
+  type: TYPE_NORMAL
+- en: SageMaker **Deployment Guardrails** is a fully managed endpoint promotion mechanism.
+    Guardrails follows the blue/green deployment concept, which is common for DevOps
+    practices. Here, the blue fleet is the old deployment (the production variant
+    in the case of SageMaker endpoints), while the green fleet is the new version
+    to be deployed. SageMaker provisions a green fleet next to the blue fleet. Once
+    the green fleet is ready and healthy, SageMaker starts shifting traffic according
+    to the predefined rules from the blue fleet to the green fleet.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Deployment Guardrails supports several modes of traffic shifting:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**All at once** mode shifts all traffic from blue to green in one step once
+    the green fleet is up and healthy. At this point, SageMaker decommissions the
+    blue fleet.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Canary** mode shifts a small portion of traffic to the green fleet. Then,
+    if the canaries are healthy, SageMaker shifts the remainder of the traffic to
+    the green fleet. After that, SageMaker decommissions the blue fleet.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Linear** mode gradually shifts the traffic from the blue fleet to the green
+    fleet.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that during a blue-green deployment, you will incur costs for both the
+    blue and green fleets while they are running. If, during the rollout, the green
+    fleet becomes unhealthy, SageMaker will execute an automatic rollback to the initial
+    deployment to avoid any impact on the end user experience.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Deployment Guardrails doesn’t support the following features:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Marketplace containers
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Multi-container endpoints
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Multi-model endpoints
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Multi-variant endpoints
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Endpoints that use Inferentia-based instances
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Endpoints that use Amazon SageMaker Model Monitor (with data capture enabled)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Practicing setting up deployment guardrails is outside the scope of this book,
+    as these types of tasks are typically performed by dedicated DevOps/MLOps teams.
+    However, it’s important to understand that SageMaker supports such capabilities
+    out of the box.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring inference workloads
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we will cover the available mechanisms for monitoring inference
+    workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Amazon CloudWatch
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Throughout this book, we have frequently referenced Amazon CloudWatch. SageMaker
+    relies on it for all monitoring needs, specifically the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Uses CloudWatch Logs to collect, organize, and manage SageMaker logs (for example,
+    your model server logs)
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Uses CloudWatch Metrics to measure endpoint characteristics such as latency,
+    resource utilization, and others
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Uses CloudWatch alarms to trigger autoscaling events
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'SageMaker inference workloads support several metrics out of the box. Depending
+    on the chosen inference workload option and deployment pattern, your default SageMaker
+    metrics may vary. For instance, for an MME, you will have additional default metrics
+    to measure some specific characteristics, such as the model’s performance and
+    loading time. We recommend that you refer to the SageMaker documentation for the
+    most up-to-date information on default SageMaker metrics: [https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/monitoring-cloudwatch.xhtml).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'If, for some reason, the out-of-the-box metrics are not sufficient for your
+    use case, you can always create custom metrics. Some scenarios where custom metrics
+    can be useful are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Your model and model server require custom metrics for appropriate scaling.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You need a higher resolution of metrics. Note that SageMaker default metrics
+    to a 1-second resolution.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You need to do custom metrics pre-processing. For instance, you may need to
+    apply a sliding window average that’s not supported by CloudWatch.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can also create custom CloudWatch alarms. Note that you can create alarms
+    for both metrics and logs. CloudWatch alarms can be used to notify you about specific
+    events via email or text notifications (this will require integrating your alarms
+    with the Amazon SNS service).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another popular use case for CloudWatch alarms is to perform actions once an
+    alarm is triggered. We have already seen how CloudWatch alarms are used to scale
+    your SageMaker endpoint in and out. However, you can use alarms for any other
+    custom logic. For example, you may integrate your custom alarm with an Amazon
+    Lambda serverless function. Your function and its custom logic (for example, an
+    endpoint update action) will be executed once the alarms is triggered.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Monitoring inference workload quality
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: SageMaker Model Monitor is a purpose-built capability for measuring and continuously
+    monitoring the quality of your inference. It allows you to calculate baseline
+    statistics for your inference inputs and model outputs and then monitor how your
+    models perform against baseline statistics in near-real time. In the case of significant
+    deviations from the predefined statistical constraints, SageMaker Model Monitor
+    will generate an alert to notify you that your model may be not performing according
+    to the desired quality metrics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Model Monitor comprises several components for monitoring different aspects
+    of your inference quality:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Data quality monitoring** allows you to detect **data drift** between data
+    used to train your model and real inference traffic against the deployed model.
+    Data drift usually results in a lower-than-expected quality of your model predictions.
+    To detect data drift, Model Monitor calculates statistics for the training data
+    (baseline), captures the inference traffic, and continuously compares these statistics
+    to the baseline.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model quality monitoring** allows you to compare your model predictions to
+    the predefined ground truth labels. If your model predictions violate the ground
+    truth predictions by predefined constraints, Model Monitor will generate an alert.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Bias drift monitoring** allows you to detect bias in your model predictions
+    and how it changes over time. Model bias can be introduced when inference traffic
+    is different from the data used for model training. To detect bias, Model Monitor
+    calculates a specific bias metric called **Difference in Positive Proportions
+    in Predicted Label** (**DPPL**). When the DPPL metric violates a predefined range
+    of values, an alert is generated.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model feature attribution monitoring** is another way to ensure that new
+    bias is not introduced during model deployment. Feature attribution drift means
+    that the influence that a specific feature has over an inference result changes
+    over time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Model Monitor only supports tabular data as inference inputs. This limits its
+    applicability to DL inference since in most cases, DL models are used to perform
+    inference on unstructured data, such as images or text.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'There are several scenarios where Model Monitor can apply to DL inference:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are using DL models to run classification or regression inference tasks.
+    In practice, this rarely happens since classical **machine learning** (**ML**)
+    algorithms (for example, XGBoost) often outperform DL models on such tasks and
+    require a fraction of the resources for training and inference compared to more
+    expensive DL models.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If your inference input can be converted from an unstructured format into a
+    structured format before it’s sent to the SageMaker inference resource – for example,
+    if you convert your unstructured text into a tokenized input and send it for inference.
+    In this case, the tokenized input can be represented as a tabular dataset so that
+    it can be used with Model Monitor.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that you can still use Model Monitor to ensure your model accuracy with
+    DL workloads for scenarios where your model has either classification or regression
+    outputs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Selecting your workload configuration
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In the previous three chapters, we reviewed the different capabilities Amazon
+    SageMaker provides to engineer and operate inference workloads: from selecting
+    optimal compute instances and runtime environments to configuring model servers
+    and managing and monitoring deployed models.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this section, we will summarize various selection criteria that you can use
+    when selecting inference workload configurations. Then, we will suggest a simple
+    algorithm that will guide the decision-making process when you’re choosing your
+    inference configuration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When engineering your inference workload, you may consider the following selection
+    criteria:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Business use case**: This allows you to understand your business opportunity
+    and end user experience by using your inference service. Analyzing your use case
+    drives important decisions such as selecting the right SageMaker inference option
+    and end user SLAs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Inference SLAs**: We have discussed two key inference SLAs in this book:
+    latency and throughput. Understanding the desired SLAs drives decisions such as
+    which instance type to use, model server configuration, and others.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Budget and cost**: It’s important to forecast both the inference budget and
+    the setup mechanisms to monitor for budget usage (the running cost of inference).
+    In the case of a budget overrun, you may want to have a mechanism to react to
+    such an event (for example, sending a notification, scaling down an endpoint,
+    and so on).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Compute instances**: When you choose compute instances, you need to consider
+    multiple factors, such as which model architecture you intend to use, your SLAs,
+    and others. The process of selecting an instance type is called rightsizing and
+    requires load tests and benchmarking to be performed.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Input data and inference traffic**: You need to understand your data size
+    (for offline inference) and inference traffic patterns (for online inference).
+    For instance, if your traffic is seasonality patterns, you may be able to use
+    endpoint autoscaling to minimize your inference costs.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Model runtime and deployment**: Depending on your model characteristics,
+    inference traffic patterns, and chosen compute instances, you need to choose specific
+    SageMaker containers and model packaging configurations (single model versus several
+    models behind an endpoint). Another aspect to explore is the model promotion strategy
+    and quality assurance in productions. For instance, earlier in this chapter, we
+    discussed how to organize A/B testing on live SageMaker endpoints using production
+    variants.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The following table highlights the key characteristics of the available SageMaker
+    inference options:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '|  | **Real-Time Inference** | **Batch Transform** | **Asynchronous Inference**
+    | **Serverless Inference** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| --- | --- | --- | --- | --- |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Inference Type | Online(real-time response). | Offline. | Online(near-real-time
+    inference, cold start during scale out from 0). | Online(cold start during scale
+    out from 0). |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Resource Scaling | 1 to hundreds of instances behind a single endpoint. |
+    1 to hundreds of instances in one inference job. | 0 to hundreds of instances.
+    | 0 to 200 concurrent inference requests. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Payload Size | Up to 6 MB. | Up to 100 MB. | Up to 1 GB. | Up to 4 MB. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Inference Timeout | 60 seconds. | No. | Up to 15 minutes. | 60 seconds. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Multi-Model/Multi-Container Support | Yes. | No. | No. | No. |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Target Use Case | When you need to have consistent real-time inference latency.
+    Supports a wide range of compute instances and model servers. | Offline inference
+    or processing when the input dataset is available upfront. | When you need to
+    handle larger payload sizes and/or processing times and additional inference latency
+    is acceptable. There is a cost-saving opportunity to scale to 0 when there is
+    no inference traffic. | When you need to have real-time inference with the lowest
+    management overhead and associated costs. Pay only for served inference requests.
+    You can scale to 0. |'
+  prefs: []
+  type: TYPE_TB
+- en: Figure 10.7 – Comparing SageMaker inference options
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following diagram, we have organized several decision points you need
+    to be aware of when selecting your inference workload implementation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 10.8 – Selection algorithm for inference options ](img/B17519_10_008.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 10.8 – Selection algorithm for inference options
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that your workload configuration is not static. Some non-extensive examples
+    that may require you to reconsider your workload configuration choices include
+    the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Traffic pattern changes may result in changes in your scaling policies
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Changes in user SLAs may result in changes in the selected compute instances
+    and/or updates in scaling policies
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: New versions of the model architecture and/or available compute instances may
+    require benchmarking against the baseline to measure potential accuracy or performance
+    gains
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Hence, you should plan and budget for continuous monitoring and workload optimizations
+    as part of your initial workload design.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using SageMaker Inference Recommender
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Choosing an optimal inference configuration requires considerable engineering
+    and testing efforts. To simplify this process, AWS recently introduced **SageMaker
+    Inference Recommender**, which provides you with a simple way to assess your inference
+    performance and costs for real-time endpoints in different configurations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Inference Recommender deploys your model to real-time endpoints with different
+    configurations, runs load testing against those endpoints, and then provides latency
+    and throughput measures, as well as associated costs. Based on the generated measures,
+    you can select the most appropriate configuration based on your SLAs and cost
+    budget. SageMaker Inference Recommender provides the following benchmarks:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: End-to-end **model latency** in milliseconds
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Maximum invocations** per minute'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Cost per hour** and **cost per inference**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'SageMaker Inference Recommender is well suited for the following use cases:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finding the optimal instance type. Note that you can either provide your own
+    list of instance types you are interested in benchmarking or let SageMaker benchmark
+    this list across all supported instances.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Benchmarking compiled by SageMaker Neo models. Here, you can compare the performance
+    of your original model to the performance of the compiled model variant.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Running a custom load test. Inference Recommender supports modeling different
+    traffic patterns to benchmark your endpoint performance under different conditions.
+    Hence, you can use SageMaker Inference Recommender to benchmark and fine-tune
+    your model server configurations, different model versions, and more.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note that at the time of writing, Inference Recommender only supports real-time
+    endpoints. So, if you need to benchmark different inference options (for instance,
+    Serverless Inference), you may need to use the custom benchmarking and load testing
+    facilities. Also, benchmark statistics by Inference Recommender as well as the
+    supported traffic patterns are limited.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we discussed how to operationalize and optimize your inference
+    workloads. We covered various inference options offered by Amazon SageMaker and
+    model hosting options, such as multi-model, multi-container, and Serverless Inference.
+    Then, we reviewed how to promote and test model candidates using the Production
+    Variant capability.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After that, we provided a high-level overview of advanced model deployment strategies
+    using SageMaker Deployment Guardrails, as well as workload monitoring using the
+    Amazon CloudWatch service and SageMaker’s Model Monitor capability. Finally, we
+    summarized the key selection criteria and algorithms you should use when defining
+    your inference workload configuration.
+  prefs: []
+  type: TYPE_NORMAL

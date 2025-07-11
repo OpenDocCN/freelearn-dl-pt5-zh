@@ -1,0 +1,1390 @@
+- en: '7'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Deep Neural Architecture Search
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The previous chapters introduced and recapped different **neural networks**
+    (**NNs**) that are designed to handle different types of data. Designing these
+    networks requires knowledge and intuition that can only be gained by consuming
+    years of research in the field. The bulk of these networks are hand-designed by
+    experts and researchers. This includes inventing completely novel NN layers and
+    constructing an actually usable architecture by combining and stacking NN layers
+    that already exist. Both tasks require a ton of iterative experimentation time
+    to burn to actually achieve success in creating a network that is useful.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, imagine a world where we can focus on inventing useful novel layers while
+    the software takes care of automating the final architecture-building process.
+    Automated architecture search methods help to accomplish exactly that by streamlining
+    the task of designing the best final NN architecture, as long as appropriate search
+    spaces are selected based on deep domain knowledge. In this chapter, we will focus
+    on the task of constructing an actual usable architecture from already existing
+    NN layers using an automated architecture creation process called **neural architecture
+    search** (**NAS**). By understanding the different types of NAS, you will be able
+    to choose the most straightforward automated search optimization approach based
+    on your current model-building setup, which ranges from simple to efficiently
+    complicated. Specifically, the following topics will be introduced:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the big picture of NAS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding general hyperparameter search-based NAS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding **reinforcement learning** (**RL**)-based NAS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Understanding non-RL-based NAS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'This chapter includes practical implementation in the Python programming language.
+    These simple methods will need to have the following libraries installed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`numpy`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`pytorch`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`catalyst ==` `21.12`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '`scikit-learn`'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You can find the code files for this chapter on GitHub at [https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_7](https://github.com/PacktPublishing/The-Deep-Learning-Architect-Handbook/tree/main/CHAPTER_7).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding the big picture of NAS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Before we dive into the details of the big picture of NAS methods, it’s important
+    to note that although NAS minimizes the manual effort necessary for shaping the
+    final architecture, it doesn’t completely negate the need for expertise in the
+    field. As we discussed earlier, foundational knowledge in **deep learning** (**DL**)
+    is crucial for selecting appropriate search spaces and interpreting the results
+    of NAS accurately. Search spaces are the set of possible options or configurations
+    that can be explored during a search. Furthermore, the performance of NAS heavily
+    relies on the quality of the training data and the relevance of the search space
+    to the task at hand. Therefore, domain expertise is still necessary to ensure
+    that the final architecture is not only efficient but also accurate and relevant
+    to the problem being solved. By the end of this section, you will have a better
+    understanding of how to leverage your domain expertise to optimize the effectiveness
+    of NAS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The previous chapters on NNs have only introduced a few prominent NN layer types
+    and only scratched the surface of the entire library of neural layers out there.
+    Today, there are too many variations of NN layers, which makes it hard to design
+    precisely which layers get used at which point in the architecture. The main problem
+    is that the space of possible NN architectures is infinitely big. Additionally,
+    evaluating any possible architectural design is slow and expensive in terms of
+    resources. These are the reasons that make it impossible to evaluate all the possible
+    NN architectures. Let’s take the training of a **convolutional NN** (**CNN**)
+    ResNet50 architecture on ImageNet, for example, to get a sense of how impossible
+    this is. This would take around 3-4 days with a single RTX 3080 Ti Nvidia GPU,
+    which is a GPU meant for normal consumers and available to be procured off-the-shelf.
+    Business consumers, on the other hand, usually obtain industrial-grade GPU variants
+    that have much greater processing power, which can bring down the runtime to under
+    a day.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Typically, researchers will hand-design architectures with already available
+    NN layers and operations by intuition. This manual method is a one-off effort,
+    and doing so repeatedly when newer and better core NN layers are invented is not
+    scalable. This is where NAS comes into play. NAS leverages already invented NN
+    layers and operations to build a more performant NN architecture. The core of
+    NAS lies in using a smarter way to conceptually search through different architectures.
+    The searching mechanism of NAS can be implemented in three ways, namely: **general
+    hyperparameter search optimization**, RL, and NAS methods that do not use RL.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'General hyperparameter search optimization pertains to methods that can be
+    applied to any **machine learning** (**ML**) algorithm hyperparameter optimizations.
+    RL is another high-level ML method, alongside **supervised learning** (**SL**)
+    and **unsupervised learning** (**UL**), that deals with some form of optimizing
+    actions taken in an environment that produces states with a quantifiable reward
+    or punishment. Non-RL-based NAS can be further broken down into three distinctive
+    types: progressive architecture growing from a small architecture baseline, progressive
+    architecture downsizing from a complex fully defined architecture graph, and evolutionary
+    algorithms. The progressive architecture-growing method includes all algorithms
+    that slowly grow a simple network to be a larger network with increasing depth
+    or width. Vice versa, there are methods that first define an architecture with
+    all the possible connections and operations and slowly drop these connections.
+    Finally, **evolutionary algorithms** are a branch of algorithms that are based
+    on biological phenomena such as mutation and breeding. In this chapter, we will
+    only cover some general hyperparameter search optimization methods, RL methods,
+    a simple form of progressive growing-based NAS, and a competitive version of progressive
+    downsizing-based NAS. Technical implementations will be available for the progressive
+    growing-based NAS methods but not for the other more complicated methods. Open
+    sourced implementations from the authors of the more complicated methods will
+    be referred to instead.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before diving into any of the mentioned NAS methods, you need to first understand
+    the notion of **microarchitecture** and **macroarchitecture**. Microarchitecture
+    refers to the details of the exact combination of layers being used in a logical
+    block. As introduced in [*Chapter 3*](B18187_03.xhtml#_idTextAnchor051), *Understanding
+    Convolutional Neural Networks*, some of these logical blocks can be repeatedly
+    stacked onto each other to generate the architecture that will be actually used.
+    There can also be different logical blocks with different layer configurations
+    in the final created architecture. Macroarchitecture, in comparison, refers to
+    a higher-level overview of how the different blocks are combined to form the final
+    NN architecture. The core idea behind NAS methods always revolves around reducing
+    the search space based on already curated knowledge about which layer or which
+    layer configurations work the best. The methods that will be introduced in this
+    chapter will either keep the macroarchitecture setup fixed while only searching
+    in the microarchitecture space or have the flexibility to explore both the micro-
+    and macroarchitecture space with creative tricks to make searching feasible.
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, let’s start with the simplest NAS method, which is general hyperparameter
+    search optimization algorithms.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding general hyperparameter search-based NAS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In ML, parameters typically refer to the weights and biases that a model learns
+    during training, while **hyperparameters** are values that are set before training
+    begins and influence how the model learns. Examples of hyperparameters include
+    learning rate and batch size. General hyperparameter search optimization algorithms
+    are a type of NAS method to automatically search for the best hyperparameters
+    to use for constructing a given NN architecture. Let’s go through a few of the
+    possible hyperparameters. In a **multi-layer perceptron** (**MLP**), hyperparameters
+    could be the number of layers that control the depth of the MLP, the width of
+    each of the layers, and the type of intermediate layer activation used. In a CNN,
+    hyperparameters could be the filter size of the convolutional layer, the stride
+    size of each of the layers, and the type of intermediate layer activation used
+    after each convolutional layer.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For NN architectures, the available types of hyperparameters that you can configure
+    depend heavily on the capabilities of the helper tools and methods used to create
+    and initialize the NN. For instance, consider the task of configuring the hidden
+    layer size of three layers individually. Having a method that produces an MLP
+    with a fixed number of layers of three makes it possible to perform a hyperparameter
+    search only on the hidden layer sizes. This is achievable by simply adding three
+    hyperparameters to the function, which sets the three hidden layer sizes respectively.
+    However, to enable the flexibility to perform a hyperparameter search for both
+    the number of layers and the hidden layer size, you have to build a helper method
+    that can dynamically apply these hyperparameters to create an MLP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The simplest form of NAS leverages these tools to perform a slightly smarter
+    search of the defined hyperparameters. Three well-known variations of hyperparameter
+    search will be covered here; these include `pytorch`, as the implementation is
+    short enough to fit in a chapter. Let’s start with successive halving.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Searching neural architectures by using successive halving
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The most basic method to search with a reduced search space to optimize runtime
+    is to randomly sample a few hyperparameter configurations and execute the full
+    training and evaluation only of the sampled configurations. This method is simply
+    called **random search**. What if we know that certain configurations are almost
+    certain to perform badly after a certain quantity of resources are consumed?
+  prefs: []
+  type: TYPE_NORMAL
+- en: Successive halving is an extension of random search that helps to save resources
+    while searching for the best neural architecture. The idea behind successive halving
+    is to eliminate half of the poorly performing configurations at each step, allowing
+    us to focus on the more promising ones. This way, we don’t waste time on configurations
+    that are less likely to yield good results.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s break down the concept using a simple example. Imagine you are trying
+    to find the best configuration for an MLP with varying hyperparameters such as
+    the number of layers and layer sizes. You start by randomly sampling 100 different
+    configurations. Now, instead of training all 100 configurations to completion,
+    you apply successive halving. You train each of the 100 configurations for a short
+    period (for example, 5 epochs) and then evaluate their performance on a validation
+    dataset. At this point, you eliminate the 50 worst-performing configurations and
+    continue training the remaining 50 configurations for another 5 epochs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this second round of training, you again evaluate the performance of the
+    remaining configurations and eliminate the 25 worst-performing ones. The top 25
+    configurations can then continue to train until convergence. By applying successive
+    halving, you save resources and time by focusing on the most promising configurations
+    while discarding the poorly performing ones early in the process. This allows
+    you to more efficiently search for the best neural architecture for your problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s dive into the technical implementation of successive halving that will
+    also set the stage for all the other methods under general hyperparameter tuning-based
+    NAS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start by importing the relevant libraries and setting the `pytorch` library
+    seed to ensure reproducibility:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, let’s define a `pytorch` MLP class that has the functionality to build
+    an MLP dynamically based on the number of hidden layers and hidden sizes of each
+    layer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we need the logic that trains this MLP when provided with a specific
+    layer configuration list. Here, we will use the `pytorch` abstraction library
+    called `catalyst` to train the model and save the best and last epoch model with
+    a few convenient methods:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we need a method that generates a random number of hyperparameters for
+    the MLP. The hyperparameter is structured to be a list of hidden layer size specifications
+    where the number of items in the list determines the number of layers. We fix
+    the range number of hidden layers to be between 1 and 6 layers and hidden layer
+    sizes to be between 2 and 100:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, with the helpers defined, let’s set up our tabular dataset to apply MLP
+    with. The `iris` dataset from `scikit-learn` will be used here. We will load it,
+    scale the values, split the dataset into train and validation partitions, and
+    prepare it to be consumed by the `catalyst` library. Note that the code up until
+    this step will be reused for the next two methods:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The approach we are going to take here with successive halving is to use epochs
+    as the resource component where we will execute three iterations of successive
+    halving once a predefined number of epochs for that iteration has been executed.
+    Half of the top-performing configurations will continue to be trained in the next
+    iteration. Here, we use 20 initial configurations and 3 iterations of successive
+    halving with 5 epochs each. Let’s start by defining these values along with the
+    seeded random number generator that controls the randomness of the generated configurations:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, we will define the execution logic for successive halving. Note that
+    the last trained epoch weights are used here, at the next iteration, instead of
+    the epoch with the best validation score:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The best configuration can then be found via the following logic:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In successive halving, some configurations might only be performant at the later
+    stages of the training process, while some configurations can be performant from
+    the early stages of the training process. Choosing either a longer wait time or
+    a faster wait time will put some models at a disadvantage and requires finding
+    a balance that we might not know the truth about. The Hyperband method that will
+    be introduced next is an attempt to solve this issue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Searching neural architectures by using Hyperband
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Hyperband improves upon the caveats in successive halving by executing multiple
+    separate end-to-end iterations of successive halving called brackets. Each consecutive
+    bracket would have smaller original sample configurations but has a higher number
+    of resources allocated. This algorithm essentially allows some randomly sampled
+    configurations to be trained longer, increasing the probability that the inherent
+    potential for good performance is shown so that abandoning these configurations
+    won’t be a waste at the later brackets. The full algorithm is shown in *Figure
+    7**.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.1 – Hyperband algorithm pseudocode](img/B18187_07_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.1 – Hyperband algorithm pseudocode
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Two user input configurations are needed for this algorithm: specifically,
+    R, the maximum amount of resources to train and evaluate a single configuration,
+    and η, the divider number that decides the number of configurations to keep at
+    the end of every successive halving iteration. The total number of brackets, s max,
+    the total resource allocated for each bracket, B, the total number of configurations
+    by bracket and iteration n and n i, and the resource allocated by brackets r i,
+    are all computed by formula. To make this easier to digest, *Figure 7**.2* shows
+    the example Hyperband resulting configuration results in each bracket when R =
+    81, and η = 3:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.2 – Example Hyperband resulting configuration results in each bracket](img/B18187_07_2.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.2 – Example Hyperband resulting configuration results in each bracket
+  prefs: []
+  type: TYPE_NORMAL
+- en: These settings produce a total of 5 brackets and produce a total of 10 final
+    models. The best model out of these 10 models would then be used as the final
+    produced model from the search operation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Note that, in this method, expert knowledge can be explicitly injected into
+    the process of the two search methods by, for example, fixing the macroarchitecture
+    of the model and only searching the hyperparameters for a microarchitecture logical
+    block. Let’s go through an implementation of Hyperband using the methods and dataset
+    defined in the successive halving topic:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let’s define the additional library needed here to compute logarithms:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, we will define the two input parameters needed for the Hyperband implementation,
+    the maximum resource we want to run per configuration in terms of epochs, and
+    the divisor of configurations, `N`, after every successive halving operation in
+    the Hyperband algorithm:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we will define the main logic of Hyperband according to *Figure 7**.1*:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The two methods utilize random search heavily without being very smart about
+    choosing the hyperparameters’ configuration. Next, we will explore a search method
+    that optimizes the next choice of hyperparameters after some initial searching
+    has been done.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Searching neural architectures by using Bayesian hyperparameter optimization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Bayesian hyperparameter optimization is a method that utilizes a surrogate
+    performance estimation model to choose an estimated best set of configurations
+    to sample and evaluate from. The act of sampling configurations to train and evaluate
+    is formally called the **acquisition function**. Instead of random sampling and
+    hoping that it’ll perform well, Bayesian optimization attempts to leverage the
+    prior information gained from an initial random configuration sampling and actual
+    training and evaluation to find new configurations that are estimated to perform
+    well. Bayesian optimization takes the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Sample a number of hyperparameter configurations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Perform full training and evaluation with these configurations to obtain performance
+    scores.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train a surrogate regression model (typically, a **Gaussian processes** (**GP**)
+    model is used) with all the available data to estimate the performance scores
+    based on the hyperparameters.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Either use all possible hyperparameter configurations or randomly sample a good
+    amount of hyperparameter configurations and predict the performance score using
+    the surrogate model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Get the *k* hyperparameter configurations that have the minimum estimated performance
+    scores from the surrogate model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Repeat *step 1* to *step 5* either a predetermined number of times, until a
+    good enough result is obtained, or until your resource budget is all used up.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The process essentially attempts to speed up the actual training and evaluation
+    process by estimating the scores it will produce and only actually training the
+    estimated top few configurations. The optimization only works if the surrogate
+    model performance score estimation function is considerably faster than the actual
+    training and evaluation of the main model. Note that the standard Bayesian optimization
+    works only in the continuous space and can’t deal with discrete hyperparameters
+    properly. Let’s go through the technical implementation of Bayesian optimization-based
+    NAS using the same methods and dataset defined earlier:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s start by importing the main powerhouse behind the Bayesian optimization
+    approach here, which is the GP regressor from `scikit-learn`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, let’s define the method that creates a structured fixed-sized column
+    of 6, which is the maximum number of possible layers defined earlier. When there
+    are fewer than 6 layers, the later columns will just have 0 layers as a feature:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, let’s define three important parameters for Bayesian optimization-based
+    NAS using MLP. The first parameter is the number of configurations. The approach
+    we are taking here is to initially train 100 configurations in the first iteration
+    according to the specified epochs per configuration. After that, we build a GP
+    regressor to predict the validation loss. Then, we will sample configurations
+    in the next few iterations and use the model to predict and pick the top five
+    configurations to perform full training. In every iteration, a new regressor model
+    is built with all the available validation loss data:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, let’s define the main logic that accomplishes a version of Bayesian
+    optimization-based NAS with MLP:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: With that, we’ve achieved MLP hyperparameter search with Bayesian optimization!
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In addition to the hyperparameter search-based NAS methods discussed in this
+    chapter, it is worth mentioning three other approaches, which are hierarchical
+    search, proxy models, and evolutionary algorithms:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hierarchical search focuses on optimizing architectures at different levels
+    of granularity, allowing for a more efficient exploration of the search space
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Proxy models serve as lightweight approximations of the target models, reducing
+    the computational cost of evaluating candidate architectures during the search
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Lastly, evolutionary algorithms are inspired by natural selection processes
+    and can be applied to the NAS problem, enabling the exploration and optimization
+    of architectures through mutation, crossover, and selection operations
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These methods can also be considered when choosing among hyperparameter search-based
+    NAS techniques.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NAS with general hyperparameter search methods provides a simple way to search
+    different configurations in a smarter way than just plain random or brute-force
+    search. It provides the most help when you already have the infrastructure ready
+    to choose different hyperparameters easily, along with the expert knowledge from
+    the field already built in under the hood.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, NAS with general hyperparameter search generally requires a lot of
+    out-of-algorithm tooling for building the model and formalizing the helper methods
+    that can reliably be controlled by hyperparameters. On top of that, it is still
+    required to have quite a bit of knowledge of which types of layers to use along
+    with out-of-algorithm crafting of the macro- and microarchitecture of the NN model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next section, we will go through a line of NAS methods that covers more
+    extensively all the steps needed to achieve NAS for any NN, called RL-based NAS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding RL-based NAS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'RL is a family of learning algorithms that deal with the learning of a policy
+    that allows an agent to make consecutive decisions on its actions while interacting
+    with states in an environment. *Figure 7**.3* shows a general overview of RL algorithms:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.3 – General overview of RL algorithms](img/B18187_07_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.3 – General overview of RL algorithms
+  prefs: []
+  type: TYPE_NORMAL
+- en: This line of algorithms is most popularly utilized to create intelligent bots
+    for games that can act as offline players against real humans. In the context
+    of a digital game, the environment represents the entire setting in which the
+    agent operates, including aspects such as the position and status of the in-game
+    character, as well as conditions of the in-game world. The state, on the other
+    hand, is a snapshot of the environment at a given time, reflecting the current
+    conditions of the game. One key component in RL is the environment feedback component
+    that can provide either a reward or punishment. In digital games, examples of
+    rewards and punishments are some forms of a competitive scoring system, in-game
+    cash, the leveling system, or sometimes negatively through death. When applied
+    to the realm of NAS, the state will then be the generated NN architecture, and
+    the environment will be the evaluation of the generated NN configurations. The
+    rewards and punishments will then be the latency performance and metric performance
+    of the resulting architecture after training and evaluating it on a chosen dataset.
+    Another key component is the term **policy**, which is the component responsible
+    for producing an action based on the state.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recall that in the general hyperparameter search-based NAS, the NN configuration
+    sample acquisition is based on random sampling. In RL-based NAS approaches, the
+    goal is not only to optimize the search process but also the acquisition process
+    that produces NN configurations based on prior experiences. The exact methods
+    of how the configurations can be produced, however, differ in different RL-based
+    NAS methods.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we will dive into a few RL methods specific to NAS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Founding NAS based on the RL method
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Efficient NAS** (**ENAS**) via parameter sharing'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Mobile** **NAS** (**MNAS**)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let’s start with the first founding NAS based on the RL method.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding founding NAS based on RL
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'RL can be implemented with NNs, and in the use case of NAS, a **recurrent NN**
+    (**RNN**) is used to act as the missing piece needed to probabilistically generate
+    the main NN configurations at test time. *Figure 7**.4* roughly shows an architectural
+    overview of the foundational NAS with the RL method:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.4 – Architectural overview of NAS with RL workflow](img/B18187_07_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.4 – Architectural overview of NAS with RL workflow
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RNN is the policy that determines the state after a learning step from
+    the previous environment interaction. In the case of NAS, the action is equivalent
+    to the state. Recall that an RNN is composed of multiple sequential recurrent-based
+    cells where each cell is capable of producing an intermediate sequential output.
+    In NAS, these intermediate sequential outputs are designed to predict specific
+    configurations for the main NN. The predictions are then fed into the next RNN
+    cell as a cell input. Consider the NAS task to search for the best CNN architecture
+    in the image domain. *Figure 7**.5* shows the structure of this task using the
+    RNN-based NN configuration predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![\uFEFFFigure 7.5 – LSTM-based CNN layer configurations prediction for NAS](img/B18187_07_5.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.5 – LSTM-based CNN layer configurations prediction for NAS
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A convolutional layer has a few specifications that need to be decided: namely,
+    the number of convolutional filters, the size of the convolutional filters, and
+    the size of the stride. *Figure 7**.5* shows the predictions for a single CNN
+    layer. For subsequent CNN layers, the same **long short-term memory** (**LSTM**)
+    cells are repeatedly sequentially predicted with the state and cell outputs from
+    the last LSTM cell as input. For a four-layered CNN, the LSTM would then be autoregressively
+    executed four times to obtain all required configuration predictions.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As for how the parameters of the LSTM are updated, a process called **policy
+    gradient** will be used. Policy gradient is a group of methods that uses gradients
+    to update the policy. Specifically, the **reinforce** rule is used here to compute
+    the gradients for updating the parameters. In more understandable terminology,
+    the following formula shows how the gradients are computed:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: gradients = average of (cross entropy loss x (reward − moving average of previous
+    rewards)) for all sampled architectures
+  prefs: []
+  type: TYPE_NORMAL
+- en: The cross-entropy loss here is specifically used to emphasize that the configuration
+    prediction tasks are framed as a multiclass classification problem so that the
+    number of search parameters can be constrained to a small number while making
+    sure boundaries are set. For example, you wouldn’t want a million filters for
+    a single CNN layer or a million-neurons-sized fully connected layers in an MLP.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The RL process here is guided by the concept of exploration versus exploitation.
+    If we continue to use only the predicted states of the RNN and use that as the
+    labels for computing the cross-entropy loss, the policy will just become more
+    and more biased toward its own parameters. Using the RNN predictions as labels
+    is known as the *exploitation process*, where the idea is to just allow the RNN
+    to be more confident about its own predictions. This process grows the model deeper
+    toward its current intelligence instead of toward intelligence that can be gained
+    from external data exploration. *Exploration* here is when network configurations
+    are randomly sampled to act as the label for the cross-entropy loss at each RNN
+    cell. The idea here is to start with lots of exploration and slowly reduce exploration
+    going into later stages of policy learning and depending more on exploitation.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Until now, the steps only allow for a relatively simple form of CNN, but modifications
+    can be added to the RNN agent to account for more complex CNN builds, such as
+    parallel connections or skip connections from ResNet or DenseNet. In the original
+    method, the addition of skip connections for complexity is attempted where an
+    additional cell is added at the end of the five sequential RNN cells shown in
+    *Figure 7**.5* to act as something called the `tanh` activation function, multiplied
+    by a learnable weight, and finally applied with a sigmoid activation function
+    that bounds the output values in between `0` to `1`. The key information here
+    is that the sigmoid function provides a probabilistic value that allows a binary
+    classification task of “to add a skip connection or not” to be executed. A `0.5`
+    value can be used to determine whether the output is `1` or `0`. One problem,
+    however, is that the size of the outputs between different layers might not be
+    compatible. A trick is automatically applied to solve the incompatibility by padding
+    smaller output feature maps with zeros so that both feature maps have the same
+    size.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This method allows you to dynamically add skip connections to a CNN in NAS.
+    *Figure 7**.6* shows the final architecture obtained from this NAS method using
+    the `CIFAR-10` image dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.6 – CNN obtained through NAS with RL from the https://arxiv.org/abs/1611.01578v2
+    paper](img/B18187_07_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.6 – CNN obtained through NAS with RL from the https://arxiv.org/abs/1611.01578v2
+    paper
+  prefs: []
+  type: TYPE_NORMAL
+- en: The architecture, although simple, is capable of deciding the best skip connections
+    needed to achieve a good result. This resulting architecture shows how complex
+    an architecture can be and shows how hard it would be for a human to design this
+    outcome manually without proper searching algorithms. Note again that any complexity
+    and modifications can be added to the RNN policy to account for additional components
+    such as the learning rate, pooling method, normalization method, or activation
+    methods, which emphasizes the flexibility of the idea. Additionally, the NAS method
+    can also be applied to search MLP or RNN main NNs. These additional adaptations
+    and complexities, however, won’t be covered here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that this technique fixed the microarchitecture structure in the sense
+    that a standard convolutional layer is used. The technique, however, enabled some
+    form of macroarchitecture designing by allowing skip connections. One of the main
+    problems of this foundational technique is the time needed to evaluate the randomly
+    generated or predicted architecture configurations. Next, we will explore a method
+    that attempts to minimize this problem.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding ENAS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: ENAS is a method that extends foundational NAS with the RL method by making
+    the evaluation of generated architectures more efficient. Additionally, ENAS provides
+    two different methods that allow either the macroarchitecture or microarchitecture
+    to be searched. Parameter sharing is a concept that relates to **transfer learning**
+    (**TL**), where what is learned from one task can be transferred to another task
+    and fine-tuned for that subsequent task to get better results. Training and evaluating
+    the main child architectures in this way provides an obvious way to speed up the
+    process. However, it does rely heavily on weights pre-trained from the previous
+    architectures and doesn’t provide an unbiased evaluation of the final searched
+    architecture even if it performs well. Regardless, the method still proves to
+    be valuable when combined with the novel search space.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ENAS applies RL using an RNN as well but does so in an entirely different searching
+    direction and predicting different components with its RNN. The search space used
+    by ENAS is through a single **directed acyclic graph** (**DAG**) where the number
+    of nodes determines the number of layers of the child architecture. *Figure 7**.7*
+    shows an example of a four-node DAG:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.7 – A four-node DAG representing the search space of ENAS](img/B18187_07_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.7 – A four-node DAG representing the search space of ENAS
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RNN will then act as the controller that predicts two components for any
+    architecture type: namely, which previous nodes to connect to and which computation
+    operation to use. The RNN in this case will autoregressively predict the two components
+    four times to account for four nodes. The red lines in *Figure 7**.7* show the
+    predicted previous nodes to connect to. There will be a fixed number of computation
+    operations that can be chosen for every node. Since there will be a random sampling
+    of the computation operation procedure to ensure an unbiased trajectory, the procedure
+    will be based on the same search space. The parameter-sharing method is applied
+    in the computation operation component for these nodes. After each training iteration,
+    the weights for each computation operation at each layer will be saved for future
+    parameter-sharing use. Parameter sharing works in a way that each computation
+    operation at each node number will be used as an identifier to save and reload
+    weights whenever it is used again at the same layer with the same computation
+    operation.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'ENAS can be applied to search for RNN architectures, CNN architectures, and
+    MLP architectures and is generally extensible to any other architecture types.
+    Let’s take the case of searching for CNN architectures for ENAS. For CNN, ENAS
+    introduced two methods for searching; the first is to perform a macroarchitecture
+    search, and the second is to perform a microarchitecture search. For the macroarchitecture
+    search, six operations were proposed, which consisted of convolutional filters
+    with filter sizes of 3 x 3 and 5 x 5, depthwise-separable convolutions with filter
+    sizes 3 x 3 and 5 x 5, and max pooling and average pooling of kernel size 3 x
+    3\. This set of operations allows for more diversity instead of just the plain
+    convolutional layer, but instead of allowing more dynamic values of convolutional
+    layer configuration, the same configurations are set to fixed values. Another
+    implementation detail here is that when more than one previous node is selected
+    for connection, the outputs from the layers of the previous nodes are concatenated
+    along their depth dimension before being sent to the layer of the current node.
+    *Figure 7**.8* shows the result of a macroarchitecture search using the `CIFAR-10`
+    dataset:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.8 – Result of ENAS using the macroarchitecture search strategy](img/B18187_07_8.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.8 – Result of ENAS using the macroarchitecture search strategy
+  prefs: []
+  type: TYPE_NORMAL
+- en: The result was achieved using only 0.32 days using an outdated NVIDIA GTX 1080
+    Ti GPU, albeit on the `CIFAR-10` dataset instead of ImageNet, and achieved only
+    a 3.87 error rate on the `CIFAR-10` validation dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'As for the microarchitecture search, the idea is to build low-level logical
+    blocks and repeat the same logical blocks so that the architecture can be scaled
+    easily. Two different logical blocks are searched in ENAS: a logical block consisting
+    of the main convolutional operations, and a reduction logical block intended to
+    reduce dimensionality. *Figure 7**.9* shows the macroarchitecture of the final
+    architecture used to scale microarchitecture decisions in ENAS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.9 – Final macroarchitecture structure to scale a microarchitecture
+    logical block](img/B18187_07_009.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.9 – Final macroarchitecture structure to scale a microarchitecture
+    logical block
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*N* is a fixed number that stays constant throughout the search duration. As
+    this is microarchitecture, the architecture construction process was made to allow
+    more complex interactions between layers, specifically the addition of operations
+    to the output of previous nodes in skip connections. Due to this, for the convolutional
+    logical block, the RNN was adapted by fixing the first two RNN cells for a node
+    to specify which two previous node indexes to connect to and the subsequent RNN
+    cells to predict the computation operation to apply individually for the two chosen
+    previous node indexes. As for the reduction logical block, the main idea is to
+    choose any operation and use a stride of two, which effectively reduces the spatial
+    dimension of its input by two. The reduction logical block can be predicted along
+    with the convolutional logical block using the same number of nodes and the same
+    RNN. The parameter-sharing method in the microarchitecture case is adapted from
+    the general case equivalently by similarly using the layer number and computation
+    type as an identifier to save and load trained child architecture weights. *Figure
+    7**.10* shows the result of using the microarchitecture searching strategy in
+    ENAS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.10 – Result of ENAS microarchitecture search strategy](img/B18187_07_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.10 – Result of ENAS microarchitecture search strategy
+  prefs: []
+  type: TYPE_NORMAL
+- en: The result was achieved in only 0.45 days using an outdated NVIDIA GTX 1080Ti
+    GPU, albeit on the `CIFAR-10` dataset instead of ImageNet, and achieved only a
+    2.89 error rate on the `CIFAR-10` validation dataset.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let’s go through the final RL-based NAS method, called MNAS.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding MNAS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'MNAS is the searching method that was used to create the CNN architecture called
+    **MnasNet**, which is a CNN-based architecture. MNAS was later utilized to build
+    the EfficientNet architecture family introduced in [*Chapter 3*](B18187_03.xhtml#_idTextAnchor051),
+    *Understanding Convolutional Neural Networks*. However, the method can still be
+    used to generate other architecture types such as RNN or MLP. MNAS’s main goal
+    is to account for the latency component, which is the main concern for architectures
+    meant to be run at the edge, or in mobile devices, as the name suggests. MNAS
+    extends the RL NAS-based concept and introduces a search space that is more flexible
+    than the microarchitecture search in ENAS, allowing the creation of more varied
+    layers at different blocks, albeit with a fixed macroarchitecture. *Figure 7**.11*
+    shows an MNAS fixed macroarchitecture layout with seven blocks while allowing
+    different types of configurations with different layers in each block. The seven-block
+    structure is adapted from the MobileNetV2 architecture:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.11 – Example of a fixed macroarchitecture of seven blocks along
+    with the configurations for each block that will be randomly sampled or predicted](img/B18187_07_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.11 – Example of a fixed macroarchitecture of seven blocks along with
+    the configurations for each block that will be randomly sampled or predicted
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'An RNN is used here as the controller network to predict the following configurations
+    for each CNN block:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Convolutional operation**: Standard Convolutional layer, depthwise convolutional
+    layer, and the MBConv layer from MobileNet.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Convolutional filter size**: 3x3 and 5x5.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Squeeze-and-excitation ratio**: 0, 0.25.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Skip connection operation**: Pooling, identity residual, or no skip connection.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**The number of layers per block**: 0, +1, -1\. This is structured to be in
+    reference to the number of layers in the same block numbers in MobileNetV2.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Output filter size per layer**: 0.75, 1.0, 1.25\. This is also structured
+    to be in reference to the filter size of the convolution layer at the same positions
+    in MobileNetV2.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The search space introduced is crucial to allow for a more efficient network
+    and higher capacity to achieve better metric performance. In CNN, for example,
+    a lot of the computation is dominated at the earlier layers as the feature sizes
+    are much larger and require more efficient layers compared to later layers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A big issue about latency is that it is a component that is dependent on both
+    the software and hardware environment. For example, let’s say architecture *A*
+    is faster than architecture *B* in hardware and software *C*. When tested on another
+    hardware and software *D*, it is possible for architecture *B* to be faster than
+    architecture *A*. Additionally, the number of parameters and **floating-point
+    operations per second** (**FLOPs**) specification of the architecture is also
+    a proxy to the actual latency that depends also on the degree of parallelism of
+    the architecture and the computational cores of the hardware. Based on these reasons,
+    MobileNet adds the latency component to the reward computation by evaluating it
+    objectively in the software and hardware environment of a mobile phone, combining
+    both the metric computation and latency. *Figure 7**.12* shows an overview of
+    the entire MNAS process:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.12 – Overview of MNAS, a platform-aware NAS with a latency guarantee](img/B18187_07_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.12 – Overview of MNAS, a platform-aware NAS with a latency guarantee
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Latency can be computed on the actual target software and hardware environment
+    and is not restricted to just using mobile phones. The reward is computed using
+    the formula with the capability to input the desired target latency in seconds:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: reward = accuracy x [ latency _ target latency ] w
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Another key detail about MnasNet is that another policy gradient method called
+    **proximal policy optimization** (**PPO**) by OpenAI was used to train the RNN
+    policy network instead of the reinforce method. PPO is a method that accomplishes
+    two things over the standard reinforcement policy gradient, namely:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Make smaller gradient updates to the policy so that the policy learns in a stabler
+    way and is thus capable of achieving more efficient convergence
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use the generated probabilities themselves as sampling probabilities for the
+    random sample generation that automatically balances exploration and exploitation
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The first point is achieved by two means:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Weighing the loss using the probabilities of the current actor network with
+    the old probabilities generated from the actor-network before a parameter update
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Clipping the probabilities in an interval [1 - ϵ , 1 + ϵ ], where ϵ can be varied
+    but the value of 0.2 was used
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The method is performed through two networks instead of one, called actor-network
+    and critic network. The critic network is structured to predict an unconstrained
+    single value that serves as part of the evaluation logic of the generated architecture,
+    along with the reward from measuring the metric performance. The actor-network,
+    on the other hand, is the network we know is the main network responsible for
+    generating ideal network architecture configurations. Both networks can be implemented
+    with RNNs. This is depicted well in *Figure 7**.12*. The two network parameters
+    are jointly updated per batch. The loss of the actor-network can be computed with
+    the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Loss =  current predicted configuration probability   _____________________________   old
+    predicted configuration probability  x Advantage
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A minimum of this loss and another version of the loss with clipped probabilities
+    will then be used as the final loss. The clipped loss is defined as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: clipped loss = ( current predicted configuration probability   _____________________________   old
+    predicted configuration probability , 1 − ϵ, 1+ ϵ) x Advantage
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The advantage here is a custom loss logic that provides a quantified evaluation
+    number of the sampled child architecture that uses both the reward (using metric
+    performance) and the single value predicted from the critic network. In the reinforce
+    method, the **exponential moving average** (**EMA**) of previous rewards was used.
+    Similarly, here, a form of the EMA is used to reduce the advantage at different
+    timesteps. The logic is slightly more scientific, but for those who would like
+    to know more, it can be computed using the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantage = discoun t DISTANCE FROM FIRST TIMESTEP x critic and reward evaluation
+    discount = λγ
+  prefs: []
+  type: TYPE_NORMAL
+- en: critic and reward evaluation = ( reward + γ(critic prediction value at t + 1)
+    − critic prediction value at t)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The lambda, λ , and gamma, γ, are constants with values between 0 and 1\. They
+    each control the level of weight decay of the discount of advantages at each timestep
+    moving forward. Additionally, the gamma also controls the contribution of predicted
+    critic values at future timesteps. As for the loss of the critic network, it can
+    be defined using the following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: critic loss = (advantage + future critic values− current critic value) 2
+  prefs: []
+  type: TYPE_NORMAL
+- en: The final total loss will be the summation of the critic loss and the actor
+    loss. PPO generally performs better than the vanilla reinforcement policy gradient
+    in efficiency and convergence. This sums up the PPO logic at a more intuitive
+    level.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The RL search space here is not efficient and takes approximately 4.5 days to
+    train on ImageNet directly with a whopping 64 TPUv2 devices. However, this resulted
+    in a child architecture called MnasNet that is more efficient than MobileNetV2
+    at the same accuracy, or more accurate than MobileNetV2 at the same latency when
+    benchmarked on ImageNet. The same MNAS methods eventually got adopted in EfficientNet,
+    which has become one of the most efficient CNN model families today.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summarizing NAS with RL methods
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'RL allows a way for us to smartly learn the most performant NN architectures
+    through sampling, training, and evaluation of neural architectures and apply the
+    experience learned by predictively generating the most efficient neural architecture
+    configurations. Simply said, NAS with RL trains an NN to generate the best NN
+    architecture! The biggest problem with NAS with RL is still the expensive compute
+    time needed. A few tricks carried out by different methods to try to circumvent
+    this issue are listed here:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Training NAS with RL on a smaller but still representative dataset as a proxy
+    task and training and evaluating the final obtained neural architecture on the
+    main larger dataset
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Parameter sharing by the unique layer number and computation type can, fortunately,
+    be generically adapted for other methods from ENAS
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Balancing the macroarchitecture and microarchitecture search flexibility to
+    reduce the search space while making sure it is flexible enough to take advantage
+    of key differences needed at different stages of a network to achieve efficiency
+    and good metric performance
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Directly embedding target and achieved latency as part of the reward structure
+    and as a result searching only mostly architectures around the specified latency
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Do note that the methods that were introduced here do not provide an exhaustive
+    overview of RL and its potential.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Although RL provides a concrete way to accomplish NAS, it is not strictly necessary.
+    In the next section, we will go through examples of a category of NAS-specific
+    methods that do not use RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding non-RL-based NAS
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: The core of NAS is about intelligently searching through different child architecture
+    configurations by making decisions based on prior search experience to find the
+    best child architecture in a non-random and non-brute-force way. The core of RL,
+    on the other hand, involves utilizing a controller-based system to achieve that
+    intelligence. Intelligent NAS can be achieved without using RL, and in this section,
+    we will go through a simplified version of the progressive growing-from-scratch
+    style of NAS without a controller and another competitive version of elimination
+    from a complex fully defined NN macroarchitecture and microarchitecture.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding path elimination-based NAS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: First and foremost, `softmax` activation before the weighted addition process.
+    During testing, the top *k* paths or operations between nodes are chosen to act
+    as the actual network, whereas the other paths are pruned away. When the weight
+    vector gets updated, however, the child architecture essentially changes. Instead
+    of training and evaluating this new child architecture to obtain the new metric
+    performance on the holdout or validation partition of the dataset, only a single
+    training epoch is used for the entire architecture to obtain an estimate of the
+    best validation performance using the training loss. This estimate will be used
+    to update the parameters of the overparameterized architecture through gradient
+    descent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '`BinaryConnect`. These binarized weights act as gates that allow data to travel
+    through only when it is enabled. This addition helps to alleviate the biggest
+    issue with any overparameterized architectures: the GPU memory size needed to
+    hold the parameters of the defined architecture. The second addition is the latency
+    component to the overall loss component, which is crucial to make sure the search
+    takes latency into consideration and doesn’t attempt to utilize more paths just
+    to get better metric performance. Let’s uncover the details step by step by first
+    describing the overall training method used in proxyless NAS:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Train only the BinaryConnect weight vector based on a single randomly sampled
+    path for each node based on the probabilities specified by the `softmax` conditioned
+    weight vector using the training dataset loss. This is achieved by freezing the
+    parameters of the rest of the architecture and using standard cross-entropy loss.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Train only the architecture parameters based on two randomly sampled paths
+    for each based on the probabilities specified by the `softmax` conditioned weight
+    vector using the validation dataset loss. This is achieved by freezing the parameters
+    of the weight vector and using an approximate gradient formula for the architecture
+    parameters:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: gradient of parameters through path 1 = gradient of binary weight 2 x path 2
+    probability x (− path 1 probability) + gradient of binary weight 1 x path 1 probability
+    x (1 − path 2 probability)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: gradient of parameters through path 2 = gradient of binary weight 1 x path 1
+    probability x (− path 2 probability) + gradient of binary weight 2 x path 2 probability
+    x (1 − path 1 probability)
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: The formula computes gradients for path 1 and path 2\. The loss used is cross-entropy
+    loss summed with a predicted latency after pruning the paths similar to DARTS.
+    The latency is predicted with an external ML model trained to predict latency
+    based on the parameters of the architecture due to the reason that latency evaluations
+    take up too much time and usually require an average of multiple runs to get a
+    reliable estimate. Any ML model can be used to build the latency predictor model
+    and is a one-off process before starting the NAS process.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Repeat *steps 1-2* until convergence, a predefined number of epochs, or any
+    early stopping without improvements on the validation loss for a predefined number
+    of epochs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Recall that BinaryConnect is used to achieve binary weights that act as gates.
+    One detail is that the standard unconstrained non-binary weight vector itself
+    is still present but a binarization operation is applied. The binarization process
+    is executed by the following steps:'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Set all binary weights to `0`.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sample the desired number of chosen paths by using the `softmax` conditioned
+    weight vector as probabilities.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Set the chosen path’s binary weights to `1`.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: BinaryConnect saves memory by only loading nonzero paths to memory.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: PNAS manages to achieve an 85.1 top-1 accuracy on ImageNet directly without
+    using a proxy dataset such as `CIFAR-10`, using only 8.3 days of search using
+    the NVIDIA GTX 1080 Ti GPU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we will go through a simple progressive growth-based NAS method as an
+    introduction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding progressive growth-based NAS
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The progressive growth-based NAS method’s key differentiator is that the method
+    can be structured to be unbounded in both macroarchitecture and microarchitecture.
+    Most of the techniques introduced in this chapter have placed a lot of domain
+    knowledge in terms of general structures found to be useful. Growth-based NAS
+    is naturally non-finite in terms of search space and can potentially help to discover
+    novel macroarchitectural structures that work well. This line of NAS will continue
+    to evolve to a stage where it can be competitive with other NAS methods, but,
+    in this book, we will only go into a method to search the microarchitectural structure
+    of the child architecture called **progressive NAS** (**PNAS**) to act as an introduction.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'PNAS adopts a progressive growth-based approach in NAS by simply using concepts
+    defined in Bayesian optimization introduced earlier in this chapter and searching
+    at the microarchitecture level while fixing the macroarchitecture structure similar
+    to the ENAS microarchitecture search method. The macroarchitecture structure is
+    adapted to the size of the dataset, `CIFAR-10`, with a smaller structure, and
+    ImageNet with a deeper structure. *Figure 7**.13* shows these structures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 7.13 – PNAS macroarchitecture structure from the https://arxiv.org/abs/1712.00559v3
+    paper](img/B18187_07_013.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 7.13 – PNAS macroarchitecture structure from the https://arxiv.org/abs/1712.00559v3
+    paper
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The method can be accomplished with the steps defined next, along with an initial
+    predefined max number of blocks in the cell and starting with zero blocks in the
+    cell:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start with the first block. Construct the full CNN with all cell options iteratively
+    and evaluate all of the CNN.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Train an RNN surrogate model to predict the metric performance using the cell
+    configurations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Expand to the next block and predict the metric performance of the possible
+    cell option combinations for the next block using all available chosen and evaluated
+    previous block variations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Take the top two best metric performance cell options for the next block and
+    train and evaluate the fully constructed CNN using the two cell options.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Fine-tune the RNN surrogate model using the extra two data points obtained in
+    *step 4*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Repeat *step 3* to *step 5* until the total number of blocks reaches the max
+    number of blocks or until the metric performance does not improve anymore.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Each block in a cell will have a configuration defined with five variables similar
+    to ENAS; namely, the first input, the second input, the operation to the first
+    input, the operation to the second input, and the method to combine the outputs
+    of the operation to the first input and operation to the second input. The set
+    of possible inputs is all the previous blocks, the output of the previous cell,
+    and the output of the cell before the previous cell. This means that the cell
+    can interact with other cells. All the possible input combinations, operation
+    types, and combination methods are laid out in each progressive block step and
+    fed to the RNN model to predict the metric performance.
+  prefs: []
+  type: TYPE_NORMAL
+- en: PNAS managed to achieve an 84.2 top-1 accuracy on ImageNet but utilized a whopping
+    225 GPU days using an NVIDIA GTX 1080 GPU.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The progressive growth-based line of NAS methods has since progressed to the
+    stage where it is possible to achieve an accuracy of 84 top-1 accuracy with only
+    5 days of searching with a method called **efficient forward architecture search**,
+    but this is beyond the scope of this book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To end this chapter, *Figure 7**.14* shows a summary performance comparison
+    among the methods introduced for the image domain, excluding general hyperparameter
+    search methods:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| **Method** | **Number of** **params (million)** | **Search** **time (days)**
+    | **CIFAR-10** **test error** | **ImageNet** **test error** |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Vanilla RL NAS | 4.2 | 1680 | 4.47 | N/A |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ENAS macro | 21.3 | 0.32 | 4.23 | N/A |'
+  prefs: []
+  type: TYPE_TB
+- en: '| ENAS micro | 4.6 | 0.45 | 2.89 | N/A |'
+  prefs: []
+  type: TYPE_TB
+- en: '| DARTS | 3.4 | 4 | 2.83 | 26.9 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| Proxyless NAS | 7.1 | 8.3 | N/A | 24.9 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| PNAS | 5.1 | 225 | 3.41 | 25.8 |'
+  prefs: []
+  type: TYPE_TB
+- en: Figure 7.14 – Performance comparison of all the introduced NAS methods, excluding
+    general hyperparameter search methods
+  prefs: []
+  type: TYPE_NORMAL
+- en: This table includes the number of parameters, search time, and test error rates
+    for `CIFAR-10` and ImageNet datasets for each NAS method introduced. Each NAS
+    method has its own strengths and weaknesses in terms of latency, complexity, and
+    accuracy. The ENAS micro method, in particular, stands out with a relatively low
+    number of parameters, a short search time, and a low test error rate for `CIFAR-10`.
+    It could be a recommended choice for neural architecture search in the image domain.
+    However, the specific choice depends on the requirements and constraints of the
+    project, such as available compute resources and desired accuracy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: NAS is a method that is generalized to any NN type, allowing for the automation
+    of creating new and advanced NNs without the need for manual neural architecture
+    design. As you may have guessed, NAS dominates the image-based field of NNs. The
+    EfficientNet model family exemplifies the impact NAS provides to the image-based
+    NN field. This is due to the inherent availability of a wide variety of CNN components
+    that make it more complicated to design when compared to a simple MLP. For sequential
+    or time-series data handling, there are not many variations of RNN cells, and
+    thus the bulk of work in NAS for RNNs is focused on designing a custom recurrent
+    cell. More work could have been done to accommodate transformers as it is the
+    current state of the art, capable of being adapted to a variety of data modalities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NAS is mainly adopted by researchers or practitioners in larger institutions.
+    One of the key traits practitioners want when trying to train better models for
+    their use cases is the speed to the final result. NAS by itself is still a process
+    that takes days to accomplish, and if applied to a large dataset, it can take
+    up to months. This deters most practitioners’ usage of NAS directly. Instead,
+    they mostly use the existing architectures from published open source implementations.
+    Using the existing architectures makes no difference in speed when compared to
+    using manually defined architecture and thus gives practitioners the motivation
+    they need to use it instead. It is also widely known that pre-training helps to
+    improve the performance of the model, thus using NAS directly means you’d have
+    to also pre-train the resulting architecture yourself on a large generalized dataset,
+    which further extends the time needed to complete the NAS process. Use cases in
+    ML often require a lot of time to explore the problem setup and figure out the
+    potential performance that is achievable from the available dataset. Thus, quick
+    iteration between model experimentations is crucial to the success of the project.
+    Slow experimentations dampen the time to identify success. These reasons are why
+    NAS is mainly adopted by practitioners in bigger institutions or researchers who
+    are willing to spend time designing generalized custom neural architectures that
+    can be amortized across different domains instead of building custom architectures
+    for a specific use case.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, NAS still undoubtedly provides a unique way to find unique custom architectures
+    for your use cases as long as time is not of concern and the goal is either to
+    maximize the performance you can get with a target latency or to generally get
+    the best-performing model without latency considerations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we will go into the details of different problem types
+    in SL, along with general tips and tricks for **supervised** **DL** (**SDL**).
+  prefs: []
+  type: TYPE_NORMAL

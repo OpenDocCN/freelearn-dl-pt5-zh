@@ -1,0 +1,2301 @@
+- en: '6'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Natural Language Processing and Recurrent Neural Networks
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: This chapter will introduce two different topics that nevertheless complement
+    each other – **natural language processing** (**NLP**) and **recurrent neural
+    networks** (**RNNs**). NLP teaches computers to process and analyze natural language
+    text to perform tasks such as machine translation, sentiment analysis, and text
+    generation. Unlike images in computer vision, natural text represents a different
+    type of data, where the order (or sequence) of the elements matters. Thankfully,
+    RNNs are suitable for processing sequential data, such as text or time series.
+    They help us deal with sequences of variable length by defining a recurrence relation
+    over these sequences (hence the name). This makes NLP and RNNs natural allies.
+    In fact, RNNs can be applied to any problem since it has been proven that they
+    are Turing-complete – theoretically, they can simulate any program that a regular
+    computer would not be able to compute.
+  prefs: []
+  type: TYPE_NORMAL
+- en: However, it is not only good news, and we’ll have to start with a disclaimer.
+    Although RNNs have great theoretical properties, we now know that there are practical
+    limitations to their use. These limitations have been mostly surpassed by a more
+    recent **neural network** (**NN**) architecture called **transformer**, which
+    we’ll discuss in [*Chapter 7*](B19627_07.xhtml#_idTextAnchor202). In theory, the
+    transformer has more limitations compared to RNNs. But as sometimes happens, it
+    works better in practice. Nevertheless, I believe that this chapter will be beneficial
+    to you. On one hand, RNNs have elegant architecture and still represent one of
+    the major NN classes; on the other hand, the progression of knowledge presented
+    in this and the next three chapters will closely match the real-world progression
+    of research on these topics. So, you’ll be able to apply the concepts you’ll learn
+    here in the next few chapters as well. This chapter will also allow you to fully
+    appreciate the advantages of the newer models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This chapter will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Natural language processing
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Introducing RNNs
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'We’ll implement the example in this chapter using Python, PyTorch, and the
+    TorchText package ([https://github.com/pytorch/text](https://github.com/pytorch/text)).
+    If you don’t have an environment set up with these tools, fret not – the example
+    is available as a Jupyter Notebook on Google Colab. You can find the code examples
+    in this book’s GitHub repository: [https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter06](https://github.com/PacktPublishing/Python-Deep-Learning-Third-Edition/tree/main/Chapter06).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Natural language processing
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'NLP is a subfield of machine learning that allows computers to interpret, manipulate,
+    and comprehend human language. This definition sounds a little dry, so, to provide
+    a little clarity, let’s start with a non-exhaustive list of the types of tasks
+    that fall under the NLP umbrella:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Text classification**: This assigns a single label to the entire input text.
+    For example, **sentiment analysis** can determine whether a product review is
+    positive or negative.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Token classification**: This assigns a label for each token of the input
+    text. A token is a building block (or a unit) of text. Words can be tokens. A
+    popular token classification task is **named entity recognition**, which assigns
+    each token to a list of predefined classes such as place, company, or person.
+    **Part-of-speech** (**POS**) tagging assigns each word to a particular part of
+    speech, such as a noun, verb, or adjective.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Text generation**: This uses the input text to generate new text with arbitrary
+    length. Text generation tasks include machine translation, question answering,
+    and text summarization (creating a shorter version of the original text while
+    preserving its essence).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Solving NLP problems is not trivial. To understand why, let’s go back to computer
+    vision ([*Chapter 4*](B19627_04.xhtml#_idTextAnchor107)), where the input images
+    are represented as 2D tensors of pixel intensities with the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The image is composed of pixels and doesn’t have any other explicitly defined
+    structure
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The pixels form implicit hierarchical structures of larger objects, based on
+    their proximity to each other
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: There is only one type of pixel, which is defined only by its scalar intensity
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Thanks to its homogenous structure, we can feed the (almost) raw image to a
+    **convolutional neural network** (**CNN**) and let it do its magic with relatively
+    little data pre-processing.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let’s return to text data, which has the following properties:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are different types of characters with different semantical meanings,
+    such as letters, digits, and punctuation marks. In addition, we might encounter
+    previously unknown symbols.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The natural text has an explicit hierarchy in the form of characters, words,
+    sentences, and paragraphs. We also have quotes, titles, and a hierarchy of headings.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Some parts of the text may be related to distant parts of the sequence, rather
+    than their immediate context. For example, a fictional story can introduce a person
+    by their name but later refer to them only as *he* or *she*. These references
+    can be separated by long text sequences, yet, we still have to be able to find
+    this relation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The complexity of natural text requires several pre-processing steps before
+    the actual NN model comes into play. The first step is **normalization**, which
+    involves operations such as removing extra whitespace and converting all letters
+    into lowercase. The next steps are not as straightforward, so we’ll dedicate the
+    next two sections to them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tokenization
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One intuitive way to approach an NLP task is to split the corpus into words,
+    which will represent the basic input units of our model. However, using words
+    as input is not set in stone and we can use other elements, such as individual
+    characters, phrases, or even whole sentences. The generic term for these units
+    is **tokens**. A token refers to a text corpus in the same way as a pixel refers
+    to an image. The process of splitting the corpus into tokens is called **tokenization**
+    (what a surprise!). The entity
+  prefs: []
+  type: TYPE_NORMAL
+- en: (for example, an algorithm) that performs this tokenization is called a **tokenizer**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The tokenizers we’ll discuss in this section are universal in the sense that
+    they can work with different NLP ML algorithms. Therefore, the pre-processing
+    algorithms in this section are commonly used with transformer models, which we’ll
+    introduce in [*Chapter 7*](B19627_07.xhtml#_idTextAnchor202).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With that, let’s discuss the types of tokenizers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Word-based**: Each word represents a unique token. This is the most intuitive
+    type of tokenization, but it has serious drawbacks. For example, the words *don’t*
+    and *do not* will be represented by different tokens, but they mean the same thing.
+    Another example is the words *car* and *cars* or *ready* and *readily*, which
+    will be represented by different tokens, whereas a single token would be more
+    appropriate. Because natural language is so diverse, there are many corner cases
+    like these. The issue isn’t just that semantically similar words will have unrelated
+    tokens, but also the large number of unique tokens that come out of this. This
+    will make the model computationally inefficient. It will also produce many tokens
+    with a small number of occurrences, which will prove challenging for the model
+    to learn. Finally, we might encounter unknown words in a new text corpus.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Character-based**: Each character (letter, digit, punctuation, and so on)
+    in the text is a unique token. In this way, we have fewer tokens, as the total
+    number of characters is limited and finite. Since we know all the characters in
+    advance, we cannot encounter unknown symbols.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: However, this tokenization is less intuitive than the word-based model because
+    a context composed of characters is less meaningful than a context based on words.
+    While the number of unique tokens is relatively small, the total number of tokens
+    in the corpus will be very large (equal to the total number of characters).
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: '**Subword tokenization**: This is a two-step process that starts by splitting
+    the corpus into words. The most obvious way to split the text is on whitespace.
+    In addition, we can also split it on whitespace *and punctuation marks*. In NLP
+    parlance, this step is known as **pre-tokenization**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: (the prefix implies that tokenization will follow). Then, it preserves the frequently
+    used words and decomposes the rare words into meaningful subwords, which are more
+    frequent. For example, we can decompose the word *tokenization* into the core
+    word *token* and the suffix *ization*, each with its own token. Then, when we
+    encounter the word *carbonization*, we can decompose it into *carbon* and *ization*.
+    In this way, we’ll have two occurrences of *ization* instead of a single occurrence
+    of *tokenization* and *carbonization*. Subword tokenization also makes it possible
+    to decompose unknown words into known tokens.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Special service tokens
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For the concept of tokenization to work, it introduces some service tokens.
+    These include the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**UNK**: Replaces unknown tokens in the corpus (think of rare words such as
+    alphanumeric designations)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**EOS**: An end-of-sentence (or sequence) token'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**BOS**: A beginning-of-sentence (or sequence) token'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**SEP**: This separates two semantically different text sequences, such as
+    question and answer'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**PAD**: This is a padding token that is appended to an existing sequence so
+    that it can reach some predefined length and fit in a fixed-length mini-batch.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For example, we can tokenize the sentence *I bought a product called FD543C*
+    into *BOS I bought a product called UNK EOS PAD PAD* to fit a fixed input with
+    a length of 10.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Subword tokenization is the most popular type of tokenization because it combines
+    the best features of character-based (smaller vocabulary size) and word-based
+    (meaningful context) tokenization. In the next few sections, we’ll discuss some
+    of the most popular subword tokenizers.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Byte-Pair Encoding and WordPiece
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: '**Byte-Pair Encoding** (**BPE**, Neural Machine Translation of Rare Words with
+    Subword Units, [https://arxiv.org/abs/1508.07909](https://arxiv.org/abs/1508.07909))
+    is a popular subword tokenization algorithm. As with other such tokenizers, it
+    begins with pre-tokenization, which splits the corpus into words.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Using this dataset as a starting point, BPE works in the following way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start with an initial **base** (or **seed**) **vocabulary**, which consists
+    of the individual characters of all words in the text corpus. Therefore, each
+    word is a sequence of single-character tokens.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Repeat the following until the size of the token vocabulary reaches a certain
+    maximum threshold:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Find the pair of tokens (initially, these are single characters) that occur
+    together most frequently and merge them into a new composite token.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Extend the existing token vocabulary with the new composite token.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Update the tokenized text corpus with the new token structure.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'To understand BPE, let’s assume that our corpus consists of the following (imaginary)
+    words: `{dab: 5, adab: 4, aab: 7, bub: 9, bun: 2}`. The digit following each word
+    indicates the number of occurrences of that word in the text. And here is the
+    same corpus, but split into tokens (that is, characters): `{(d, a, b): 5, (a,
+    d, a, b): 4, (a, a, b): 7, (b, u, b): 9, (b, u, c): 2}`. Based on this, we can
+    build our initial token vocabulary with occurrence counts for each token: `{b:
+    36, a: 27, u: 11, d: 9, c: 2}`. The following list illustrates the first four
+    merge operations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The most common pair of tokens is `(a, b)`, which occurs `freq((a, b)) = 5
+    + 4 + 7 = 16` times. Therefore, we merge them, and the corpus becomes `{(d,` `):
+    5, (a, d,` `): 4, (a,` `): 7, (b, u, b): 9, (b, u, c): 2}`. The new token vocabulary
+    is `{b: 20,` `: 16, a: 11, u: 11, d: 9,` `c: 2}`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The new most common token pair is `(b, u)` with `freq((b, u)) = 9 + 2 = 11`
+    occurrences. Again, we proceed to combine them in a new token: `{(d, ab): 5, (a,
+    d, ab): 4, (a, ab): 7, (``, b): 9, (``, c): 2}`. The updated token vocabulary
+    is `{ab: 16, a: 11,` `: 11, b: 9, d: 9,` `c: 2}`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The next token pair is `(d, ab)` and it occurs `freq((d, ab)) = 5 + 4 = 9`
+    times. After combining them, the tokenized corpus becomes `{(``): 5, (a,` `):
+    4, (a, ab): 7, (bu, b): 9, (bu, c): 2}`. The new token vocabulary is `{a: 11,
+    bu: 11, b: 9,` `: 9, ab: 7,` `c: 2}`.'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The new pair of tokens is `(bu, b)` with nine occurrences. After merging them,
+    the corpus becomes `{(dab): 5, (a, dab): 4, (a, ab): 7, (``): 9, (bu, c): 2}`,'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'and the token vocabulary becomes `{a: 11,` `: 9,` `: 9, ab: 7, bu: 2,` `c:
+    2}`.'
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: BPE stores all token-merge rules and their order and not just the final token
+    vocabulary. During model inference, it applies the rules in the same order on
+    the new unknown text to tokenize it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: End-of-word tokens
+  prefs: []
+  type: TYPE_NORMAL
+- en: The original BPE implementation appends a special end-of-word token, `<w/>`,
+    at the end of each word – for example, the word `aab` becomes `aab<w/>`. Other
+    implementations can place the special token at the beginning of the word, instead
+    of the end. This makes it possible for the algorithm to distinguish between, say,
+    the token `ab`, as presented in the word `ca<w/>`, and the same token in `a``<w/>`.
+    In this way, the algorithm can restore the original corpus from the tokenized
+    one (**de-tokenization**), which wouldn’t be possible otherwise. In this section,
+    we have omitted the end-of-word token for clarity.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s recall that our base vocabulary includes all characters of the text corpus.
+    If these are Unicode characters (which is the usual case), we could end up with
+    a vocabulary of up to 150,000 tokens. And this is before we even start the token-merge
+    process. One trick to solve this issue is with the help of **byte-level BPE**.
+    Each Unicode character can be encoded with multiple (up to 4) bytes. Byte-level
+    BPE initially splits the corpus into a sequence of bytes, instead of full-fledged
+    Unicode characters. If a character is encoded with *n* bytes, the tokenizer will
+    treat it as a sequence of *n* one-byte tokens. In this way, the size of the base
+    vocabulary will always be 256 (the maximum unique values that we can store in
+    a byte). In addition, byte-level BPE guarantees that we won’t encounter unknown
+    tokens.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**WordPiece** ([https://arxiv.org/abs/1609.08144](https://arxiv.org/abs/1609.08144))
+    is another subword tokenization algorithm. It is similar to BPE but with one main
+    difference. Like BPE, it starts with a base vocabulary of individual characters
+    and then proceeds to merge them into new composite tokens. However, it defines
+    the merge order based on a score, computed with the following formula (unlike
+    BPE, which uses frequent co-occurrence):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>s</mi><mi>c</mi><mi>o</mi><mi>r</mi><mi>e</mi><mfenced
+    open="(" close=")"><mfenced open="(" close=")"><mrow><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><msub><mi>n</mi><mn>1</mn></msub><mo>,</mo><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><msub><mi>n</mi><mn>2</mn></msub></mrow></mfenced></mfenced><mo>=</mo><mfrac><mrow><mi>f</mi><mi>r</mi><mi>e</mi><mi>q</mi><mfenced
+    open="(" close=")"><mfenced open="(" close=")"><mrow><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><msub><mi>n</mi><mn>1</mn></msub><mo>,</mo><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><msub><mi>n</mi><mn>2</mn></msub></mrow></mfenced></mfenced></mrow><mrow><mi>f</mi><mi>r</mi><mi>e</mi><mi>q</mi><mfenced
+    open="(" close=")"><mrow><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><msub><mi>n</mi><mn>1</mn></msub></mrow></mfenced><mo>×</mo><mi>f</mi><mi>r</mi><mi>e</mi><mi>q</mi><mfenced
+    open="(" close=")"><mrow><mi>t</mi><mi>o</mi><mi>k</mi><mi>e</mi><msub><mi>n</mi><mn>2</mn></msub></mrow></mfenced></mrow></mfrac></mrow></mrow></math>](img/397.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this way, the algorithm prioritizes the merging of pairs where the individual
+    tokens are less frequent in the corpus. Let’s compare this approach with BPE,
+    which merges tokens based only on the potential gains of the new token. In contrast,
+    WordPiece balances the gain (the nominator in the formula) with the potential
+    loss of the existing tokens (the denominator). This makes sense because the new
+    token will exist instead of the old pair of tokens, rather than alongside them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In-word tokens
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'WordPiece adds a special *##* prefix to all tokens inside a word, except for
+    the first. For example, it will tokenize the word *aab* as `[a, ##a, ##b]`. The
+    token merge removes the *##* between the tokens. So, when we merge *##a* and *##b*,
+    *aab* becomes `[``a, ##ab]`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unlike BPE, WordPiece only stores the final token vocabulary. When it tokenizes
+    a new word, it finds the longest matching subword in the vocabulary and splits
+    the word on it. For example, let’s assume that we want to split the word *abcd*
+    with a token vocabulary of `[a, ##b, ##c, ##d, ab, ##cd, ##bcd]`. Following the
+    new rule, WordPiece will first select the longest subword, *bcd*, and it will
+    tokenize *abcd* as `[``a, ##bcd]`.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: BPE and WordPiece are greedy algorithms – they will always merge tokens deterministically,
+    based on frequency criteria. However, encoding the same text sequence with different
+    tokens might be possible. This could act as regularization for a potential NLP
+    algorithm. Next, we’ll introduce a tokenization technique that takes advantage
+    of this.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Unigram
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Unlike BPE and WordPiece, the **Unigram** (*Subword Regularization: Improving
+    Neural Network Translation Models with Multiple Subword Candidates*, [https://arxiv.org/abs/1804.10959](https://arxiv.org/abs/1804.10959))
+    algorithm starts with a large base vocabulary and progressively tries to reduce
+    it. The initial base vocabulary is a union of all unique characters and the most
+    common substrings of the corpus. One way to find the most common substrings is
+    with BPE. The algorithm assumes that each token, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/113.png),
+    occurs independently (hence the Unigram name). Because of this assumption, the
+    probability of a token, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/399.png),
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/400.png),
+    is just the number of its occurrences divided by the total size of the rest of
+    the corpus. Then, the probability of a sequence of tokens with length *M*, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mtext>X</mml:mtext><mml:mo>=</mml:mo><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/401.png),
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced
+    open="(" close=")"><mi>x</mi></mfenced><mo>=</mo><mrow><munderover><mo>∏</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>M</mi></munderover><mrow><mi>P</mi><mfenced
+    open="(" close=")"><msub><mi>x</mi><mi>i</mi></msub></mfenced></mrow></mrow><mo>,</mo><mo>∀</mo><msub><mi>x</mi><mi>i</mi></msub><mo>∈</mo><mi>V</mi><mo>,</mo><mrow><munderover><mo>∑</mo><mrow><msub><mi>x</mi><mi>i</mi></msub><mo>∈</mo><mi>V</mi></mrow><mrow
+    /></munderover><mrow><mi>P</mi><mfenced open="(" close=")"><msub><mi>x</mi><mi>i</mi></msub></mfenced></mrow></mrow><mo>=</mo><mn>1</mn></mrow></mrow></math>](img/402.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *V* is the full token vocabulary.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Say that we have the same token sequence, *X*, and multiple token segmentation
+    candidates, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>x</mml:mi><mml:mo>∈</mml:mo><mml:mi>S</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>X</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/403.png),
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'for that sequence. The most probable segmentation candidate, *x**, for *X*
+    is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><msup><mi>x</mi><mi
+    mathvariant="normal">*</mi></msup><mo>=</mo><mi>a</mi><mi>r</mi><mi>g</mi><mi>m</mi><mi>a</mi><mi>x</mi><mi>P</mi><mfenced
+    open="(" close=")"><mi>x</mi></mfenced><mo>,</mo><mi>x</mi><mo>∈</mo><mi>S</mi><mfenced
+    open="(" close=")"><mi>X</mi></mfenced></mrow></mrow></math>](img/404.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Let’s clarify this with an example. We’ll assume that our corpus consists of
+    some (imaginary) words, `{dab: 5, aab: 7, bun: 4}`, where the digits indicate
+    the number of occurrences of that word in the text. Our initial token vocabulary
+    is a union of all unique characters and all possible substrings (the numbers indicate
+    frequency): `{a: 19, b: 16, ab: 12, aa: 7, da: 5, d: 5, bu: 4, un: 4}`. The sum
+    of all token frequencies is 19 + 16 + 12 + 7 + 5 + 5 + 4 + 4 = 72\. Then, the
+    independent probability for each token is ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mtext>/</mml:mtext><mml:mn>72</mml:mn></mml:math>](img/405.png)
+    – for example, ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>P</mi><mo>(</mo><mi>a</mi><mo>)</mo><mo>=</mo><mn>19</mn><mo>/</mo><mn>72</mn><mo>=</mo><mn>0.264</mn></mrow></mrow></mrow></math>](img/406.png),'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>P</mi><mo>(</mo><mi>a</mi><mi>b</mi><mo>)</mo><mo>=</mo><mn>12</mn><mo>/</mo><mn>72</mn><mo>=</mo><mn>0.167</mn></mrow></mrow></mrow></math>](img/407.png),
+    and so on.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Our extended vocabulary presents us with the possibility to tokenize each sequence
+    (we’ll focus on words for simplicity) in multiple ways. For example, we can represent
+    *dab* as either `{d, a, b}`, `{da, b}`, or `{d, ab}`. Here, the probabilities
+    for each candidate are P({d, a, b}) = P(d) * P(a) * P(b) = 0.07 * 0.264 * 0.222
+    = 0.0041; ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>P</mi><mo>(</mo><mo>{</mo><mi>d</mi><mi>a</mi><mo>,</mo><mi>b</mi><mo>}</mo><mo>)</mo><mo>=</mo><mn>0.07</mn><mi
+    mathvariant="normal">*</mi><mn>0.222</mn><mo>=</mo><mn>0.015</mn></mrow></mrow></mrow></math>](img/408.png);
+    ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mrow><mi>P</mi><mo>(</mo><mo>{</mo><mi>d</mi><mo>,</mo><mi>a</mi><mi>b</mi><mo>}</mo><mo>)</mo><mo>=</mo><mn>0.07</mn><mi
+    mathvariant="normal">*</mi><mn>0.167</mn><mo>=</mo><mn>0.012</mn></mrow></mrow></mrow></math>](img/409.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The candidate with the highest probability is *x** = `{da, b}`.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'With that, here’s how Unigram tokenization works step by step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start with the initial large base vocabulary, *V*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Repeat the following steps until the size of |*V*| reaches some minimum threshold
+    value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Find the *l*-best tokenization candidates, *x**, for all words in the corpus
+    with the help of the **Viterbi** algorithm ([https://en.wikipedia.org/wiki/Viterbi_algorithm](https://en.wikipedia.org/wiki/Viterbi_algorithm)
+    – using this algorithm is necessary because this is a computationally intensive
+    task). Taking *l* candidates, instead of one, makes it possible to sample different
+    token sequences over the same text. You can think of this as a data augmentation
+    technique over the input data, which provides additional regularization to the
+    NLP algorithm. Once we have a tokenized corpus in this way, we can estimate the
+    probabilities, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>∈</mml:mo><mml:mi>V</mml:mi></mml:math>](img/410.png),
+    for all tokens of the current token vocabulary, *V*, with the help of an **expectation-minimization**
+    algorithm ([https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm](https://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)).
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: For each token, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/113.png),
+    compute a special loss function, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>l</mml:mi><mml:mi>o</mml:mi><mml:mi>s</mml:mi><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/412.png),
+    which determines how the likelihood of the corpus is reduced if we remove ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/115.png)
+    from the token vocabulary.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Sort the tokens by their ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>l</mml:mi><mml:mi>o</mml:mi><mml:mi>s</mml:mi><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/414.png)
+    and preserve only the top *n* % of the tokens (for example, *n = 80*). Always
+    preserve the individual characters to avoid unknown tokens.
+  prefs:
+  - PREF_IND
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This concludes our introduction to tokenization. Some of these techniques were
+    developed alongside the transformer architecture and we’ll make the most use of
+    them in the following chapters. But for now, let’s focus on another fundamental
+    technique in the NLP pipeline.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing word embeddings
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Now that we’ve learned how to tokenize the text corpus, we can proceed to the
+    next step in the NLP data processing pipeline. For the sake of clarity, we’ll
+    assume that we’ve tokenized the corpus into words, rather than subwords or characters
+    (in this section, *word* and *token* are interchangeable).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One way to feed the words of the sequence as input to the NLP algorithm is
+    with one-hot encoding. Our input vector will have the same size as the number
+    of tokens in the vocabulary and each token will have a unique one-hot encoded
+    representation. However, this approach has a few drawbacks, as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Sparse inputs**: The one-hot representation consists of mostly zeros and
+    a single value. If our NLP algorithm is an NN (and it is), this type of input
+    will activate only a small portion of its weights per word. Because of this, we’ll
+    need a large training set to include a sufficient number of training samples of
+    each word of the vocabulary.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Computational intensity**: The large size of the vocabulary will result in
+    large input tensors, which require large NNs and more computational resources.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Impracticality**: Every time we add a new word to the vocabulary, we’ll increase
+    its size. However, the size of the one-hot encoded input will also increase. Therefore,
+    we’ll have to change the structure of our NN to accommodate the new size and we’ll
+    perform additional training.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Lack of context**: Words such as *dog* and *wolf* are semantically similar,
+    but the one-hot representation lacks a way to convey this similarity.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'In this section, we’ll try to solve these issues with the help of a lower-dimensional
+    distributed representation of the words, known as **word embeddings** (*A Neural
+    Probabilistic Language Model*, [http://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf](http://www.jmlr.org/papers/volume3/bengio03a/bengio03a.pdf)).
+    The distributed representation is created by learning an embedding function that
+    transforms the one-hot encoded words into a lower-dimensional space of word embeddings,
+    as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.1 – Words -> one-hot encoding -> word embedding vectors](img/B19627_06_1.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.1 – Words -> one-hot encoding -> word embedding vectors
+  prefs: []
+  type: TYPE_NORMAL
+- en: Words from the vocabulary with size *V* are transformed into one-hot encoding
+    vectors of size *V*. Then, an **embedding function** transforms this *V*-dimensional
+    space into a distributed representation (vector) of a **fixed** size, *D* (here,
+    *D=4*). This vector serves as input to the NLP algorithm. We can see that the
+    fixed and smaller vector size solves the issues of sparsity, computational intensity,
+    and impracticality we just described. Next, we’ll see how it solves the context
+    issue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The embedding function learns semantic information about the words. It maps
+    each word in the vocabulary to a continuous-valued vector representation – that
+    is, the word embedding. Each word corresponds to a point in this embedding space,
+    and different dimensions correspond to the grammatical or semantic properties
+    of these words. The concept of embedding space is similar to the latent space
+    representation, which we first discussed in the context of diffusion models in
+    [*Chapter 5*](B19627_05.xhtml#_idTextAnchor146).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The goal is to ensure that the words close to each other in the embedding space
+    have similar meanings. By *close to each other*, we mean a high value of the dot
+    product (similarity) of their embedding vectors. In this way, the information
+    that some words are semantically similar can be exploited by the ML algorithm.
+    For example, it might learn that *fox* and *cat* are semantically related and
+    that both *the quick brown fox* and *the quick brown cat* are valid phrases. A
+    sequence of words can then be replaced with a sequence of embedding vectors that
+    capture the characteristics of these words. We can use this sequence as a base
+    for various NLP tasks. For example, a classifier trying to classify the sentiment
+    of an article might be trained on previously learned word embeddings, instead
+    of one-hot encoding vectors. In this way, the semantic information of the words
+    becomes readily available for the sentiment classifier.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The mapping between one-hot representation and embedding vectors
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s assume that we have already computed the embedding vectors of each token.
+    One way to implement the mapping between the one-hot representation and the actual
+    embedding vector is with the help of a *V×D*-shaped matrix, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/415.png).
+    We can think of the matrix rows as a lookup table, where each row represents one
+    word embedding vector. It works thanks to the one-hot encoded input word, which
+    is a vector of all zeros, except for the index of the word itself. Because of
+    this, the input word, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/416.png),
+    will only activate its unique row (vector) of weights, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/417.png),
+    in ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/418.png).
+    So, for each input sample (word), only the word’s embedding vector will participate.
+    We can also think of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/415.png)
+    as a weight matrix of a **fully connected** (**FC**) NN layer. In this way, we
+    can embed the embeddings (get it?) as the first NN layer – that is, the NN takes
+    the one-hot encoded token as input and the embedding layer transforms it into
+    a vector. Then, the rest of the NN uses the embedding vector instead of the one-hot
+    representation. This is a standard implementation across all deep learning libraries.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The concept of word embeddings was first introduced more than 20 years ago but
+    remains one of the central paradigms in NLP today. **Large language models** (**LLMs**),
+    such as ChatGPT, use improved versions of word embeddings, which we’ll discuss
+    in [*Chapter 7*](B19627_07.xhtml#_idTextAnchor202).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we are familiar with embedding vectors, we’ll continue with the algorithm
+    to obtain and compute them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Word2Vec
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A lot of research has gone into creating better word embedding models, in particular
+    by omitting to learn the probability function over sequences of words. One of
+    the most popular ways to do this is with **Word2Vec** ([http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf](http://papers.nips.cc/paper/5021-distributed-representations-of-words-and-phrases-and-their-compositionality.pdf),
+    https://arxiv.org/abs/1301.3781, and https://arxiv.org/abs/1310.4546). It creates
+    embedding vectors based on the context (surrounding words) of the word in focus.
+    More specifically, the context is the *n* preceding and the *n* following words
+    of the focus word. The following figure shows the context window as it slides
+    across the text, surrounding different focus words:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: "![Figure 6.2 – A Word2Vec sliding context window with n=2\\. The same type\
+    \ of context window applies to both CBOW and \uFEFFskip-gram](img/B19627_06_2.jpg)"
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.2 – A Word2Vec sliding context window with n=2\. The same type of context
+    window applies to both CBOW and skip-gram
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Word2vec comes in two flavors: **Continuous Bag of Words** (**CBOW**) and **skip-gram**.
+    We’ll start with CBOW and then we’ll continue with skip-gram.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: CBOW
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'CBOW predicts the most likely word given its context (surrounding words). For
+    example, given the sequence *the quick _____ fox jumps*, the model will predict
+    *brown*. It takes all words within the context window with equal weights and doesn’t
+    consider their order (hence the *bag* in the name). We can train the model with
+    the help of the following simple NN with input, hidden, and output layers:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.3 – A CBOW model NN](img/B19627_06_3.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.3 – A CBOW model NN
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here’s how the model works:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The input is the one-hot-encoded word representation (its length is equal to
+    the vocabulary size, *V*).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The embedding vectors are represented by the *input-to-hidden* matrix, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/420.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The embedding vectors of all context words are averaged to produce the output
+    of the hidden network layer (there is no activation function).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The hidden activations serve as input to the output **Softmax** layer of size
+    *V* (with the hidden-to-output weight matrix, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>D</mml:mi><mml:mo>×</mml:mo><mml:mi>V</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/421.png)),
+    which predicts the most likely word to be found in the context (proximity) of
+    the input words. The index with the highest activation represents the one-hot-encoded
+    related word.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We’ll train the NN with gradient descent and backpropagation. The training set
+    consists of (context and label) one-hot encoded pairs of words that appear close
+    to each other in the text. For example, if part of the text is `[the, quick, brown,
+    fox, jumps]` and *n=2*, the training tuples will include `([quick, brown], the),
+    ([the, brown, fox], quick)`, `([the, quick, fox jumps], brown)`, and so on. Since
+    we are only interested in the embeddings, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/422.png),
+    we’ll discard the output NN weights, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msup></mml:math>](img/423.png),
+    when the training is finished.
+  prefs: []
+  type: TYPE_NORMAL
+- en: CBOW will tell us which word is most likely to appear in a given context. This
+    could be a problem for rare words. For example, given the context *The weather
+    today is really _____*, the model will predict the word *beautiful* rather than
+    *fabulous* (hey, it’s just an example). CBOW is several times faster to train
+    than the skip-gram and achieves slightly better accuracy for frequent words.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Skip-gram
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The skip-gram model can predict the context of a given input word (the opposite
+    of CBOW). For example, the word *brown* will predict the words *The quick fox
+    jumps*. Unlike CBOW, the input is a single one-hot encoded word vector. But how
+    do we represent the context words in the output? Instead of trying to predict
+    the whole context (all surrounding words) simultaneously, skip-gram transforms
+    the context into multiple training pairs, such as `(fox, the)`, `(fox, quick)`,
+    `(fox, brown)`, and `(fox, jumps)`. Once again, we can train the model with a
+    simple single-layer NN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.4 – A skip-gram model NN](img/B19627_06_4.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.4 – A skip-gram model NN
+  prefs: []
+  type: TYPE_NORMAL
+- en: As with CBOW, the output is a softmax, which represents the one-hot-encoded
+    most probable context word. The input-to-hidden weights, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/424.png),
+    represent the word embeddings lookup table, and the hidden-to-output weights,
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msup></mml:math>](img/425.png),
+    are only relevant during training. The hidden layer doesn’t have an activation
+    function (that is, it uses linear activation).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll train the model with backpropagation (no surprises here). Given a sequence
+    of words, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:msub></mml:math>](img/426.png)![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:msub></mml:math>](img/427.png),
+    the objective of the skip-gram model is to maximize the average log probability,
+    where *n* is the window size:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:mfrac><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>m</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>M</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mo>-</mml:mo><mml:mi>n</mml:mi><mml:mo>,</mml:mo><mml:mi>i</mml:mi><mml:mo>≠</mml:mo><mml:mn>0</mml:mn></mml:mrow><mml:mrow><mml:mi>i</mml:mi><mml:mo>=</mml:mo><mml:mi>n</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mi>l</mml:mi><mml:mi>o</mml:mi><mml:mi>g</mml:mi><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mrow></mml:mrow></mml:mrow></mml:math>](img/428.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The model defines the probability, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mo>+</mml:mo><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/429.png),
+    as the following softmax formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced
+    open="(" close=")"><mrow><msub><mi>w</mi><mi>O</mi></msub><mo>|</mo><msub><mi>w</mi><mi>I</mi></msub></mrow></mfenced><mo>=</mo><mfrac><mrow><mi>e</mi><mi>x</mi><mi>p</mi><mfenced
+    open="(" close=")"><mrow><msubsup><mi mathvariant="bold">v</mi><msub><mi>w</mi><mi>O</mi></msub><mrow><mo>′</mo><mi
+    mathvariant="normal">⊤</mi></mrow></msubsup><msub><mi mathvariant="bold">v</mi><msub><mi>w</mi><mi>I</mi></msub></msub></mrow></mfenced></mrow><mrow><msubsup><mo>∑</mo><mrow><mi>w</mi><mo>=</mo><mn>1</mn></mrow><mi>V</mi></msubsup><mrow><mi>e</mi><mi>x</mi><mi>p</mi><mfenced
+    open="(" close=")"><mrow><msubsup><mi mathvariant="bold">v</mi><mi>w</mi><mrow><mo>′</mo><mi
+    mathvariant="normal">⊤</mi></mrow></msubsup><msub><mi mathvariant="bold">v</mi><msub><mi>w</mi><mi>I</mi></msub></msub></mrow></mfenced></mrow></mrow></mfrac></mrow></mrow></math>](img/430.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: In this example, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>I</mml:mi></mml:mrow></mml:msub></mml:math>](img/431.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>O</mml:mi></mml:mrow></mml:msub></mml:math>](img/432.png)
+    are the input and output words, and **v** and **v**’ are the corresponding word
+    vectors in the input and output weight matrices, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>V</mml:mi><mml:mo>×</mml:mo><mml:mi>D</mml:mi></mml:mrow></mml:msub></mml:math>](img/420.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>D</mml:mi><mml:mo>×</mml:mo><mml:mi>V</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/434.png),
+    respectively (we keep the original notation of the paper). Since the NN doesn’t
+    have a hidden activation function, its output value for one input/output word
+    pair is simply the multiplication of the input word vector, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>I</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:msub></mml:math>](img/435.png),
+    and the output word vector, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">v</mml:mi></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>O</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/436.png)
+    (hence the transpose operation).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The authors of the Word2Vec paper note that word representations cannot represent
+    idiomatic phrases that are not compositions of individual words. For example,
+    *New York Times* is a newspaper, and not just a natural combination of the meanings
+    of *New*, *York*, and *Times*. To overcome this, the model can be extended to
+    include whole phrases. However, this significantly increases the vocabulary size.
+    And, as we can see from the preceding formula, the softmax denominator needs to
+    compute the output vectors for all words of the vocabulary. Additionally, every
+    weight of the ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>D</mml:mi><mml:mo>×</mml:mo><mml:mi>V</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/434.png)
+    matrix is updated on every training step, which slows the training.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To solve this, we can replace the softmax operation with the so-called `(fox,
+    brown)`), as well as *k* additional negative pairs (for example, `(fox, puzzle)`),
+    where *k* is usually in the range of [5,20]. Instead of predicting the word that
+    best matches the input word (softmax), we’ll simply predict whether the current
+    pair of words is true or not. In effect, we convert the multinomial classification
+    problem (classified as one of many classes) into a binary logistic regression
+    (or binary classification) problem. By learning the distinction between positive
+    and negative pairs, the classifier will eventually learn the word vectors in the
+    same way, as with multinomial classification. In Word2Vec, the words for the negative
+    pairs are drawn from a special distribution, which draws less frequent words more
+    often, compared to more frequent ones.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Some of the most frequent words to occur carry less information value compared
+    to the rare words. Examples of such words are the definite and indefinite articles
+    *a*, *an*, and *the*. The model will benefit more from observing the pairs *London*
+    and *city* compared to *the* and *city* because almost all words co-occur frequently
+    with *the*. The opposite is also true – the vector representations of frequent
+    words do not change significantly after training on many examples. To counter
+    the imbalance between the rare and frequent words, the authors of the paper propose
+    a subsampling approach, where each word, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/114.png),
+    of the training set is discarded with some probability, computed by the heuristic
+    formula where
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>f</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/439.png)
+    is the frequency of word ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub></mml:math>](img/15.png)
+    and *t* is a threshold (usually around ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mn>10</mml:mn></mml:mrow><mml:mrow><mml:mo>-</mml:mo><mml:mn>5</mml:mn></mml:mrow></mml:msup></mml:math>](img/441.png)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow><mrow><mi>P</mi><mfenced
+    open="(" close=")"><msub><mi>w</mi><mi>i</mi></msub></mfenced><mo>=</mo><mn>1</mn><mo>−</mo><msqrt><mfrac><mi>t</mi><mrow><mi>f</mi><mfenced
+    open="(" close=")"><msub><mi>w</mi><mi>i</mi></msub></mfenced></mrow></mfrac></msqrt></mrow></mrow></math>](img/442.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: It aggressively subsamples words with a frequency greater than *t* but also
+    preserves the ranking of the frequencies.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We can say that, in general, skip-gram performs better on rare words than CBOW,
+    but it takes longer to train.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve learned about embedding vectors, let’s learn how to visualize
+    them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Visualizing embedding vectors
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A successful word embedding function will map semantically similar words to
+    vectors with high dot product similarity in the embedding space. To illustrate
+    this, we’ll implement the following steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Train a Word2Vec skip-gram model on the `text8` dataset, which consists of the
+    first 100,000,000 bytes of plain text from Wikipedia ([http://mattmahoney.net/dc/textdata.html](http://mattmahoney.net/dc/textdata.html)).
+    Each embedding vector is 100-dimensional, which is the default value for this
+    type of model.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Select a list of *seed* words. In this case, the words are *mother*, *car*,
+    *tree*, *science*, *building, elephant*, and *green*.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compute the dot-product similarity between the Word2Vec embedding vector of
+    each seed word and the embedding vectors of all other words in the vocabulary.
+    Then, select a cluster of the top-*k* (in our case, *k=5*) similar words (based
+    on their dot-product similarity) for each seed word.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Visualize the similarity between the seed embeddings and the embeddings of
+    their respective clusters of similar words in a 2D plot. Since the embeddings
+    are 100-dimensional, we’ll use the t-SNE ([https://en.wikipedia.org/wiki/T-distributed_stochastic_neighbor_embedding](https://en.wikipedia.org/wiki/T-distributed_stochastic_neighbor_embedding))
+    dimensionality-reduction algorithm. It maps each high-dimensional embedding vector
+    on a two- or three-dimensional point in a way where similar objects are modeled
+    on nearby points and dissimilar objects are modeled on distant points with a high
+    probability. We can see the result in the following scatterplot:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.5 – t-SNE visualization of the seed words and their clusters of
+    the most similar words](img/B19627_06_5.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.5 – t-SNE visualization of the seed words and their clusters of the
+    most similar words
+  prefs: []
+  type: TYPE_NORMAL
+- en: This graph proves that the obtained word vectors contain relevant information
+    for the words.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Word2Vec (and similar models) create **static** (or **context independent**)
+    **embeddings**. Each word has a single embedding vector, based on all occurrences
+    (that is, all contexts) of that word in the text corpus. This imposes some limitations.
+    For example, *bank* has a different meaning in different contexts, such as *river
+    bank*, *savings bank*, and *bank holiday*. Despite this, it is represented with
+    a single embedding. In addition, the static embedding doesn’t take into account
+    the word order in the context. For example, the expressions *I like apples, but
+    I don’t like oranges* and *I like oranges, but I don’t like apples* have opposite
+    meanings, but Word2Vec interprets them as the same. We can solve these problems
+    with the so-called **dynamic** (**context dependent**) **embeddings**, which we’ll
+    discuss in [*Chapter 7*](B19627_07.xhtml#_idTextAnchor202).
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, we’ve focused on single words (or tokens). Next, we’ll expand our scope
+    to text sequences.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Language modeling
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A word-based **language model** (**LM**) defines a probability distribution
+    over sequences of **tokens**. For this section, we’ll assume that the tokens are
+    words. Given a sequence of words of length *m* (for example, a sentence), an LM
+    assigns a probability, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/443.png),
+    that the full sequence of words could exist. One application of these probabilities
+    is a generative model to create new text – a word-based LM can compute the likelihood
+    of the next word, given an existing sequence of words that precede it. Once we
+    have this new word, we can append it to the existing sequence and predict yet
+    another new word, and so on. In this way, we can generate new text sequences with
+    arbitrary length. For example, given the sequence *the quick brown*, the LM might
+    predict *fox* as the next most likely word. Then, the sequence becomes *the quick
+    brown fox*, and we task the LM to predict the new most likely word based on the
+    updated sequence. A model whose output depends on its previous values, as well
+    as its stochastic (that is, with some randomness) output (new value), is called
+    an **autoregressive model**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll focus on the properties of the word sequence, rather than the model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Even the most advanced LLMs, such as ChatGPT, are autoregressive models – they
+    just predict the next word, one word at a time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Understanding N-grams
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The inference of the probability of a long sequence, say ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:math>](img/444.png),
+    is typically infeasible. To understand why, let’s note that we can calculate the
+    joint probability of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/445.png)
+    with the chain rule of joint probability ([*Chapter 2*](B19627_02.xhtml#_idTextAnchor047)):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>…</mml:mo><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>3</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/446.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The probability of the later words given the earlier words would be especially
+    difficult to estimate from the data. That’s why this joint probability is typically
+    approximated by an independence assumption that the *i*-th word is only dependent
+    on the *n-1* previous words. We’ll only model the joint probabilities of combinations
+    of *n* sequential words, called *n*-grams. For example, in the phrase *the quick
+    brown fox*, we have the following *n*-grams:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**1-gram** (**unigram**): *the*, *quick*, *brown*, and *fox* (this is where
+    Unigram tokenization takes its name)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**2-gram** (**bigram**): *the quick*, *quick brown*, and *brown fox*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**3-gram** (**trigram**): *the quick brown* and *quick* *brown fox*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**4-gram**: *the quick* *brown fox*'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The term *n*-grams can refer to other types of sequences of length *n*, such
+    as *n* characters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The inference of the joint distribution is approximated with the help of *n*-gram
+    models that split the joint distribution into multiple independent parts. If we
+    have a large corpus of text, we can find all the *n*-grams up until a certain
+    *n* (typically 2 to 4) and count the occurrence of each *n*-gram in that corpus.
+    From these counts, we can estimate the probabilities of the last word of each
+    *n*-gram, given the previous *n-1* words:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Unigram: ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mi>c</mml:mi><mml:mi>o</mml:mi><mml:mi>u</mml:mi><mml:mi>n</mml:mi><mml:mi>t</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi>w</mml:mi></mml:mrow></mml:mfenced></mml:mrow><mml:mrow><mml:mtext>total number of words in the corpus</mml:mtext></mml:mrow></mml:mfrac></mml:math>](img/447.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Bigram: ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mi>P</mi><mfenced
+    open="(" close=")"><mrow><msub><mi>w</mi><mi>i</mi></msub><mo>|</mo><msub><mi>w</mi><mrow><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></mfenced><mo>=</mo><mstyle
+    scriptlevel="+1"><mfrac><mrow><mi>c</mi><mi>o</mi><mi>u</mi><mi>n</mi><mi>t</mi><mfenced
+    open="(" close=")"><mrow><msub><mi>w</mi><mrow><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><msub><mi>w</mi><mi>i</mi></msub></mrow></mfenced></mrow><mrow><mi>c</mi><mi>o</mi><mi>u</mi><mi>n</mi><mi>t</mi><mfenced
+    open="(" close=")"><msub><mi>w</mi><mrow><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub></mfenced></mrow></mfrac></mstyle></mrow></mrow></math>](img/448.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*n*-gram: ![<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow><mrow><mi>P</mi><mfenced
+    open="(" close=")"><mrow><msub><mi>w</mi><mrow><mi>n</mi><mo>+</mo><mi>i</mi></mrow></msub><mo>|</mo><msub><mi>w</mi><mi>n</mi></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>w</mi><mrow><mi>n</mi><mo>+</mo><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></mfenced><mo>=</mo><mstyle
+    scriptlevel="+1"><mfrac><mrow><mi>c</mi><mi>o</mi><mi>u</mi><mi>n</mi><mi>t</mi><mfenced
+    open="(" close=")"><mrow><msub><mi>w</mi><mi>n</mi></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>w</mi><mrow><mi>n</mi><mo>+</mo><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><msub><mi>w</mi><mrow><mi>n</mi><mo>+</mo><mi>i</mi></mrow></msub></mrow></mfenced></mrow><mrow><mi>c</mi><mi>o</mi><mi>u</mi><mi>n</mi><mi>t</mi><mfenced
+    open="(" close=")"><mrow><msub><mi>w</mi><mi>n</mi></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>w</mi><mrow><mi>n</mi><mo>+</mo><mi>i</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></mfenced></mrow></mfrac></mstyle></mrow></mrow></math>](img/449.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The independent assumption that the *i*-th word is only dependent on the previous
+    *n-1* words can now be used to approximate the joint distribution.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For example, we can approximate the joint distribution for a unigram with the
+    following formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>…</mml:mo><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/450.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'For a trigram, we can approximate the joint distribution with the following
+    formula:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mi>P</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:mo>…</mml:mo><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>=</mml:mo><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>3</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>…</mml:mo><mml:mi>P</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi>w</mml:mi></mml:mrow><mml:mrow><mml:mi>m</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/451.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: We can see that, based on the vocabulary size, the number of *n*-grams grows
+    exponentially with *n*. For example, if a small vocabulary contains 100 words,
+    then the number of possible 5-grams would be ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msup><mml:mrow><mml:mn>100</mml:mn></mml:mrow><mml:mrow><mml:mn>5</mml:mn></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:mn>10,000,000,000</mml:mn></mml:math>](img/452.png)
+    different 5-grams. In comparison, the entire works of Shakespeare contain around
+    30,000 different words, illustrating the infeasibility of using *n*-grams with
+    a large *n*. Not only is there the issue of storing all the probabilities, but
+    we would also need a very large text corpus to create decent *n*-gram probability
+    estimations for larger values of *n*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The curse of dimensionality
+  prefs: []
+  type: TYPE_NORMAL
+- en: When the number of possible input variables (words) increases, the number of
+    different combinations of these input values increases exponentially. This problem
+    is known as the curse of dimensionality. It arises when the learning algorithm
+    needs at least one example per relevant combination of values, which is the case
+    in *n*-gram modeling. The larger our *n*, the better we can approximate the original
+    distribution and the more data we would need to make good estimations of the *n*-gram
+    probabilities.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But fret not, as the *n*-gram LM gives us some important clues on how to proceed.
+    Its theoretical formulation is sound, but the curse of dimensionality makes it
+    unfeasible. In addition, the *n*-gram model reinforces the importance of the word
+    context, just as with Word2Vec. In the next few sections, we’ll learn how to simulate
+    an *n*-gram model probability distribution with the help of NNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Introducing RNNs
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: An RNN is a type of NN that can process sequential data with variable length.
+    Examples of such data include text sequences or the price of a stock at various
+    moments in time. By using the word *sequential*, we imply that the sequence elements
+    are related to each other and their order matters. For example, if we take a book
+    and randomly shuffle all the words in it, the text will lose its meaning, even
+    though we’ll still know the individual words.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'RNNs get their name because they apply the same function over a sequence recurrently.
+    We can define an RNN as a recurrence relation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>f</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>,</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/453.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Here, *f* is a differentiable function, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/454.png)
+    is a vector of values called internal RNN state (at step *t*), and ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png)
+    is the network input at step *t*. Unlike regular NNs, where the state only depends
+    on the current input (and RNN weights), here, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/454.png)
+    is a function of both the current input, as well as the previous state, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/457.png).
+    You can think of ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/458.png)
+    as the RNN’s summary of all previous inputs. The recurrence relation defines how
+    the state evolves step by step over the sequence via a feedback loop over previous
+    states, as illustrated in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.6 – An unfolded RNN](img/B19627_06_6.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.6 – An unfolded RNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: On the left, we have a visual illustration of the RNN recurrence relation. On
+    the right, we have the RNN states recurrently unfolded over the sequence *t-1*,
+    *t*, *t+1*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RNN has three sets of parameters (or weights), shared between all steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**U**: Transforms the input, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png),
+    into the state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/454.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**W**: Transforms the previous state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/457.png),
+    into the current state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/454.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**V**: Maps the newly computed internal state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/454.png),
+    to the output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/464.png)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**U**, **V**, and **W** apply linear transformation over their respective inputs.
+    The most basic case of such a transformation is the familiar FC operation we know
+    and love (therefore, **U**, **V**, and **W** are weight matrices). We can now
+    define the internal state and the RNN output as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>f</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mi
+    mathvariant="bold">W</mml:mi><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/465.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mi
+    mathvariant="bold">V</mml:mi></mml:math>](img/466.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Here, *f* is the non-linear activation function (such as tanh, sigmoid, or ReLU).
+  prefs: []
+  type: TYPE_NORMAL
+- en: For example, in a word-level LM, the input, *x*, will be a sequence of word
+    embedding vectors (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/467.png)).
+  prefs: []
+  type: TYPE_NORMAL
+- en: The state, *s*, will be a sequence of state vectors (![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/468.png)).
+    Finally, the output, *y*, will be a sequence of probability vectors (![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">y</mml:mi></mml:mrow><mml:mrow><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>…</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/469.png))
+    of the next words in the sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that in an RNN, each state is dependent on all previous computations via
+    this recurrence relation. An important implication of this is that RNNs have memory
+    over time because the states, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/454.png),
+    contain information based on the previous steps. In theory, RNNs can remember
+    information for an arbitrarily long period, but in practice, they are limited
+    to looking back only a few steps. We will address this issue in more detail in
+    the *Vanishing and exploding* *gradients* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RNN we described is somewhat equivalent to a single-layer regular NN (with
+    an additional recurrence relation). But as with regular NNs, we can stack multiple
+    RNNs to form a **stacked RNN**. The cell state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>l</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/471.png),
+    of an RNN cell at level *l* at time *t* will take the output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>l</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msubsup></mml:math>](img/472.png),
+    of the RNN cell from level *l-1* and the previous cell state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>l</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/473.png),
+    of the cell at the same level *l* as the input:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>l</mml:mi></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:mi>f</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>l</mml:mi></mml:mrow></mml:msubsup><mml:mo>,</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">y</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>l</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msubsup></mml:mrow></mml:mfenced></mml:math>](img/474.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the following diagram, we can see an unfolded, stacked RNN:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.7 – Stacked RNN](img/B19627_06_7.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.7 – Stacked RNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Because RNNs are not limited to processing fixed-size inputs, they expand the
+    possibilities of what we can compute with NNs. We can identify several types of
+    tasks, based on the relationship between the input and output sizes:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**One-to-one**: Non-sequential processing, such as feedforward NNs and CNNs.
+    There isn’t much difference between a feedforward NN and applying an RNN to a
+    single time step. An example of one-to-one processing is image classification.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**One-to-many**: This generates a sequence based on a single input – for example,
+    caption generation from an image (*Show and Tell: A Neural Image Caption* *Generator*,
+    [https://arxiv.org/abs/1411.4555](https://arxiv.org/abs/1411.4555)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Many-to-one**: This outputs a single result based on a sequence – for example,
+    sentiment classification of text.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Many-to-many indirect**: A sequence is encoded into a state vector, after
+    which this state vector is decoded into a new sequence – for example, language
+    translation (*Learning Phrase Representations using RNN Encoder-Decoder for Statistical
+    Machine Translation*, [https://arxiv.org/abs/1406.1078](https://arxiv.org/abs/1406.1078)
+    and *Sequence to Sequence Learning with Neural* *Networks*, [http://papers.nips.cc/paper/5346-sequence-to-sequence-learning-with-neural-networks.pdf)](http://papers.nips.cc/paper/5346-sequence-to-sequence-learning-with-neural-networks.pdf)).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Many-to-many direct**: Outputs a result for each input step – for example,
+    frame phoneme labeling in speech recognition.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: The many-to-many models are often referred to as **sequence-to-sequence** (**seq2seq**)
+    models.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is a graphical representation of the preceding input-output combinations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.8 – RNN input-output combinations, inspired by http://karpathy.github.io/2015/05/21/rnn-effectiveness/](img/B19627_06_8.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.8 – RNN input-output combinations, inspired by [http://karpathy.github.io/2015/05/21/rnn-effectiveness/](http://karpathy.github.io/2015/05/21/rnn-effectiveness/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve introduced RNNs, let’s improve our knowledge by implementing
+    a simple RNN example.
+  prefs: []
+  type: TYPE_NORMAL
+- en: RNN implementation and training
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In the preceding section, we briefly discussed what RNNs are and what problems
+    they can solve. Let’s dive into the details of an RNN and how to train it with
+    a very simple toy example: counting ones in a sequence.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We’ll teach a basic RNN how to count the number of ones in the input and then
+    output the result at the end of the sequence. This is an example of a many-to-one
+    relationship, which we defined in the previous section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll implement this example with Python (no DL libraries) and numpy. An example
+    of the input and output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The RNN we’ll use is illustrated in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.9 – Basic RNN for counting ones in the input](img/B19627_06_9.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.9 – Basic RNN for counting ones in the input
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/475.png),
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/476.png),
+    *U*, *W*, and *y* are scalar values (**x** remains a vector), we won’t use the
+    matrix notation (bold capital letters) in the RNN implementation and training
+    section and its subsections. We’ll use italic notation instead. In the code sections,
+    we’ll denote them as variables. However, note that the generic versions of these
+    formulas use matrix and vector parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The RNN will have only two parameters: an input weight, *U*, and a recurrence
+    weight, *W*. The output weight, *V*, is set to 1 so that we just read out the
+    last state as the output, *y*.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, let’s add some code so that our example can be executed. We’ll import
+    numpy and define our training set – inputs, **x**, and labels, *y*. **x** is two-dimensional
+    since the first dimension represents the sample in the mini-batch. *y* is a single
+    numerical value (it still has a batch dimension). For the sake of simplicity,
+    we’ll use a mini-batch with a single sample:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The recurrence relation defined by this RNN is ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>f</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mi>W</mml:mi><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mi>U</mml:mi></mml:mrow></mml:mfenced></mml:math>](img/477.png).
+    Note that this is a linear model since we don’t apply a non-linear function in
+    this formula. We can implement a recurrence relationship in the following way:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs: []
+  type: TYPE_PRE
+- en: The states, `s_t`, and the weights, `W` and `U`, are single scalar values. `x_t`
+    represents a single element of the input sequence (in our case, one or zero).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'One solution to this task is to just get the sum of the elements of the input
+    sequence. If we set `U=1`, then whenever input is received, we will get its full
+    value. If we set `W=1`, then the value we would accumulate would never decay.
+    So, for this example, we would get the desired output: 3\. Nevertheless, let’s
+    use this simple example to explain the training and implementation of the RNN.
+    This will be interesting, as we will see in the rest of this section.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We can think of an RNN as a special type of regular NN by unfolding it through
+    time for a certain number of time steps (as illustrated in the preceding diagram).
+    This regular NN has as many hidden layers as the size of the elements of the input
+    sequence. In other words, one hidden layer represents one step through time. The
+    only difference is that each layer has multiple inputs: the previous state, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/478.png),
+    and the current input, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/479.png).
+    The parameters, *U* and *W*, are shared between all of the hidden layers.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The forward pass unfolds the RNN along the sequence and builds a stack of states
+    for each step. In the following code block, we can see an implementation of the
+    forward pass, which returns the activation, *s*, for each recurrent step and each
+    sample in the batch:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs: []
+  type: TYPE_PRE
+- en: Now that we have the RNN forward pass, let’s look at how to train our unfolded
+    RNN.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Backpropagation through time
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Backpropagation through time** (**BPTT**) is the typical algorithm we use
+    to train RNNs (*Backpropagation Through Time: What It Does and How to Do It*,
+    [http://axon.cs.byu.edu/~martinez/classes/678/Papers/Werbos_BPTT.pdf](http://axon.cs.byu.edu/~martinez/classes/678/Papers/Werbos_BPTT.pdf)).
+    As its name suggests, it’s an adaptation of the backpropagation algorithm we discussed
+    in [*Chapter 2*](B19627_02.xhtml#_idTextAnchor047).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s assume that we’ll use the **mean squared error** (**MSE**) cost function.
+    Now that we also have our forward step implementation, we can define how the gradient
+    is propagated backward. Since the unfolded RNN is equivalent to a regular feedforward
+    NN, we can use the backpropagation chain rule we introduced in [*Chapter 2*](B19627_02.xhtml#_idTextAnchor047).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Because the weights, *W* and *U*, are shared across the layers, we’ll accumulate
+    the error derivatives for each recurrent step, and in the end, we’ll update the
+    weights with the accumulated value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we need to get the gradient of the output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/480.png),
+    concerning the loss function, *J*, *∂J/∂s*. Once we have it, we’ll propagate it
+    backward through the stack of activities we built during the forward step. This
+    backward pass pops activities off of the stack to accumulate their error derivatives
+    at each time step. The recurrence relation that propagates this gradient through
+    the RNN can be written as follows (chain rule):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mi>W</mml:mi></mml:math>](img/481.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'The gradients of the weights, *U* and *W*, are accumulated as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:mi>U</mml:mi></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>t</mml:mi><mml:mo>=</mml:mo><mml:mn>0</mml:mn></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:msub><mml:mrow><mml:mi>x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:math>](img/482.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:mi>W</mml:mi></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∑</mml:mo><mml:mrow><mml:mi>t</mml:mi><mml:mo>=</mml:mo><mml:mn>0</mml:mn></mml:mrow><mml:mrow><mml:mi>n</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:math>](img/483.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Armed with this knowledge, let’s implement the backward pass:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Accumulate the gradients for `U` and `W` in `gU` and `gW`, respectively:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Use gradient descent to optimize our RNN. Compute the gradients (using MSE)
+    with the help of the backward function and use them to update the weights value:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the training for 150 epochs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Finally, display the loss function and the gradients for each weight over the
+    epochs. We’ll do this with the help of the `plot_training` function, which is
+    not implemented here but is available in the full example on GitHub. `plot_training`
+    produces the following graph:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '![Figure 6.10 – The RNN loss – uninterrupted line  – loss value; dashed lines
+    – the weight gradients during training](img/B19627_06_10.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.10 – The RNN loss – uninterrupted line – loss value; dashed lines –
+    the weight gradients during training
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now that we’ve learned about backpropagation through time, let’s discuss how
+    the familiar vanishing and exploding gradient problems affect it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Vanishing and exploding gradients
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'The preceding example has an issue. To illustrate it, let’s run the training
+    process with a longer sequence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The output is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'The reason for these warnings is that the final parameters, `U` and `W`, end
+    up as `plot_training` function to produce the following result:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.11 – Parameters and loss function during an exploding gradients
+    scenario](img/B19627_06_11.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.11 – Parameters and loss function during an exploding gradients scenario
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the initial epochs, the gradients slowly increase, similar to the way they
+    increased for the shorter sequence. However, when they get to epoch 23 (the exact
+    epoch is unimportant, though), the gradient becomes so large that it goes out
+    of the range of the float variable and becomes NaN (as illustrated by the jump
+    in the plot). This problem is known as **exploding gradients**. We can stumble
+    upon exploding gradients in a regular feedforward NN, but it is especially pronounced
+    in RNNs. To understand why, let’s recall the recurrent gradient propagation chain
+    rule for the two consecutive sequence steps we defined in the *Backpropagation
+    through* *time* section:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:mi>J</mml:mi></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mi>W</mml:mi></mml:math>](img/481.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Depending on the sequence’s length, an unfolded RNN can be much deeper compared
+    to a regular NN. At the same time, the weights, *W*, of an RNN are shared across
+    all of the steps. Therefore, we can generalize this formula to compute the gradient
+    between two non-consecutive steps of the sequence. Because *W* is shared, the
+    equation forms a geometric progression:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>…</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∏</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>k</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>j</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>s</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mi>W</mml:mi></mml:mrow></mml:mrow></mml:math>](img/485.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: "In our simple linear RNN, the gradient grows exponentially if *|W|>1* (exploding\
+    \ gradient), where *W* is a single scalar weight – for example, 50 time steps\
+    \ over *W=1.5* is ![<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow><mrow><msup><mi>W</mi><mrow><mo>(</mo><mn>50</mn><mo>)</mo></mrow></msup><mo>≈</mo><mn>637</mn><mi\
+    \ mathvariant=\"normal\">\uFEFF</mi><mo>,</mo><mn>621</mn><mi mathvariant=\"normal\"\
+    >\uFEFF</mi><mo>,</mo><mn>500</mn></mrow></mrow></math>](img/486.png). The gradient\
+    \ shrinks exponentially if *|W|<1* (vanishing gradient), for example, 10 time\
+    \ steps over *W=0.6* is ![<mml:math xmlns:mml=\"http://www.w3.org/1998/Math/MathML\"\
+    \ xmlns:m=\"http://schemas.openxmlformats.org/officeDocument/2006/math\"><mml:msup><mml:mrow><mml:mi>W</mml:mi></mml:mrow><mml:mrow><mml:mo>(</mml:mo><mml:mn>10</mml:mn><mml:mo>)</mml:mo></mml:mrow></mml:msup><mml:mo>=</mml:mo><mml:mn>0.00097</mml:mn></mml:math>](img/487.png).\
+    \ If the weight parameter, *W*, is a matrix instead of a scalar, this exploding\
+    \ or vanishing gradient is related to the largest eigenvalue, *ρ*, of *W* (also\
+    \ known as a spectral radius). It is sufficient for *ρ<1* for the gradients to\
+    \ vanish, and it is necessary for *ρ>1* for them to explode."
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The vanishing gradients problem, which we first mentioned in [*Chapter 3*](B19627_03.xhtml#_idTextAnchor079),
+    has another more subtle effect in RNNs: the gradient decays exponentially over
+    the number of steps to a point where it becomes extremely small in the earlier
+    states. In effect, they are overshadowed by the larger gradients from more recent
+    time steps, and the RNN’s ability to retain the history of these earlier states
+    vanishes. This problem is harder to detect because the training will still work,
+    and the NN will produce valid outputs (unlike with exploding gradients). It just
+    won’t be able to learn long-term dependencies.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, we are familiar with some of the problems surrounding RNNs. This
+    knowledge will serve us well because, in the next section, we’ll discuss how to
+    solve these problems with the help of a special type of RNN cell.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Long-short term memory
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Hochreiter and Schmidhuber studied the problems of vanishing and exploding
+    gradients extensively and came up with a solution called **long short-term memory**
+    (**LSTM** – [https://www.bioinf.jku.at/publications/older/2604.pdf](https://www.bioinf.jku.at/publications/older/2604.pdf)
+    and *Learning to Forget: Continual Prediction with LSTM*, https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.55.5709&rep=rep1&type=pdf).
+    LSTMs can handle long-term dependencies due to a specially crafted memory cell.
+    They work so well that most of the current accomplishments in training RNNs on
+    a variety of problems are due to the use of LSTMs. In this section, we’ll explore
+    how this memory cell works and how it solves the vanishing gradients issue.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The following is a diagram of an LSTM cell:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.12 – LSTM cell (top); unfolded LSTM cell (bottom). Inspired by http://colah.github.io/posts/2015-08-Understanding-LSTMs/](img/B19627_06_12.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.12 – LSTM cell (top); unfolded LSTM cell (bottom). Inspired by [http://colah.github.io/posts/2015-08-Understanding-LSTMs/](http://colah.github.io/posts/2015-08-Understanding-LSTMs/)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The key idea of LSTM is the cell state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/488.png)
+    (in addition to the hidden RNN state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/489.png)),
+    where the information can only be explicitly written in or removed so that the
+    state stays constant if there is no outside interference. The cell state can only
+    be modified by specific gates, which are a way to let information pass through.
+    A typical LSTM is composed of three gates: a **forget gate**, an **input gate**,
+    and an **output gate**. The cell state, input, and output are all vectors so that
+    the LSTM can hold a combination of different information blocks at each time step.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: LSTM notations
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/490.png),
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/491.png),
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/492.png)
+    are the LSTM’s input, cell memory state, and output (or hidden state) vectors
+    in moment *t*. ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/493.png)
+    is the candidate cell state vector (more on that later). The input, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/494.png),
+    and the previous cell output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/495.png),
+    are connected to each gate and the candidate cell vector with sets of FC weights,
+    **W** and **U**, respectively. ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/496.png),
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/497.png),
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">o</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/498.png)
+    are the forget, input, and output gates of the LSTM cell (the gates use vector
+    notation as well).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The gates are composed of FC layers, sigmoid activations, and element-wise
+    multiplication (denoted with ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mo>⨀</mml:mo></mml:math>](img/499.png)).
+    Because the sigmoid only outputs values between 0 and 1, the multiplication can
+    only reduce the value running through the gate. Let’s discuss them in order:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Forget gate**, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/500.png):
+    It decides whether we want to erase parts of the existing cell state or not. It
+    bases its decision on the weighted vector sum of the output of the previous cell,
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/501.png),
+    and the current input, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png):'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>f</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow><mml:mrow><mml:mi>f</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/503.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'From the preceding formula, we can see that the forget gate applies element-wise
+    sigmoid activations to each element of the previous state vector, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/504.png):
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/505.png)
+    (note the circle-dot notation). Since the operation is elementwise, the values
+    of this vector are squashed in the [0, 1] range. An output of 0 erases a specific
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn><mml:mo>,</mml:mo><mml:mi>j</mml:mi></mml:mrow></mml:msub></mml:math>](img/506.png)
+    cell block completely and an output of 1 allows the information in that cell block
+    to pass through. In this way, the LSTM can get rid of irrelevant information in
+    its cell state vector.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Input gate**, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/507.png):
+    It decides what new information is going to be added to the memory cell in a multi-step
+    process. The first step determines whether any information is going to be added.
+    As in the forget gate, its decision is based on ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/508.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png):
+    it outputs 0 or 1 through the sigmoid function for each cell of the candidate
+    state vector. An output of 0 means that no information is added to that cell block’s
+    memory. As a result, the LSTM can store specific pieces of information in its
+    cell state vector:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/510.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'In the next step of the input gate sequence, we compute the new candidate cell
+    state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/511.png).
+    It is based on the previous output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/512.png),
+    and the current input, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png),
+    and is transformed via a tanh function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>n</mml:mi><mml:mi>h</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow><mml:mrow><mml:mi>c</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/514.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Then, we combine ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/515.png)
+    with the sigmoid outputs of the input gate via element-wise multiplication: ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/516.png).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To recap, the forget and input gates decide what information to forget and
+    include from the previous and candidate cell states, respectively. The final version
+    of the new cell state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/517.png),
+    is just an element-wise sum between these two components:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>⊕</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">b</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/518.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**Output gate**, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">o</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/519.png):
+    It decides what the total cell output is going to be. It takes ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/520.png)
+    and ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png)
+    as inputs. It outputs a value in the (0, 1) range (via the sigmoid function) for
+    each block of the cell’s memory. Like before, 0 means that the block doesn’t output
+    any information and 1 means that the block can pass through as a cell’s output.
+    Therefore, the LSTM can output specific blocks of information from its cell state
+    vector:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">o</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow><mml:mrow><mml:mi>o</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/522.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, the LSTM cell’s output is transferred by a tanh function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">o</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:mi
+    mathvariant="normal">t</mml:mi><mml:mi mathvariant="normal">a</mml:mi><mml:mi
+    mathvariant="normal">n</mml:mi><mml:mi mathvariant="normal">h</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/523.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Because all these formulas are derivable, we can chain LSTM cells together,
+    just like when we chain simple RNN states together and train the network via backpropagation
+    through time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: But how does the LSTM protect us from vanishing gradients? Let’s start with
+    the forward phase. Notice that the cell state is copied identically from step
+    to step if the forget gate is 1 and the input gate is
+  prefs: []
+  type: TYPE_NORMAL
+- en: '0: ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>⊕</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:mn>1</mml:mn><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>⊕</mml:mo><mml:mn>0</mml:mn><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/524.png).
+    Only the forget gate can completely erase the cell’s memory. As a result, the
+    memory can remain unchanged over a long period. Also, note that the input is a
+    tanh activation that’s been added to the current cell’s memory. This means that
+    the cell’s memory doesn’t blow up and is quite stable.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s use an example to demonstrate how an LSTM cell is unfolded. For the sake
+    of simplicity, we’ll assume that it has one-dimensional (single scalar value)
+    input, state, and output vectors. Because the values are scalar, we won’t use
+    vector notation for the rest of this example:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.13 – Unrolling an LSTM through time](img/B19627_06_13.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.13 – Unrolling an LSTM through time
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The process is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: First, we have a value of 3 as a candidate state. The input gate is set to ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>i</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:math>](img/525.png)
+    and the forget gate is set to ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>0</mml:mn></mml:math>](img/526.png).
+    This means that the previous state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>N</mml:mi></mml:math>](img/527.png),
+    is erased and replaced with the new state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>0</mml:mn><mml:mo>⨀</mml:mo><mml:mi>N</mml:mi><mml:mo>⊕</mml:mo><mml:mn>1</mml:mn><mml:mo>⨀</mml:mo><mml:mn>3</mml:mn><mml:mo>=</mml:mo><mml:mn>3</mml:mn></mml:math>](img/528.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'For the next two time steps, the forget gate is set to 1, while the input gate
+    is set to 0\. By doing this, all the information is kept throughout these steps
+    and no new information is added because the input gate is set to 0: ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>1</mml:mn><mml:mo>⨀</mml:mo><mml:mn>3</mml:mn><mml:mo>⊕</mml:mo><mml:mn>0</mml:mn><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:mn>3</mml:mn></mml:math>](img/529.png).'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Finally, the output gate is set to ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>o</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:math>](img/530.png)
+    and 3 is output and remains unchanged. We have successfully demonstrated how the
+    internal state is stored across multiple steps.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Next, let’s focus on the backward phase. The cell state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/531.png),
+    can mitigate the vanishing/exploding gradients as well with the help of the forget
+    gate, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/532.png).
+    Like the regular RNN, we can use the chain rule to compute the partial derivative,
+    ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mtext>/</mml:mtext><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/533.png),
+    for two consecutive steps. Following the formula ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>⊕</mml:mo><mml:msub><mml:mrow><mml:mi>i</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/534.png)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'and without going into details, its partial derivative is as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>≈</mml:mo><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/535.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'We can also generalize this to non-consecutive steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>=</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>2</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>…</mml:mo><mml:mfrac><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow><mml:mrow><mml:mo>∂</mml:mo><mml:msub><mml:mrow><mml:mi>c</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>k</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfrac><mml:mo>≈</mml:mo><mml:mrow><mml:munderover><mml:mo
+    stretchy="false">∏</mml:mo><mml:mrow><mml:mi>j</mml:mi><mml:mo>=</mml:mo><mml:mn>1</mml:mn></mml:mrow><mml:mrow><mml:mi>k</mml:mi></mml:mrow></mml:munderover><mml:mrow><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mi>j</mml:mi><mml:mo>+</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mrow></mml:math>](img/536.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: If the forget gate values are close to 1, gradient information can pass back
+    through the network states almost unchanged. This is because ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/532.png)
+    uses sigmoid activation and information flow is still subject to the vanishing
+    gradient that’s specific to sigmoid activations. But unlike the gradients in the
+    regular RNN, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi>f</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/532.png)
+    has a different value at each time step. Therefore, this is not a geometric progression,
+    and the vanishing gradient effect is less pronounced.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we’ll introduce a new type of lightweight RNN cell that still preserves
+    the properties of LSTM.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Gated recurrent units
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'A **gated recurrent unit** (**GRU**) is a type of recurrent block that was
+    introduced in 2014 (*Learning Phrase Representations using RNN Encoder-Decoder
+    for Statistical Machine Translation*, [https://arxiv.org/abs/1406.1078](https://arxiv.org/abs/1406.1078)
+    and *Empirical Evaluation of Gated Recurrent Neural Networks on Sequence Modeling*,
+    https://arxiv.org/abs/1412.3555) as an improvement over LSTM. A GRU unit usually
+    has similar or better performance than an LSTM, but it does so with fewer parameters
+    and operations:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.14 – A GRU cell diagram](img/B19627_06_14.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.14 – A GRU cell diagram
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Similar to the classic RNN, a GRU cell has a single hidden state, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/539.png).
+    You can think of it as a combination of the hidden and cell states of an LSTM.
+    The GRU cell has two gates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Update gate**, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/540.png):
+    Combines the input and forget LSTM gates. It decides what information to discard
+    and what new information to include in its place based on the network input, ![<mml:math
+    xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/352.png),
+    and the previous hidden state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/542.png).
+    By combining the two gates, we can ensure that the cell will forget information,
+    but only when we are going to include new information in its place:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>z</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow><mml:mrow><mml:mi>z</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/543.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: '**Reset gate**, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">r</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/544.png):
+    Uses the previous hidden state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/545.png),
+    and the network input, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/357.png),
+    to decide how much of the previous state to pass through:'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">r</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:mi>σ</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi mathvariant="bold">W</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">U</mml:mi></mml:mrow><mml:mrow><mml:mi>r</mml:mi></mml:mrow></mml:msub><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:math>](img/547.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Next, we have the candidate state, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/548.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msubsup><mml:mrow><mml:mi mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup><mml:mo>=</mml:mo><mml:mi>t</mml:mi><mml:mi>a</mml:mi><mml:mi>n</mml:mi><mml:mi>h</mml:mi><mml:mfenced
+    separators="|"><mml:mrow><mml:mi mathvariant="bold">W</mml:mi><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">x</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>+</mml:mo><mml:mi
+    mathvariant="bold">U</mml:mi><mml:mfenced separators="|"><mml:mrow><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">r</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:mrow></mml:mfenced></mml:mrow></mml:mfenced></mml:math>](img/549.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'Finally, the GRU output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/550.png),
+    at time *t* is an element-wise sum between the previous output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/551.png),
+    and the candidate output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/548.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+    display="block"><mml:msub><mml:mrow><mml:mi mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>=</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub><mml:mo>⨀</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub><mml:mo>⊕</mml:mo><mml:mfenced
+    separators="|"><mml:mrow><mml:mn>1</mml:mn><mml:mo>-</mml:mo><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">z</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:mrow></mml:mfenced><mml:mo>⨀</mml:mo><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>''</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/553.png)'
+  prefs: []
+  type: TYPE_IMG
+- en: Since the update gate allows us to both forget and store data, it is directly
+    applied to the previous output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi><mml:mo>-</mml:mo><mml:mn>1</mml:mn></mml:mrow></mml:msub></mml:math>](img/551.png),
+    and applied over the candidate output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msubsup><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow><mml:mrow><mml:mi>'</mml:mi></mml:mrow></mml:msubsup></mml:math>](img/548.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'We’ll conclude our introduction to RNNs by returning to the disclaimer at the
+    start of this chapter – the practical limitations of RNNs. We can solve one of
+    them – the vanishing and exploding gradients – with the help of LSTM or GRU cells.
+    However, there are two others:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The RNN’s internal state is updated after each element of the sequence – a new
+    element requires all preceding elements to be processed in advance. Therefore,
+    the RNN sequence processing cannot be parallelized and RNNs cannot take advantage
+    of the GPU parallelization capabilities.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The information of all preceding sequence elements is summarized in a single
+    hidden cell state. The RNN doesn’t have direct access to the historical sequence
+    elements and has to rely on the cell state instead. In practice, this means that
+    an RNN (even LSTM or GRU) can meaningfully process sequences with a maximum length
+    of around 100 elements.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As we’ll see in the next chapter, the transformer architecture successfully
+    solves both of these limitations. But for now, let’s see how to use LSTMs in practice.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Implementing text classification
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this section, we’ll use LSTM to implement a sentiment analysis example over
+    the Large Movie Review Dataset (**IMDb**, [http://ai.stanford.edu/~amaas/data/sentiment/](http://ai.stanford.edu/~amaas/data/sentiment/)),
+    which consists of 25,000 training and 25,000 testing reviews of popular movies.
+    Each review has a binary label that indicates whether it is positive or negative.
+    This type of problem is an example of a **many-to-one** relationship, which we
+    defined in the *Recurrent neural networks (**RNNs)* section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The sentiment analysis model is displayed in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 6.15 – Sentiment analysis with word embeddings and LSTM](img/B19627_06_15.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 6.15 – Sentiment analysis with word embeddings and LSTM
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s describe the model components (these are valid for any text classification
+    algorithm):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Each word of the sequence is replaced with its embedding vector. These embeddings
+    can be produced with word2vec.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The word embedding is fed as input to the LSTM cell.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The cell output, ![<mml:math xmlns:mml="http://www.w3.org/1998/Math/MathML"
+    xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"><mml:msub><mml:mrow><mml:mi
+    mathvariant="bold">h</mml:mi></mml:mrow><mml:mrow><mml:mi>t</mml:mi></mml:mrow></mml:msub></mml:math>](img/556.png),
+    serves as input to an FC layer with two output units and softmax. The softmax
+    output represents the probability of the review being positive (1) or negative
+    (0).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The network can be produced with Word2Vec.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The output for the final element of the sequence is taken as a result of the
+    whole sequence.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'To implement this example, we’ll use PyTorch and the TorchText package. It
+    consists of data processing utilities and popular datasets for natural language.
+    We’ll only include the interesting portions of the code, but the full example
+    is available in this book’s GitHub repo. With that, let’s start:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Define the device (by default, this is GPU with a fallback on CPU):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Start the training and testing dataset pipeline. First, define the `basic_english`
+    tokenizer, which splits the text on spaces (that is, word tokenization):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Next, use `tokenizer` to build the token `vocabulary`:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, `IMDB(split='train')` provides an iterator of all movie reviews in the
+    training set (each review is represented as a string). The `yield_tokens(IMDB(split='train'))`
+    generator iterates over all samples and splits them into words. The result serves
+    as input to `build_vocab_from_iterator`, which iterates over the tokenized samples
+    and builds the token `vocabulary`. Note that the vocabulary only includes training
+    samples. Therefore, any token that exists in the test set (but not the training
+    one) will be replaced with the default unknown `<``unk>` token.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Next, define the `collate_batch` function, which takes a `batch` of tokenized
+    samples with varying lengths, and concatenates them in a single long sequence
+    of tokens:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Here, the `samples` list aggregates all tokenized `_sample` instances of `batch`.
+    In the end, they are concatenated into a single list. The `offsets` list contains
+    the offset from the start of each concatenated sample. This information makes
+    it possible to reverse-split the long `samples` sequence into separate items again.
+    The purpose of the function is to create a compressed `batch` representation.
+    This is necessary because of the varying length of each sample. The alternative
+    would be to pad all samples to match the length of the longest one so that they
+    can fit in the batch tensor. Fortunately, PyTorch provides us with the `offsets`
+    optimization to avoid this. Once we feed the compressed batch to the RNN, it will
+    automatically reverse it back into separate samples.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: 'Then, we define the LSTM model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The model implements the scheme we introduced at the start of this section.
+    As its name suggests, the `embedding` property (an instance of `EmbeddingBag`)
+    maps the token (in our case, word) index to its embedding vector. We can see that
+    the constructor takes the vocabulary size (`num_embeddings`) and the embedding
+    vector size (`embedding_dim`). In theory, we could initialize `EmbeddingBag` with
+    pre-computed Word2Vec embedding vectors. But in our case, we’ll simply use random
+    initialization and let the model learn them as part of the training. `embedding`
+    also takes care of the compressed batch representation (hence the `offsets` parameter
+    in the `forward` method). The embedding’s output serves as input to the `rnn`
+    LSTM cell, which, in turn, feeds the output `fc` layer.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: Define the `train_model(model, cost_function, optimizer, data_loader)` and `test_model(model,
+    cost_function, data_loader)` functions. These are almost the same functions that
+    we first defined in [*Chapter 3*](B19627_03.xhtml#_idTextAnchor079), so we won’t
+    include them here. However, they have been adapted to the compressed batch representation
+    and the additional `offsets` parameter.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Proceed with the experiment. Instantiate the LSTM model, the cross-entropy
+    cost function, and the Adam optimizer:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Define `train_dataloader`, `test_dataloader`, and their respective datasets
+    (use a mini-batch size of 64):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Run the training for 5 epochs:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: The model achieves a test accuracy in the realm of 87%.
+  prefs:
+  - PREF_IND
+  type: TYPE_NORMAL
+- en: This concludes our small practical example of LSTM text classification. Coincidentally,
+    it also concludes this chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we introduced two complementary topics – NLP and RNNs. We discussed
+    the tokenization technique and the most popular tokenization algorithms – BPE,
+    WordPiece, and Unigram. Then, we introduced the concept of word embedding vectors
+    and the Word2Vec algorithm to produce them. We also discussed the *n*-gram LM,
+    which provided us with a smooth transition to the topic of RNNs. There, we implemented
+    a basic RNN example and introduced two of the most advanced RNN architectures
+    – LSTM and GRU. Finally, we implemented a sentiment analysis model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the next chapter, we’ll supercharge our NLP potential by introducing the
+    attention mechanism and transformers.
+  prefs: []
+  type: TYPE_NORMAL

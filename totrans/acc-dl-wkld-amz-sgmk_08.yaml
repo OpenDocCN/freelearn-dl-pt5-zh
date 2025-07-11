@@ -1,0 +1,1024 @@
+- en: '8'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: Considering Hardware for Inference
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In *Part 3, Serving Deep Learning Models* of this book, we will focus on how
+    to develop, optimize, and operationalize inference workloads for **deep learning**
+    (**DL**) models. Just like training, DL inference is computationally intensive
+    and requires an understanding of specific types of hardware built for inference,
+    model optimization techniques, and specialized software servers to manage model
+    deployment and handle inference traffic. Amazon SageMaker provides a wide range
+    of capabilities to address these aspects.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In this chapter, we will discuss hardware options and model optimization for
+    model serving. We will review the available hardware accelerators that are suitable
+    for DL inference and discuss how to select one. Amazon SageMaker offers multiple
+    NVIDIA GPU accelerators and a proprietary chip built for DL inference – **AWS
+    Inferentia**. SageMaker also allows you to access accelerator capacity using its
+    **Elastic Inference** capability. As each inference use case is unique and comes
+    with its own set of business requirements, we will propose a set of selection
+    criteria that can be used when evaluating the optimal hardware accelerator for
+    inference.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Another important aspect when building your DL inference workload is understanding
+    how to optimize a specific model architecture for inference on the target hardware
+    accelerator. This process is known as model compilation. We will review the popular
+    optimizer and runtime environment known as NVIDIA **TensorRT**, which delivers
+    optimal latency and throughput for models running on NVIDIA GPU accelerators.
+    Then, we will discuss **Neuron SDK**, which optimizes models to run on AWS Inferentia
+    chips. We will also discuss **SageMaker Neo** – a managed model compilation service
+    that allows you to compile models for a wide range of data center and edge hardware
+    accelerators. Note that you won’t cover any edge or embedded platforms in this
+    book.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will cover the following topics:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Selecting hardware accelerators in AWS Cloud
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Compiling models for inference
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: After reading this chapter, you will be able to select an efficient hardware
+    configuration for your inference workloads with optimal price/performance characteristics
+    and perform further optimizations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Technical requirements
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: 'In this chapter, we will provide code samples so that you can develop practical
+    skills. The full code examples are available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter8/](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter8/).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To follow along with this code, you will need the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An AWS account and IAM user with permission to manage Amazon SageMaker resources.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Have a SageMaker notebook, SageMaker Studio notebook, or local SageMaker compatible
+    environment established.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Access to GPU training instances in your AWS account. Each example in this chapter
+    will provide recommended instance types to use. You may need to increase your
+    compute quota for **SageMaker Training Job** to have GPU instances enabled. In
+    this case, please follow the instructions at [https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/regions-quotas.xhtml).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: You must install the required Python libraries by running `pip install -r requirements.txt`.
+    The file that contains the required libraries can be found in the `chapter8` directory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this chapter, we will provide examples of compiling models for inference,
+    which requires access to specific accelerator types. If you intend to follow these
+    code samples, please provision a SageMaker notebook instance or SageMaker Studio
+    notebook with the target accelerator.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Selecting hardware accelerators in AWS Cloud
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: AWS Cloud and Amazon SageMaker provide a range of hardware accelerators that
+    are suitable for inference workloads. Choosing a hardware platform often requires
+    multiple experiments to be performed with various accelerators and serving parameters.
+    Let’s look at some key selection criteria that can be useful during the evaluation
+    process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Latency-throughput trade-offs
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Inference latency defines how quickly your model can return inference outcomes
+    to the end user, and we want to minimize latency to improve user experience. Inference
+    throughput defines how many inference requests can be processed simultaneously,
+    and we want to maximize it to guarantee that as many inference requests as possible
+    are served. In software engineering, it’s common to discuss latency-throughput
+    trade-offs as it’s usually impractical to minimize latency and maximize throughput
+    at the same time, so you need to find a balance between these characteristics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: It’s common to set target latency and throughput SLAs as part of the business
+    requirements of your specific use case. Finding an acceptable latency-throughput
+    trade-off requires benchmarking with different accelerators and model/server parameters
+    against target SLAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For instance, when running a real-time inference endpoint, usually, you are
+    concerned with the latency SLA as it will have a direct impact on your end users.
+    You may start by finding the hardware and model configuration with the latency
+    within the target SLA number, and then scale it to reach the desired throughput.
+    In the case of batch inference, overall system throughput is usually more important
+    than latency. We want to maximize throughput to guarantee that our hardware resources
+    are utilized efficiently.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Cost
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The cost of running the inference workload is another important parameter that
+    influences which hardware you use and your latency and throughput SLAs. While
+    AWS and SageMaker offer one of the most powerful GPU accelerators on the market,
+    their cost may be prohibitively high for your specific use case. Hence, it’s often
+    the case that you may need to adjust your latency and throughput SLAs to make
+    your DL inference application economically viable.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Supported frameworks and operators
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: Running inference workloads is computationally intensive as it requires calculating
+    a model forward pass on a single or batch of inputs. Each forward pass consists
+    of a sequence of individual compute tasks. A type of computing task is known as
+    an operator. Some examples of common DL operators include matrix multiplication,
+    convolution, and average pooling.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Operators supported by DL frameworks can always run on CPU devices. However,
+    CPU, as we discussed in [*Chapter 5*](B17519_05.xhtml#_idTextAnchor083), *Considering
+    Hardware for Training*, is not the most efficient DL accelerator. Therefore, running
+    inference using a CPU results in higher latency compared to specialized accelerators
+    such as GPUs and ASIC chips.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NVIDIA GPU accelerators support a wide range of operators via the CUDA toolkit.
+    In certain cases, you may need to implement a new operator for your specific model
+    architecture. The CUDA toolkit provides a programming API for such custom operator
+    development.
+  prefs: []
+  type: TYPE_NORMAL
+- en: ASIC accelerators such as AWS Inferentia provide support for a finite list of
+    operators and frameworks. In cases where a specific operator is not supported,
+    this operator will be executed on the CPU device. This allows you to run many
+    model architectures on specialized accelerators, but on the other hand, it will
+    likely result in increased inference latency due to overall slowness of CPU execution
+    and the necessary handoff between the ASIC and CPU accelerators of the tensors
+    during the model’s forward pass.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Hence, when choosing your target hardware accelerator, you need to understand
+    which DL frameworks and operators are supported.
+  prefs: []
+  type: TYPE_NORMAL
+- en: In [*Chapter 5*](B17519_05.xhtml#_idTextAnchor083), *Considering Hardware for
+    Deep Learning Training*, we provided an overview of the available hardware accelerators
+    for DL on the Amazon SageMaker platform. In the following sections, we will highlight
+    some accelerators and compute instances recommended for inference workloads.
+  prefs: []
+  type: TYPE_NORMAL
+- en: G4 instance family – best price and performance ratio for inference
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The G4 instances feature NVIDIA T4 Tensor Core GPUs with 16 GB of memory. This
+    accelerator is designed by NVIDIA for inference in the cloud and data centers.
+    It supports FP32, FP16, INT8, and INT4 precision types. G4 should be considered
+    as the default option for running DL inference workloads since it combines performance
+    characteristics relevant for inference workloads and lower cost compared to the
+    more powerful P3 family.
+  prefs: []
+  type: TYPE_NORMAL
+- en: For further performance optimizations, you can compile your model using the
+    NVIDIA TensorRT optimizer. We will discuss the TensorRT optimizer in detail in
+    the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: P3 instance family – performant and expensive for inference
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: A P3 instance with NVIDIA V100 accelerators is primarily designed for large-scale
+    training. Compared to G4, the P3 family has up to 32 GB of GPU memory and larger
+    network bandwidth (both inter-GPU and inter-node). P3 also supports the F64, FP32,
+    FP16, and INT8 precision types.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Many of P3’s characteristics are very desirable for large-scale distributed
+    training, but they are less relevant for inference. For instance, you rarely need
+    to have a double precision type; rather, you want to reduce precision during inference
+    to minimize latency. Higher network bandwidth (specifically inter-node) is also
+    less relevant for inference workloads since it’s rare to distribute your model
+    across nodes at serving time.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, while the P3 family is more performant than G4, it costs more and has minimal
+    benefits for inference workloads. One scenario where you may want to use P3 instead
+    of G4 is when you’re running inference for large models. In this case, the `P3dn.24xlarge`
+    instance can provide you with 8 V100 GPUs with 32 GB each.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Not that here, we are only considering accelerators that are available as part
+    of SageMaker. Some instance families (such as the G5 and P4 families) are only
+    available as part of the Amazon EC2 service. We expect these instances to be supported
+    by Amazon SageMaker in the future.
+  prefs: []
+  type: TYPE_NORMAL
+- en: AWS Inferentia
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: AWS Inferentia is a purpose-built ASIC accelerator for DL inference workloads.
+    According to AWS, it offers the lowest inference cost in the cloud. Each Inferentia
+    chip consists of four NeuronCores, which are high-performance matrix-multiply
+    engines. NeuronCores are optimized for operations on small batch sizes to guarantee
+    the lowest possible inference latency. Inferentia supports the FP16, BF16, and
+    INT8 precision types. The `g4dn.xlarge` alternative, while costing 70% less to
+    run.
+  prefs: []
+  type: TYPE_NORMAL
+- en: To run inference on an Inferentia instance, you need to compile the model using
+    AWS Neuron SDK ([https://github.com/aws/aws-neuron-sdk/](https://github.com/aws/aws-neuron-sdk/)).
+    Neuron SDK supports TensorFlow, PyTorch, and MXNet DL frameworks. We will discuss
+    model compilation and optimization with Neuron SDK in the next section.
+  prefs: []
+  type: TYPE_NORMAL
+- en: AWS Inferentia offers a performant and cost-efficient inference accelerator.
+    Additionally, you can further optimize your models using Neuron SDK. Note that
+    you need to consider whether the given model architecture and its operators are
+    supported by Neuron SDK. Unsupported operators will be executed on the CPU device,
+    which will result in additional latency. This may or may not be acceptable based
+    on your target SLAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Amazon Elastic Inference
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: '**Elastic Inference** (**EI**) is a capability that allows you to attach user-defined
+    accelerator capacity to regular CPU instances. EI was designed specifically for
+    inference use cases. Accelerator capacity is available via an attached network
+    interface. EI supports TensorFlow, MXNet, and PyTorch frameworks and the ONNX
+    model format. To be able to use EI, you need to load your models in a special
+    EI-enabled version of DL frameworks. The modified versions of DL frameworks automatically
+    detect the presence of EI accelerators and execute operators over the network
+    interface. The following diagram illustrates this:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.1 – Accessing the EI GPU capacity via a network interface ](img/B17519_08_001.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.1 – Accessing the EI GPU capacity via a network interface
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'EI has several accelerator types available. You can select one based on the
+    amount of required accelerator memory or anticipated throughput (in TFLOPS). EI
+    provides low cost and high flexibility when it comes to instance configuration.
+    Unlike dedicated GPU instances with restricted configurations, you can mix and
+    match CPU instances and EI to achieve acceptable SLAs for inference latency and
+    throughput while keeping the overall cost low:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '| Accelerator Type | FP32 Throughput (TFLOPS) | FP16 Throughput (TFLOPS) |
+    Memory (GB) |'
+  prefs: []
+  type: TYPE_TB
+- en: '| eia2.medium | 1 | 8 | 2 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| eia2.large | 2 | 16 | 4 |'
+  prefs: []
+  type: TYPE_TB
+- en: '| eia2.xlarge | 4 | 32 | 8 |'
+  prefs: []
+  type: TYPE_TB
+- en: Figure 8.2 – EI performance characteristics
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When selecting EI, you need to keep several caveats in mind:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: By design, EI accelerators always introduce additional latency due to network
+    transfer. EI accelerators may underperform on models with complex control flows.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The EI-enabled DL frameworks are lagging considerably behind the latest open
+    source versions. Also, you may experience compatibility issues trying to run the
+    latest model architectures on EI.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: EI provides relatively low GPU memory (compared to the latest generations of
+    GPU instances), which may restrict the types of models you can run on it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Like GPU instances and Inferentia, EI supports model compilation and optimization.
+    You can use a SageMaker Neo optimizer job for TensorFlow models, which uses the
+    **TF-TRT** library for TensorRT. Optimized models typically have better latency-throughput
+    characteristics but may take up large GPU memory at inference time. This may lead
+    to potential **out-of-memory** (**OOM**) issues.
+  prefs: []
+  type: TYPE_NORMAL
+- en: EI can be a useful option in your toolbox when selecting a DL accelerator, especially
+    when you are looking for a highly flexible and cost-efficient solution and are
+    running more compact and less demanding model architectures. However, if you are
+    looking for high-performant inference for demanding models, you should consider
+    Inferentia and G4 instances first.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Compiling models for inference
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: To achieve optimal inference performance on the given accelerator hardware,
+    you usually need to compile your model for this accelerator. The compilation process
+    includes various computational optimizations, such as layer and tensor fusion,
+    precision calibration, and discarding unused parameters.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In this section, we will review the optimizers that perform compilation for
+    previously discussed inference accelerators: NVIDIA TensorRT for NVIDIA GPU accelerators
+    and Neuron SDK compiler for AWS Inferentia. After that, we will review a managed
+    compilation service called SageMaker Neo, which supports multiple cloud and edge
+    hardware accelerators.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will start by looking at the TensorRT compiler for NVIDIA GPU accelerators.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using TensorRT
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'NVIDIA TensorRT is a compiler and inference runtime built for the CUDA ecosystem.
+    According to NVIDIA benchmarks, it can improve model performance up to six times
+    compared to an uncompiled model version on the same hardware accelerator. TensorRT
+    supports TensorFlow and PyTorch frameworks, as well as the cross-framework ONNX
+    model format. TensorRT is integrated with the NVIDIA Triton model server to manage
+    model deployment and serve inference requests. TensorRT provides both C++ and
+    Python runtime environments. The C++ runtime can be especially useful for inference
+    at the edge and embedded devices that may not have a Python runtime configured:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.3 – Accessing EI GPU capacity via a network interface ](img/B17519_08_003.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.3 – Accessing EI GPU capacity via a network interface
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'TensorRT provides several key optimization mechanisms when compiling models
+    (refer to *Figure 8.3*):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Precision Calibration** converts weights and activations into INT8 precision
+    type without impacting accuracy to maximize model throughput'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Layer and Tensor Fusion** combines multiple layers and tensor operators into
+    a single computation to optimize memory utilization and latency'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Kernel Auto-Tuning** selects optimal data layers and algorithms for the given
+    hardware accelerator'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Dynamic Tensor Memory** allows you to efficiently reuse the memory that’s
+    been allocated for tensors'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Multi-Stream Execution** allows you to process multiple inputs in parallel'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Most of these optimizations happen automatically without user input. At compile
+    time, you need to set the following parameters:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '**Precision mode** defines the precision type that the model parameters will
+    be converted into. TensorRT allows you to reduce precision without or with minimal
+    impact on accuracy. A lower precision allows you to reduce the memory footprint,
+    which, in turn, speeds up memory-bound operations.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Input batch size** sets how many sample inputs are expected in a single inference
+    request. Increasing the batch size usually increases the overall system throughput.
+    However, a larger batch size requires more available memory and may also increase
+    inference request latency.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '**Max memory size** defines how much GPU memory is available for the model
+    at inference time.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It’s recommended to experiment with various combinations of these parameters
+    to achieve optimal performance, given your available resources and latency-throughput
+    SLAs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Depending on the DL framework model, the compilation path to the TensorRT format
+    is different. For TensorFlow, you can use the **TensorFlow-TensorRT** (**TRT**)
+    integration library ([https://github.com/tensorflow/tensorrt](https://github.com/tensorflow/tensorrt)).
+    For PyTorch, you need to convert the model into TorchScript format using the PyTorch
+    JIT compiler. Then, you can use Torch-TensorRT integration ([https://github.com/pytorch/TensorRT](https://github.com/pytorch/TensorRT))
+    to compile the model into TensorRT format. Then, the compiled model can be served
+    using the model server of your choice. In [*Chapter 9*](B17519_09.xhtml#_idTextAnchor137),
+    *Implementing Model Servers*, we will develop an inference application for the
+    TensorRT compiled model using the NVIDIA Triton model server.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let’s review an example of how to compile the PyTorch ResNet50 model using TensorRT
+    and then benchmark it against an uncompiled model. To compile the model using
+    TensorRT, you need to have access to the environment that contains the target
+    NVIDIA GPU. In the case of Amazon SageMaker, you can use a SageMaker notebook
+    instance with the NVIDIA GPU accelerator. It’s recommended to use the official
+    NVIDIA PyTorch container that comes with all the dependencies preconfigured.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Important note
+  prefs: []
+  type: TYPE_NORMAL
+- en: Note that Amazon SageMaker Studio notebooks don't allow you to run Docker containers.
+    Hence, in this example, we will use a SageMaker notebook instance. Choose a notebook
+    instance with the same GPU accelerator as the intended inference cluster.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Follow the next steps to compile PyTorch model for TensorRT runtime:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Start a SageMaker notebook instance with the NVIDIA GPU accelerator. For example,
+    you can use the `ml.p3.2xlarge` notebook instance.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once your notebook has been fully provisioned, open the JupyterLab service via
+    the respective link in the AWS Console.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'In your JupyterLab environment, open a **Terminal** session and run the following
+    commands to copy the source code for model compilation:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'In the same Terminal session, run the following commands to download the NVIDIA
+    PyTorch container with TensorRT configured:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE1]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'A new Terminal session will open in the PyTorch container. Run the following
+    commands to download the test images and start benchmarking:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE2]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The benchmarking script should take several minutes to complete. You will be
+    able to get inference results for the uncompiled ResNet50 model and the compiled
+    model with FP32 precision and with FP16 precision. As you can see from the following
+    summary, there is a latency improvement of more than five times in the FP16 model
+    compared to the uncompiled model with the same accuracy:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*Uncompiled ResNet50 model*: Average batch time: 102.17 ms'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Compiled ResNet50 model with FP32 precision*: Average batch time: 70.79 ms'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*ResNet50 model with FP16 precision*: Average batch time: 17.26 ms'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Let’s review the compilation and inference part of the benchmarking script
+    to familiarize ourselves with the PyTorch TensorRT API:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, we will load the regular, uncompiled ResNet50 model from PyTorch Hub:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE3]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'To compile the model, we can use the `torch_tensorrt` integration API. In the
+    following example, we are compiling the model into a TorchScript module, optimized
+    for the TensorRT engine:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE4]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, you can save and load the compiled model as a regular TorchScript program:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE5]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: In this section, you learned how to manually compile a PyTorch model for NVIDIA
+    GPU accelerators using TensorRT and reviewed the latency improvements of the compiled
+    model.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are interested in compiling TensorFlow models, you can use a similar
+    approach. Note that you would need to use the official NVIDIA TensorFlow container
+    instead. For a code example for this, you can refer to the official TensorFlow
+    tutorial at [https://blog.tensorflow.org/2021/01/leveraging-tensorflow-tensorrt-integration.xhtml](https://blog.tensorflow.org/2021/01/leveraging-tensorflow-tensorrt-integration.xhtml).
+  prefs: []
+  type: TYPE_NORMAL
+- en: As you can see, the overall compilation process is manual. Later in this chapter,
+    we will review SageMaker Neo, which allows us to compile TensorFlow and PyTorch
+    models for NVIDIA GPU accelerators with minimal manual effort.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using Neuron SDK
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: AWS Neuron SDK allows you to compile your DL models for AWS Inferentia instances.
+    It provides several parameters to help you optimize your inference program based
+    on the available Inferentia chips and your latency and throughput SLAs. Neuron
+    SDK supports TensorFlow, PyTorch, and MXNet frameworks. Neuron SDK is an ahead-of-time
+    compiler, so you must explicitly provide the batch size at compilation time. It
+    also includes a runtime environment in which we load the model and get predictions
+    at inference time. Note that the compiled model by Neuron SDK can only be used
+    on AWS Inferentia chips.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Neuron SDK supports a wide but finite set of operators. AWS tested Neuron SDK
+    on the following popular model architectures:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*NLP models from the HuggingFace Transformer library*: **BERT**, **distilBERT**,
+    **XLM-BERT**, **Robert**, **BioBERT**, **MarianMT**, **Pegasus**, **and Bart**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*Computer vision models*: **Resnet**, **Renext**, **VGG**, **Yolo v3/v4/v5**,
+    **SSD**'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Neuron SDK also supports generic model layers such as a fully connected layer
+    or embeddings lookup. If your model architecture uses supported operators, you
+    will be able to fully utilize Neuron SDK optimizations. You can refer to the list
+    of supported operators for specific DL frameworks in the official Neuron SDK documentation
+    at [https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.xhtml](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/index.xhtml).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'When compiling your model using Neuron SDK, keep the following caveats in mind:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: If a specific operator is not supported, its execution will be performed on
+    the CPU accelerator. This will lead to slower performance.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The control flows in your model may not be fully supported.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you expect variable batch size, you will need to implement **dynamic batching**.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: If you expect a variable input size (for example, the variable size of input
+    images), you should consider implementing padding or bucketing.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Now, let’s discuss the available Neuron SDK optimizations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: FP32 Autocasting
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: Whenever possible, Neuron SDK converts your model into the BF16 precision type
+    to reduce the memory footprint and improve latency-throughput characteristics.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Batching inference inputs
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Batching refers to combining multiple inference inputs into a single batch.
+    In this regard, it’s the same as batching during model training. In the case of
+    an inference workload, batching influences your throughput. Like TensorRT, Neuron
+    SDK requires you to define the target batch size at compilation time. The Inferentia
+    accelerator is specifically optimized for running inference on smaller batch sizes.
+    This is achieved through combining latency-sensitive operations (such as reading
+    weights from memory) for the whole inference batch, thus achieving better latency-throughput
+    characteristics than performing the same operations on each inference input. The
+    following diagram illustrates this concept:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.4 – Batched inference with single memory retrieval ](img/B17519_08_004.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.4 – Batched inference with single memory retrieval
+  prefs: []
+  type: TYPE_NORMAL
+- en: Dynamic batching is a feature of Neuron SDK that allows you to slice the input
+    tensors so that they match the batch size that’s used at compilation time. Please
+    note that dynamic batching is available for several eligible model architectures.
+  prefs: []
+  type: TYPE_NORMAL
+- en: NeuronCore pipelining
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'Each Inferentia accelerator consists of four **NeuronCores**. Pipelining allows
+    you to shard a model across multiple NeuronCores, caching the model parameters
+    in on-chip memory. This allows you to process network operators with locally cached
+    data faster and avoid accessing external memory. According to AWS, internal benchmark
+    pipelines usually allow us to achieve the highest hardware utilization without
+    batching. The following diagram shows an example of pipelining:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.5 – Pipelining model across three NeuronCores ](img/B17519_08_005.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.5 – Pipelining model across three NeuronCores
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In the following example, we will compile and benchmark the ResNet50 model
+    on an AWS Inferentia instance. At the time of writing, Amazon SageMaker doesn’t
+    support managed notebook instances. Hence, we used the Amazon EC2 `inf1.xlarge`
+    instance with a `8888`. For this, you will need to set up your instance security
+    group like so:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.6 – Security group configuration to allow Jupyter traffic ](img/B17519_08_006.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.6 – Security group configuration to allow Jupyter traffic
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Before we can start compiling Neuron SDK, we need to install Neuron SDK and
+    its dependencies on the EC2 instance. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'First, you will need to SSH to your instance using the following commands:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE6]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Once you have logged into the EC2 instance, please follow the instructions at
+    [https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-intro/pytorch-setup/pytorch-install.xhtml](https://awsdocs-neuron.readthedocs-hosted.com/en/latest/neuron-intro/pytorch-setup/pytorch-install.xhtml)
+    to install Neuron PyTorch on your Ubuntu OS. Note that installation may take around
+    5 minutes to complete.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Once the installation has finished, clone the sources and start the Jupyter
+    server application:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE7]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: After that, you can open `<your_instance_public_DNS>:8888/tree` to access the
+    Jupyter notebook for this example. Note that the first time you do this, you will
+    need to copy the security token that was returned by `jupyter notebook...` previously.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Once the setup is done, we can compile and benchmark the models on the AWS
+    Inferentia accelerator. The full code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter8/2_Neuron_SDK_compilation.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter8/2_Neuron_SDK_compilation.ipynb).
+    Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In the opened Jupyter notebook, change the kernel to **Python (Neuron PyTorch)**,
+    which we configured previously.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Next, we must import the required libraries, including `torch_neuron`, and
+    download the ResNet50 model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE8]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we must analyze the model operators to identify if any model operators
+    are not supported by Inferentia/Neuron SDK. Since the ResNet50 model is supported,
+    the output of this command should confirm that all the model operators are supported:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE9]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, we are ready to compile by running the following command. You will see
+    the compilation statistics and status in the output:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE10]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Since Neuron SDK compiles into a TorchScript program, saving and loading the
+    model is similar to what you would do in regular PyTorch:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE11]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Now, let’s benchmark the compiled model with batching or pipelining. For this,
+    we will prepare preprocessing and benchmark methods to form an inference batch
+    and **measure latency** (**ms**) and **throughput** (**samples/s**):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE12]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The benchmark results should be similar to the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE13]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Next, we will recompile the model with batching enabled (by setting `batch_size`
+    to `5` samples per NeuronCore):'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE14]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'After rerunning the benchmark, please note that while latency is decreased,
+    the overall throughput has increased, as shown here:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE15]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The benchmark’s output should look as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE16]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Lastly, let’s compile and benchmark the model with pipelining enabled. We will
+    start by tracing the original model with the `neuroncore-pipeline-cores` parameter:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE17]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'Then, we will rerun the benchmark on this new model:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE18]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'The output of this benchmarking will be as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE19]'
+  prefs: []
+  type: TYPE_PRE
+- en: Note that the resulting latency and throughput of the pipeline model are lower
+    than the model without batching and with batching. One reason for this is that
+    in our benchmark test, we run inference requests sequentially. To leverage the
+    pipeline model better, we would need to create several parallel inference requests.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using SageMaker Neo
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: SageMaker Neo allows you to compile and optimize DL models for a wide range
+    of target hardware platforms. It supports PyTorch, TensorFlow, MXNet, and ONNX
+    models for hardware platforms such as Ambarella, ARM, Intel, NVIDIA. NXP, Qualcomm,
+    Texas Instruments, and Xilinx. SageMaker Neo also supports deployment for cloud
+    instances, as well as edge devices.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Under the hood, SageMaker Neo converts your trained model from a framework-specific
+    representation into an intermediate framework-agnostic representation. Then, it
+    applies automatic optimizations and generates binary code for the optimized operations.
+    Once the model has been compiled, you can deploy it to the target instance type
+    it using the SageMaker Inference service. Neo also provides a runtime for each
+    target platform that loads and executes the compiled model. An overview of SageMaker
+    Neo is shown in the following diagram:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 8.7 – SageMaker Neo overview ](img/B17519_08_007.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: Figure 8.7 – SageMaker Neo overview
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'SageMaker Neo enables users to significantly reduce any additional development
+    or setup work. However, it also comes with certain limitations that may or may
+    not be suitable for your specific use case:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: SageMaker Neo primarily supports computer vision models such as **Image Classification**,
+    **Object Detection**, and **Semantic Segmentation**. It doesn’t support, for example,
+    NLP model architectures.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SageMaker Neo supports various DL frameworks but they are several major versions
+    behind. So, if you are looking to use the latest model architecture and/or the
+    latest framework version features, you will have to consider other compilation
+    options (for instance, manually compiling using TensorRT). For the latest details
+    on SageMaker Neo support, refer to [https://docs.aws.amazon.com/sagemaker/latest/dg/neo-supported-cloud.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/neo-supported-cloud.xhtml).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SageMaker Neo supports a set of cloud instances. At the time of writing , it
+    supports compilation for `ml.c5`, `ml.c4`, `ml.m5`, `ml.m4`, `ml.p3`, `ml.p2`,
+    and `ml.inf1` instances.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: SageMaker Neo sets specific requirements on the inference request format, (specifically,
+    around the shape of the input).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: These are key limitations you need to keep in mind when considering using SageMaker
+    Neo. In many cases, SageMaker Neo can be a convenient and efficient way to compile
+    your DL models if your model architecture, framework version, and target hardware
+    accelerators are supported.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let’s review how to compile a TensorFlow model using SageMaker Neo. In this
+    example, we will train the ResNet50 model, compile it for several hardware platforms,
+    and deploy inference endpoints of optimized models. We will highlight the key
+    aspects. The full source code is available here: [https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter8/3_SageMaker_Neo_TF.ipynb](https://github.com/PacktPublishing/Accelerate-Deep-Learning-Workloads-with-Amazon-SageMaker/blob/main/chapter8/3_SageMaker_Neo_TF.ipynb).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Developing a training and inference script
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In the previous chapters, we mentioned that SageMaker must implement specific
+    methods to be able to train models and run inference on SageMaker. Depending on
+    the DL framework and target hardware platform, the required API will be slightly
+    different. Refer to the official documentation for details: [https://docs.aws.amazon.com/sagemaker/latest/dg/neo-deployment-hosting-services-prerequisites.xhtml](https://docs.aws.amazon.com/sagemaker/latest/dg/neo-deployment-hosting-services-prerequisites.xhtml).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To serve TensorFlow models, we implemented the simple `serving_input_fn()`
+    method, which passes inputs to the model and returns predictions:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE20]'
+  prefs: []
+  type: TYPE_PRE
+- en: Next, we schedule our compilation job.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Running compilation jobs and deployment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'To start compilation jobs, we must train our model using the SageMaker Python
+    SDK from `sagemaker.tensorflow` and then import TensorFlow:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '[PRE21]'
+  prefs: []
+  type: TYPE_PRE
+- en: 'Once the model has been trained, we can test how compilation works for two
+    different hardware accelerators: a `p2` instance with NVIDIA GPU devices and a
+    `c5` instance without any specialized hardware. Follow these steps:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'For this, first, we must compile the model for the NVIDIA GPU and deploy the
+    endpoint using the same hardware type. Note the `input_shape` parameter, which
+    tells SageMaker what input share to use during the compilation process. You will
+    need to convert your inference sample into the same input share at inference time:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE22]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: To access the logs of your compilation job, you can navigate to **SageMaker**
+    | **Inference** | **Compilation jobs** in the AWS Console. In these logs, you
+    can find, for instance, what compilation framework SageMaker Neo is using under
+    the hood (Apache TVM) and see the compilation status of your model operators.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Running compilation jobs for the c5 instance is very similar. Note that we
+    are using the same `estimator` object that we did to compile the p2 instance.
+    As mentioned previously, you only need to train the model once; then, you can
+    compile it for as many target platforms as you need:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE23]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: As a result of a successful compilation, the resulting model artifact will be
+    persisted in the S3 location available upon calling the `c5_estimator.model_data`
+    attribute.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Calling the endpoint with compiled models is the same as calling an uncompiled
+    model. Here is an example of the `p2` inference endpoint:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE24]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: Note that we reshaped our input data so that it matches the input data that
+    was used during the compilation process.
+  prefs: []
+  type: TYPE_NORMAL
+- en: This brief example demonstrates how a single model can be compiled using SageMaker
+    Neo. It’s recommended to benchmark SageMaker compiled models before deploying
+    them to production against uncompiled models to confirm latency-throughput improvements.
+    Please note that uncompiled and compiled models may have different memory requirements.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we reviewed the available hardware accelerators that are suitable
+    for running DL inference programs. We also discussed how your models can be optimized
+    for target hardware accelerators using the TensorRT compiler for NVIDIA GPU accelerators
+    and Neuron SDK for AWS Inferentia accelerators. Then, we reviewed the SageMaker
+    Neo service, which allows you to compile supported models for a wide range of
+    hardware platforms with minimal development efforts and highlighted several limitations
+    of this service. After reading this chapter, you should be able to make decisions
+    about which hardware accelerators to use and how to optimize them based on your
+    specific use case requirements around latency, throughput, and cost.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Once you have selected your hardware accelerator and model optimization strategy,
+    you will need to decide which model server to use and how to further tune your
+    inference workload at serving time. In the next chapter, we will discuss popular
+    model server solutions and gain practical experience in developing and deploying
+    them on the **SageMaker Inference** service.
+  prefs: []
+  type: TYPE_NORMAL

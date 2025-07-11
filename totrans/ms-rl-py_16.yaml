@@ -1,0 +1,1313 @@
+- en: '*Chapter 13*: Other Advanced Topics'
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we'll cover several advanced topics of reinforcement learning
+    (RL). First of all, we'll go deeper into distributed RL, in addition to what we
+    covered in the previous chapters. This area is key to dealing with excessive data
+    needs to train agents for sophisticated tasks. Curiosity-driven RL handles hard-exploration
+    problems that are not solvable by traditional exploration techniques. Offline
+    RL leverages offline data to obtain good policies. All of these are hot research
+    areas that you will hear more about in the next few years.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, in this chapter, you will learn about the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distributed RL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Curiosity-driven RL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Offline RL
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's get started!
+  prefs: []
+  type: TYPE_NORMAL
+- en: Distributed reinforcement learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: As we've already mentioned in earlier chapters, training sophisticated RL agents
+    requires massive amounts of data. While one critical area of research is to increase
+    the sample efficiency in RL; the other, complementary direction is how to best
+    utilize the compute power and parallelization and reduce the wall-clock time and
+    cost of training. We've already covered, implemented, and used distributed RL
+    algorithms and libraries in the earlier chapters. So, this section will be an
+    extension of the previous discussions due to the importance of this topic. Here,
+    we present additional material on state-of-the-art distributed RL architectures,
+    algorithms, and libraries. With that, let's get started with SEED RL, an architecture
+    designed for massive and efficient parallelization.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Scalable, efficient deep reinforcement learning – SEED RL
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s begin the discussion by revisiting the Ape-X architecture, which is
+    a milestone in scalable RL. The key contribution of Ape-X is to decouple learning
+    from acting: The actors generate experiences, at their own pace, the learner learns
+    from the experiences at its own pace, and the actors update their local copies
+    of the neural network policy periodically. An illustration of this flow for Ape-X
+    DQN is given in *Figure 13.1*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.1 – Ape-X DQN architecture, revisited'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_1.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.1 – Ape-X DQN architecture, revisited
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, let''s unpack this architecture from a computational and data communication
+    point of view:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Actors, potentially hundreds of them, periodically pull ![](img/Formula_13_001.png)
+    parameters, the neural network policy, from a central learner. Depending on the
+    size of the policy network, hundreds of thousands of numbers are pushed from the
+    learner to the remote actors. This creates a big communication load between the
+    learner and the actors, two orders of magnitude larger than what it would take
+    to transfer actions and observations.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Once an actor receives the policy parameters, it uses it to infer actions for
+    each step of the environment. In most settings, only the learner uses a GPU and
+    the actors work on CPU nodes. So, in this architecture, a lot of inference has
+    to be done on CPUs, which is much less efficient for this purpose compared to
+    GPU inference.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Actors switch between environment and inference steps, which have different
+    compute requirements. Carrying out both steps on the same node either leads to
+    computational bottlenecks (when it is a CPU node that has to do inference) or
+    underutilization of resources (when it is a GPU node, the GPU capacity is wasted).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'To overcome these inefficiencies, the SEED RL architecture makes the following
+    key proposal: *Moving the action inference to the learner.* So, an actor sends
+    its observation to the central learner, where the policy parameters are, and receives
+    an action back. This way, the inference time is reduced as it is done on a GPU
+    rather than a CPU.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Of course, the story does not end here. What we have described so far leads
+    to a different set of challenges:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Since the actor needs to send the observation in each environment step to a
+    remote learner to receive an action, this creates a **latency** issue that did
+    not exist before.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While an actor waits for an action, it remains idle, causing *underutilization
+    of the compute resources on the actor node*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Passing individual observations to the learner GPU increases the total *communication
+    overhead with the GPU*.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The GPU resources need to be tuned to handle both inference and learning.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To overcome these challenges, SEED RL has the following structure:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: A very fast communication protocol, called **gRPC**, to transfer the observations
+    and actions between the actors and the learner.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Multiple environments are placed on a single actor to maximize utilization.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Observations are batched before being passed to the GPU to reduce the overhead.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'There is a fourth challenge of tuning the resource allocation, but it is a
+    tuning problem rather than being a fundamental architecture problem. As a result,
+    SEED RL proposes an architecture that can do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Process millions of observations per second.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Reduce the cost of experiments, by up to 80%.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Decrease the wall-clock time by increasing the training speed by up to three
+    times.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The SEED RL architecture is illustrated in *Figure 13.2*, taken from the SEED
+    RL paper, which compares it to IMPALA, which suffers from similar downsides as
+    Ape-X:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.2 – A comparison of IMPALA and SEED architectures (source: Espeholt
+    et al, 2020)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_2.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Figure 13.2 – A comparison of IMPALA and SEED architectures (source: Espeholt
+    et al, 2020)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: So far, so good. For the implementation details, we refer you to *Espeholt et
+    al, 2020* and the code repository associated with the paper.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: The authors have open-sourced SEED RL on [https://github.com/google-research/seed_rl](https://github.com/google-research/seed_rl).
+    The repo has implementations of the IMPALA, SAC, and the R2D2 agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We will cover the R2D2 agent momentarily and then run some experiments. But
+    before we close this section, let's also provide you with one more resource.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are interested in diving deeper into the engineering aspects of the architecture,
+    gRPC is a great tool to have under your belt. It is a fast communication protocol
+    that is used to connect microservices in many tech companies. Check it out at
+    https://grpc.io.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Awesome job! You are now up to date with the state of the art in distributed
+    RL. Next, we'll cover a state-of-the-art model that is used in distributed RL
+    architectures, R2D2\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Recurrent experience replay in distributed reinforcement learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: One of the most influential contributions to the recent RL literature, which
+    set the state of the art in the classical benchmarks at the time, is the **Recurrent
+    Replay Distributed DQN** (**R2D2**) agent. The main contribution of the R2D2 work
+    is actually related to the effective use of **recurrent neural networks** (**RNNs**)
+    in an RL agent, which is also implemented in a distributed setting. The paper
+    uses **long-short term memory** (**LSTM**) as the choice of RNN, which we'll also
+    adapt here in our discussion. So, let's start with what the challenge is with
+    training RNNs when it comes to initializing the recurrent state, and then talk
+    about how the R2D2 agent addresses it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: The initial recurrent state mismatch problem in recurrent neural networks
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: In the previous chapters, we discussed the importance of carrying a memory of
+    observations to uncover partially observable states. For example, rather than
+    using a single frame in an Atari game, which will not convey information such
+    as the speeds of the objects, basing the action on a sequence of past frames,
+    from which the speed and so on can be derived, will lead to higher rewards. An
+    effective way of processing sequence data, as we also mentioned, is using RNNs.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The idea behind an RNN is to pass the inputs of a sequence to the same neural
+    network one by one, but then also pass information, a memory, and a summary of
+    the past steps, from one step to the next, which is illustrated in *Figure 13.3*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.3 – A depiction of RNNs with a) compact, and b) unrolled representations'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_3.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.3 – A depiction of RNNs with a) compact, and b) unrolled representations
+  prefs: []
+  type: TYPE_NORMAL
+- en: A key question here is what to use for the initial recurrent state, ![](img/Formula_13_002.png).
+    Most commonly and conveniently, the recurrent state is initialized as all zeros.
+    This is not a big problem when an actor steps through the environment and this
+    initial recurrent state corresponds to the start of an episode. However, while
+    training from stored samples that correspond to small sections of longer trajectories,
+    such an initialization becomes a problem. Let's see why.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Consider the scenario illustrated in *Figure 13.4*. We are trying to train
+    the RNN on a stored sample ![](img/Formula_13_003.png), so the observation is
+    a sequence of four frames that are passed to the policy network. So,![](img/Formula_13_004.png)
+    is the first frame and ![](img/Formula_13_005.png) is the last and the most recent
+    frame in the sampled ![](img/Formula_13_006.png) sequence (and the argument is
+    similar for ![](img/Formula_13_007.png)). As we feed the inputs, the ![](img/Formula_13_008.png)''s
+    will be obtained and passed to the subsequent steps and we use zeros for ![](img/Formula_13_009.png):'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.4 – Using a sequence of frames to obtain an action from an RNN'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_4.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.4 – Using a sequence of frames to obtain an action from an RNN
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Now, remember that the role of a recurrent state ![](img/Formula_13_010.png)
+    is to summarize what happened up to step ![](img/Formula_13_011.png). When we
+    use a vector of zeros for ![](img/Formula_13_012.png) during training, to generate
+    value function predictions and target values for the Q function, for example,
+    it creates several problems, which are related but slightly different from each
+    other:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It does not any convey meaningful information about what happened before that
+    timestep.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We use that same vector (of zeros) regardless of what happened before the sampled
+    sequence, which leads to an overloaded representation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: A vector of zeros, since it is not an output of the RNN, is not a meaningful
+    representation of the RNN anyway.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: As a result, the RNN gets "confused" about what to make of the hidden states
+    in general and reduces its reliance on memory, which defeats the very purpose
+    of using them.
+  prefs: []
+  type: TYPE_NORMAL
+- en: One solution to this is to record the whole trajectory and process/replay it
+    during training to calculate the recurrent states for each step. This is also
+    problematic because replaying all sample trajectories of arbitrary lengths during
+    training is a lot of overhead.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, let's see how the R2D2 agent addresses this issue.
+  prefs: []
+  type: TYPE_NORMAL
+- en: R2D2 solution to the initial recurrent state mismatch
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The solution of the R2D2 agent is two-fold:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Store the recurrent states from the rollouts.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Use a burn-in period.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Let's look into these in more detail in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Storing the recurrent states from rollouts
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: While an agent steps through the environment, at the beginning of the episode,
+    it initializes the recurrent state. Then it uses the recurrent policy network
+    to take its actions at each step, and the recurrent states corresponding to each
+    of those observations are also generated. The R2D2 agent sends these recurrent
+    states along with the sampled experience to the replay buffer to later use them
+    to initialize the network at training time instead of vectors of zeros.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'In general, this significantly remedies the negative impact of using zero initialization.
+    However, it is still not a perfect solution: The recurrent states stored in the
+    replay buffer would be stale by the time they were used in training. This is because
+    the network is constantly updated, whereas these states would carry a representation
+    that was generated by an older version of the network, such as what was used at
+    the rollout time. This is called **representational drift**.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: To mitigate representational drift, R2D2 proposes an additional mechanism, which
+    is to use a burn-in period at the beginning of the sequence.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Using a burn-in period
+  prefs:
+  - PREF_H4
+  type: TYPE_NORMAL
+- en: 'Using a burn-in period works as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Store a sequence that is longer than what we normally would.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Use the extra portion at the beginning of the sequence to unroll the RNN with
+    the current parameters.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: With that, produce an initial state that is not stale for after the burn-in
+    portion.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Don't use the burn-in portion during the backpropagation.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This is depicted in *Figure 13.5*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.5 – Representation of R2D2''s use of stored recurrent states with
+    a two-step burn-in'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_5.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.5 – Representation of R2D2's use of stored recurrent states with a
+    two-step burn-in
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'So, for the example in the figure, the idea is that rather than using ![](img/Formula_13_013.png),
+    which is generated under some old policy ![](img/Formula_13_014.png), do the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Use ![](img/Formula_13_015.png) to initialize the recurrent state at training
+    time.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Unroll the RNN with the current parameters ![](img/Formula_13_016.png) over
+    the burn-in portion to generate an ![](img/Formula_13_017.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This hopefully recovers from the stale representation of ![](img/Formula_13_018.png)
+    and leads to a more accurate initialization than ![](img/Formula_13_019.png) would.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: This is more accurate in the sense that it is closer to what we would have obtained
+    if we stored and unrolled the entire trajectory from the beginning till ![](img/Formula_13_020.png)
+    using ![](img/Formula_13_021.png).
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: So, this was the R2D2 agent. Before we wrap up this section, let's discuss what
+    the R2D2 agent has achieved.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Key results from the R2D2 paper
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The R2D2 work has really interesting insights, for which I highly recommend
+    you read the full paper. However, for the completeness of our discussion, here
+    is a summary:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: R2D2 quadruples the previous state of the art on Atari benchmarks that were
+    set by Ape-X DQN, being the first agent to achieve a superhuman level of performance
+    on 52 out of 57 games, and with a higher sample efficiency.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It achieves this using a single set of hyperparameters across all environments,
+    which speaks to the robustness of the agent.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Interestingly, R2D2 improves the performance even in environments that are considered
+    fully observable, which you would not expect using a memory to help. The authors
+    explain this with the high representation power of LSTM.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Storing the recurrent states and using a burn-in period are both greatly beneficial,
+    while the impact of the former is greater. These approaches can be used together,
+    which is the most effective, or individually.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Using zero start states decreases an agent's capability to rely on the memory.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: For your information, in three out of the five environments in which the R2D2
+    agent could not exceed human-level performance, it can actually achieve it by
+    modifying the parameters. The remaining two environments, Montezuma's Revenge
+    and Pitfall, are notorious hard-exploration problems, to which we will return
+    in the latter sections of the chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With that, let's wrap up our discussion here and go into some hands-on work.
+    In the next section, we are going to use the SEED RL architecture with an R2D2
+    agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Experimenting with SEED RL and R2D2
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: In this section, we'll give a short demo of the SEED RL repo and how to use
+    it to train agents. Let's start with setting up the environment.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Setting up the environment
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The SEED RL architecture uses multiple libraries, such as TensorFlow and gRPC,
+    that interact in rather sophisticated ways. To save us from most of the setup,
+    the maintainers of SEED RL use Docker containers to train RL agents.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Docker and container technology are among the fundamental tools behind today's
+    internet services. If you are into machine learning engineering and/or are interested
+    in serving your models in a production environment, it is a must to know. A quick
+    bootcamp on Docker by Mumshad Mannambeth is available at [https://youtu.be/fqMOX6JJhGo](https://youtu.be/fqMOX6JJhGo).
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The setup instructions are available on the SEED RL GitHub page. In a nutshell,
+    they are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Install Docker on your machine.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Enable running Docker as a non-root user.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Install `git`.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Clone the SEED repository.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'Start your training for the environments defined in the repo using the `run_local.sh`
+    script, as follows:'
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: '[PRE0]'
+  prefs:
+  - PREF_IND
+  type: TYPE_PRE
+- en: 'A few additions to this setup may be needed if your NVIDIA GPU is not recognized
+    by the SEED container:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Install the NVIDIA Container Toolkit at [https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Install NVIDIA Modprobe, for example for Ubuntu, using `sudo apt-get install
+    nvidia-modprobe`.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Reboot your workstation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'Once your setup is successful, you should see that your agent starts training
+    on a tmux terminal, as shown in *Figure 13.6*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.6 – SEED RL training on a tmux terminal'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_6.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.6 – SEED RL training on a tmux terminal
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tmux is a terminal multiplexer, basically a window manager within the terminal.
+    For a quick demo on how to use tmux, check out [https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/](https://www.hamvocke.com/blog/a-quick-and-easy-guide-to-tmux/).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now you have SEED, a state-of-the-art RL framework, running on your machine!
+    You can plug in your custom environments for training by following the Atari,
+    Football, or DMLab example folders.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'The R2D2 agent is also available at DeepMind''s ACME library, along with many
+    other agents: [https://github.com/deepmind/acme](https://github.com/deepmind/acme).'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Next, we'll discuss curiosity-driven RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Curiosity-driven reinforcement learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: When we discussed the R2D2 agent, we mentioned that there were only a few Atari
+    games left in the benchmark set that the agent could not exceed the human performance
+    in. The remaining challenge for the agent was to solve **hard-exploration** problems,
+    which have very sparse and/or misleading rewards. Later work that came out of
+    Google DeepMind addressed those challenges as well, with agents called **Never
+    Give Up** (**NGU**) and **Agent57** reaching superhuman-level performance in all
+    of the 57 games used in the benchmarks. In this section, we are going to discuss
+    these agents and the methods they used for effective exploration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's dive in by describing the concepts of hard-exploration and **curiosity-driven
+    learning**.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Curiosity-driven learning for hard-exploration problems
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Let''s consider the simple grid world illustrated in *Figure 13.7*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.7 – A hard-exploration grid-world problem'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_7.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.7 – A hard-exploration grid-world problem
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Assume the following setting in this grid world:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are 102 total states, 101 for the grid world and 1 for the cliff surrounding
+    it.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: The agent starts in the far left of the world and its goal is to reach the trophy
+    on the far right.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Reaching the trophy has a reward of 1,000, falling off the cliff has a reward
+    of -100, and there's a -1 reward for each time step that passes to encourage quick
+    exploration.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: An episode terminates when the trophy is reached, the agent falls off the cliff,
+    or after 1,000 time steps.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'The agent has five actions available to it at every time step: to stay still,
+    or to go up, down, left, or right.'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'If you train an agent in the current setting, even with the most powerful algorithms
+    we have covered, such as PPO, R2D2, and so on, the resulting policy will likely
+    be suicidal:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It is very difficult to stumble upon the trophy through random actions, so the
+    agent may never discover that there is a trophy with a high reward in this grid
+    world.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Waiting until the end of the episode results in a total reward of -1000.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In this dark world, the agent may decide to commit suicide as early as possible
+    to avoid prolonged suffering.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Even with the most powerful algorithms, the weak link in this approach is the
+    strategy of exploration through random actions. The probability of stumbling upon
+    the optimal set of moves is ![](img/Formula_13_022.png).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Tip
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'To find the expected number of steps it will take for the agent to reach the
+    trophy through random actions, we can use the following equation:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_023.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_13_024.png) is the expected number of steps it will take
+    for the agent to reach the trophy when in state ![](img/Formula_13_025.png). We
+    need to generate these equations for all states (it will be slightly different
+    for ![](img/Formula_13_026.png)) and solve the resulting system of equations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: When we discussed the Machine Teaching approach previously, we mentioned that
+    the human teacher can craft the reward function to encourage the agent to go right
+    in the world. The downside of this approach is that it may not be feasible to
+    manually craft the reward function in more complex environments. In fact, the
+    winning strategy may not even be known by the teacher to guide the agent.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Then the question becomes how can we encourage the agent to explore the environment
+    efficiently? One good answer is to reward the agent for the states it visited
+    for the first time, for example, with a reward of +1 in our grid world. Enjoying
+    discovering the world could make a good motivation for the agent to avoid suicide,
+    which will also lead to winning the trophy eventually.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'This approach is called **curiosity-driven learning**, which involves giving
+    an **intrinsic reward** to the agent based on the *novelty* of its observations.
+    The reward takes the following form:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_027.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_13_028.png) is the extrinsic reward assigned by the environment
+    at time ![](img/Formula_13_029.png), ![](img/Formula_13_030.png) is the intrinsic
+    reward for the novelty of the observation at time ![](img/Formula_08_016.png),
+    and ![](img/Formula_13_032.png) is a hyperparameter to tune the relative importance
+    of exploration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we discuss the NGU and Agent57 agents, let's look into some practical
+    challenges in curiosity-driven RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Challenges in curiosity-driven reinforcement learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The grid world example we provided above has one of the simplest possible settings.
+    On the other hand, our expectation of RL agents is to solve many sophisticated
+    exploration problems. That, of course, comes with challenges. Let's discuss a
+    few of them here.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Assessing novelty when observations are in continuous space and/or are high-dimensional
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'When we have discrete observations, it is simple to assess whether an observation
+    is novel or not: We can simply count how many times the agent has seen each observation.
+    When the observation is in continuous space, such as images, however, it gets
+    complicated as it is not possible to simply count them. A similar challenge is
+    when the number of dimensions of the observation space is too big, as it is in
+    an image.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Noisy TV problem
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: An interesting failure state for curiosity-driven exploration is to have a source
+    of noise in the environment, such as a noisy TV that displays random frames in
+    a maze.
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.8 – Noisy TV problem illustrated in OpenAI''s experiments (source
+    OpenAI et al. 2018)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_8.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.8 – Noisy TV problem illustrated in OpenAI's experiments (source OpenAI
+    et al. 2018)
+  prefs: []
+  type: TYPE_NORMAL
+- en: The agent then gets stuck in front of the noisy TV (like a lot of people do)
+    to do meaningless exploration rather than actually discovering the maze.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Life-long novelty
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: The intrinsic reward, as we described above, is given based on the novelty of
+    the observations within an episode. However, we want our agent to avoid making
+    the same discoveries again and again in different episodes. In other words, we
+    need a mechanism to assess *life-long novelty* for effective exploration.
+  prefs: []
+  type: TYPE_NORMAL
+- en: There are different ways of addressing these challenges. Next, we will review
+    how the NGU and the Agent57 agents address them, leading to their state-of-the-art
+    performance in the classic RL benchmarks.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Never Give Up
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The NGU agent effectively brings together some key exploration strategies. Let's
+    take a look at this in the following sections.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Obtaining embeddings for observations
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'The NGU agent obtains embeddings from observations in such a way that it handles
+    the two challenges together regarding a) high-dimensional observation space, and
+    b) noise in observations. Here is how: Given an ![](img/Formula_13_033.png) triplet
+    sampled from the environment, where ![](img/Formula_13_034.png) is the observation
+    and ![](img/Formula_13_035.png) is the action at time ![](img/Formula_13_036.png),
+    it trains the neural network to predict action from the two consecutive observations.
+    This is illustrated in *Figure 13.9*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.9 – NGU agent embedding network'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_9.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.9 – NGU agent embedding network
+  prefs: []
+  type: TYPE_NORMAL
+- en: The embeddings, the ![](img/Formula_13_037.png)-dimensional representations
+    of the images coming out of the ![](img/Formula_13_038.png) embedding network,
+    denoted as ![](img/Formula_13_039.png), is what the agent will use to assess the
+    novelty of the observations later.
+  prefs: []
+  type: TYPE_NORMAL
+- en: If you are wondering why there is this fancy setup to obtain some lower-dimensional
+    representations of image observations, it is to address the noisy TV problem.
+    Noise in the observations is not useful information while predicting the action
+    that led the environment from emitting observation ![](img/Formula_13_040.png)
+    to ![](img/Formula_13_041.png) in the next step. In other words, actions taken
+    by the agent would not explain the noise in the observations. Therefore, we don't
+    expect a network that predicts the action from observations to learn representations
+    carrying the noise, at least not dominantly. So, this is a clever way of denoising
+    the observation representations.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's next see how these representations are used.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Episodic novelty module
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'In order to assess how novel an observation ![](img/Formula_13_042.png) is
+    compared to the previous observations in the episode and calculate an episodic
+    intrinsic reward ![](img/Formula_13_043.png), the NGU agent does the following:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Stores the embeddings from the observations encountered in an episode in a memory
+    ![](img/Formula_08_077.png)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Compares ![](img/Formula_13_045.png) to ![](img/Formula_13_046.png)-nearest
+    embeddings in ![](img/Formula_13_047.png)
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: Calculates an intrinsic reward that is inversely proportional to the sum of
+    the similarities between ![](img/Formula_13_048.png) and its ![](img/Formula_13_049.png)
+    neighbors
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'This idea is illustrated in *Figure 13.10*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.10 – NGU episodic novelty module'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_10.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.10 – NGU episodic novelty module
+  prefs: []
+  type: TYPE_NORMAL
+- en: To avoid the somewhat crowded notation, we'll leave the details of the calculation
+    to the paper, but this should give you the idea.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Finally, let's discuss how the NGU agent assesses life-long novelty.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Life-long novelty module with random distillation networks
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: During training, RL agents collect experiences across many parallel processes
+    and over many episodes, leading to billions of observations in some applications.
+    Therefore, it is not quite straightforward to tell whether an observation is a
+    novel one among all.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'A clever way to address that is to use **Random Network Distillation** (**RND**),
+    which the NGU agent does. RND involves two networks: a random network and a predictor
+    network. Here is how they work:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: The random network is randomly initialized at the beginning of the training.
+    Naturally, it leads to an arbitrary mapping from observations to outputs.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The predictor network tries to learn this mapping, which is what the random
+    network does, throughout the training.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The predictor network's error will be low on previously encountered observations
+    and high on novel ones.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: The higher the prediction error is, the larger the intrinsic reward will be.
+  prefs:
+  - PREF_OL
+  type: TYPE_NORMAL
+- en: 'The RND architecture is illustrated in *Figure 13.11*:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.11 – RND architecture in the NGU agent'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_11.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.11 – RND architecture in the NGU agent
+  prefs: []
+  type: TYPE_NORMAL
+- en: The NGU agent uses this error to obtain a multiplier, ![](img/Formula_13_050.png),
+    to scale ![](img/Formula_13_051.png). More specifically,
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_052.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_13_053.png) and ![](img/Formula_13_054.png) are the mean
+    and standard deviation of the prediction network errors. So, to obtain a multiplier
+    greater than 1 for an observation, the error, the "surprise," of the predictor
+    network should be greater than the average error it makes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Now, let's put everything together.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Combining the intrinsic and extrinsic rewards
+  prefs:
+  - PREF_H3
+  type: TYPE_NORMAL
+- en: 'After obtaining an episodic intrinsic reward and a multiplier based on life-long
+    novelty for an observation, the combined intrinsic reward at time ![](img/Formula_13_055.png)
+    is calculated as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_056.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'where ![](img/Formula_13_057.png) is a hyperparameter to cap the multiplier.
+    Then the episode reward is a weighted sum of the intrinsic and extrinsic rewards:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_058.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: This is it! We have covered some of the key ideas behind the NGU agent. There
+    are more details to it, such as how to set the ![](img/Formula_13_059.png) values
+    across parallelized actors and then use it to parametrize the value function network.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Before we wrap up our discussion on curiosity-driven learning, let's briefly
+    talk about an extension to the NGU agent, Agent57\.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Agent57 improvements
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Agent57 extends the NGU agent to set the new state of the art. The main improvements
+    are as follows:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It trains separate value function networks for intrinsic and extrinsic rewards
+    and then combines them.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It trains a population of policies, for which the sliding-window **upper confidence
+    bound** (**UCB**) method is used to the pick ![](img/Formula_13_060.png) and discount
+    factor ![](img/Formula_13_061.png) while prioritizing one policy over the other.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: With that, we conclude our discussion on curiosity-driven RL, which is key to
+    solving hard-exploration problems in RL. Having said that, exploration strategies
+    in RL is a broad topic. For a more comprehensive review of the topic, I suggest
+    you read Lilian Weng's blog post (*Weng*, *2020*) on this and then dive into the
+    papers referred to in the blog.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Next, we''ll discuss another important area: offline RL.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Offline reinforcement learning
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '**Offline RL** is about training agents using data recorded during some prior
+    interactions of an agent (likely non-RL, such as a human agent) with the environment,
+    as opposed to directly interacting with it. It is also called **batch RL**. In
+    this section, we look into some of the key components of offline RL. Let''s get
+    started with an overview of how it works.'
+  prefs: []
+  type: TYPE_NORMAL
+- en: An overview of how offline reinforcement learning works
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'In offline RL, the agent does not directly interact with the environment to
+    explore and learn a policy. *Figure 13.12* contrasts this to on-policy and off-policy
+    settings:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![Figure 13.12 – Comparison of on-policy, off-policy, and offline deep RL (adapted
+    from Levine, 2020)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '](img/B14160_13_12.jpg)'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Figure 13.12 – Comparison of on-policy, off-policy, and offline deep RL (adapted
+    from *Levine, 2020*)
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Let''s unpack what this figure illustrates:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: In on-policy RL, the agent collects a batch of experiences with each policy.
+    Then, it uses this batch to update the policy. This cycle repeats until a satisfactory
+    policy is obtained.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In off-policy RL, the agent samples experiences from a replay buffer to periodically
+    improve the policy. The updated policy is then used in the rollouts to generate
+    new experience, which gradually replaces the old experience in the replay buffer.
+    This cycle repeats until a satisfactory policy is obtained.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: In offline RL, there is some behavior policy ![](img/Formula_13_062.png) interacting
+    with the environment and collecting experience. This behavior policy does not
+    have to belong to an RL agent. In fact, in most cases, it is either human behavior,
+    a rule-based decision mechanism, a classical controller, and so on. The experience
+    recorded from these interactions is what the RL agent will use to learn a policy,
+    hopefully improving the behavior policy. So, in offline RL, the RL agent does
+    not interact with the environment.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: One of the obvious questions in your mind could be why we cannot just put the
+    offline data into something like a replay buffer and use a DQN agent or similar.
+    This is an important point, so let's discuss it.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why we need special algorithms for offline learning
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Interacting with the environment for an RL agent is necessary to observe the
+    consequences of its actions in different states. Offline RL, on the other hand,
+    does not let the agent interact and explore, which is a serious limitation. Here
+    are some examples to illustrate this point:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's say we have data from a human driving a car in town. The maximum speed
+    the driver reached as per the logs is 50 mph. The RL agent might infer from the
+    logs that increasing the speed reduces the travel time and may come up with a
+    policy that suggests driving at 150 mph in town. Since the agent never observed
+    its possible consequences, it does not have a lot of chance to correct its approach.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: While using a value-based method, such as DQN, the Q network is initialized
+    randomly. As a result, some ![](img/Formula_13_063.png) values will be very high
+    just by chance, suggesting a policy driving the agent to ![](img/Formula_13_064.png)
+    and then taking action ![](img/Formula_13_065.png). When the agent is able to
+    explore, it can evaluate the policy and correct such bad estimates. In offline
+    RL, it cannot.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: So, the core of the problem here is the **distributional shift**, that is, the
+    discrepancy between the behavior policy and the resulting RL policy.
+  prefs: []
+  type: TYPE_NORMAL
+- en: So, hopefully, you are convinced that offline RL requires some special algorithms.
+    Then the next question is, is it worth it? Why should we bother when we can happily
+    obtain superhuman-level performance with all the clever approaches and models
+    we've discussed so far? Let's see why.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Why offline reinforcement learning is crucial
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: The very reason that video games are the most common testbed for RL is we can
+    collect the amount of data needed for training. When it comes to training RL policies
+    for real-world applications, such as robotics, autonomous driving, supply chain,
+    finance, and so on, we need simulations of these processes to be able to collect
+    the necessary amounts of data and wildly explore various policies. *This is arguably
+    the single most important challenge in real-world RL*.
+  prefs: []
+  type: TYPE_NORMAL
+- en: 'Here are some reasons why:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Building a high-fidelity simulation of a real-world process is often very costly
+    and could take years.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: High-fidelity simulations are likely to require a lot of compute resources to
+    run, making it hard to scale them for RL training.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Simulations could quickly become stale if the environment dynamics change in
+    a way that is not parametrized in the simulation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Even when the fidelity is very high, it may not be high enough for RL. RL is
+    prone to overfitting to errors, quirks, and assumptions of the (simulation) environment
+    it interacts with. So, this creates a sim-to-real gap.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It could be costly or unsafe to deploy RL agents that might have overfit to
+    the simulation.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'As a result, a simulation is a rare beast to run into in businesses and organizations.
+    Do you know what we have in abundance? Data. We have processes that generate a
+    lot of data:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: Manufacturing environments have machine logs.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Retailers have data on their past pricing strategies and their results.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Trading firms have logs of their buy and sell decisions.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: We have, and can obtain, a lot of car-driving videos.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Offline RL has the potential to drive automation for all those processes and
+    create huge real-world value.
+  prefs: []
+  type: TYPE_NORMAL
+- en: After this long but necessary motivation, it is finally time to go into a specific
+    offline RL algorithm.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Advantage weighted actor-critic
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'Offline RL is a hot area of research and there are many algorithms that have
+    been proposed. One common theme is to make sure that the learned policy stays
+    close to the behavior policy. A common measure to assess the discrepancy is KL
+    divergence:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_066.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'On the other hand, different from the other approaches, **advantage weighted
+    actor-critic** (**AWAC**) exhibits the following traits:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: It does not try to fit a model to explicitly learn ![](img/Formula_13_067.png).
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It implicitly punishes the distributional shift.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: It uses dynamic programming a train to ![](img/Formula_13_068.png) function
+    for data efficiency.
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: 'To this end, AWAC optimizes the following objective function:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_069.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: 'which leads to the following policy update step:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '![](img/Formula_13_070.jpg)'
+  prefs: []
+  type: TYPE_IMG
+- en: where ![](img/Formula_13_071.png) is a hyperparameter and ![](img/Formula_13_072.png)
+    is a normalization quantity. The key idea here is to encourage actions with a
+    higher advantage.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Info
+  prefs: []
+  type: TYPE_NORMAL
+- en: One of the key contributions of AWAC is that the policy that is trained from
+    offline data can then later be fine-tuned effectively by interacting with the
+    environment if that opportunity exists.
+  prefs: []
+  type: TYPE_NORMAL
+- en: We defer the details of the algorithm to the paper (by *Nair et al, 2020*),
+    and the implementation to the RLkit repo at [https://github.com/vitchyr/rlkit](https://github.com/vitchyr/rlkit).
+  prefs: []
+  type: TYPE_NORMAL
+- en: Let's wrap up our discussion on offline RL with benchmark datasets and the corresponding
+    repos.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Offline reinforcement learning benchmarks
+  prefs:
+  - PREF_H2
+  type: TYPE_NORMAL
+- en: 'As offline RL is taking off, researchers from DeepMind and UC Berkeley have
+    created benchmark datasets and repos so that offline RL algorithms can be compared
+    to each other in a standardized way. These will serve as the "Gym" for offline
+    RL, if you will:'
+  prefs: []
+  type: TYPE_NORMAL
+- en: '*RL Unplugged* by DeepMind includes datasets from Atari, Locomotion, DeepMind
+    Control Suite environments, as well as real-world datasets. It is available at
+    [https://github.com/deepmind/deepmind-research/tree/master/rl_unplugged](https://github.com/deepmind/deepmind-research/tree/master/rl_unplugged).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '*D4RL* by UC Berkeley''s **Robotics and AI Lab** (**RAIL**) includes datasets
+    from various environments such as Maze2D, Adroit, Flow, and CARLA. It is available
+    at [https://github.com/rail-berkeley/d4rl](https://github.com/rail-berkeley/d4rl).'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: Great work! You are now up to speed with one of the key emerging fields – offline
+    RL.
+  prefs: []
+  type: TYPE_NORMAL
+- en: Summary
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: In this chapter, we covered several advanced topics that are very hot areas
+    of research. Distributed RL is key to be able to scale RL experiments efficiently.
+    Curiosity-driven RL makes solving hard-exploration problems possible through effective
+    exploration strategies. And finally, offline RL has the potential to transform
+    how RL is used for real-world problems by leveraging the data logs already available
+    for many processes.
+  prefs: []
+  type: TYPE_NORMAL
+- en: With this chapter, we conclude the part of our book on algorithmic and theoretical
+    discussions. The remaining chapters will be more applied, starting with robotics
+    applications in the next chapter.
+  prefs: []
+  type: TYPE_NORMAL
+- en: References
+  prefs:
+  - PREF_H1
+  type: TYPE_NORMAL
+- en: '[https://arxiv.org/abs/1910.06591](https://arxiv.org/abs/1910.06591)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://lilianweng.github.io/lil-log/2020/06/07/exploration-strategies-in-deep-reinforcement-learning.html](https://lilianweng.github.io/lil-log/2020/06/07/exploration-strategies-in-deep-reinforcement-learning.html)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://deepmind.com/blog/article/Agent57-Outperforming-the-human-Atari-benchmark](https://deepmind.com/blog/article/Agent57-Outperforming-the-human-Atari-benchmark)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://openai.com/blog/reinforcement-learning-with-prediction-based-rewards/](https://openai.com/blog/reinforcement-learning-with-prediction-based-rewards/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://youtu.be/C3yKgCzvE_E](https://youtu.be/C3yKgCzvE_E)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://medium.com/@sergey.levine/decisions-from-data-how-offline-reinforcement-learning-will-change-how-we-use-ml-24d98cb069b0](mailto:https://medium.com/@sergey.levine/decisions-from-data-how-offline-reinforcement-learning-will-change-how-we-use-ml-24d98cb069b0)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://offline-rl-neurips.github.io/](https://offline-rl-neurips.github.io/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://github.com/vitchyr/rlkit/tree/master/rlkit](https://github.com/vitchyr/rlkit/tree/master/rlkit)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://arxiv.org/pdf/2005.01643.pdf](https://arxiv.org/pdf/2005.01643.pdf)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://arxiv.org/abs/2006.09359](https://arxiv.org/abs/2006.09359)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://offline-rl.github.io/](https://offline-rl.github.io/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
+- en: '[https://bair.berkeley.edu/blog/2020/09/10/awac/](https://bair.berkeley.edu/blog/2020/09/10/awac/)'
+  prefs:
+  - PREF_UL
+  type: TYPE_NORMAL
