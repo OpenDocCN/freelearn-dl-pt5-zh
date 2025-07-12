@@ -1,6 +1,6 @@
-# Github DevOps 加速指南
+# KNIME 无代码深度学习
 
-> 原文：[`annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e`](https://annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e)
+> 原文：[`annas-archive.org/md5/3fb5edd9b2e990d054f2bfb606f7000f`](https://annas-archive.org/md5/3fb5edd9b2e990d054f2bfb606f7000f)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

@@ -1,6 +1,6 @@
-# Github DevOps 加速指南
+# AutoKeras 自动机器学习
 
-> 原文：[`annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e`](https://annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e)
+> 原文：[`annas-archive.org/md5/4b95d582294fbab3113a489dde33e6e5`](https://annas-archive.org/md5/4b95d582294fbab3113a489dde33e6e5)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 

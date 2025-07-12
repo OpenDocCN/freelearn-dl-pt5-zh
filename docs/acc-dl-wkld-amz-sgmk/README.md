@@ -1,6 +1,6 @@
-# Github DevOps 加速指南
+# 亚马逊 SageMaker 深度学习负载加速指南
 
-> 原文：[`annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e`](https://annas-archive.org/md5/677f27c30764b3701bc2b6cf6de3a30e)
+> 原文：[`annas-archive.org/md5/621c8e4bb6ef8d84ed646f8ded57a6f8`](https://annas-archive.org/md5/621c8e4bb6ef8d84ed646f8ded57a6f8)
 > 
 > 译者：[飞龙](https://github.com/wizardforcel)
 > 
