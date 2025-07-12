@@ -1,4 +1,4 @@
-# *第一章:* 使用 KNIME Analytics Platform 入门深度学习
+# 第一章：*第一章:* 使用 KNIME Analytics Platform 入门深度学习
 
 我们将通过探索 KNIME Analytics Platform 来开始我们的**深度学习**（**DL**）范式之旅。如果你一直对神经网络和深度学习架构感兴趣，并且总觉得编码部分会成为你快速学习曲线的障碍，那么这本书就是为你而写的。
 

@@ -1,4 +1,4 @@
-# 使用 Magenta.js 在浏览器中运行 Magenta。
+# 第十章：使用 Magenta.js 在浏览器中运行 Magenta。
 
 本章将介绍 Magenta.js，这是 Magenta 的 JavaScript 实现，由于它运行在浏览器中并且可以作为网页共享，因此在易用性上获得了广泛的关注。我们将介绍 TensorFlow.js，它是构建 Magenta.js 的技术，并展示 Magenta.js 中可用的模型，包括如何转换我们之前训练的模型。然后，我们将使用 GANSynth 和 MusicVAE 创建小型 Web 应用程序，分别用于采样音频和序列。最后，我们将看到 Magenta.js 如何通过 Web MIDI API 和 Node.js 与其他应用程序交互。
 

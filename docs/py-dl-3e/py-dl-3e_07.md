@@ -1,6 +1,6 @@
-# 7
 
-# 注意力机制与 Transformer
+
+# 第七章：注意力机制与 Transformer
 
 在*第六章*中，我们概述了一个典型的**自然语言处理**（**NLP**）流程，并介绍了**递归神经网络**（**RNNs**）作为 NLP 任务的候选架构。但我们也概述了它们的缺点——它们本质上是顺序的（即不可并行化），并且由于其内部序列表示的局限性，无法处理更长的序列。在本章中，我们将介绍**注意力机制**，它使**神经网络**（**NN**）可以直接访问整个输入序列。我们将简要讨论 RNN 中的注意力机制，因为它最初是作为 RNN 的扩展引入的。然而，本章的主角将是**Transformer**——一种完全依赖于注意力的最新神经网络架构。Transformer 在过去 10 年中成为最重要的神经网络创新之一。它们是所有近期**大型语言模型**（**LLMs**）的核心，例如 ChatGPT（[`chat.openai.com/`](https://chat.openai.com/)），甚至是图像生成模型，如 Stable Diffusion（[`stability.ai/stable-diffusion`](https://stability.ai/stable-diffusion)）。这是我们专注于 NLP 的章节中的第二章，也是三章中专门讨论 Transformer 的第一章。
 

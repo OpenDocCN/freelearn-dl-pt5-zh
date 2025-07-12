@@ -1,4 +1,4 @@
-# 使 Magenta 与音乐应用程序互动
+# 第十一章：使 Magenta 与音乐应用程序互动
 
 在本章中，我们将展示 Magenta 如何融入更广泛的应用场景，展示如何使其与其他音乐应用程序（如**数字音频工作站**（**DAWs**）和合成器）互动。我们将解释如何通过 MIDI 接口将 MIDI 序列从 Magenta 发送到 FluidSynth 和 DAW。通过这种方式，我们将学习如何在所有平台上处理 MIDI 端口，以及如何在 Magenta 中循环 MIDI 序列。我们还将展示如何使用 MIDI 时钟和传输信息同步多个应用程序。最后，我们将介绍 Magenta Studio，它是基于 Magenta.js 的 Magenta 独立包装，可以作为插件集成到 Ableton Live 中。
 

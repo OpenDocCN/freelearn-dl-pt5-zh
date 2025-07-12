@@ -1,4 +1,4 @@
-# 6\. LSTM、GRU 和高级 RNN
+# 第六章：6\. LSTM、GRU 和高级 RNN
 
 概述
 
